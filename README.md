@@ -24,6 +24,17 @@ agent   /address-review ─▶  fix code · answer questions · status:addressed
 You always review the **real `git diff`** — Cairn only *reorders and annotates* it. The AI
 emits order and narrative; the code shown is pulled from git, never reproduced by the AI.
 
+## See it in 10 seconds
+
+```bash
+npm install && npm run demo
+```
+
+Builds a throwaway repo with a realistic multi-file change (a per-customer spending limit) and
+opens the review page: five steps in call-flow order, the cross-file jumps, an unchanged-context
+step, two pre-seeded comments to play with, and one change **deliberately left out of the tour**
+so you can watch the "Not in the tour" trust flag fire. Source: [`examples/demo.mjs`](examples/demo.mjs).
+
 ## Install
 
 ```bash

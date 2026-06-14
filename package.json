@@ -15,6 +15,7 @@
     "build": "tsc",
     "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
     "start": "node dist/cli.js",
+    "demo": "npm run build && node examples/demo.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {
