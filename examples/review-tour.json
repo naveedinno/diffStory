@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "title": "Add per-market funding-rate cap",
+  "summary": "Read the keeper entry point first, then the helper it now delegates clamping to, then where the cap is stored, and finally the test. The cap is the whole change; everything else supports it.",
+  "base": "main",
+  "steps": [
+    {
+      "id": "s1",
+      "order": 1,
+      "title": "Entry point: settleFunding() now clamps the rate",
+      "file": "contracts/Funding.sol",
+      "range": [120, 145],
+      "kind": "changed",
+      "why": "Start here — this is the function the keeper calls each epoch. The new clamp on line 132 is the core behavior; everything else exists to support it. Verify the clamp happens before the rate is applied, not after.",
+      "calls": ["s2"],
+      "tags": ["entrypoint", "core"]
+    },
+    {
+      "id": "s2",
+      "order": 2,
+      "title": "The helper it delegates to: _capRate() (new)",
+      "file": "contracts/lib/RateMath.sol",
+      "range": [40, 58],
+      "kind": "new-file",
+      "why": "settleFunding() hands the clamping off here. The unchecked block on 50 is safe because cap is guaranteed <= type(uint128).max by the require on line 44 — confirm that invariant holds.",
+      "returnsTo": "s1",
+      "tags": ["helper"]
+    },
+    {
+      "id": "s3",
+      "order": 3,
+      "title": "Where the cap is read from: marketConfig",
+      "file": "contracts/storage/MarketConfig.sol",
+      "range": [88, 92],
+      "kind": "context",
+      "why": "Unchanged, but you need to see it: _capRate() reads fundingRateCap from this struct. It's per-market, so each market can set its own ceiling. Nothing here changed — just orienting you.",
+      "tags": ["context"]
+    },
+    {
+      "id": "s4",
+      "order": 4,
+      "title": "Test: cap is enforced at the boundary",
+      "file": "test/Funding.t.sol",
+      "range": [210, 240],
+      "kind": "changed",
+      "why": "Confirms the cap clamps an over-limit rate and leaves an under-limit rate untouched. Check that the boundary case (rate == cap) is asserted, since that's the off-by-one risk in _capRate().",
+      "tags": ["test"]
+    }
+  ]
+}

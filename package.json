@@ -1,0 +1,36 @@
+{
+  "name": "cairn",
+  "version": "0.1.0",
+  "description": "Guided, in-order review of AI-authored diffs, with a comment loop back to the agent.",
+  "type": "module",
+  "bin": {
+    "cairn": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "code-review",
+    "diff",
+    "ai",
+    "agent",
+    "guided-review",
+    "claude-code"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
