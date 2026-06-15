@@ -89,7 +89,7 @@ function handle(req, res, opts) {
 function loadReview(opts) {
     const tour = loadTour(tourPath(opts.repo));
     const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
-    const files = parseUnifiedDiff(getDiff(opts.repo, base));
+    const files = parseUnifiedDiff(getDiff(opts.repo, base, opts.headOverride));
     return { tour, base, files };
 }
 function renderReview(opts) {

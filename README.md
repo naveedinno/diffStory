@@ -91,7 +91,11 @@ git clone git@github.com:naveedinno/diffStory.git && cd diffStory
 | `diffstory init` | Scaffold `.diffstory/` with a starter tour. |
 | `diffstory help` | Full usage and flags. |
 
-Flags: `--dir <path>`, `--base <ref>`, `--port <n>`, `--no-open`.
+Flags: `--dir <path>` · `--base <ref>` · `--head <ref>` · `--port <n>` · `--no-open`.
+
+**Choosing what to diff** — by default it's your working tree vs the merge-base with your default
+branch. Override it: uncommitted only `--base HEAD` · since a commit/tag `--base v1.2.0` · between
+two refs `--base main --head feature` · a different repo `--dir /path/to/repo`.
 
 ---
 

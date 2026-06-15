@@ -71,16 +71,16 @@ function defaultBranchCandidates(repo: string): string[] {
   return out;
 }
 
-/** Unified diff of the working tree against `base`. */
-export function getDiff(repo: string, base: string): string {
-  return git(repo, [
-    'diff',
-    '--no-color',
-    '--no-ext-diff',
-    `-U${DIFF_CONTEXT_LINES}`,
-    base,
-    '--',
-  ]);
+/**
+ * Unified diff against `base`. With no `head`, diffs the working tree (the usual
+ * "review my current change" case). With `head`, diffs `base..head` — two refs,
+ * no working tree involved.
+ */
+export function getDiff(repo: string, base: string, head?: string): string {
+  const args = ['diff', '--no-color', '--no-ext-diff', `-U${DIFF_CONTEXT_LINES}`, base];
+  if (head) args.push(head);
+  args.push('--');
+  return git(repo, args);
 }
 
 /** A short human label for what we diffed against. */

@@ -23,6 +23,7 @@ export interface ServeOptions {
   repo: string;
   port: number;
   baseOverride?: string;
+  headOverride?: string;
   open: boolean;
 }
 
@@ -108,7 +109,7 @@ interface ReviewData {
 function loadReview(opts: ServeOptions): ReviewData {
   const tour = loadTour(tourPath(opts.repo));
   const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
-  const files = parseUnifiedDiff(getDiff(opts.repo, base));
+  const files = parseUnifiedDiff(getDiff(opts.repo, base, opts.headOverride));
   return { tour, base, files };
 }
 
