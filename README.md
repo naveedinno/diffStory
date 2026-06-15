@@ -112,6 +112,24 @@ The skills then work in every repo as `/diffstory:review-tour` and `/diffstory:a
 (Claude also auto-invokes them by description). Pick up new versions later with
 `/plugin marketplace update diffstory`.
 
+### Codex & other agents (not just Claude Code)
+
+diffStory isn't Claude-only. The **CLI is agent-agnostic**, and the two skills use the standard
+`SKILL.md` format that **Codex** (and other agents) also read — they're already neutral (the
+instructions reference the `diffstory` CLI, never a Claude-specific command).
+
+- **CLI** — install exactly as above: `npm i -g github:naveedinno/diffStory`.
+- **Skills** — Codex reads skills from `.agents/skills/`. Install them once, globally:
+  ```bash
+  git clone git@github.com:naveedinno/diffStory.git
+  cp -r diffStory/skills/review-tour diffStory/skills/address-review ~/.agents/skills/
+  ```
+  Codex then invokes them as `$review-tour` / `$address-review`, or automatically when a request
+  matches their description. (Prefer per-repo? Copy into that repo's `.agents/skills/` instead.)
+
+Same loop either way: the agent writes `.diffstory/review-tour.json`, you run `diffstory serve`
+and comment, and the agent acts on `.diffstory/comments.json`.
+
 ### 3. Use it anywhere
 
 The loop above now works in **any** repo on that machine. `.diffstory/` holds local review
