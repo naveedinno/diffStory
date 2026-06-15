@@ -33,14 +33,17 @@ npm install && npm run demo
 This builds a sample multi-file change and opens the review page so you can click around — walk the
 steps, leave a comment, watch the trust check flag a sneaky change.
 
-Then use it for real, in any repo after your agent makes changes:
+Then use it for real, in any repo after making changes:
 
 ```text
-1.  Ask your agent for a tour      →  it writes .diffstory/review-tour.json
-2.  diffstory serve                →  opens the guided review page
-3.  Read in order, comment on lines
-4.  Ask your agent to address them →  refresh, repeat until clean ✅
+1.  diffstory story                →  your agent writes .diffstory/story.json, then the review opens
+2.  Read in order, comment on lines
+3.  Ask your agent to address them →  refresh, repeat until clean ✅
 ```
+
+**Reviewing a teammate's PR?** If they committed their story (`diffstory init` → *share via git*),
+just `git checkout <their-branch> && diffstory serve` to replay their guided walkthrough — no agent
+needed.
 
 ## What you get
 
