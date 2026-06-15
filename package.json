@@ -22,7 +22,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
     "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",
