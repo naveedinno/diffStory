@@ -52,16 +52,23 @@ Then use it for real, in any repo after your agent makes changes:
 - 🗂️ **An all-files view** — a clean, file-by-file overview when you want the bird's-eye.
 - 🔒 **Local & dependency-free** — Node built-ins only; nothing installed at runtime, nothing phoned home.
 
-## Works with your agent
+## Install
 
-The review loop is driven by two skills your coding agent runs; the `diffstory` CLI itself is
-agent-agnostic. Install the CLI once:
+One command — no `npm -g`, no `sudo`. It clones diffStory to `~/.diffstory` and puts a launcher
+on your PATH that runs via `node`. Re-run any time to update:
 
-```bash
-npm i -g github:naveedinno/diffStory
+```sh
+curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/install.sh | sh
 ```
 
-Then add the skills for your agent:
+<details><summary>Other ways to install</summary>
+
+- **npm (from the repo):** `npm i -g github:naveedinno/diffStory`
+- **From source:** `git clone … && cd diffStory && npm install && npm run build && npm link`
+
+</details>
+
+Then add the skills your agent runs (the CLI is agent-agnostic):
 
 **Claude Code**
 ```text
