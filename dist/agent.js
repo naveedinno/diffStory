@@ -1,7 +1,7 @@
 // Detect and drive the user's coding agent (Claude Code / Codex) headlessly to
 // generate the story. The spawn itself is integration-only; the pure helpers
 // (onPath, storyPrompt, agentCommand) are unit-tested.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
 /** Whether `cmd` resolves on PATH (POSIX `command -v`). */
 export function onPath(cmd) {
@@ -26,8 +26,24 @@ export function agentCommand(agent, prompt) {
         ? ['claude', ['-p', prompt, '--permission-mode', 'acceptEdits']]
         : ['codex', ['exec', '--full-auto', prompt]];
 }
-/** Run the agent in `repo`, streaming its output. Returns whether it exited 0. */
+/**
+ * Run the agent in `repo`, capturing its (often noisy) output instead of dumping
+ * it to the terminal. stdin is closed so an unexpected prompt can't hang us.
+ * Returns the exit-ok flag and the captured output (shown only on failure).
+ */
 export function runAgent(agent, repo, prompt) {
     const [cmd, args] = agentCommand(agent, prompt);
-    return spawnSync(cmd, args, { cwd: repo, stdio: 'inherit' }).status === 0;
+    return new Promise((resolve) => {
+        const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+        let output = '';
+        const cap = (b) => {
+            output += b.toString();
+            if (output.length > 200_000)
+                output = output.slice(-200_000); // cap memory
+        };
+        child.stdout?.on('data', cap);
+        child.stderr?.on('data', cap);
+        child.on('error', (e) => resolve({ ok: false, output: `${output}\n${String(e)}` }));
+        child.on('close', (code) => resolve({ ok: code === 0, output }));
+    });
 }
