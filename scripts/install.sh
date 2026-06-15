@@ -39,7 +39,12 @@ else
   git clone -q --depth 1 "$REPO" "$SRC"
 fi
 
-[ -f "$SRC/dist/cli.js" ] || die "build output missing at $SRC/dist/cli.js"
+# Build from source so the CLI is always current, even if the committed dist lags.
+command -v npm >/dev/null 2>&1 || die "npm is required to build diffStory (it ships with Node.js)."
+say "› Building (first run fetches the TypeScript compiler)…"
+( cd "$SRC" && npm install --no-audit --no-fund --loglevel=error && npm run build >/dev/null )
+
+[ -f "$SRC/dist/cli.js" ] || die "build failed — try:  cd $SRC && npm install && npm run build"
 
 mkdir -p "$BIN_DIR"
 LAUNCHER="$BIN_DIR/diffstory"
