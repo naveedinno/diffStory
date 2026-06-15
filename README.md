@@ -93,9 +93,10 @@ git clone git@github.com:naveedinno/diffStory.git && cd diffStory
 
 Flags: `--dir <path>` · `--base <ref>` · `--head <ref>` · `--port <n>` · `--no-open`.
 
-**Choosing what to diff** — by default it's your working tree vs the merge-base with your default
-branch. Override it: uncommitted only `--base HEAD` · since a commit/tag `--base v1.2.0` · between
-two refs `--base main --head feature` · a different repo `--dir /path/to/repo`.
+**Choosing what to diff** — just run `diffstory serve` and it **asks** (pick a branch or commit
+from a list). Prefer flags? Pass one to skip the prompt: uncommitted only `--base HEAD` · since a
+commit/tag `--base v1.2.0` · between two refs `--base main --head feature` · a different repo
+`--dir /path/to/repo`.
 
 ---
 

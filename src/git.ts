@@ -83,6 +83,43 @@ export function getDiff(repo: string, base: string, head?: string): string {
   return git(repo, args);
 }
 
+/** Branch names (local + remote), most-recently-committed first. For the picker. */
+export function listBranches(repo: string): string[] {
+  const out = tryGit(repo, [
+    'for-each-ref',
+    '--format=%(refname:short)',
+    '--sort=-committerdate',
+    'refs/heads',
+    'refs/remotes',
+  ]);
+  if (!out) return [];
+  return out
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((b) => b && b !== 'origin/HEAD');
+}
+
+/** Recent commits as {sha, subject}, newest first. For the picker. */
+export function listRecentCommits(repo: string, n = 15): Array<{ sha: string; subject: string }> {
+  const out = tryGit(repo, ['log', `-${n}`, '--no-merges', '--pretty=format:%h%x09%s']);
+  if (!out) return [];
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf('\t');
+      return tab < 0
+        ? { sha: line, subject: '' }
+        : { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+    });
+}
+
+/** Current branch name, or null when detached. */
+export function currentBranch(repo: string): string | null {
+  const b = tryGit(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])?.trim();
+  return b && b !== 'HEAD' ? b : null;
+}
+
 /** A short human label for what we diffed against. */
 export function describeBase(repo: string, base: string): string {
   const short = tryGit(repo, ['rev-parse', '--short', base])?.trim();
