@@ -54,6 +54,17 @@ say "› Installed launcher: $LAUNCHER"
 VERSION=$(node "$SRC/dist/cli.js" --version 2>/dev/null || true)
 [ -n "$VERSION" ] && say "› $VERSION"
 
+# Install the agent skills into the cross-agent location (Codex, Cursor, …).
+SKILLS_DEST="${DIFFSTORY_SKILLS:-$HOME/.agents/skills}"
+mkdir -p "$SKILLS_DEST"
+for s in review-tour address-review; do
+  [ -d "$SRC/skills/$s" ] || continue
+  rm -rf "$SKILLS_DEST/$s"
+  cp -R "$SRC/skills/$s" "$SKILLS_DEST/$s"
+done
+say "› Installed skills: $SKILLS_DEST  (Codex: \$review-tour / \$address-review)"
+say "  Claude Code uses the plugin instead: /plugin marketplace add naveedinno/diffStory && /plugin install diffstory@diffstory"
+
 # Ensure BIN_DIR is on PATH (bash, zsh, fish).
 case ":${PATH}:" in
   *":$BIN_DIR:"*)
