@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { APP_BRAND } from './config.js';
 import { buildReviewModel } from './view-model.js';
+import { highlight } from './highlight.js';
 import type { FileView, SbsRow, StepView, TrustView, UncoveredView, UnifiedRow } from './view-model.js';
 import type { Comment, CommentType, DiffFile, Tour } from './types.js';
 
@@ -376,13 +377,12 @@ function cell(side: 'left' | 'right', row: SbsRow): string {
       signClass = ' ds-sign-add';
     }
   }
-  const tone = side === 'left' && del ? ' ds-code-del' : side === 'right' && add ? ' ds-code-add' : '';
   let tint = '';
   if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
   const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
-  return `<span class="ds-cell${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code${tone}">${
-    esc(row.content) || ' '
+  return `<span class="ds-cell${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code">${
+    highlight(row.content) || ' '
   }</span>${flag}</span>`;
 }
 
@@ -391,11 +391,10 @@ function singleCell(row: SbsRow): string {
   const add = row.type === 'add';
   const sign = add ? '+' : '';
   const signCls = add ? ' ds-sign-add' : '';
-  const codeCls = add ? ' ds-code-add' : '';
   const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
   const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
-  return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code${codeCls}">${
-    esc(row.content) || ' '
+  return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code">${
+    highlight(row.content) || ' '
   }</span>${flag}</span>`;
 }
 
@@ -505,7 +504,7 @@ function unifiedRow(row: UnifiedRow): string {
   return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"><span class="ds-no">${
     row.no ?? ''
   }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${
-    esc(row.content) || ' '
+    highlight(row.content) || ' '
   }</span>${flag}</div>`;
 }
 

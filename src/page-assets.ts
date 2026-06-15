@@ -95,7 +95,7 @@ a{color:inherit;text-decoration:none}
 .ds-stepcard-body{grid-column:2;min-width:0;display:flex;flex-direction:column;gap:3px}
 .ds-stepcard-title{font-size:13px;font-weight:600;color:#cdd2da;line-height:1.32;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .ds-stepcard.is-active .ds-stepcard-title{color:#fff}
-.ds-stepcard-file{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.ds-stepcard-file{font-family:var(--mono);font-size:11px;color:var(--dim);overflow-wrap:anywhere;line-height:1.35}
 .ds-stepcard-tags{display:flex;align-items:center;gap:7px;margin-top:4px;flex-wrap:wrap}
 .ds-flowchip{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--dim);padding:2px 7px;border-radius:5px;background:rgba(255,255,255,0.04)}
 .ds-flowico{color:var(--dim2);font-size:9px}
@@ -134,7 +134,7 @@ a{color:inherit;text-decoration:none}
 .ds-iconbtn:disabled{opacity:0.32;cursor:default}
 .ds-step-titlerow{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
 .ds-step-title{font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:#f0f1f4;line-height:1.3}
-.ds-step-file{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.ds-step-file{font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;min-width:0}
 .ds-step-file:hover{color:var(--accent-blue);text-decoration:underline}
 .ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:rgba(96,150,255,0.07);border:1px solid rgba(96,150,255,0.2);flex:none}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -191,8 +191,13 @@ a{color:inherit;text-decoration:none}
 .ds-urow .ds-no{width:40px}
 .ds-urow .ds-code{padding:2px 12px 2px 4px}
 .ds-urow .ds-no,.ds-urow .ds-sign{padding-top:2px;padding-bottom:2px}
-.ds-urow.ds-row-add .ds-code{color:var(--add-text)}
-.ds-urow.ds-row-del .ds-code{color:var(--del-text)}
+/* syntax highlighting — the line background still marks add/del */
+.ds-code .tk-k{color:#c79bff}
+.ds-code .tk-t{color:#6fd2c2}
+.ds-code .tk-f{color:#8fb4ff}
+.ds-code .tk-s{color:#b7d59b}
+.ds-code .tk-n{color:#e8a87c}
+.ds-code .tk-c{color:#727a86;font-style:italic}
 .ds-diffnote{padding:14px 16px;color:var(--muted);font-family:var(--sans);font-size:13px}
 .ds-diffnote-soft{color:var(--dim2);font-size:12px;border-bottom:1px solid var(--line-soft)}
 
