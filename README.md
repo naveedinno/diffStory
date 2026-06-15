@@ -1,217 +1,164 @@
-# diffStory
+<div align="center">
 
-**The agent tells the story of its change — a guided, in-order diff review with a comment loop back to the agent.**
+# 📖 diffStory
 
-Reviewing a big change an AI wrote is miserable: 30 files sorted alphabetically, no idea where
-to start, no thread connecting them. diffStory fixes the *order*. The AI that wrote the code also
-emits the **reading order** — the path it would walk you through in person: start at the entry
-point, follow the call into the next file, come back. You read the change the way it was meant to
-be understood, leave comments right on the lines, and hand them straight back to the agent to fix.
+### Read AI-written code the way it was meant to be read.
 
-> It's the agent telling you the *story* of what it changed, in the order the story actually happens.
+diffStory turns a sprawling, AI-authored change into a **guided tour**. The agent that wrote the
+code walks you through it in the order the logic actually flows — you comment right on the lines,
+and it fixes things on the spot. No more hunting through thirty alphabetised files.
 
-## The loop
+`MIT` · zero runtime dependencies · 100% local · works with **Claude Code** & **Codex**
 
-```
-agent   /review-tour    ─▶  .diffstory/review-tour.json  (reading plan: order + why, no code)
-        diffstory serve  ─▶  localhost review page  ◀── you read it in order
-        you comment      ─▶  .diffstory/comments.json    (saved to disk as you go)
-agent   /address-review  ─▶  fix code · answer questions · status:addressed
-                   └──────────  refresh diffstory serve  ◀──────────┘   until clean
-```
+</div>
 
-You always review the **real `git diff`** — diffStory only *reorders and annotates* it. The AI
-emits order and narrative; the code shown is pulled from git, never reproduced by the AI.
+---
 
-## See it in 10 seconds
+## Why
+
+Reviewing a big change an AI wrote is miserable: thirty files in alphabetical order, no idea where
+to start, nothing connecting them. diffStory flips it. The AI that wrote the code emits the
+**reading order** — start at the entry point, follow the call into the next file, come back — plus
+a one-line *why* for every stop. You read the **story** of the change, not a pile of diffs, and
+hand your comments straight back to the agent.
+
+## Quick start
+
+See it in ~10 seconds:
 
 ```bash
 npm install && npm run demo
 ```
 
-Builds a throwaway repo with a realistic multi-file change (a per-customer spending limit) and
-opens the review page. Things to try:
+This builds a sample multi-file change and opens the review page so you can click around — walk the
+steps, leave a comment, watch the trust check flag a sneaky change.
 
-- **Story tour** — walk the five steps in call-flow order (`←` / `→`, or `j` / `k`); each leads
-  with the AI's *"why this step"* note, then a side-by-side before/after diff. Toggle **Diff ⇄
-  Full file** to see the whole file with the change highlighted.
-- **All files** — the scannable overview: every file as a collapsible card with a `+/−` diffstat
-  and a *Step N* jump chip; **Expand / Collapse all**.
-- **Trust check** — one change is **deliberately left out of the tour**; watch the amber
-  *unexplained change* flag fire and open the drawer that surfaces it.
-- **Comments** — hover any line for a `+`, leave a change-request / question / nit, resolve it.
+Then use it for real, in any repo after your agent makes changes:
 
-Source: [`examples/demo.mjs`](examples/demo.mjs).
+```text
+1.  Ask your agent for a tour      →  it writes .diffstory/review-tour.json
+2.  diffstory serve                →  opens the guided review page
+3.  Read in order, comment on lines
+4.  Ask your agent to address them →  refresh, repeat until clean ✅
+```
 
-## Install (from source)
+## What you get
 
-To hack on diffStory itself:
+- 🧭 **A guided reading order** — walk the change step by step in call-flow order, not by filename.
+- 📝 **A "why" for every step** — what to look at, what's subtle, why it's safe.
+- ⚖️ **Real side-by-side diffs** — before/after from the actual `git diff`, never reproduced by the AI. Flip to the full file anytime.
+- 💬 **Comments that loop back** — drop a change request, question, or nit; the agent replies and fixes; you resolve.
+- 🛡️ **A trust check** — any change no step explains gets flagged, so nothing slips in quietly.
+- 🗂️ **An all-files view** — a clean, file-by-file overview when you want the bird's-eye.
+- 🔒 **Local & dependency-free** — Node built-ins only; nothing installed at runtime, nothing phoned home.
+
+## Works with your agent
+
+The review loop is driven by two skills your coding agent runs; the `diffstory` CLI itself is
+agent-agnostic. Install the CLI once:
 
 ```bash
-npm install      # dev dep: typescript only — zero runtime dependencies
-npm run build
-npm link         # puts `diffstory` on your PATH (or run: node dist/cli.js)
-npm test         # type-check + unit + smoke tests
+npm i -g github:naveedinno/diffStory
 ```
 
-Install the two skills so your local Claude Code agent can drive the loop:
+Then add the skills for your agent:
 
-```bash
-cp -r skills/review-tour skills/address-review ~/.claude/skills/
-```
-
-→ To roll diffStory out to teammates **without** cloning the repo, see
-[Roll it out to your team](#roll-it-out-to-your-team).
-
-## Use
-
-In the repo you're reviewing, after your agent has made changes:
-
-```bash
-# 1. agent writes the tour
-#    (in Claude Code)  /review-tour
-
-# 2. you review
-diffstory serve             # builds the page from the real diff + the tour, opens your browser
-
-# 3. agent addresses your comments
-#    (in Claude Code)  /address-review
-
-# 4. refresh the browser to see replies + fixes, repeat until clean
-```
-
-## Roll it out to your team
-
-diffStory ships in **two halves** — both need to reach each teammate:
-
-- **The CLI** (`diffstory`) — serves the review page and runs the trust check.
-- **The agent skills** (`review-tour`, `address-review`) — let Claude Code author the tour and
-  act on your comments. Shipped as a **Claude Code plugin**.
-
-### 1. Install the CLI
-
-Works against a private GitHub repo too — it uses each teammate's existing git credentials:
-
-```bash
-npm i -g github:naveedinno/diffstory        # puts `diffstory` on PATH
-# or zero-install per run:  npx github:naveedinno/diffstory serve
-```
-
-> Once published to npm: `npm i -g @naveedinno/diffstory` (or `npx @naveedinno/diffstory`).
-
-### 2. Install the skills (Claude Code plugin)
-
-This repo is also a Claude Code **plugin marketplace**. In Claude Code, each teammate runs:
-
-```
-/plugin marketplace add naveedinno/diffstory      # this repo
+**Claude Code**
+```text
+/plugin marketplace add naveedinno/diffStory
 /plugin install diffstory@diffstory
 ```
 
-The skills then work in every repo as `/diffstory:review-tour` and `/diffstory:address-review`
-(Claude also auto-invokes them by description). Pick up new versions later with
-`/plugin marketplace update diffstory`.
-
-### Codex & other agents (not just Claude Code)
-
-diffStory isn't Claude-only. The **CLI is agent-agnostic**, and the two skills use the standard
-`SKILL.md` format that **Codex** (and other agents) also read — they're already neutral (the
-instructions reference the `diffstory` CLI, never a Claude-specific command).
-
-- **CLI** — install exactly as above: `npm i -g github:naveedinno/diffStory`.
-- **Skills** — Codex reads skills from `.agents/skills/`. From a clone of this repo, run the
-  installer:
-  ```bash
-  git clone git@github.com:naveedinno/diffStory.git && cd diffStory
-  ./scripts/install-skills.sh            # → ~/.agents/skills (Codex, Cursor, …)
-  #   --claude  also installs into ~/.claude/skills · --dir PATH  picks a custom location
-  ```
-  Codex then invokes them as `$review-tour` / `$address-review`, or automatically when a request
-  matches their description. (Per-repo instead of global: `--dir <that-repo>/.agents/skills`.)
-
-Same loop either way: the agent writes `.diffstory/review-tour.json`, you run `diffstory serve`
-and comment, and the agent acts on `.diffstory/comments.json`.
-
-### 3. Use it anywhere
-
-The loop above now works in **any** repo on that machine. `.diffstory/` holds local review
-state — add it to each repo's `.gitignore`. Gate CI with `diffstory check`, which exits non-zero
-if any change isn't covered by a tour step.
+**Codex · Cursor · other**
+```bash
+git clone git@github.com:naveedinno/diffStory.git && cd diffStory
+./scripts/install-skills.sh
+```
 
 ## Commands
 
 | Command | What it does |
-|---|---|
-| `diffstory serve` | Build the review page from the diff + tour and serve it (default command). |
-| `diffstory check` | Print coverage to the terminal; **exits 1 if any change isn't in the tour**. Good for CI / pre-handoff. |
+| --- | --- |
+| `diffstory serve` | Open the guided review page (default command). |
+| `diffstory check` | Print coverage; **exits non-zero if a change isn't in the tour** — great for CI. |
 | `diffstory init` | Scaffold `.diffstory/` with a starter tour. |
-| `diffstory help` | Full usage. |
+| `diffstory help` | Full usage and flags. |
 
-Options: `--dir <path>` (repo to review), `--base <ref>` (diff base; default auto = merge-base
-with the default branch), `--port <n>`, `--no-open`.
+Flags: `--dir <path>`, `--base <ref>`, `--port <n>`, `--no-open`.
 
-## The review screen
+---
 
-A deep-dark, IDE-native screen built for staring at for an hour:
+<details>
+<summary><b>The tour format</b> — what your agent writes</summary>
 
-- **Reading-order rail** (left) — the AI-authored tour as a connected trail of numbered steps;
-  the active one lights azure, visited ones check off, and each shows its file, change kind
-  (Changed / New file / Context), and call-flow (*"Calls step 2 · returns to 1"*).
-- **Story tour** (main) — leads with the *why* note, then a side-by-side before/after diff. New
-  files show a hatched "did not exist" column; context steps render single-column "unchanged".
-  Toggle to the complete file at any time.
-- **All files** — a dense overview that scales to 100+ changes: collapsible per-file cards with
-  compact unified diffs, untoured flags, and jump-into-the-tour chips.
-- **Comments** — threaded, with a flavor (change / question / nit) and a status (open →
-  addressed → resolved). The agent's replies show inline; you resolve when satisfied.
+<br>
 
-## The trust check
-
-diffStory cross-checks the tour against the real diff. **Any changed hunk no step points at is
-flagged** — on the page (the amber *unexplained change* pill opens a drawer that tallies covered
-vs. unexplained lines and surfaces each one), and in `diffstory check` (which exits non-zero).
-The agent can't quietly leave a change out of the narrative.
-
-## The tour format
-
-`.diffstory/review-tour.json` — written by the agent, order + narrative only. See
-[`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md) for the full schema. The short of it:
+`.diffstory/review-tour.json` is authored by the agent: **order and narrative only, never code.**
 
 ```jsonc
 {
   "version": 1,
-  "title": "Cap settle output",
-  "summary": "Read settle() first, then the cap() helper it now calls.",
+  "title": "Add per-customer spending limit",
+  "summary": "Start at the API entry point, follow the limit check across files, then the test.",
   "steps": [
-    { "id": "s1", "order": 1, "title": "settle() now caps", "file": "fileA.ts",
-      "range": [1, 4], "kind": "changed", "why": "Entry point; delegates to cap().", "calls": ["s2"] },
-    { "id": "s2", "order": 2, "title": "the cap() helper", "file": "lib.ts",
-      "range": [1, 3], "kind": "new-file", "why": "Clamps to 100.", "returnsTo": "s1" }
+    { "id": "s1", "order": 1, "title": "createOrder() now checks the limit", "file": "src/api.ts",
+      "range": [1, 16], "kind": "changed", "why": "Entry point — the new block rejects over-cap orders before placing them.", "calls": ["s2"] },
+    { "id": "s2", "order": 2, "title": "checkSpendingLimit()", "file": "src/limits.ts",
+      "range": [1, 11], "kind": "new-file", "why": "Reads the customer's spend and compares to the cap.", "returnsTo": "s1" }
   ]
 }
 ```
 
-`kind` is `changed` (render the real hunk), `new-file`, or `context` (show *unchanged* code the
-reader needs — like the callee you didn't touch). `calls`/`returnsTo` render the cross-file jumps.
+`kind` is `changed` (show the real hunk), `new-file`, or `context` (unchanged code the reader needs
+— like a callee you didn't touch). `calls` / `returnsTo` render the cross-file jumps. Full schema
+in [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
 
-## v1 scope & limitations
+</details>
 
-- **Manual round-trip.** Comments are saved to disk; you trigger `/address-review` yourself and
-  refresh. No live-watch/SSE yet (planned).
-- **Comment drift.** Comments anchor to a line number at comment-time. If the agent edits and
-  you *don't* re-run `/review-tour`, an unresolved comment can point at a shifted line — it falls
-  back to a note on its step. Resolve a batch, then re-review fresh.
-- **Syntax highlighting** is diff-coloring only in v1 (kept fully self-contained, no CDN). Token
-  highlighting via build-time Shiki is the planned enhancement.
-- Needs a git repo; reviews the working tree against the base.
+<details>
+<summary><b>How it works under the hood</b></summary>
 
-## Why TypeScript + zero deps
+<br>
 
-The whole tool is Node built-ins (`http`, `child_process`, `fs`). Nothing to install at
-runtime, nothing phoning home — which matters when the entire point is *trusting* the change in
-front of you. The review page is a single self-contained HTML document: all code is escaped
+You always review the **real `git diff`** — diffStory only *reorders and annotates* it. The agent
+supplies order + narrative; the code shown is pulled from git, never reproduced by the AI (which
+matters when the thing you're auditing is that same AI's output).
+
+The whole tool is Node built-ins (`http`, `child_process`, `fs`) — nothing to install at runtime,
+nothing phoning home. The review page is a single self-contained HTML document; all code is escaped
 server-side and the client only ever sets text or injects that server-escaped markup.
+
+</details>
+
+<details>
+<summary><b>Rolling it out to a team</b></summary>
+
+<br>
+
+The repo can stay **private** — grant read access to specific people (Settings → Collaborators, or
+a GitHub org + team). Everyone then installs from it using their own GitHub auth:
+
+- **CLI:** `npm i -g github:naveedinno/diffStory` (if it errors on auth, use `git+ssh://git@github.com/naveedinno/diffStory.git`).
+- **Claude Code:** `/plugin marketplace add naveedinno/diffStory` → `/plugin install diffstory@diffstory`.
+- **Codex / others:** `./scripts/install-skills.sh` (installs into `~/.agents/skills/`; `--claude` also targets `~/.claude/skills/`, `--dir PATH` for a custom location).
+
+Each teammate needs the repo shared with them and GitHub auth configured (an SSH key or token) —
+the same as cloning any private repo. Add `.diffstory/` to each repo's `.gitignore`.
+
+</details>
+
+<details>
+<summary><b>Limitations (v1)</b></summary>
+
+<br>
+
+- **Manual round-trip.** Comments save to disk; you trigger the agent's address step and refresh. Live-watch is planned.
+- **Comment drift.** Comments anchor to a line number at comment-time; if code shifts and the tour isn't refreshed, a comment falls back to a note on its step. Resolve a batch, then re-review fresh.
+- **Syntax highlighting** is diff-coloring only in v1 (kept self-contained, no CDN).
+- Needs a git repo; reviews the working tree against a base.
+
+</details>
 
 ## License
 
-MIT
+[MIT](LICENSE) © naveedinno
