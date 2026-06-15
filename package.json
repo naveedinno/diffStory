@@ -27,7 +27,7 @@
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
-    "prepare": "npm run build"
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=20"

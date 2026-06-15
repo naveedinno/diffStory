@@ -1,6 +1,9 @@
 node_modules/
-dist/
 *.log
+
+# dist/ is committed so `npm i -g github:naveedinno/diffStory` works without a
+# build step (a global git-install does not install devDeps, so tsc is absent).
+# Rebuild before committing source changes: npm run build
 
 # diffStory working files live alongside the repo being reviewed.
 # Keep them local by default — they describe a single review session.
