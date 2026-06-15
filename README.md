@@ -119,13 +119,15 @@ diffStory isn't Claude-only. The **CLI is agent-agnostic**, and the two skills u
 instructions reference the `diffstory` CLI, never a Claude-specific command).
 
 - **CLI** — install exactly as above: `npm i -g github:naveedinno/diffStory`.
-- **Skills** — Codex reads skills from `.agents/skills/`. Install them once, globally:
+- **Skills** — Codex reads skills from `.agents/skills/`. From a clone of this repo, run the
+  installer:
   ```bash
-  git clone git@github.com:naveedinno/diffStory.git
-  cp -r diffStory/skills/review-tour diffStory/skills/address-review ~/.agents/skills/
+  git clone git@github.com:naveedinno/diffStory.git && cd diffStory
+  ./scripts/install-skills.sh            # → ~/.agents/skills (Codex, Cursor, …)
+  #   --claude  also installs into ~/.claude/skills · --dir PATH  picks a custom location
   ```
   Codex then invokes them as `$review-tour` / `$address-review`, or automatically when a request
-  matches their description. (Prefer per-repo? Copy into that repo's `.agents/skills/` instead.)
+  matches their description. (Per-repo instead of global: `--dir <that-repo>/.agents/skills`.)
 
 Same loop either way: the agent writes `.diffstory/review-tour.json`, you run `diffstory serve`
 and comment, and the agent acts on `.diffstory/comments.json`.
