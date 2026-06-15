@@ -20,19 +20,26 @@ export function storyPrompt(baseRef, headRef) {
         `with the entry point, follow the call flow — do NOT emit one step per file. Cover every changed ` +
         `hunk. Do not ask questions — generate it directly.`);
 }
+/** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
+export const DEFAULT_CLAUDE_MODEL = 'sonnet';
 /** The headless command + args for an agent. Flags verified against each CLI's --help. */
-export function agentCommand(agent, prompt) {
-    return agent === 'claude'
-        ? ['claude', ['-p', prompt, '--permission-mode', 'acceptEdits']]
-        : ['codex', ['exec', '--full-auto', prompt]];
+export function agentCommand(agent, prompt, model) {
+    if (agent === 'claude') {
+        return ['claude', ['-p', prompt, '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL]];
+    }
+    const args = ['exec', '--full-auto'];
+    if (model)
+        args.push('--model', model);
+    args.push(prompt);
+    return ['codex', args];
 }
 /**
  * Run the agent in `repo`, capturing its (often noisy) output instead of dumping
  * it to the terminal. stdin is closed so an unexpected prompt can't hang us.
  * Returns the exit-ok flag and the captured output (shown only on failure).
  */
-export function runAgent(agent, repo, prompt) {
-    const [cmd, args] = agentCommand(agent, prompt);
+export function runAgent(agent, repo, prompt, model) {
+    const [cmd, args] = agentCommand(agent, prompt, model);
     return new Promise((resolve) => {
         const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
         let output = '';

@@ -14,10 +14,17 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('.diffstory/story.json'));
 });
 
-test('agentCommand builds headless invocations', () => {
+test('agentCommand builds headless invocations with a safe default model', () => {
   assert.deepEqual(agentCommand('claude', 'GO'), [
     'claude',
-    ['-p', 'GO', '--permission-mode', 'acceptEdits'],
+    ['-p', 'GO', '--permission-mode', 'acceptEdits', '--model', 'sonnet'],
   ]);
   assert.deepEqual(agentCommand('codex', 'GO'), ['codex', ['exec', '--full-auto', 'GO']]);
+});
+
+test('agentCommand honors an explicit model', () => {
+  assert.deepEqual(agentCommand('claude', 'GO', 'opus')[1], [
+    '-p', 'GO', '--permission-mode', 'acceptEdits', '--model', 'opus',
+  ]);
+  assert.deepEqual(agentCommand('codex', 'GO', 'gpt-5')[1], ['exec', '--full-auto', '--model', 'gpt-5', 'GO']);
 });
