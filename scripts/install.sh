@@ -39,12 +39,15 @@ else
   git clone -q --depth 1 "$REPO" "$SRC"
 fi
 
-# Build from source so the CLI is always current, even if the committed dist lags.
-command -v npm >/dev/null 2>&1 || die "npm is required to build diffStory (it ships with Node.js)."
-say "› Building (first run fetches the TypeScript compiler)…"
-( cd "$SRC" && npm install --no-audit --no-fund --loglevel=error && npm run build >/dev/null )
+# Build from source so the CLI is always current. Non-fatal: if the toolchain or
+# npm cache is unhappy, fall back to the prebuilt dist committed in the repo.
+if command -v npm >/dev/null 2>&1; then
+  say "› Building (first run fetches the TypeScript compiler)…"
+  ( cd "$SRC" && npm install --no-audit --no-fund --loglevel=error && npm run build >/dev/null ) \
+    || say "  (couldn't build — using the prebuilt dist shipped in the repo)"
+fi
 
-[ -f "$SRC/dist/cli.js" ] || die "build failed — try:  cd $SRC && npm install && npm run build"
+[ -f "$SRC/dist/cli.js" ] || die "no CLI build found — try:  cd $SRC && npm install && npm run build"
 
 mkdir -p "$BIN_DIR"
 LAUNCHER="$BIN_DIR/diffstory"
