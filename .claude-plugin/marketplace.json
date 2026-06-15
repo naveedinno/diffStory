@@ -1,0 +1,17 @@
+{
+  "name": "diffstory",
+  "description": "diffStory — guided, in-order AI-diff review with a comment loop back to the agent.",
+  "owner": {
+    "name": "naveedinno",
+    "email": "naveed.hashim171@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "diffstory",
+      "source": "./",
+      "description": "The review-tour + address-review skills that drive diffStory's review loop. Pair with the `diffstory` CLI (see the repo README).",
+      "version": "0.1.0",
+      "homepage": "https://github.com/naveedinno/diffstory"
+    }
+  ]
+}

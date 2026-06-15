@@ -1,10 +1,20 @@
 {
-  "name": "cairn",
+  "name": "@naveedinno/diffstory",
   "version": "0.1.0",
-  "description": "Guided, in-order review of AI-authored diffs, with a comment loop back to the agent.",
+  "description": "diffStory — the agent tells the story of its change: a guided, in-order diff review with a comment loop back to the agent.",
   "type": "module",
+  "author": "naveedinno <naveed.hashim171@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/naveedinno/diffstory.git"
+  },
+  "homepage": "https://github.com/naveedinno/diffstory#readme",
+  "bugs": "https://github.com/naveedinno/diffstory/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "cairn": "dist/cli.js"
+    "diffstory": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -16,12 +26,14 @@
     "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",
-    "prepublishOnly": "npm run build"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepare": "npm run build"
   },
   "engines": {
     "node": ">=20"
   },
   "keywords": [
+    "diffstory",
     "code-review",
     "diff",
     "ai",

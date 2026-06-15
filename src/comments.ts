@@ -3,9 +3,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { commentsPath } from './config.js';
-import type { Comment, CommentType } from './types.js';
+import type { Comment, CommentStatus, CommentType } from './types.js';
 
 const TYPES: CommentType[] = ['change', 'question', 'nit'];
+const STATUSES: CommentStatus[] = ['open', 'addressed', 'resolved'];
 
 export function loadComments(repo: string): Comment[] {
   const path = commentsPath(repo);
@@ -64,6 +65,23 @@ export function deleteComment(repo: string, id: string): boolean {
   if (next.length === comments.length) return false;
   saveComments(repo, next);
   return true;
+}
+
+/**
+ * Update a comment's status (the reviewer resolving / reopening a thread).
+ * Returns the updated comment, or null if no comment has that id. The agent's
+ * `reply` and everything else is preserved.
+ */
+export function setCommentStatus(repo: string, id: string, status: string): Comment | null {
+  if (!STATUSES.includes(status as CommentStatus)) {
+    throw new Error(`status must be one of ${STATUSES.join(', ')}`);
+  }
+  const comments = loadComments(repo);
+  const target = comments.find((c) => c.id === id);
+  if (!target) return null;
+  target.status = status as CommentStatus;
+  saveComments(repo, comments);
+  return target;
 }
 
 function nextId(): string {

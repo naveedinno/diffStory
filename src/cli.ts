@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cairn CLI: serve a guided review, check coverage, or scaffold a tour.
+// diffStory CLI: serve a guided review, check coverage, or scaffold a tour.
 import { resolve } from 'node:path';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { isGitRepo, resolveBase, getDiff, describeBase } from './git.js';
@@ -7,7 +7,7 @@ import { parseUnifiedDiff } from './diff.js';
 import { loadTour, TourError } from './tour.js';
 import { computeCoverage, stalePointers } from './coverage.js';
 import { serve } from './server.js';
-import { APP_NAME, DEFAULT_PORT, dataDir, tourPath } from './config.js';
+import { APP_NAME, DATA_DIR, DEFAULT_PORT, dataDir, tourPath } from './config.js';
 
 const VERSION = '0.1.0';
 
@@ -38,7 +38,7 @@ function parseArgs(argv: string[]): Args {
 
 function ensureRepo(dir: string): void {
   if (!isGitRepo(dir)) {
-    throw new Error(`${dir} is not a git repository — cairn reviews a git diff.`);
+    throw new Error(`${dir} is not a git repository — ${APP_NAME} reviews a git diff.`);
   }
 }
 
@@ -86,7 +86,7 @@ function cmdInit(a: Args): void {
   }
   console.log(`\nNext:`);
   console.log(`  1. Have your agent run /review-tour to fill in the tour`);
-  console.log(`  2. cairn serve`);
+  console.log(`  2. ${APP_NAME} serve`);
   console.log(`  3. Leave comments in the browser, then run /address-review to hand them back.\n`);
 }
 
@@ -97,7 +97,7 @@ ${APP_NAME} — guided, in-order review of AI-authored diffs.
 Usage:
   ${APP_NAME} [serve]        Build the review page and open it (default command)
   ${APP_NAME} check          Print coverage to the terminal; exit 1 if changes are uncovered
-  ${APP_NAME} init           Scaffold .cairn/ with a starter tour
+  ${APP_NAME} init           Scaffold ${DATA_DIR}/ with a starter tour
   ${APP_NAME} help           Show this help
 
 Options:
@@ -107,8 +107,8 @@ Options:
   --no-open        Don't open the browser automatically
   -v, --version    Print version
 
-The tour lives at .cairn/review-tour.json (written by the /review-tour skill).
-Comments are saved to .cairn/comments.json (read back by /address-review).
+The tour lives at ${DATA_DIR}/review-tour.json (written by the /review-tour skill).
+Comments are saved to ${DATA_DIR}/comments.json (read back by /address-review).
 `);
 }
 

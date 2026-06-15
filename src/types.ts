@@ -1,4 +1,4 @@
-// Shared data shapes for Cairn.
+// Shared data shapes for diffStory.
 //
 // Two authored artifacts flow through the system:
 //   - the *tour* (review-tour.json) — written by the AI, describes the reading order.

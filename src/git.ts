@@ -108,3 +108,19 @@ export function readFileRange(
   const to = Math.min(all.length, Math.max(from, end));
   return { lines: all.slice(from - 1, to), startLine: from };
 }
+
+/**
+ * Read a whole file from the working tree as an array of lines (no trailing
+ * newlines). Returns null if the file is gone. Used to reconstruct the
+ * complete-file ("Full file") view.
+ */
+export function readWholeFile(repo: string, file: string): string[] | null {
+  const abs = join(repo, file);
+  if (!existsSync(abs)) return null;
+  const text = readFileSync(abs, 'utf8');
+  const lines = text.split('\n');
+  // Drop a single trailing empty element from a final newline so the line count
+  // matches the file's real line count.
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}

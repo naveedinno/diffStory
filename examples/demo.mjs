@@ -1,6 +1,6 @@
 // Builds a throwaway git repo with a realistic multi-file change + a tour, then
-// opens the Cairn review page on it. Run with: npm run demo
-// Set CAIRN_DEMO_NO_SERVE=1 to build the repo without launching the server.
+// opens the diffStory review page on it. Run with: npm run demo
+// Set DIFFSTORY_DEMO_NO_SERVE=1 to build the repo without launching the server.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'dist', 'cli.js');
-const DEMO = process.env.CAIRN_DEMO_DIR || join(tmpdir(), 'cairn-demo');
+const DEMO = process.env.DIFFSTORY_DEMO_DIR || join(tmpdir(), 'diffstory-demo');
 
 // ---------------------------------------------------------------------------
 // File contents. Authored so line numbers match the tour ranges exactly.
@@ -135,8 +135,8 @@ function write(rel, content) {
 rmSync(DEMO, { recursive: true, force: true });
 mkdirSync(DEMO, { recursive: true });
 git(['init', '-q', '-b', 'main']);
-git(['config', 'user.email', 'demo@cairn']);
-git(['config', 'user.name', 'cairn demo']);
+git(['config', 'user.email', 'demo@diffstory']);
+git(['config', 'user.name', 'diffStory demo']);
 write('src/api.ts', BASE_API);
 write('src/orders.ts', BASE_ORDERS);
 write('src/db.ts', DB);
@@ -153,19 +153,19 @@ git(['add', '-A']);
 git(['commit', '-qm', 'feat: per-customer monthly spending limit']);
 
 // the tour + a couple of pre-seeded comments
-write('.cairn/review-tour.json', TOUR);
-write('.cairn/comments.json', COMMENTS);
+write('.diffstory/review-tour.json', TOUR);
+write('.diffstory/comments.json', COMMENTS);
 
 console.log('\nDemo repo built at: ' + DEMO);
-console.log('— cairn check —');
+console.log('— diffstory check —');
 try {
   execFileSync('node', [CLI, 'check', '--dir', DEMO], { stdio: 'inherit' });
 } catch {
   /* `check` exits 1 when something is uncovered — that's the point of this demo */
 }
 
-if (process.env.CAIRN_DEMO_NO_SERVE) {
-  console.log('\n(skipping serve; CAIRN_DEMO_NO_SERVE set)');
+if (process.env.DIFFSTORY_DEMO_NO_SERVE) {
+  console.log('\n(skipping serve; DIFFSTORY_DEMO_NO_SERVE set)');
   process.exit(0);
 }
 

@@ -1,13 +1,13 @@
 ---
 name: review-tour
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .cairn/review-tour.json — a guided, in-order reading path through your own diff — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
+description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/review-tour.json — a guided, in-order reading path through your own diff — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
 ---
 
 # Writing a review tour
 
 You just changed code. The reviewer now has to understand it. A raw diff sorts files
 alphabetically — the worst order for understanding. Your job: write the **reading order**
-you'd give a colleague looking over your shoulder, and save it as a tour Cairn can render.
+you'd give a colleague looking over your shoulder, and save it as a tour diffStory can render.
 
 You have something no diff tool has: you know *why* the code is shaped this way and what
 calls what. Capture that.
@@ -36,11 +36,11 @@ calls what. Capture that.
      to come back to.
 
 4. **Cover every change.** Every changed hunk MUST be pointed at by at least one `changed` or
-   `new-file` step. This is enforced — run `cairn check` and fix anything it lists under
+   `new-file` step. This is enforced — run `diffstory check` and fix anything it lists under
    "not in the tour" until it passes. Don't quietly leave a change out of the narrative.
 
-5. **Write** the result to `.cairn/review-tour.json`, then run `cairn check` one last time.
-   Tell the user: *"Tour ready — run `cairn serve` to review."*
+5. **Write** the result to `.diffstory/review-tour.json`, then run `diffstory check` one last time.
+   Tell the user: *"Tour ready — run `diffstory serve` to review."*
 
 ## Schema
 
@@ -78,6 +78,6 @@ calls what. Capture that.
 
 ## Don't
 
-- Don't reproduce code in the tour — Cairn pulls the real diff from git. You only supply order + narrative.
+- Don't reproduce code in the tour — diffStory pulls the real diff from git. You only supply order + narrative.
 - Don't write a step per file mechanically — write the *path a human should walk*.
-- Don't skip the `cairn check` gate.
+- Don't skip the `diffstory check` gate.

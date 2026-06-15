@@ -1,216 +1,602 @@
-// Turn a validated tour + the parsed diff into a single self-contained HTML page.
-// All code content is escaped here, server-side; the client JS only ever uses
-// textContent, so there is no HTML-injection sink.
+// Turn a validated tour + the parsed diff into a single self-contained HTML page —
+// the diffStory review screen. All code content is escaped here, server-side; the
+// client JS only ever sets textContent or injects this server-escaped HTML, so
+// there is no HTML-injection sink.
 import { join } from 'node:path';
-import { readFileRange } from './git.js';
-import { rangesOverlap } from './diff.js';
-import { orderedSteps } from './tour.js';
-import { computeCoverage, stalePointers } from './coverage.js';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
-import { APP_NAME } from './config.js';
-import type { DiffFile, DiffLine, Tour, TourStep } from './types.js';
-
-const UNCOVERED_STEP_ID = '__uncovered__';
+import { APP_BRAND } from './config.js';
+import { buildReviewModel } from './view-model.js';
+import type { FileView, SbsRow, StepView, TrustView, UncoveredView, UnifiedRow } from './view-model.js';
+import type { Comment, CommentType, DiffFile, Tour } from './types.js';
 
 export interface RenderInput {
   repo: string;
   tour: Tour;
   files: DiffFile[];
   baseLabel: string;
+  comments: Comment[];
 }
 
+const FLAVOR_LABEL: Record<CommentType, string> = {
+  change: 'Change request',
+  question: 'Question',
+  nit: 'Nit',
+};
+const FLAVOR_ICON: Record<CommentType, string> = { change: '◆', question: '?', nit: '○' };
+const STATUS_LABEL: Record<Comment['status'], string> = {
+  open: 'Open',
+  addressed: 'Addressed',
+  resolved: 'Resolved',
+};
+
 export function renderPage(input: RenderInput): string {
-  const { repo, tour, files, baseLabel } = input;
-  const steps = orderedSteps(tour);
-  const byId = new Map(steps.map((s) => [s.id, s]));
-  const coverage = computeCoverage(tour, files);
-  const stale = stalePointers(tour, files);
+  const { repo, tour, files, baseLabel, comments } = input;
+  const model = buildReviewModel(repo, tour, files);
+  const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i]));
 
-  const coveragePill =
-    coverage.uncovered.length > 0
-      ? `<span class="pill warn">⚠ ${coverage.uncovered.length} change${coverage.uncovered.length === 1 ? '' : 's'} not in tour</span>`
-      : `<span class="pill ok">✓ all changes covered</span>`;
+  const openCount = comments.filter((c) => c.status !== 'resolved').length;
+  const uncoveredCount = model.trust.uncovered.length;
+  const approveReady = openCount === 0 && uncoveredCount === 0;
 
-  const head = `
-  <header class="top">
-    <h1><span class="brand">${APP_NAME}</span> ${esc(tour.title)}</h1>
-    ${tour.summary ? `<p class="summary">${nl(esc(tour.summary))}</p>` : ''}
-    <div class="meta">
-      <span class="pill">vs ${esc(baseLabel)}</span>
-      <span class="pill">${coverage.coveredChangedFiles}/${coverage.totalChangedFiles} changed files</span>
-      ${coveragePill}
-      <span class="pill" id="comment-count">0 comments</span>
-    </div>
-    ${staleBanner(stale)}
-  </header>`;
-
-  const body =
-    steps.map((s) => renderStep(repo, s, files, byId)).join('\n') +
-    renderUncovered(coverage, files);
+  const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
+  const railFiles = model.files.map((f, i) => railFileItem(f, i)).join('');
+  const stepPanels = model.steps
+    .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
+    .join('');
+  const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${APP_NAME} — ${esc(tour.title)}</title>
+<title>${esc(APP_BRAND)} — ${esc(tour.title)}</title>
 <style>${PAGE_CSS}</style>
 </head>
 <body>
-${head}
-<div class="layout">
-${renderRail(steps)}
-<main>
-${body || '<div class="empty">This tour has no steps.</div>'}
-</main>
+<header class="ds-top">
+  <div class="ds-brand" title="${esc(APP_BRAND)} — the agent tells the story of its change">
+    ${BRAND_MARK}
+    <span class="ds-word"><span class="ds-word-a">diff</span><span class="ds-word-b">Story</span></span>
+  </div>
+  <div class="ds-vsep"></div>
+  <div class="ds-titlewrap">
+    <div class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
+      baseLabel,
+    )}">${esc(baseLabel)}</span></div>
+    <div class="ds-title" title="${esc(tour.summary || tour.title)}">${esc(tour.title)}</div>
+  </div>
+  <div class="ds-status">
+    <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> open ${plural(
+      openCount,
+      'comment',
+    )}</span>
+    <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no tour step explains">${
+      uncoveredCount
+        ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained ${plural(uncoveredCount, 'change')}`
+        : `<span class="ds-check">✓</span> all changes explained`
+    }</button>
+  </div>
+  <div class="ds-vsep"></div>
+  <div class="ds-actions">
+    <button class="ds-btn ds-btn-ghost" data-verdict="request">Request changes</button>
+    <button class="ds-btn ds-btn-approve" data-verdict="approve"${approveReady ? '' : ' disabled'} title="${
+      approveReady
+        ? 'Everything is covered and there are no open comments'
+        : 'Resolve open comments and make sure every change is explained first'
+    }"><span class="ds-check">✓</span> Approve</button>
+  </div>
+</header>
+
+<div class="ds-layout">
+  <aside class="ds-rail">
+    <div class="ds-railpad">
+      <div class="ds-viewtoggle" role="tablist">
+        <button class="ds-tab is-active" data-view="tour" role="tab">Story tour</button>
+        <button class="ds-tab" data-view="files" role="tab">All files</button>
+      </div>
+    </div>
+    <div class="ds-readhead" data-rail="tour">
+      <div class="ds-readhead-row">
+        <span class="ds-readhead-label">Reading order</span>
+        <span class="ds-readhead-count" id="ds-progress-text">1 / ${model.totalSteps}</span>
+      </div>
+      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:${
+        model.totalSteps ? (100 / model.totalSteps).toFixed(2) : 0
+      }%"></div></div>
+    </div>
+    <div class="ds-readhead" data-rail="files" hidden>
+      <div class="ds-readhead-row">
+        <span class="ds-readhead-label">Files</span>
+        <span class="ds-readhead-count">${model.files.length} ${plural(model.files.length, 'file')}</span>
+      </div>
+    </div>
+    <div class="ds-railscroll">
+      <div class="ds-railsteps" data-rail="tour">
+        <div class="ds-spine"></div>
+        ${railCards}
+      </div>
+      <div class="ds-railfiles" data-rail="files" hidden>
+        ${railFiles || '<div class="ds-empty ds-empty-rail">No files in this change.</div>'}
+      </div>
+    </div>
+    ${trustRailCard(model.trust)}
+  </aside>
+
+  <main class="ds-main">
+    <div class="ds-view" id="ds-view-tour">
+      ${stepPanels || '<div class="ds-empty">This tour has no steps.</div>'}
+    </div>
+    <div class="ds-view" id="ds-view-files" hidden>
+      <div class="ds-fileshead">
+        <div class="ds-fileshead-l">
+          <h1 class="ds-fileshead-title">All files in this change</h1>
+          <div class="ds-fileshead-stats">
+            <span>${model.filesChanged} changed${
+    model.contextFiles ? ` · ${model.contextFiles} context` : ''
+  }</span>
+            <span class="ds-dot"></span>
+            <span class="ds-stat-add">+${model.totalAdd}</span>
+            <span class="ds-stat-del">−${model.totalDel}</span>
+            ${
+              uncoveredCount
+                ? `<span class="ds-dot"></span><span class="ds-stat-untoured"><span class="ds-dot ds-dot-amber"></span>${uncoveredCount} untoured</span>`
+                : ''
+            }
+          </div>
+        </div>
+        <div class="ds-fileshead-r">
+          <span class="ds-fileshint">Pick a file from the list</span>
+        </div>
+      </div>
+      <div class="ds-filedetail" id="ds-file-detail">
+        ${filePanels || '<div class="ds-empty">No files in this change.</div>'}
+      </div>
+    </div>
+  </main>
 </div>
+
+${trustDrawer(model.trust, stepIndexById)}
+<div class="ds-toast" id="ds-toast" hidden></div>
+<noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
 <script>${PAGE_JS}</script>
 </body>
 </html>`;
 }
 
-function renderRail(steps: TourStep[]): string {
-  const items = steps
+// ---- sidebar ----
+
+function railCard(s: StepView, i: number): string {
+  const flow = s.flow
+    ? `<span class="ds-flowchip" title="Call flow — where this step leads next and returns to in the tour"><span class="ds-flowico">↳</span>${esc(
+        s.flow,
+      )}</span>`
+    : '';
+  return `<button class="ds-stepcard${i === 0 ? ' is-active' : ''}" data-step-index="${i}" data-step-id="${esc(
+    s.id,
+  )}">
+    <span class="ds-num">${i === 0 ? '1' : i + 1}</span>
+    <span class="ds-stepcard-body">
+      <span class="ds-stepcard-title">${esc(s.title)}</span>
+      <span class="ds-stepcard-file">${esc(s.file)}</span>
+      <span class="ds-stepcard-tags">
+        <span class="ds-badge ds-badge-${s.kind === 'new-file' ? 'new' : s.kind}" title="What kind of file this is in the change">${esc(
+          s.kindLabel,
+        )}</span>
+        ${flow}
+      </span>
+    </span>
+  </button>`;
+}
+
+function trustRailCard(trust: TrustView): string {
+  if (!trust.uncovered.length) {
+    return `<button class="ds-trustcard is-clean" data-trust-open>
+      <span class="ds-trustcard-ico">✓</span>
+      <span class="ds-trustcard-body">
+        <span class="ds-trustcard-title">Trust check</span>
+        <span class="ds-trustcard-sub">Every change is explained by a step.</span>
+      </span>
+    </button>`;
+  }
+  const n = trust.uncovered.length;
+  return `<button class="ds-trustcard" data-trust-open>
+    <span class="ds-trustcard-ico">▲</span>
+    <span class="ds-trustcard-body">
+      <span class="ds-trustcard-title">Trust check</span>
+      <span class="ds-trustcard-sub">${n} ${plural(n, 'change')} in this diff ${
+    n === 1 ? "isn't" : "aren't"
+  } explained by any step.</span>
+    </span>
+  </button>`;
+}
+
+function railFileItem(f: FileView, i: number): string {
+  const [dir, base] = splitPath(f.file);
+  const kindClass = f.kind === 'new' ? 'new' : f.kind;
+  const stat =
+    f.add || f.del
+      ? `${f.add ? `<span class="ds-stat-add">+${f.add}</span>` : ''}${
+          f.del ? `<span class="ds-stat-del">−${f.del}</span>` : ''
+        }`
+      : '<span class="ds-dim">·</span>';
+  const flag = f.untoured
+    ? `<span class="ds-fileitem-flag" title="${f.untoured} untoured ${plural(f.untoured, 'change')}">▲</span>`
+    : '';
+  return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
+    f.file,
+  )}" title="${esc(f.file)} — ${esc(f.kindLabel)}">
+    <span class="ds-fileitem-dot k-${kindClass}"></span>
+    <span class="ds-fileitem-path"><span class="ds-dim">${esc(dir)}</span><span class="ds-fileitem-base">${esc(
+      base,
+    )}</span></span>
+    ${flag}
+    <span class="ds-fileitem-stat">${stat}</span>
+  </button>`;
+}
+
+// ---- story tour ----
+
+function stepPanel(
+  repo: string,
+  s: StepView,
+  i: number,
+  total: number,
+  comments: Comment[],
+): string {
+  const editor = vscodeLink(repo, s.file, 1);
+  const prevDisabled = i === 0 ? ' disabled' : '';
+  const nextDisabled = i === total - 1 ? ' disabled' : '';
+  return `<section class="ds-step" data-step-panel="${i}" data-step-id="${esc(s.id)}"${
+    i === 0 ? '' : ' hidden'
+  }>
+    <div class="ds-step-top">
+      <div class="ds-step-meta">
+        <span class="ds-step-count">Step ${s.order} of ${total}</span>
+        <span class="ds-dot"></span>
+        <span class="ds-badge ds-badge-${s.kind === 'new-file' ? 'new' : s.kind}">${esc(s.kindLabel)}</span>
+        <span class="ds-flex"></span>
+        <span class="ds-step-pos">${s.order} / ${total}</span>
+        <span class="ds-nav">
+          <button class="ds-iconbtn" data-prev title="Previous step"${prevDisabled}>←</button>
+          <button class="ds-iconbtn" data-next title="Next step"${nextDisabled}>→</button>
+        </span>
+      </div>
+      <div class="ds-step-titlerow">
+        <h1 class="ds-step-title">${esc(s.title)}</h1>
+        <a class="ds-step-file" href="${editor}" title="Open ${esc(s.file)} in your editor">${esc(
+          s.file,
+        )}</a>
+      </div>
+    </div>
+    <div class="ds-why">
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Why this step</span></div>
+      <p class="ds-why-text">${nl(esc(s.why))}</p>
+    </div>
+    <div class="ds-diffscroll">
+      <div class="ds-diff" data-diff data-file="${esc(s.file)}"${s.newFile ? ' data-newfile="1"' : ''}>
+        <div class="ds-difftoolbar">
+          <span class="ds-difthint" data-difthint>Showing only the lines this step touches</span>
+          <div class="ds-modetoggle">
+            <button class="is-active" data-mode="diff">Diff</button>
+            <button data-mode="full">Full file</button>
+          </div>
+        </div>
+        <div data-diff-inner>${diffInner(s, comments)}</div>
+        <div data-full-inner hidden></div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function diffInner(s: StepView, comments: Comment[]): string {
+  if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
+    return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
+  }
+  const head = diffHead(s);
+  const body = s.blocks
     .map(
-      (s) =>
-        `<li><a href="#step-${esc(s.id)}"><span class="num">${s.order}</span>${esc(
-          s.title,
-        )}<span class="ktag">${s.kind}</span></a></li>`,
+      (block, bi) =>
+        (bi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
+        block.map((row) => sbsRow(row, s, comments)).join(''),
     )
     .join('');
-  return `<nav class="rail"><ol>${items}</ol></nav>`;
+  const note =
+    s.note && s.blocks.some((b) => b.length)
+      ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
+      : '';
+  return `${head}${note}<div class="ds-diffbody">${body}</div>`;
 }
 
-function renderStep(
-  repo: string,
-  step: TourStep,
-  files: DiffFile[],
-  byId: Map<string, TourStep>,
-): string {
-  const view = buildStepView(repo, step, files);
-  const loc = `${esc(step.file)}:${step.range[0]}–${step.range[1]}`;
-  const editor = vscodeLink(repo, step.file, step.range[0]);
-  const tags = (step.tags ?? []).map((t) => `<span class="pill">${esc(t)}</span>`).join(' ');
-
-  const code = view.blocks.length
-    ? `<div class="code">${view.blocks
-        .map(
-          (block, i) =>
-            (i > 0 ? `<div class="gap"><span>⋯</span></div>` : '') +
-            block.map((dl) => renderLine(dl, step)).join(''),
-        )
-        .join('')}</div>`
-    : `<div class="empty">${esc(view.note ?? 'Nothing to show.')}</div>`;
-
-  return `<section class="step" id="step-${esc(step.id)}">
-  <div class="step-head"><span class="order">#${step.order}</span><h2>${esc(
-    step.title,
-  )}</h2><span class="kind">${step.kind}</span></div>
-  <div class="loc"><span>${loc}</span><a href="${editor}">open in editor →</a>${
-    tags ? `<span>${tags}</span>` : ''
-  }</div>
-  <div class="why">${nl(esc(step.why))}</div>
-  ${renderJumps(step, byId)}
-  ${view.note && view.blocks.length ? `<div class="loc">note: ${esc(view.note)}</div>` : ''}
-  ${code}
-</section>`;
-}
-
-function renderJumps(step: TourStep, byId: Map<string, TourStep>): string {
-  const parts: string[] = [];
-  for (const id of step.calls ?? []) {
-    const t = byId.get(id);
-    if (t) parts.push(`<a href="#step-${esc(id)}">→ flows into: ${esc(t.title)}</a>`);
+function diffHead(s: StepView): string {
+  if (s.context) {
+    return `<div class="ds-diffhead ds-diffhead-ctx">
+      <span class="ds-diffhead-side"><span class="ds-diffhead-label">Context</span><span class="ds-diffhead-path">${esc(
+        s.file,
+      )}</span></span>
+      <span class="ds-diffhead-note">unchanged — shown so the change makes sense</span>
+    </div>`;
   }
-  if (step.returnsTo) {
-    const t = byId.get(step.returnsTo);
-    if (t) parts.push(`<a href="#step-${esc(step.returnsTo)}">↩ back to: ${esc(t.title)}</a>`);
-  }
-  return parts.length ? `<div class="jumps">${parts.join('')}</div>` : '';
+  const leftLabel = s.newFile ? 'Did not exist' : 'Before';
+  const rightLabel = s.newFile ? 'New file' : 'After';
+  return `<div class="ds-diffhead">
+    <span class="ds-diffhead-side">
+      <span class="ds-diffhead-label${s.newFile ? ' ds-dim' : ''}">${leftLabel}</span>
+      ${s.newFile ? '' : `<span class="ds-diffhead-path">${esc(s.file)}</span>`}
+    </span>
+    <span class="ds-diffhead-divider"></span>
+    <span class="ds-diffhead-side">
+      <span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${rightLabel}</span>
+      <span class="ds-diffhead-path">${esc(s.file)}</span>
+    </span>
+  </div>`;
 }
 
-function renderLine(dl: DiffLine, step: TourStep): string {
-  const no = dl.newNo ?? dl.oldNo ?? '';
-  const canComment = dl.newNo !== undefined;
-  const data = canComment
-    ? ` data-file="${esc(step.file)}" data-line="${dl.newNo}" data-step="${esc(step.id)}"`
+function sbsRow(row: SbsRow, s: StepView, comments: Comment[]): string {
+  const commentable = !!row.comment && row.newNo !== undefined;
+  const attrs = commentable
+    ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
     : '';
-  const gutter = canComment ? '<span class="gut gutter">+</span>' : '<span class="gut"></span>';
-  return `<div class="ln ${dl.type}"${data}>${gutter}<span class="no">${no}</span><span class="code-content">${
-    esc(dl.content) || ' '
-  }</span></div>`;
+  const cells = s.context
+    ? singleCell(row)
+    : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
+  const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
+  const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}${plus}</div>`;
+  const thread = commentable ? threadFor(s.id, row.newNo!, comments) : '';
+  return rowHtml + thread;
 }
 
-interface StepView {
-  blocks: DiffLine[][];
-  note?: string;
-}
-
-function buildStepView(repo: string, step: TourStep, files: DiffFile[]): StepView {
-  const [start, end] = step.range;
-  const file = files.find((f) => f.newPath === step.file);
-
-  if (step.kind === 'changed') {
-    if (file && file.hunks.length) {
-      const blocks = file.hunks
-        .filter((h) => rangesOverlap([h.newStart, h.newStart + Math.max(h.newLines, 1) - 1], [start, end]))
-        .map((h) => h.lines);
-      if (blocks.length) return { blocks };
-      return {
-        blocks: file.hunks.map((h) => h.lines),
-        note: 'tour range did not match a hunk — showing all changes in this file',
-      };
-    }
-    const r = readFileRange(repo, step.file, start, end);
-    if (!r) return { blocks: [], note: `file not found: ${step.file}` };
-    return {
-      blocks: [r.lines.map((c, i) => ctx(c, r.startLine + i))],
-      note: 'no diff for this range — showing the current file',
-    };
+function cell(side: 'left' | 'right', row: SbsRow): string {
+  const add = row.type === 'add';
+  const del = row.type === 'del';
+  // An add has no left counterpart; a del has no right counterpart.
+  if ((side === 'left' && add) || (side === 'right' && del)) {
+    return '<span class="ds-cell ds-cell-empty"></span>';
   }
-
-  // context or new-file: read straight from the working tree
-  const r = readFileRange(repo, step.file, start, end);
-  if (!r) return { blocks: [], note: `file not found: ${step.file}` };
-  const kind: DiffLine['type'] = step.kind === 'new-file' ? 'add' : 'ctx';
-  return { blocks: [r.lines.map((c, i) => ({ type: kind, content: c, newNo: r.startLine + i }))] };
+  let no = '';
+  let sign = '';
+  let signClass = '';
+  if (side === 'left') {
+    no = row.oldNo !== undefined ? String(row.oldNo) : '';
+    if (del) {
+      sign = '−';
+      signClass = ' ds-sign-del';
+    }
+  } else {
+    no = row.newNo !== undefined ? String(row.newNo) : '';
+    if (add) {
+      sign = '+';
+      signClass = ' ds-sign-add';
+    }
+  }
+  const tone = side === 'left' && del ? ' ds-code-del' : side === 'right' && add ? ' ds-code-add' : '';
+  let tint = '';
+  if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
+  else if (side === 'left' && del) tint = ' ds-cell-del';
+  const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+  return `<span class="ds-cell${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code${tone}">${
+    esc(row.content) || ' '
+  }</span>${flag}</span>`;
 }
 
-function renderUncovered(coverage: ReturnType<typeof computeCoverage>, files: DiffFile[]): string {
-  if (!coverage.uncovered.length) return '';
-  const blocks = coverage.uncovered
-    .map((u) => {
-      const file = files.find((f) => f.newPath === u.file);
-      const lines = file
-        ? file.hunks
-            .filter((h) => rangesOverlap([h.newStart, h.newStart + Math.max(h.newLines, 1) - 1], u.range))
-            .flatMap((h) => h.lines)
-        : [];
-      const head = `<div class="loc"><span>${esc(u.file)}:${u.range[0]}–${u.range[1]}</span><span class="pill">${u.status}</span></div>`;
-      const code = lines.length
-        ? `<div class="code">${lines
-            .map((dl) => renderLine(dl, { id: UNCOVERED_STEP_ID, file: u.file } as TourStep))
-            .join('')}</div>`
-        : '';
-      return head + code;
-    })
-    .join('<div class="gap"><span>⋯</span></div>');
-
-  return `<section class="step uncovered" id="step-${UNCOVERED_STEP_ID}">
-  <div class="step-head"><span class="order">⚠</span><h2>Not in the tour</h2><span class="kind">${coverage.uncovered.length} hunk(s)</span></div>
-  <div class="why">These changes are in the diff but no tour step points at them. The agent may have left them out — review them directly, or send a comment asking why.</div>
-  ${blocks}
-</section>`;
+function singleCell(row: SbsRow): string {
+  const no = row.newNo ?? row.oldNo ?? '';
+  return `<span class="ds-cell ds-cell-single"><span class="ds-no">${no}</span><span class="ds-sign"></span><span class="ds-code">${
+    esc(row.content) || ' '
+  }</span></span>`;
 }
 
-function staleBanner(stale: TourStep[]): string {
-  if (!stale.length) return '';
-  const names = stale.map((s) => esc(s.title)).join(', ');
-  return `<div class="meta"><span class="pill warn">⚠ ${stale.length} step(s) point at unchanged code: ${names}</span></div>`;
+function threadFor(stepId: string, line: number, comments: Comment[]): string {
+  const here = comments.filter((c) => c.step === stepId && c.line === line);
+  if (!here.length) return '';
+  return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
 }
 
-function ctx(content: string, newNo: number): DiffLine {
-  return { type: 'ctx', content, newNo };
+export function commentHtml(c: Comment): string {
+  const type = (['change', 'question', 'nit'] as CommentType[]).includes(c.type as CommentType)
+    ? (c.type as CommentType)
+    : 'change';
+  const reply = c.reply
+    ? `<div class="ds-reply">
+        <span class="ds-reply-av">◈</span>
+        <div class="ds-reply-main">
+          <div class="ds-reply-who"><span class="ds-reply-name">${esc(APP_BRAND)}</span><span class="ds-ai-badge">AI</span></div>
+          <div class="ds-reply-body">${nl(esc(c.reply))}</div>
+        </div>
+      </div>`
+    : '';
+  const resolved = c.status === 'resolved';
+  return `<div class="ds-comment status-${c.status}" data-comment-id="${esc(c.id)}" data-status="${
+    c.status
+  }"${c.reply ? ' data-hasreply="1"' : ''}>
+    <div class="ds-comment-card flavor-${type}">
+      <div class="ds-comment-head">
+        <span class="ds-flavor-ico">${FLAVOR_ICON[type]}</span>
+        <span class="ds-flavor-label">${FLAVOR_LABEL[type]}</span>
+        <span class="ds-dot"></span>
+        <span class="ds-comment-author">${esc(authorOf(c))}</span>
+        <span class="ds-flex"></span>
+        <span class="ds-statusbadge"><span class="ds-dot"></span>${STATUS_LABEL[c.status]}</span>
+      </div>
+      <div class="ds-comment-body">${nl(esc(c.body))}</div>
+      ${reply}
+      <div class="ds-comment-actions">
+        <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
+        <button class="ds-ghost ds-del" data-delete>Delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function authorOf(_c: Comment): string {
+  return 'You';
+}
+
+// ---- all files ----
+
+function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): string {
+  const [dir, base] = splitPath(f.file);
+  const stepIdx = f.stepId !== undefined ? stepIndexById.get(f.stepId) : undefined;
+  const stepChip =
+    stepIdx !== undefined && f.stepOrder !== undefined
+      ? `<button class="ds-stepchip" data-goto-step="${stepIdx}" title="Open this file in the story tour">Step ${f.stepOrder}</button>`
+      : '';
+  const untouredBadge = f.untoured
+    ? `<span class="ds-untoured-badge"><span class="ds-tri">▲</span>${f.untoured} untoured</span>`
+    : '';
+  const stat =
+    f.add || f.del
+      ? `${f.add ? `<span class="ds-stat-add">+${f.add}</span>` : ''}${
+          f.del ? `<span class="ds-stat-del">−${f.del}</span>` : ''
+        }`
+      : '<span class="ds-dim">unchanged</span>';
+  const unified = f.hunks.length
+    ? f.hunks
+        .map(
+          (hunk, hi) =>
+            (hi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
+            hunk.map(unifiedRow).join(''),
+        )
+        .join('')
+    : '<div class="ds-diffnote">No diff to show.</div>';
+  // The All-files pane is a master/detail viewer: one file at a time (driven by
+  // the sidebar list), defaulting to the complete-file view. The full file is
+  // lazy-loaded into [data-full-inner] when the panel is first shown.
+  const toggle = f.hasFull
+    ? `<div class="ds-modetoggle"><button data-mode="diff">Diff</button><button class="is-active" data-mode="full">Full file</button></div>`
+    : '';
+  return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(
+    f.file,
+  )}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${i === 0 ? '' : ' hidden'}>
+    <div class="ds-filepanel-head">
+      <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(
+        base,
+      )}</span></span>
+      <span class="ds-badge ds-badge-${f.kind === 'new' ? 'new' : f.kind}">${esc(f.kindLabel)}</span>
+      ${untouredBadge}
+      ${stepChip}
+      <span class="ds-flex"></span>
+      <span class="ds-cardstat">${stat}</span>
+      ${toggle}
+    </div>
+    <div class="ds-filepanel-body">
+      <div data-diff-inner${f.hasFull ? ' hidden' : ''}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-full-inner${f.hasFull ? '' : ' hidden'}></div>
+    </div>
+  </section>`;
+}
+
+function unifiedRow(row: UnifiedRow): string {
+  const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
+  const flag = row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+  return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"><span class="ds-no">${
+    row.no ?? ''
+  }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${
+    esc(row.content) || ' '
+  }</span>${flag}</div>`;
+}
+
+// ---- trust drawer ----
+
+function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): string {
+  const clean = !trust.uncovered.length;
+  const cards = trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('');
+  const body = clean
+    ? `<div class="ds-trust-clean">✓ Every change in the diff is explained by a step. Nothing was slipped in quietly.</div>`
+    : `<div class="ds-trust-section">Unexplained ${plural(trust.uncovered.length, 'change')}</div>${cards}`;
+  return `<div class="ds-drawer-root" id="ds-trust-drawer" hidden>
+    <div class="ds-drawer-scrim" data-trust-close></div>
+    <div class="ds-drawer" role="dialog" aria-label="Trust check">
+      <div class="ds-drawer-head">
+        <div>
+          <div class="ds-drawer-title">Trust check</div>
+          <div class="ds-drawer-sub">Every line in the diff, accounted for against the tour.</div>
+        </div>
+        <button class="ds-drawer-x" data-trust-close title="Close">×</button>
+      </div>
+      <div class="ds-drawer-body">
+        <div class="ds-trust-stats">
+          <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(
+            trust.coveredLines,
+            'line',
+          )} covered by a step</div></div>
+          <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(
+            trust.uncoveredLines,
+            'change',
+          )} no step explains</div></div>
+        </div>
+        ${body}
+        <div class="ds-trust-foot">When every change is explained, this panel turns green — nothing was slipped in quietly.</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string {
+  const rows = u.rows.length
+    ? u.rows.map(unifiedRow).join('')
+    : `<div class="ds-diffnote">${esc(u.file)}:${u.line}</div>`;
+  const stepIdx = u.stepId !== undefined ? stepIndexById.get(u.stepId) : undefined;
+  const jump =
+    stepIdx !== undefined
+      ? `<button class="ds-btn ds-btn-solid" data-goto-step="${stepIdx}">Jump to ${esc(u.file)}</button>`
+      : `<button class="ds-btn ds-btn-solid" data-goto-file="${esc(u.file)}">Show ${esc(u.file)}</button>`;
+  return `<div class="ds-trust-card">
+    <div class="ds-trust-card-head">
+      <span class="ds-trust-card-path">${esc(u.file)}<span class="ds-dim">:${u.line}</span></span>
+      <span class="ds-untoured-tag">UNTOURED</span>
+    </div>
+    <div class="ds-diffbody ds-diffbody-unified">${rows}</div>
+    <div class="ds-trust-card-note">This change is in the diff but no tour step walks through it — surfaced here so nothing slips in unexplained.</div>
+    <div class="ds-trust-card-actions">
+      ${jump}
+      <button class="ds-btn ds-btn-ghost" data-explain>Ask ${esc(APP_BRAND)} to explain</button>
+    </div>
+  </div>`;
+}
+
+// ---- full file (used by the lazy /api/fullfile endpoint) ----
+
+export function renderFullFile(rows: SbsRow[], opts: { file: string; newFile: boolean }): string {
+  if (!rows.length) {
+    return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
+  }
+  const leftLabel = opts.newFile ? 'Did not exist' : 'Before';
+  const rightLabel = opts.newFile ? 'New file' : 'After';
+  const head = `<div class="ds-diffhead">
+    <span class="ds-diffhead-side"><span class="ds-diffhead-label${
+      opts.newFile ? ' ds-dim' : ''
+    }">${leftLabel}</span>${opts.newFile ? '' : `<span class="ds-diffhead-path">${esc(opts.file)}</span>`}</span>
+    <span class="ds-diffhead-divider"></span>
+    <span class="ds-diffhead-side"><span class="ds-diffhead-label${
+      opts.newFile ? ' ds-green' : ''
+    }">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
+  </div>`;
+  const body = rows.map((r) => fullRow(r)).join('');
+  return `${head}<div class="ds-diffbody">${body}</div>`;
+}
+
+function fullRow(row: SbsRow): string {
+  const cells = `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
+  return `<div class="ds-row ds-row-${row.type}">${cells}</div>`;
+}
+
+// ---- shared bits ----
+
+const BRAND_MARK = `<svg class="ds-mark" width="13" height="20" viewBox="0 0 13 20" aria-hidden="true">
+    <line x1="6.5" y1="3.5" x2="6.5" y2="16.5" stroke="#3f444c" stroke-width="2" stroke-linecap="round"></line>
+    <circle cx="6.5" cy="4.5" r="3.6" fill="#5a606b"></circle>
+    <circle cx="6.5" cy="10" r="3.6" fill="#828a96"></circle>
+    <circle cx="6.5" cy="15.5" r="3.6" fill="oklch(0.7 0.13 235)"></circle>
+  </svg>`;
+
+function splitPath(p: string): [string, string] {
+  const i = p.lastIndexOf('/');
+  return i < 0 ? ['', p] : [p.slice(0, i + 1), p.slice(i + 1)];
+}
+
+function plural(n: number, word: string): string {
+  return n === 1 ? word : word + 's';
 }
 
 function vscodeLink(repo: string, file: string, line: number): string {

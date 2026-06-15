@@ -1,7 +1,7 @@
-# Cairn — design
+# diffStory — design
 
-**Date:** 2026-06-14
-**Status:** v1 implemented
+**Date:** 2026-06-14 (renamed + review screen redesigned 2026-06-15)
+**Status:** v1 implemented; review screen rebuilt from the Claude Design handoff (see redesign note at the end)
 
 ## Problem
 
@@ -18,7 +18,8 @@ agent**. The AI that wrote the code — which uniquely knows intent and call flo
 fixing. Reviewing AI code becomes: read it the way it was meant to be read, push back inline,
 hand it back.
 
-Name: **cairn** (the trail-marker stones that show the safe route through wilderness).
+Name: **diffStory** — the agent narrates the *story* of its change, in the order the story
+happens. (Originally "cairn", after the trail-marker stones; renamed 2026-06-15.)
 
 ## Key decisions (and why)
 
@@ -40,11 +41,11 @@ Name: **cairn** (the trail-marker stones that show the safe route through wilder
 ## Architecture
 
 ```
-agent   /review-tour   ─▶  .cairn/review-tour.json   (reading plan: order + why, no code)
-        cairn serve     ─▶  localhost review page  ◀── reviewer reads in order
-        reviewer comment ─▶  .cairn/comments.json    (POST → disk)
+agent   /review-tour   ─▶  .diffstory/review-tour.json   (reading plan: order + why, no code)
+        diffstory serve     ─▶  localhost review page  ◀── reviewer reads in order
+        reviewer comment ─▶  .diffstory/comments.json    (POST → disk)
 agent   /address-review ─▶  fix code · answer Qs · status:addressed · refresh tour
-                   └──────────  refresh cairn serve  ◀──────────┘   until clean
+                   └──────────  refresh diffstory serve  ◀──────────┘   until clean
 ```
 
 ### Components
@@ -64,7 +65,7 @@ agent   /address-review ─▶  fix code · answer Qs · status:addressed · ref
   why-notes, real highlighted diff, jump links, `vscode://` editor links, per-line comment UI,
   the "Not in the tour" section. All code escaped server-side; client JS uses only `textContent`.
 - **server** (`src/server.ts`) — re-renders on each GET (refresh = live); `GET/POST/DELETE
-  /api/comments` persist to `.cairn/comments.json`.
+  /api/comments` persist to `.diffstory/comments.json`.
 - **comments** (`src/comments.ts`) — validate + persist; the handoff file.
 - **skills** — `review-tour` (producer) and `address-review` (consumer) for Claude Code.
 
@@ -92,4 +93,41 @@ multi-tour; cross-machine state; build-time syntax highlighting.
 
 End-to-end smoke test (temp repo, real branch diff, deliberately-uncovered hunk) confirmed:
 base detection, diff parse, coverage catching the uncovered change, page render, and the full
-comment round-trip to `.cairn/comments.json`. `tsc` clean.
+comment round-trip to `.diffstory/comments.json`. `tsc` clean.
+
+## 2026-06-15 — Review-screen redesign (diffStory)
+
+The reviewer mocked the review screen in Claude Design and handed it off; the renderer was
+rebuilt to match it, and the tool was renamed **cairn → diffStory** end to end (package, CLI,
+`.cairn/` → `.diffstory/`, skills, docs).
+
+What changed:
+
+- **`src/view-model.ts` (new)** — pure data layer that turns the tour + parsed diff + coverage
+  into the structures the screen needs: ordered story steps (side-by-side rows grouped by hunk),
+  the All-files overview (unified rows, untoured-flagged), the trust view, and a full-file
+  side-by-side reconstruction (`buildFullFileRows`) built from the working-tree file + hunks —
+  no second git call. `render.ts` and the full-file endpoint share it.
+- **`src/render.ts`** — rewritten to emit the diffStory screen: header (wordmark + change kicker
+  + open-comment / unexplained-change pills + verdict buttons), a sidebar with a *Story tour ⇄
+  All files* toggle, the reading-order rail (numbered spine, kind badges, call-flow chips,
+  progress), the per-step *why* note + side-by-side diff, the All-files cards, inline threaded
+  comments, and a slide-in trust drawer. All code still escaped server-side.
+- **`src/page-assets.ts`** — the dark IDE theme and a lightweight client: view switching, step
+  nav (+ `j`/`k`/arrows), card expand/collapse, lazy **Full file** fetch, the trust drawer, and
+  comment compose / resolve / delete. The client only sets `textContent`, builds nodes, or
+  injects the server-escaped `/api/fullfile` HTML.
+- **Backend** — `GET /api/fullfile` (allowlisted to files in the diff/tour; reconstructs the
+  complete file side-by-side) and `PATCH /api/comments/:id` (reviewer resolve / reopen, via
+  `setCommentStatus`). `git.readWholeFile` added for the full-file view.
+
+Faithful-but-real adaptations: the kicker shows the real diff base (not a mock PR number); the
+AI reply is the agent's real `reply` rendered when present (no fake instant reply — replies come
+from `/address-review`); Approve / Request changes tie to the real handoff (toasts pointing at
+`/address-review`, Approve gated on clean coverage + no open comments). Reviewer reply *threads*
+from the mock were dropped — the on-disk comment model is a single agent reply, and that's what
+`/address-review` consumes.
+
+Verified: `tsc` clean, `diffstory check` flags the uncovered hunk, and the served page +
+`/api/fullfile` + comment POST/PATCH/DELETE round-trips all confirmed against the demo repo,
+including the path-traversal allowlist (returns a friendly note, not file contents).
