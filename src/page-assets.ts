@@ -148,6 +148,9 @@ a{color:inherit;text-decoration:none}
 .ds-diff{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:var(--panel3)}
 .ds-difftoolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
+.ds-commenthint{font-size:11px;color:var(--accent-blue);display:flex;align-items:center;gap:6px;white-space:nowrap;margin-left:auto;margin-right:12px}
+.ds-commenthint b{color:var(--accent-blue)}
+.ds-commenthint-ico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:var(--accent);color:#0a1322;font-weight:700;font-size:13px;line-height:1}
 .ds-modetoggle{display:flex;gap:2px;padding:2px;border-radius:7px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06)}
 .ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:6px;border:none;cursor:pointer;background:transparent;color:var(--muted)}
 .ds-modetoggle button.is-active{background:var(--accent-soft);color:var(--accent-text)}
@@ -182,8 +185,10 @@ a{color:inherit;text-decoration:none}
 .ds-code-del{color:var(--del-text)}
 .ds-untoured-tag{flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:#0e0f13;background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
 .ds-addcomment{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:6px;border:none;cursor:pointer;
-  display:none;align-items:center;justify-content:center;background:var(--accent);color:#0a1322;font-size:15px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,0.35);z-index:3}
-.ds-row:hover .ds-addcomment{display:flex}
+  display:flex;align-items:center;justify-content:center;background:var(--accent);color:#0a1322;font-size:15px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,0.35);z-index:3;
+  opacity:0.28;transition:opacity .12s,transform .12s}
+.ds-row:hover .ds-addcomment{opacity:1;transform:translateY(-50%) scale(1.08)}
+.ds-addcomment:hover{opacity:1}
 .ds-urow{display:flex;align-items:flex-start}
 .ds-urow.ds-row-add{background:rgba(46,160,67,0.09)}
 .ds-urow.ds-row-del{background:rgba(248,81,73,0.09)}
