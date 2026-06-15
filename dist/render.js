@@ -248,6 +248,11 @@ function diffHead(s) {
       <span class="ds-diffhead-note">unchanged — shown so the change makes sense</span>
     </div>`;
     }
+    if (s.newFile) {
+        return `<div class="ds-diffhead ds-diffhead-ctx">
+      <span class="ds-diffhead-side"><span class="ds-diffhead-label ds-green">New file</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>
+    </div>`;
+    }
     const leftLabel = s.newFile ? 'Did not exist' : 'Before';
     const rightLabel = s.newFile ? 'New file' : 'After';
     return `<div class="ds-diffhead">
@@ -267,7 +272,7 @@ function sbsRow(row, s, comments) {
     const attrs = commentable
         ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
         : '';
-    const cells = s.context
+    const cells = s.context || s.newFile
         ? singleCell(row)
         : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
     const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
@@ -310,7 +315,13 @@ function cell(side, row) {
 }
 function singleCell(row) {
     const no = row.newNo ?? row.oldNo ?? '';
-    return `<span class="ds-cell ds-cell-single"><span class="ds-no">${no}</span><span class="ds-sign"></span><span class="ds-code">${esc(row.content) || ' '}</span></span>`;
+    const add = row.type === 'add';
+    const sign = add ? '+' : '';
+    const signCls = add ? ' ds-sign-add' : '';
+    const codeCls = add ? ' ds-code-add' : '';
+    const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
+    const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+    return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code${codeCls}">${esc(row.content) || ' '}</span>${flag}</span>`;
 }
 function threadFor(stepId, line, comments) {
     const here = comments.filter((c) => c.step === stepId && c.line === line);

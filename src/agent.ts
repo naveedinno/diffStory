@@ -16,12 +16,15 @@ export function availableAgents(): Agent[] {
   return (['claude', 'codex'] as Agent[]).filter(onPath);
 }
 
-/** The instruction handed to the agent — triggers the producer skill and pins the base. */
-export function storyPrompt(baseLabel: string): string {
+/** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
+export function storyPrompt(baseRef: string, headRef?: string): string {
+  const diff = headRef ? `git diff ${baseRef}..${headRef} --` : `git diff ${baseRef} --`;
   return (
-    `Use the diffStory review-tour skill to create a review story for the current change in this repo. ` +
-    `Diff against: ${baseLabel}. Write the reading plan to ${DATA_DIR}/story.json, set its "base" field ` +
-    `to "${baseLabel}", and cover every changed hunk. Do not ask questions — generate it directly.`
+    `Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}. ` +
+    `Write the reading plan to ${DATA_DIR}/story.json and set its "base" field to "${baseRef}". ` +
+    `Keep the number of steps proportional to the change: group related edits into one step, lead ` +
+    `with the entry point, follow the call flow — do NOT emit one step per file. Cover every changed ` +
+    `hunk. Do not ask questions — generate it directly.`
   );
 }
 
