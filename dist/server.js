@@ -10,7 +10,7 @@ import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
-import { tourPath, APP_NAME, APP_BRAND } from './config.js';
+import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 export function serve(opts) {
     const server = createServer((req, res) => handle(req, res, opts));
     server.on('error', (err) => {
@@ -25,7 +25,7 @@ export function serve(opts) {
     server.listen(opts.port, () => {
         const url = `http://localhost:${opts.port}/`;
         console.log(`\n  ${APP_BRAND} review ready → ${url}`);
-        console.log(`  reviewing ${tourPath(opts.repo)}`);
+        console.log(`  reviewing ${resolveStoryPath(opts.repo)}`);
         console.log(`  comments are saved as you go; run /address-review to hand them back.\n`);
         console.log(`  Ctrl-C to stop.\n`);
         if (opts.open)
@@ -87,7 +87,7 @@ function handle(req, res, opts) {
     }
 }
 function loadReview(opts) {
-    const tour = loadTour(tourPath(opts.repo));
+    const tour = loadTour(resolveStoryPath(opts.repo));
     const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
     const files = parseUnifiedDiff(getDiff(opts.repo, base, opts.headOverride));
     return { tour, base, files };

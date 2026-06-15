@@ -16,7 +16,7 @@ import {
   setCommentStatus,
   type NewComment,
 } from './comments.js';
-import { tourPath, APP_NAME, APP_BRAND } from './config.js';
+import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
 
 export interface ServeOptions {
@@ -42,7 +42,7 @@ export function serve(opts: ServeOptions): void {
   server.listen(opts.port, () => {
     const url = `http://localhost:${opts.port}/`;
     console.log(`\n  ${APP_BRAND} review ready → ${url}`);
-    console.log(`  reviewing ${tourPath(opts.repo)}`);
+    console.log(`  reviewing ${resolveStoryPath(opts.repo)}`);
     console.log(`  comments are saved as you go; run /address-review to hand them back.\n`);
     console.log(`  Ctrl-C to stop.\n`);
     if (opts.open) openBrowser(url);
@@ -107,7 +107,7 @@ interface ReviewData {
 }
 
 function loadReview(opts: ServeOptions): ReviewData {
-  const tour = loadTour(tourPath(opts.repo));
+  const tour = loadTour(resolveStoryPath(opts.repo));
   const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
   const files = parseUnifiedDiff(getDiff(opts.repo, base, opts.headOverride));
   return { tour, base, files };

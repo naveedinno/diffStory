@@ -1,6 +1,6 @@
 ---
 name: review-tour
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/review-tour.json — a guided, in-order reading path through your own diff — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
+description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json — a guided, in-order reading path through your own diff — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
 ---
 
 # Writing a review tour
@@ -39,7 +39,7 @@ calls what. Capture that.
    `new-file` step. This is enforced — run `diffstory check` and fix anything it lists under
    "not in the tour" until it passes. Don't quietly leave a change out of the narrative.
 
-5. **Write** the result to `.diffstory/review-tour.json`, then run `diffstory check` one last time.
+5. **Write** the result to `.diffstory/story.json`, then run `diffstory check` one last time.
    Tell the user: *"Tour ready — run `diffstory serve` to review."*
 
 ## Schema
@@ -49,7 +49,7 @@ calls what. Capture that.
   "version": 1,
   "title": "<short title for the whole change>",
   "summary": "<one paragraph: what changed + the reading strategy>",
-  "base": "main",                      // optional: ref to diff against; omit to auto-detect
+  "base": "main",                      // the ref you diffed against — SET THIS so a PR reviewer replays the same base
   "steps": [
     {
       "id": "s1",                      // unique; referenced by calls/returnsTo and comments

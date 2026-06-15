@@ -104,6 +104,7 @@ const TOUR = `{
   "version": 1,
   "title": "Add per-customer monthly spending limit",
   "summary": "Start at the API entry point, follow the new limit check across files, then see where the spend gets recorded. The jumps mirror the call flow — read top to bottom.",
+  "base": "main",
   "steps": [
     { "id": "s1", "order": 1, "title": "Entry point: createOrder() now checks the limit", "file": "src/api.ts", "range": [1, 16], "kind": "changed", "why": "Start here — the POST /orders handler. The new block on lines 8-12 rejects the order before placing it. Verify the check runs BEFORE placeOrder, not after.", "calls": ["s2"], "tags": ["entrypoint"] },
     { "id": "s2", "order": 2, "title": "The check it calls: checkSpendingLimit() (new file)", "file": "src/limits.ts", "range": [1, 11], "kind": "new-file", "why": "createOrder delegates here. It reads the customer's spend and compares against the cap. Look hard at line 10 — the boundary condition is the risky bit.", "calls": ["s3"], "returnsTo": "s1", "tags": ["core"] },
@@ -153,7 +154,7 @@ git(['add', '-A']);
 git(['commit', '-qm', 'feat: per-customer monthly spending limit']);
 
 // the tour + a couple of pre-seeded comments
-write('.diffstory/review-tour.json', TOUR);
+write('.diffstory/story.json', TOUR);
 write('.diffstory/comments.json', COMMENTS);
 
 console.log('\nDemo repo built at: ' + DEMO);
