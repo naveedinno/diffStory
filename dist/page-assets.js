@@ -140,7 +140,7 @@ a{color:inherit;text-decoration:none}
 /* ---- overview (step 0) ---- */
 .ds-storymark{display:block}
 .ds-stepcard[hidden]{display:none}
-.ds-stepcard.is-intro{grid-template-columns:30px 1fr;gap:11px;align-items:center;margin:10px 12px 2px;padding:11px 13px;border-radius:11px;
+.ds-stepcard.is-intro{grid-template-columns:30px 1fr;gap:11px;align-items:center;margin:10px 12px 2px;padding:11px 13px 11px 7px;border-radius:11px;
   background:rgba(96,150,255,0.06);border:1px solid rgba(96,150,255,0.16)}
 .ds-stepcard.is-intro:hover{background:rgba(96,150,255,0.1)}
 .ds-stepcard.is-intro.is-active{background:rgba(96,150,255,0.13);border-color:rgba(96,150,255,0.34)}
