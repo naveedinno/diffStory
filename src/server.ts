@@ -18,6 +18,10 @@ import {
 } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
+import { availableAgents, streamAgent, addressPrompt, type AgentEvent } from './agent.js';
+
+// Only one agent run at a time: concurrent runs editing the same working tree would collide.
+let agentBusy = false;
 
 export interface ServeOptions {
   repo: string;
@@ -72,6 +76,10 @@ function handle(req: IncomingMessage, res: ServerResponse, opts: ServeOptions): 
           sendJson(res, 400, { error: (e as Error).message });
         }
       });
+    }
+    if (method === 'POST' && url.pathname === '/api/address') {
+      if (agentBusy) return sendJson(res, 409, { error: 'An agent run is already in progress.' });
+      return readBody(req, (body) => runAddress(res, opts, body));
     }
     if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
       const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
@@ -141,6 +149,75 @@ function renderFullFileResponse(opts: ServeOptions, file: string): string {
     .map((u) => u.range);
   const rows = buildFullFileRows(df, newLines, ranges);
   return renderFullFile(rows, { file, newFile: df?.status === 'added' });
+}
+
+/** Raw `git diff` text for the current review scope — used to detect agent code edits. */
+function currentDiff(opts: ServeOptions): string {
+  try {
+    const tour = loadTour(resolveStoryPath(opts.repo));
+    const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
+    return getDiff(opts.repo, base, opts.headOverride);
+  } catch {
+    return '';
+  }
+}
+
+function tailLines(s: string, n: number): string {
+  return s.trimEnd().split('\n').slice(-n).join('\n');
+}
+
+/**
+ * Drive the user's agent to address review comments and stream its output as NDJSON
+ * (one JSON event per line: {type:'text'|'tool'|'error'|'done', ...}). Reuses the
+ * address-review skill — the agent writes replies + edits code itself.
+ */
+function runAddress(res: ServerResponse, opts: ServeOptions, body: string): void {
+  let input: { commentIds?: string[]; all?: boolean };
+  try {
+    input = JSON.parse(body || '{}');
+  } catch {
+    return sendJson(res, 400, { error: 'invalid JSON' });
+  }
+  const target: string[] | 'all' = input.all
+    ? 'all'
+    : Array.isArray(input.commentIds)
+      ? input.commentIds
+      : [];
+  if (target !== 'all' && target.length === 0) {
+    return sendJson(res, 400, { error: 'no comments specified' });
+  }
+
+  const agents = availableAgents();
+  if (agents.length === 0) {
+    return sendJson(res, 400, { error: 'No agent CLI found (looked for "claude" and "codex").' });
+  }
+  const agent = agents[0];
+
+  agentBusy = true;
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+
+  const before = currentDiff(opts);
+  const send = (e: object) => {
+    try {
+      res.write(JSON.stringify(e) + '\n');
+    } catch {
+      /* client disconnected */
+    }
+  };
+
+  streamAgent(agent, opts.repo, addressPrompt(target), (e: AgentEvent) => send(e))
+    .then(({ ok, output }) => {
+      const codeChanged = currentDiff(opts) !== before;
+      if (!ok) send({ type: 'error', data: tailLines(output, 30) });
+      send({ type: 'done', ok, codeChanged });
+    })
+    .catch((err) => send({ type: 'error', data: String(err) }))
+    .finally(() => {
+      res.end();
+      agentBusy = false;
+    });
 }
 
 function readBody(req: IncomingMessage, done: (body: string) => void): void {

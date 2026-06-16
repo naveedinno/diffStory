@@ -11,6 +11,9 @@ import { renderPage, renderFullFile } from './render.js';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
+import { availableAgents, streamAgent, addressPrompt } from './agent.js';
+// Only one agent run at a time: concurrent runs editing the same working tree would collide.
+let agentBusy = false;
 export function serve(opts) {
     const server = createServer((req, res) => handle(req, res, opts));
     server.on('error', (err) => {
@@ -55,6 +58,11 @@ function handle(req, res, opts) {
                     sendJson(res, 400, { error: e.message });
                 }
             });
+        }
+        if (method === 'POST' && url.pathname === '/api/address') {
+            if (agentBusy)
+                return sendJson(res, 409, { error: 'An agent run is already in progress.' });
+            return readBody(req, (body) => runAddress(res, opts, body));
         }
         if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
             const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
@@ -119,6 +127,72 @@ function renderFullFileResponse(opts, file) {
         .map((u) => u.range);
     const rows = buildFullFileRows(df, newLines, ranges);
     return renderFullFile(rows, { file, newFile: df?.status === 'added' });
+}
+/** Raw `git diff` text for the current review scope — used to detect agent code edits. */
+function currentDiff(opts) {
+    try {
+        const tour = loadTour(resolveStoryPath(opts.repo));
+        const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
+        return getDiff(opts.repo, base, opts.headOverride);
+    }
+    catch {
+        return '';
+    }
+}
+function tailLines(s, n) {
+    return s.trimEnd().split('\n').slice(-n).join('\n');
+}
+/**
+ * Drive the user's agent to address review comments and stream its output as NDJSON
+ * (one JSON event per line: {type:'text'|'tool'|'error'|'done', ...}). Reuses the
+ * address-review skill — the agent writes replies + edits code itself.
+ */
+function runAddress(res, opts, body) {
+    let input;
+    try {
+        input = JSON.parse(body || '{}');
+    }
+    catch {
+        return sendJson(res, 400, { error: 'invalid JSON' });
+    }
+    const target = input.all
+        ? 'all'
+        : Array.isArray(input.commentIds)
+            ? input.commentIds
+            : [];
+    if (target !== 'all' && target.length === 0) {
+        return sendJson(res, 400, { error: 'no comments specified' });
+    }
+    const agents = availableAgents();
+    if (agents.length === 0) {
+        return sendJson(res, 400, { error: 'No agent CLI found (looked for "claude" and "codex").' });
+    }
+    const agent = agents[0];
+    agentBusy = true;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    const before = currentDiff(opts);
+    const send = (e) => {
+        try {
+            res.write(JSON.stringify(e) + '\n');
+        }
+        catch {
+            /* client disconnected */
+        }
+    };
+    streamAgent(agent, opts.repo, addressPrompt(target), (e) => send(e))
+        .then(({ ok, output }) => {
+        const codeChanged = currentDiff(opts) !== before;
+        if (!ok)
+            send({ type: 'error', data: tailLines(output, 30) });
+        send({ type: 'done', ok, codeChanged });
+    })
+        .catch((err) => send({ type: 'error', data: String(err) }))
+        .finally(() => {
+        res.end();
+        agentBusy = false;
+    });
 }
 function readBody(req, done) {
     let data = '';
