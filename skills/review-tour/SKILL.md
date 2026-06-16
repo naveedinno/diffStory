@@ -22,7 +22,8 @@ calls what. Capture that.
    - Start at the **entry point** — the function/endpoint/handler a reader hits first.
    - Follow each **call into the code it depends on**, even across files, then come back.
    - Put **definitions before uses**, **core logic before glue**, **tests last**.
-   - Group changes that only make sense together into adjacent steps.
+   - Group changes that only make sense together into adjacent steps. Do not produce one
+     step per file or one step per hunk unless the change truly reads that way.
 
 3. **Write one step per stop.** Each step:
    - `file` + `range`: the lines to show, in the **post-change** file (1-based, inclusive).
@@ -32,6 +33,10 @@ calls what. Capture that.
    - `why`: the most important field. **Review-oriented**, not narration. Say what to verify,
      what's subtle, why an approach is safe, what you were unsure about. Not "adds a cap" —
      instead "clamps the rate here; the unchecked block is safe because cap ≤ uint128 max."
+   - `title`: name the behavior or risk being reviewed, not just the file. Good titles sound
+     like "Entry point: reject over-cap orders before placement" or "Reserve accounting now
+     follows each pending settlement." Weak titles sound like "Update OrderService" or
+     "Tests for changes."
    - `calls`: ids of steps this one leads into (renders the A→B jump). `returnsTo`: the step
      to come back to.
 
@@ -80,4 +85,8 @@ calls what. Capture that.
 
 - Don't reproduce code in the tour — diffStory pulls the real diff from git. You only supply order + narrative.
 - Don't write a step per file mechanically — write the *path a human should walk*.
+- Don't restate the diff with bland verbs like "adds", "updates", "modifies", or "changes"
+  unless the sentence also says what the reviewer should verify.
+- Don't bury the core behavior behind docs, tests, generated files, or cleanup. Show those after
+  the implementation they support.
 - Don't skip the `diffstory check` gate.

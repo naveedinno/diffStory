@@ -12,6 +12,10 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
+  assert.ok(p.includes('Reading order contract'));
+  assert.ok(p.includes('do not emit one step per file'));
+  assert.ok(p.includes('what to verify'));
+  assert.ok(p.includes('Run diffstory check'));
 });
 
 test('agentCommand builds headless invocations with a safe default model', () => {

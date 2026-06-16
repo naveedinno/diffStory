@@ -14,11 +14,24 @@ export function availableAgents() {
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
 export function storyPrompt(baseRef, headRef) {
     const diff = headRef ? `git diff ${baseRef}..${headRef} --` : `git diff ${baseRef} --`;
-    return (`Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}. ` +
-        `Write the reading plan to ${DATA_DIR}/story.json and set its "base" field to "${baseRef}". ` +
-        `Keep the number of steps proportional to the change: group related edits into one step, lead ` +
-        `with the entry point, follow the call flow — do NOT emit one step per file. Cover every changed ` +
-        `hunk. Do not ask questions — generate it directly.`);
+    return (`Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}.\n\n` +
+        `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}". The story is for a human ` +
+        `reviewer, not a changelog.\n\n` +
+        `Reading order contract:\n` +
+        `- Start at the entry point a reviewer should inspect first.\n` +
+        `- Follow runtime/control/data flow across files, then return to callers when useful.\n` +
+        `- Group related edits into one stop; do not emit one step per file or one step per hunk.\n` +
+        `- Put tests, snapshots, docs, and generated files after the behavior they verify or explain.\n\n` +
+        `Writing contract:\n` +
+        `- Step titles should name the exact behavior or risk being reviewed.\n` +
+        `- Each "why" must say what to verify, what is subtle, or why the change is safe.\n` +
+        `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
+        `- Prefer specific protocol/product language from the code over generic narrative.\n\n` +
+        `Coverage contract:\n` +
+        `- Cover every changed hunk with a changed/new-file step.\n` +
+        `- Use context steps only for unchanged code that makes the review easier.\n` +
+        `- Run diffstory check and adjust the story until the coverage gate is clean.\n\n` +
+        `Do not ask questions. Generate it directly.`);
 }
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
 export const DEFAULT_CLAUDE_MODEL = 'sonnet';
