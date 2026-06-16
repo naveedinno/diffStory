@@ -13,6 +13,7 @@ export const PAGE_CSS = `
   --del:#e0716c; --del-bg:rgba(248,81,73,0.1); --del-text:#f0b3af;
   --amber:#e0b34d; --amber-soft:rgba(224,179,77,0.1); --amber-text:#e7d6a8;
   --green:oklch(0.74 0.16 150);
+  --ds-split:50;
   --mono:ui-monospace,Menlo,Consolas,"SF Mono",monospace;
   --sans:'Helvetica Neue',Helvetica,Arial,sans-serif;
 }
@@ -229,7 +230,13 @@ a{color:inherit;text-decoration:none}
 .ds-cell-untoured{background:rgba(224,179,77,0.12)}
 .ds-cell-empty{flex:1;min-width:0;align-self:stretch;background-color:rgba(255,255,255,0.012);
   background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.022) 0,rgba(255,255,255,0.022) 1px,transparent 1px,transparent 7px)}
-.ds-celldiv{width:1px;flex:none;background:rgba(255,255,255,0.06)}
+.ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
+.ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
+.ds-celldiv{width:1px;flex:none;background:rgba(255,255,255,0.06);position:relative;cursor:col-resize}
+.ds-celldiv::after{content:'';position:absolute;top:0;bottom:0;left:-5px;right:-5px;z-index:2}
+.ds-celldiv:hover{background:var(--accent-blue)}
+body.ds-resizing{cursor:col-resize}
+body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .ds-no{width:38px;flex:none;text-align:right;padding:4px 8px 4px 0;color:var(--faint);user-select:none;font-variant-numeric:tabular-nums}
 .ds-sign{width:12px;flex:none;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
 .ds-sign-add{color:var(--add-bd)}
@@ -630,12 +637,34 @@ export const PAGE_JS = `
     if(filesView&&!filesView.hidden)selectFile(selectedFile+(next?1:-1));
     else if(tourView&&!tourView.hidden)setActive(active+(next?1:-1));
   }
+  // ---- resizable diff panes (drag the BEFORE | AFTER divider) ----
+  var splitBody=null;
+  function startSplit(e){
+    var div=closest(e.target,'.ds-celldiv');if(!div)return;
+    var body=closest(div,'.ds-diffbody');if(!body)return;
+    splitBody=body;document.body.classList.add('ds-resizing');e.preventDefault();
+  }
+  function moveSplit(e){
+    if(!splitBody)return;
+    var r=splitBody.getBoundingClientRect();if(!r.width)return;
+    var pct=Math.max(22,Math.min(78,(e.clientX-r.left)/r.width*100));
+    document.documentElement.style.setProperty('--ds-split',String(pct));
+  }
+  function endSplit(){
+    if(!splitBody)return;
+    splitBody=null;document.body.classList.remove('ds-resizing');
+    try{localStorage.setItem('ds-split',(document.documentElement.style.getPropertyValue('--ds-split')||'').trim());}catch(e){}
+  }
   function init(){
     tourView=$('#ds-view-tour');filesView=$('#ds-view-files');drawer=$('#ds-trust-drawer');toastEl=$('#ds-toast');
     stepPanels=$all('.ds-step');stepCards=$all('.ds-stepcard');total=stepPanels.length||1;
     filePanels=$all('.ds-filepanel');fileItems=$all('.ds-fileitem');
     document.addEventListener('click',onClick);
     document.addEventListener('keydown',onKey);
+    document.addEventListener('mousedown',startSplit);
+    document.addEventListener('mousemove',moveSplit);
+    document.addEventListener('mouseup',endSplit);
+    try{var sv=localStorage.getItem('ds-split');if(sv)document.documentElement.style.setProperty('--ds-split',sv);}catch(e){}
     refreshCount();
     var rab=$('[data-readaloud]');
     if(rab){

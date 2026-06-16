@@ -276,15 +276,9 @@ function introPanel(model: ReviewModel, tour: Tour): string {
 }
 
 function trustRailCard(trust: TrustView): string {
-  if (!trust.uncovered.length) {
-    return `<button class="ds-trustcard is-clean" data-trust-open>
-      <span class="ds-trustcard-ico">✓</span>
-      <span class="ds-trustcard-body">
-        <span class="ds-trustcard-title">Trust check</span>
-        <span class="ds-trustcard-sub">Every change is explained by a step.</span>
-      </span>
-    </button>`;
-  }
+  // When everything's explained the header pill already says so — don't spend
+  // sidebar space on a redundant "all clear" card.
+  if (!trust.uncovered.length) return '';
   const n = trust.uncovered.length;
   return `<button class="ds-trustcard" data-trust-open>
     <span class="ds-trustcard-ico">▲</span>
@@ -448,9 +442,10 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[]): string {
 function cell(side: 'left' | 'right', row: SbsRow): string {
   const add = row.type === 'add';
   const del = row.type === 'del';
+  const sideCls = side === 'left' ? ' ds-cell-l' : ' ds-cell-r';
   // An add has no left counterpart; a del has no right counterpart.
   if ((side === 'left' && add) || (side === 'right' && del)) {
-    return '<span class="ds-cell ds-cell-empty"></span>';
+    return `<span class="ds-cell ds-cell-empty${sideCls}"></span>`;
   }
   let no = '';
   let sign = '';
@@ -472,7 +467,7 @@ function cell(side: 'left' | 'right', row: SbsRow): string {
   if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
   const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
-  return `<span class="ds-cell${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code">${
+  return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code">${
     highlight(row.content) || ' '
   }</span>${flag}</span>`;
 }
