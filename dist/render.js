@@ -56,6 +56,7 @@ export function renderPage(input) {
         ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained ${plural(uncoveredCount, 'change')}`
         : `<span class="ds-check">✓</span> all changes explained`}</button>
   </div>
+  <button class="ds-readaloud" data-readaloud title="Read each step's reason aloud as you walk the story"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
   <div class="ds-vsep"></div>
   <div class="ds-actions">
     <button class="ds-btn ds-btn-ghost" data-verdict="request">Request changes</button>
