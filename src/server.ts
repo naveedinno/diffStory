@@ -47,7 +47,7 @@ export function serve(opts: ServeOptions): void {
     const url = `http://localhost:${opts.port}/`;
     console.log(`\n  ${APP_BRAND} review ready → ${url}`);
     console.log(`  reviewing ${resolveStoryPath(opts.repo)}`);
-    console.log(`  comments are saved as you go; run /address-review to hand them back.\n`);
+    console.log(`  comments save as you go; click "Ask agent" or "Address all open" in the page to get replies live.\n`);
     console.log(`  Ctrl-C to stop.\n`);
     if (opts.open) openBrowser(url);
   });

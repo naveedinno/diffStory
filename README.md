@@ -38,7 +38,7 @@ Then use it for real, in any repo after making changes:
 ```text
 1.  diffstory story                →  your agent writes .diffstory/story.json, then the review opens
 2.  Read in order, comment on lines
-3.  Ask your agent to address them →  refresh, repeat until clean ✅
+3.  Hit "Ask agent" on the page    →  it answers and fixes inline, live ✅
 ```
 
 **Reviewing a teammate's PR?** If they committed their story (`diffstory init` → *share via git*),
@@ -50,7 +50,7 @@ needed.
 - 🧭 **A guided reading order** — walk the change step by step in call-flow order, not by filename.
 - 📝 **A "why" for every step** — what to look at, what's subtle, why it's safe.
 - ⚖️ **Real side-by-side diffs** — before/after from the actual `git diff`, never reproduced by the AI. Flip to the full file anytime.
-- 💬 **Comments that loop back** — drop a change request, question, or nit; the agent replies and fixes; you resolve.
+- 💬 **Comments that loop back, live** — drop a change request, question, or nit, then hit **Ask agent** (or **Address all open**) and watch the agent reply and fix right on the page; you resolve.
 - 🛡️ **A trust check** — any change no step explains gets flagged, so nothing slips in quietly.
 - 🗂️ **An all-files view** — a clean, file-by-file overview when you want the bird's-eye.
 - 🔒 **Local & dependency-free** — Node built-ins only; nothing installed at runtime, nothing phoned home.
@@ -167,7 +167,7 @@ the same as cloning any private repo. Add `.diffstory/` to each repo's `.gitigno
 
 <br>
 
-- **Manual round-trip.** Comments save to disk; you trigger the agent's address step and refresh. Live-watch is planned.
+- **Reload after code edits.** Replies stream into the page live and patch inline; when the agent also edits code, the diff and story are server-rendered, so a one-click "Reload to see the new diff" refreshes them.
 - **Comment drift.** Comments anchor to a line number at comment-time; if code shifts and the tour isn't refreshed, a comment falls back to a note on its step. Resolve a batch, then re-review fresh.
 - **Syntax highlighting** is diff-coloring only in v1 (kept self-contained, no CDN).
 - Needs a git repo; reviews the working tree against a base.
