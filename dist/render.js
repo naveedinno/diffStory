@@ -38,6 +38,9 @@ export function renderPage(input) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
 <title>${esc(APP_BRAND)} — ${esc(tour.title)}</title>
 <style>${PAGE_CSS}</style>
 </head>
