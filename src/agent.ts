@@ -41,6 +41,26 @@ export function storyPrompt(baseRef: string, headRef?: string): string {
   );
 }
 
+/** Instruct the agent to address review comments via the address-review skill. */
+export function addressPrompt(target: string[] | 'all'): string {
+  const scope =
+    target === 'all'
+      ? 'every comment whose status is "open"'
+      : `the comments with these ids: ${target.join(', ')}`;
+  return (
+    `Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
+    `Act by type for each one:\n` +
+    `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
+    `- question → read the code at its file:line, then answer concretely in "reply".\n` +
+    `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n` +
+    `For every comment you handle: set "status" to "addressed" and write a specific "reply" — name the ` +
+    `function or file you changed, or give your answer. Preserve every other field and never delete a comment.\n\n` +
+    `If your edits moved code, re-run the diffStory review-tour skill so ${DATA_DIR}/story.json line ranges ` +
+    `stay correct, then run "diffstory check" until coverage is clean.\n\n` +
+    `Do not ask questions. Make the changes directly.`
+  );
+}
+
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
 export const DEFAULT_CLAUDE_MODEL = 'sonnet';
 
@@ -78,5 +98,97 @@ export function runAgent(
     child.stderr?.on('data', cap);
     child.on('error', (e) => resolve({ ok: false, output: `${output}\n${String(e)}` }));
     child.on('close', (code) => resolve({ ok: code === 0, output }));
+  });
+}
+
+// ---- live address loop: stream the agent's output to the review page ----
+
+/** A normalized event from a streaming agent run. */
+export type AgentEvent =
+  | { type: 'text'; data: string }
+  | { type: 'tool'; data: string };
+
+/** The streaming command + args for an agent. Flags verified against each CLI's --help. */
+export function streamCommand(agent: Agent, prompt: string, model?: string): [string, string[]] {
+  if (agent === 'claude') {
+    return [
+      'claude',
+      ['-p', prompt, '--output-format', 'stream-json', '--verbose',
+       '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL],
+    ];
+  }
+  const args = ['exec', '--full-auto'];
+  if (model) args.push('--model', model);
+  args.push(prompt);
+  return ['codex', args];
+}
+
+/** Parse one line of Claude's --output-format stream-json into events (non-JSON → none). */
+export function parseClaudeStreamLine(line: string): AgentEvent[] {
+  const s = line.trim();
+  if (!s) return [];
+  let obj: any;
+  try {
+    obj = JSON.parse(s);
+  } catch {
+    return [];
+  }
+  if (obj?.type !== 'assistant' || !Array.isArray(obj.message?.content)) return [];
+  const out: AgentEvent[] = [];
+  for (const block of obj.message.content) {
+    if (block?.type === 'text' && block.text) {
+      out.push({ type: 'text', data: block.text });
+    } else if (block?.type === 'tool_use') {
+      const f = block.input?.file_path ?? block.input?.path ?? '';
+      out.push({ type: 'tool', data: `✏️ ${block.name}${f ? ' ' + f : ''}` });
+    }
+  }
+  return out;
+}
+
+/** Codex exec streams human-readable text; forward non-empty lines as text. */
+export function parseCodexStreamLine(line: string): AgentEvent[] {
+  const s = line.replace(/\s+$/, '');
+  return s.trim() ? [{ type: 'text', data: s }] : [];
+}
+
+function lineParser(agent: Agent): (line: string) => AgentEvent[] {
+  return agent === 'claude' ? parseClaudeStreamLine : parseCodexStreamLine;
+}
+
+/**
+ * Spawn the agent and stream normalized events as output arrives, calling `onEvent`
+ * per parsed event. Resolves with the exit-ok flag and captured output (used for a
+ * failure tail). The spawn itself is integration-only — the parsers are unit-tested.
+ */
+export function streamAgent(
+  agent: Agent,
+  repo: string,
+  prompt: string,
+  onEvent: (e: AgentEvent) => void,
+  model?: string,
+): Promise<{ ok: boolean; output: string }> {
+  const [cmd, args] = streamCommand(agent, prompt, model);
+  const parse = lineParser(agent);
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    let buf = '';
+    const feed = (b: Buffer) => {
+      const text = b.toString();
+      output += text;
+      if (output.length > 200_000) output = output.slice(-200_000); // cap memory
+      buf += text;
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const ln of lines) for (const e of parse(ln)) onEvent(e);
+    };
+    child.stdout?.on('data', feed);
+    child.stderr?.on('data', feed);
+    child.on('error', (e) => resolve({ ok: false, output: `${output}\n${String(e)}` }));
+    child.on('close', (code) => {
+      if (buf) for (const e of parse(buf)) onEvent(e); // flush the last partial line
+      resolve({ ok: code === 0, output });
+    });
   });
 }
