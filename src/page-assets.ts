@@ -40,10 +40,10 @@ a{color:inherit;text-decoration:none}
 .ds-word-a{color:#8a909b;font-weight:500}
 .ds-word-b{color:#f0f1f4;font-weight:600}
 .ds-vsep{width:1px;height:24px;background:rgba(255,255,255,0.1)}
-.ds-titlewrap{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;gap:1px}
-.ds-kicker{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:0.09em;text-transform:uppercase;color:var(--dim2);font-weight:700}
+.ds-titlewrap{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;gap:1px;overflow:hidden}
+.ds-kicker{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:0.09em;text-transform:uppercase;color:var(--dim2);font-weight:700;min-width:0;overflow:hidden;white-space:nowrap}
 .ds-kicker .ds-dim{color:var(--faint);font-weight:600}
-.ds-change{font-size:11px;color:var(--dim);font-family:var(--mono);text-transform:none;letter-spacing:0}
+.ds-change{font-size:11px;color:var(--dim);font-family:var(--mono);text-transform:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .ds-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f0f1f4}
 .ds-status{display:flex;align-items:center;gap:8px;flex:none}
 .ds-open{display:flex;align-items:center;gap:7px;font-size:12px;color:#cdd2da;padding:7px 11px;border-radius:8px;background:rgba(255,255,255,0.05)}
@@ -59,7 +59,7 @@ a{color:inherit;text-decoration:none}
 .ds-trustpill.is-clean:hover{background:rgba(46,160,67,0.14)}
 .ds-check{font-size:12px}
 .ds-actions{display:flex;align-items:center;gap:9px}
-.ds-btn{font-size:13px;font-weight:500;border-radius:9px;cursor:pointer;border:1px solid transparent}
+.ds-btn{font-size:13px;font-weight:500;border-radius:9px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .ds-btn-ghost{color:#cdd2da;padding:9px 15px;border-color:rgba(255,255,255,0.16);background:transparent}
 .ds-btn-ghost:hover{background:rgba(255,255,255,0.06)}
 .ds-btn-approve{display:flex;align-items:center;gap:7px;font-weight:600;color:#0a1f12;padding:9px 17px;border:none;background:var(--green)}
@@ -87,6 +87,9 @@ a{color:inherit;text-decoration:none}
 .ds-playstep:hover{background:rgba(96,150,255,0.18)}
 .ds-btn-solid{font-weight:600;color:#0a1322;padding:7px 13px;border:none;background:var(--accent)}
 .ds-btn-solid:hover{background:var(--accent-hi)}
+/* header responsiveness: drop the kicker, then tighten pills/buttons as it narrows */
+@media (max-width:1180px){.ds-top{gap:9px}.ds-kicker{display:none}}
+@media (max-width:980px){.ds-open,.ds-trustpill{padding:6px 9px}.ds-btn-ghost,.ds-btn-approve{padding:8px 11px}.ds-readaloud{padding:7px 9px}.ds-gear{width:28px;height:28px}}
 
 /* ---- layout ---- */
 .ds-layout{flex:1;display:flex;min-height:0}
@@ -141,12 +144,11 @@ a{color:inherit;text-decoration:none}
 /* ---- overview (step 0) ---- */
 .ds-storymark{display:block}
 .ds-stepcard[hidden]{display:none}
-.ds-stepcard.is-intro{grid-template-columns:30px 1fr;gap:11px;align-items:center;margin:10px 12px 2px;padding:11px 13px 11px 7px;border-radius:11px;
-  background:rgba(96,150,255,0.06);border:1px solid rgba(96,150,255,0.16)}
-.ds-stepcard.is-intro:hover{background:rgba(96,150,255,0.1)}
-.ds-stepcard.is-intro.is-active{background:rgba(96,150,255,0.13);border-color:rgba(96,150,255,0.34)}
-.ds-stepcard.is-intro .ds-num{grid-column:1;width:30px;height:30px;margin:0;border-radius:9px;border:none;box-shadow:none;
-  background:rgba(96,150,255,0.16);color:var(--accent-blue)}
+.ds-stepcard.is-intro{align-items:center;margin:2px 12px 6px 0;padding:11px 14px 11px 0;border-radius:11px;background:rgba(96,150,255,0.1)}
+.ds-stepcard.is-intro:hover{background:rgba(96,150,255,0.14)}
+.ds-stepcard.is-intro.is-active{background:rgba(96,150,255,0.16)}
+.ds-stepcard.is-intro .ds-num{grid-column:1;width:30px;height:30px;margin:0 0 0 19px;border-radius:9px;border:none;box-shadow:none;
+  background:rgba(96,150,255,0.18);color:var(--accent-blue)}
 .ds-stepcard.is-intro.is-active .ds-num{background:var(--accent);color:#0a1322}
 .ds-stepcard.is-intro .ds-stepcard-title{color:#dfe4ec}
 .ds-stepcard.is-intro.is-active .ds-stepcard-title{color:#fff}
