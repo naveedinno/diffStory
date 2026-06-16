@@ -50,6 +50,9 @@ export function renderPage(input) {
     ${BRAND_MARK}
     <span class="ds-word"><span class="ds-word-a">diff</span><span class="ds-word-b">Story</span></span>
   </div>
+  <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+    <span class="ds-sidebar-toggle-ico">☰</span>
+  </button>
   <div class="ds-vsep"></div>
   <div class="ds-titlewrap">
     <div class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(baseLabel)}">${esc(baseLabel)}</span></div>
@@ -57,6 +60,7 @@ export function renderPage(input) {
   </div>
   <div class="ds-status">
     <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> open ${plural(openCount, 'comment')}</span>
+    <button class="ds-addall" data-address-all${openCount ? '' : ' disabled'} title="Have your agent address every open comment and reply right here">Address all open</button>
     <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no tour step explains">${uncoveredCount
         ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained ${plural(uncoveredCount, 'change')}`
         : `<span class="ds-check">✓</span> all changes explained`}</button>
@@ -93,6 +97,17 @@ export function renderPage(input) {
         : 'Resolve open comments and make sure every change is explained first'}"><span class="ds-check">✓</span> Approve</button>
   </div>
 </header>
+
+<div class="ds-agentconsole" id="ds-agentconsole" hidden aria-live="polite">
+  <div class="ds-ac-head">
+    <span class="ds-ac-spin" aria-hidden="true"></span>
+    <span class="ds-ac-title">Agent is working…</span>
+    <span class="ds-flex"></span>
+    <button class="ds-ghost ds-ac-close" data-ac-close hidden>Close</button>
+  </div>
+  <pre class="ds-ac-body" id="ds-ac-body"></pre>
+  <div class="ds-ac-foot" id="ds-ac-foot" hidden></div>
+</div>
 
 <div class="ds-layout">
   <aside class="ds-rail">
@@ -437,6 +452,9 @@ export function commentHtml(c) {
       <div class="ds-comment-body">${nl(esc(c.body))}</div>
       ${reply}
       <div class="ds-comment-actions">
+        ${c.status !== 'resolved'
+        ? '<button class="ds-ghost ds-send" data-send title="Ask your agent to answer or fix this — the reply appears right here">Ask agent</button>'
+        : ''}
         <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
         <button class="ds-ghost ds-del" data-delete>Delete</button>
       </div>
