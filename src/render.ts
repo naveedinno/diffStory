@@ -7,7 +7,15 @@ import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { APP_BRAND } from './config.js';
 import { buildReviewModel } from './view-model.js';
 import { highlight } from './highlight.js';
-import type { FileView, SbsRow, StepView, TrustView, UncoveredView, UnifiedRow } from './view-model.js';
+import type {
+  FileView,
+  ReviewModel,
+  SbsRow,
+  StepView,
+  TrustView,
+  UncoveredView,
+  UnifiedRow,
+} from './view-model.js';
 import type { Comment, CommentType, DiffFile, Tour } from './types.js';
 
 export interface RenderInput {
@@ -33,7 +41,9 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
 export function renderPage(input: RenderInput): string {
   const { repo, tour, files, baseLabel, comments } = input;
   const model = buildReviewModel(repo, tour, files);
-  const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i]));
+  // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
+  // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
+  const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));
 
   const openCount = comments.filter((c) => c.status !== 'resolved').length;
   const uncoveredCount = model.trust.uncovered.length;
@@ -78,7 +88,21 @@ export function renderPage(input: RenderInput): string {
         : `<span class="ds-check">✓</span> all changes explained`
     }</button>
   </div>
-  <button class="ds-readaloud" data-readaloud title="Read each step's reason aloud as you walk the story"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
+  <div class="ds-settings-wrap">
+    <button class="ds-readaloud" data-readaloud title="Read each step's reason aloud as you walk the story"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
+    <button class="ds-gear" data-settings title="Read-aloud settings" aria-label="Read-aloud settings">⚙</button>
+    <div class="ds-settings-pop" id="ds-settings" hidden>
+      <div class="ds-settings-title">Read aloud</div>
+      <div class="ds-settings-row">
+        <span class="ds-settings-label">Speed</span>
+        <div class="ds-seg">
+          <button data-rate="0.8">Slow</button>
+          <button data-rate="1.05" class="is-active">Normal</button>
+          <button data-rate="1.4">Fast</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="ds-vsep"></div>
   <div class="ds-actions">
     <button class="ds-btn ds-btn-ghost" data-verdict="request">Request changes</button>
@@ -98,14 +122,16 @@ export function renderPage(input: RenderInput): string {
         <button class="ds-tab" data-view="files" role="tab">All files</button>
       </div>
     </div>
+    ${introCard(model)}
     <div class="ds-readhead" data-rail="tour">
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Reading order</span>
-        <span class="ds-readhead-count" id="ds-progress-text">1 / ${model.totalSteps}</span>
+        <span class="ds-readhead-count" id="ds-progress-text">${model.totalSteps} ${plural(
+    model.totalSteps,
+    'step',
+  )}</span>
       </div>
-      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:${
-        model.totalSteps ? (100 / model.totalSteps).toFixed(2) : 0
-      }%"></div></div>
+      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:0%"></div></div>
     </div>
     <div class="ds-readhead" data-rail="files" hidden>
       <div class="ds-readhead-row">
@@ -127,7 +153,8 @@ export function renderPage(input: RenderInput): string {
 
   <main class="ds-main">
     <div class="ds-view" id="ds-view-tour">
-      ${stepPanels || '<div class="ds-empty">This tour has no steps.</div>'}
+      ${introPanel(model, tour)}
+      ${stepPanels}
     </div>
     <div class="ds-view" id="ds-view-files" hidden>
       <div class="ds-fileshead">
@@ -168,27 +195,84 @@ ${trustDrawer(model.trust, stepIndexById)}
 
 // ---- sidebar ----
 
+// The Overview sits above the numbered steps as navigation index 0 — the calm
+// entry point that answers "what is this change?" before the walkthrough begins.
+function introCard(model: ReviewModel): string {
+  const n = model.totalSteps;
+  return `<button class="ds-stepcard is-intro is-active" data-rail="tour" data-intro data-step-index="0" title="The whole change at a glance, before the walkthrough">
+    <span class="ds-num">${STORY_MARK}</span>
+    <span class="ds-stepcard-body">
+      <span class="ds-stepcard-title">Overview</span>
+      <span class="ds-intro-cardsub">The change at a glance${n ? ` · ${n} ${plural(n, 'step')}` : ''}</span>
+    </span>
+  </button>`;
+}
+
+// A rail card carries only what tells steps apart: the number, the headline, and
+// the file's base name (full path on hover). The kind badge appears only when it
+// is *not* a plain change — "Changed" on every card is noise, so it is dropped.
 function railCard(s: StepView, i: number): string {
-  const flow = s.flow
-    ? `<span class="ds-flowchip" title="Call flow — where this step leads next and returns to in the tour"><span class="ds-flowico">↳</span>${esc(
-        s.flow,
-      )}</span>`
-    : '';
-  return `<button class="ds-stepcard${i === 0 ? ' is-active' : ''}" data-step-index="${i}" data-step-id="${esc(
-    s.id,
-  )}">
-    <span class="ds-num">${i === 0 ? '1' : i + 1}</span>
+  const base = splitPath(s.file)[1];
+  const badge =
+    s.kind === 'changed'
+      ? ''
+      : `<span class="ds-railbadge ds-badge-${s.kind === 'new-file' ? 'new' : 'context'}">${esc(
+          s.kindLabel,
+        )}</span>`;
+  return `<button class="ds-stepcard" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
+    <span class="ds-num">${i + 1}</span>
     <span class="ds-stepcard-body">
       <span class="ds-stepcard-title">${esc(s.title)}</span>
-      <span class="ds-stepcard-file">${esc(s.file)}</span>
-      <span class="ds-stepcard-tags">
-        <span class="ds-badge ds-badge-${s.kind === 'new-file' ? 'new' : s.kind}" title="What kind of file this is in the change">${esc(
-          s.kindLabel,
-        )}</span>
-        ${flow}
+      <span class="ds-stepcard-fileline">
+        <span class="ds-stepcard-file" title="${esc(s.file)}">${esc(base)}</span>${badge}
       </span>
     </span>
   </button>`;
+}
+
+// The Overview panel: the change's title and summary up front (this is the only
+// place the summary is shown in full), a few orienting facts, and one button into
+// the walkthrough. It is navigation index 0 — shown first, before any step.
+function introPanel(model: ReviewModel, tour: Tour): string {
+  const n = model.totalSteps;
+  const trust = model.trust.uncovered.length;
+  const first = model.steps[0];
+  const summary =
+    tour.summary && tour.summary.trim()
+      ? nl(esc(tour.summary.trim()))
+      : 'Each step builds on the one before it — read them in order, or jump to any file from the list.';
+  const filesLabel = `${plural(model.filesChanged, 'file')} changed${
+    model.contextFiles ? ` · ${model.contextFiles} for context` : ''
+  }`;
+  const trustFact = trust
+    ? `<div class="ds-fact ds-fact-warn"><span class="ds-fact-n">▲ ${trust}</span><span class="ds-fact-l">unexplained ${plural(
+        trust,
+        'change',
+      )}</span></div>`
+    : `<div class="ds-fact ds-fact-ok"><span class="ds-fact-n">✓</span><span class="ds-fact-l">every change explained</span></div>`;
+  const start = first
+    ? `<button class="ds-intro-start" data-goto-step="1">
+        <span class="ds-intro-start-main">Start the walkthrough <span class="ds-intro-arrow">→</span></span>
+        <span class="ds-intro-start-sub">Step 1 · ${esc(first.title)}</span>
+      </button>`
+    : '';
+  return `<section class="ds-step is-intro" data-step-panel="0">
+    <div class="ds-introwrap">
+      <span class="ds-intro-eyebrow">${STORY_MARK}<span>The story of this change</span></span>
+      <h1 class="ds-intro-title">${esc(tour.title)}</h1>
+      <p class="ds-intro-lede">${summary}</p>
+      <div class="ds-intro-facts">
+        <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(
+    n,
+    'step',
+  )} to read in order</span></div>
+        <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
+        <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
+        ${trustFact}
+      </div>
+      ${start}
+    </div>
+  </section>`;
 }
 
 function trustRailCard(trust: TrustView): string {
@@ -247,20 +331,25 @@ function stepPanel(
   comments: Comment[],
 ): string {
   const editor = vscodeLink(repo, s.file, 1);
-  const prevDisabled = i === 0 ? ' disabled' : '';
   const nextDisabled = i === total - 1 ? ' disabled' : '';
-  return `<section class="ds-step" data-step-panel="${i}" data-step-id="${esc(s.id)}"${
-    i === 0 ? '' : ' hidden'
-  }>
+  // Call-flow lives here now (not on every rail card). Only show the meaningful
+  // cross-references — "Standalone"/"Final step" carry no navigation cue.
+  const flow = /^(Calls|Returns)/.test(s.flow)
+    ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(
+        s.flow,
+      )}</span>`
+    : '';
+  return `<section class="ds-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
         <span class="ds-dot"></span>
         <span class="ds-badge ds-badge-${s.kind === 'new-file' ? 'new' : s.kind}">${esc(s.kindLabel)}</span>
+        ${flow}
         <span class="ds-flex"></span>
         <span class="ds-step-pos">${s.order} / ${total}</span>
         <span class="ds-nav">
-          <button class="ds-iconbtn" data-prev title="Previous step"${prevDisabled}>←</button>
+          <button class="ds-iconbtn" data-prev title="Previous">←</button>
           <button class="ds-iconbtn" data-next title="Next step"${nextDisabled}>→</button>
         </span>
       </div>
@@ -272,7 +361,7 @@ function stepPanel(
       </div>
     </div>
     <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Why this step</span></div>
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Why this step</span><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
       <p class="ds-why-text">${nl(esc(s.why))}</p>
     </div>
     <div class="ds-diffscroll">
@@ -603,6 +692,10 @@ const BRAND_MARK = `<svg class="ds-mark" width="13" height="20" viewBox="0 0 13 
     <circle cx="6.5" cy="10" r="3.6" fill="#828a96"></circle>
     <circle cx="6.5" cy="15.5" r="3.6" fill="oklch(0.7 0.13 235)"></circle>
   </svg>`;
+
+// The brand mark in miniature, in currentColor so it tints with state: a spine of
+// three points — the whole story at a glance. Marks the Overview, in rail and panel.
+const STORY_MARK = `<svg class="ds-storymark" width="11" height="15" viewBox="0 0 11 15" aria-hidden="true"><line x1="5.5" y1="2.6" x2="5.5" y2="12.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"></line><circle cx="5.5" cy="2.6" r="1.9" fill="currentColor"></circle><circle cx="5.5" cy="7.5" r="1.9" fill="currentColor"></circle><circle cx="5.5" cy="12.4" r="1.9" fill="currentColor"></circle></svg>`;
 
 function splitPath(p: string): [string, string] {
   const i = p.lastIndexOf('/');
