@@ -40,6 +40,12 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.ok(rootText.includes('pick a repo'));
     assert.ok(rootText.includes('open by path'));
 
+    // server-backed folder browser lists dirs and flags the repo itself
+    const fs = await (await fetch(`${base}/api/fs?path=${encodeURIComponent(repo)}`)).json();
+    assert.equal(typeof fs.path, 'string');
+    assert.equal(fs.isGit, true);
+    assert.ok(Array.isArray(fs.entries));
+
     assert.equal((await fetch(`${base}/api/refs`)).status, 409);
 
     const opened = await fetch(`${base}/api/repo/open`, {

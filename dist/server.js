@@ -9,7 +9,7 @@ import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranc
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
-import { renderPickerStub } from './picker.js';
+import { renderPicker } from './picker.js';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
@@ -17,6 +17,7 @@ import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPrefligh
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
 import { recordRecent, loadRecents } from './recents.js';
+import { listDirs } from './fs-browse.js';
 import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
@@ -70,6 +71,10 @@ function handle(req, res, session) {
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
             return sendJson(res, 200, listRecentRepos());
+        }
+        if (method === 'GET' && url.pathname === '/api/fs') {
+            const p = url.searchParams.get('path');
+            return sendJson(res, 200, listDirs(p && p.trim() ? p : homedir()));
         }
         if (method === 'POST' && url.pathname === '/api/repo/open') {
             return readBody(req, (body) => {
@@ -165,10 +170,7 @@ function handle(req, res, session) {
     }
 }
 function pickerStub() {
-    return renderPickerStub(loadRecents(homedir()).map((e) => {
-        const s = inspectRepo(e.path);
-        return { path: s.path, name: s.name, hasTour: s.hasTour };
-    }));
+    return renderPicker(listRecentRepos(), homedir(), Date.now());
 }
 /** The recents list, each entry enriched with its current repo state for the picker. */
 function listRecentRepos() {
