@@ -124,6 +124,28 @@ export function describeBase(repo, base) {
     return short ?? base;
 }
 /**
+ * Per-file added/removed line counts for the change (`git diff --numstat`).
+ * Binary files report `-`/`-`, which we surface as null. Used by the change summary.
+ */
+export function numstat(repo, base, head) {
+    const args = ['diff', '--numstat', '--no-color', base];
+    if (head)
+        args.push(head);
+    args.push('--');
+    const out = tryGit(repo, args);
+    if (!out)
+        return [];
+    return out
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+        const parts = line.split('\t');
+        const added = parts[0] === '-' ? null : Number(parts[0]);
+        const removed = parts[1] === '-' ? null : Number(parts[1]);
+        return { path: parts.slice(2).join('\t'), added, removed };
+    });
+}
+/**
  * Read an inclusive 1-based line range from a file in the working tree.
  * Returns the lines (without trailing newlines) or null if the file is gone.
  */
