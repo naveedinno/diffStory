@@ -36,7 +36,9 @@ test('app server drives picker → open → refs → recent → close', async ()
   try {
     const root = await fetch(`${base}/`);
     assert.equal(root.status, 200);
-    assert.ok((await root.text()).toLowerCase().includes('pick a repo'));
+    const rootText = (await root.text()).toLowerCase();
+    assert.ok(rootText.includes('pick a repo'));
+    assert.ok(rootText.includes('open by path'));
 
     assert.equal((await fetch(`${base}/api/refs`)).status, 409);
 

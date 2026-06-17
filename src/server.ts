@@ -9,6 +9,7 @@ import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranc
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
+import { renderPickerStub } from './picker.js';
 import { buildFullFileRows } from './view-model.js';
 import {
   loadComments,
@@ -172,9 +173,11 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
   }
 }
 
-// Phase 1 placeholder; replaced by the real picker page in a later task.
 function pickerStub(): string {
-  return `<!doctype html><meta charset="utf-8"><title>${APP_BRAND}</title><body><p>Pick a repo — the picker UI lands in Phase 2.</p></body>`;
+  return renderPickerStub(loadRecents(homedir()).map((e) => {
+    const s = inspectRepo(e.path);
+    return { path: s.path, name: s.name, hasTour: s.hasTour };
+  }));
 }
 
 /** The recents list, each entry enriched with its current repo state for the picker. */
