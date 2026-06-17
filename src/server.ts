@@ -10,6 +10,9 @@ import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
+import { renderChangePage } from './change-page.js';
+import { summarizeChange } from './change-view.js';
+import { basename } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import {
   loadComments,
@@ -86,7 +89,9 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
   try {
     if (method === 'GET' && url.pathname === '/') {
       if (session.repo == null) return sendHtml(res, pickerStub());
-      return sendHtml(res, renderReview(session));
+      applyScope(session, url.searchParams);
+      if (existsSync(resolveStoryPath(session.repo))) return sendHtml(res, renderReview(session));
+      return sendHtml(res, renderChange(session));
     }
     if (method === 'GET' && url.pathname === '/api/repos/recent') {
       return sendJson(res, 200, listRecentRepos());
@@ -180,6 +185,29 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
 
 function pickerStub(): string {
   return renderPicker(listRecentRepos(), homedir(), Date.now());
+}
+
+/** Apply a scope choice from the Your-change switcher (?scope=auto | ?base= | ?head=). */
+function applyScope(session: Session, params: URLSearchParams): void {
+  if (params.get('scope') === 'auto') {
+    session.base = undefined;
+    session.head = undefined;
+    return;
+  }
+  const base = params.get('base');
+  const head = params.get('head');
+  if (base) session.base = base;
+  if (head) session.head = head;
+}
+
+/** The "Your change" screen for a repo that has no tour yet. */
+function renderChange(session: Session): string {
+  const repo = session.repo as string;
+  return renderChangePage(summarizeChange(repo, session.base, session.head), {
+    repoName: basename(repo),
+    base: session.base,
+    head: session.head,
+  });
 }
 
 /** The recents list, each entry enriched with its current repo state for the picker. */
