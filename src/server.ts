@@ -5,7 +5,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { resolveBase, getDiff, describeBase, readWholeFile } from './git.js';
+import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranches, listRecentCommits, currentBranch } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
@@ -20,7 +20,10 @@ import {
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, type AgentEvent } from './agent.js';
-import { createSession, type Session } from './session.js';
+import { createSession, openSession, closeSession, type Session } from './session.js';
+import { inspectRepo } from './repo-state.js';
+import { recordRecent, loadRecents } from './recents.js';
+import { homedir } from 'node:os';
 
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -82,6 +85,37 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
       if (session.repo == null) return sendHtml(res, pickerStub());
       return sendHtml(res, renderReview(session));
     }
+    if (method === 'GET' && url.pathname === '/api/repos/recent') {
+      return sendJson(res, 200, listRecentRepos());
+    }
+    if (method === 'POST' && url.pathname === '/api/repo/open') {
+      return readBody(req, (body) => {
+        let path = '';
+        try {
+          path = String((JSON.parse(body || '{}') as { path?: string }).path ?? '');
+        } catch {
+          return sendJson(res, 400, { error: 'invalid JSON' });
+        }
+        if (!path || !isGitRepo(path)) {
+          return sendJson(res, 400, { error: 'Not a git repository.' });
+        }
+        openSession(session, path);
+        recordRecent(homedir(), path, nowMs());
+        sendJson(res, 200, inspectRepo(path));
+      });
+    }
+    if (method === 'POST' && url.pathname === '/api/repo/close') {
+      closeSession(session);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (method === 'GET' && url.pathname === '/api/refs') {
+      if (!session.repo) return noRepo(res);
+      return sendJson(res, 200, {
+        current: currentBranch(session.repo),
+        branches: listBranches(session.repo),
+        commits: listRecentCommits(session.repo),
+      });
+    }
     if (method === 'GET' && url.pathname === '/api/fullfile') {
       return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
     }
@@ -137,6 +171,11 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
 // Phase 1 placeholder; replaced by the real picker page in a later task.
 function pickerStub(): string {
   return `<!doctype html><meta charset="utf-8"><title>${APP_BRAND}</title><body><p>Pick a repo — the picker UI lands in Phase 2.</p></body>`;
+}
+
+/** The recents list, each entry enriched with its current repo state for the picker. */
+function listRecentRepos() {
+  return loadRecents(homedir()).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
 }
 
 interface ReviewData {
@@ -200,6 +239,10 @@ function currentDiff(session: Session): string {
 
 function tailLines(s: string, n: number): string {
   return s.trimEnd().split('\n').slice(-n).join('\n');
+}
+
+function nowMs(): number {
+  return Date.now();
 }
 
 /** Drive the user's agent to address review comments and stream NDJSON events. */
