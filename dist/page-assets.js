@@ -371,6 +371,7 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .ds-ac-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent-blue);animation:ds-spin .7s linear infinite;flex:none}
 @keyframes ds-spin{to{transform:rotate(360deg)}}
 .ds-ac-body{margin:0;padding:11px 13px;overflow:auto;flex:1;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.ds-ac-body.is-hint{font-family:var(--sans);font-size:12.5px;font-style:italic;white-space:normal;color:var(--muted)}
 .ds-ac-foot{padding:10px 13px;border-top:1px solid var(--line-soft);font-size:12px;color:var(--text);display:flex;align-items:center;gap:9px}
 .ds-ghost{font-size:12px;font-weight:500;color:var(--text);padding:6px 12px;border-radius:7px;border:1px solid var(--line);background:transparent;cursor:pointer}
 .ds-ghost:hover{background:var(--fill-2)}
@@ -706,17 +707,25 @@ export const PAGE_JS = `
   }
   var NL=String.fromCharCode(10);
   function acEl(){return $('#ds-agentconsole');}
-  function acOpen(){
+  var acTimer=null;
+  function acClearTimer(){if(acTimer){clearInterval(acTimer);acTimer=null;}}
+  function acOpen(title){
     var c=acEl();if(!c)return;c.hidden=false;
-    var body=$('#ds-ac-body');if(body)body.textContent='';
+    var body=$('#ds-ac-body');if(body){body.className='ds-ac-body is-hint';body.textContent='Warming up — reading your comments and the current diff…';}
     var foot=$('#ds-ac-foot');if(foot){foot.hidden=true;foot.textContent='';}
-    var t=$('.ds-ac-title',c);if(t)t.textContent='Agent is working…';
+    var t=$('.ds-ac-title',c);if(t)t.textContent=title||'Agent is working…';
     var sp=$('.ds-ac-spin',c);if(sp)sp.hidden=false;
     var cl=$('[data-ac-close]',c);if(cl)cl.hidden=true;
+    acClearTimer();var t0=Date.now();
+    acTimer=setInterval(function(){
+      var b=$('#ds-ac-body');if(!b||b.className.indexOf('is-hint')<0){acClearTimer();return;}
+      b.textContent='Working — reading your comments and the current diff… ('+Math.round((Date.now()-t0)/1000)+'s)';
+    },1000);
   }
-  function acAppend(s){var body=$('#ds-ac-body');if(!body)return;body.textContent+=s;body.scrollTop=body.scrollHeight;}
+  function acAppend(s){var body=$('#ds-ac-body');if(!body)return;if(body.className.indexOf('is-hint')>=0){acClearTimer();body.className='ds-ac-body';body.textContent='';}body.textContent+=s;body.scrollTop=body.scrollHeight;}
   function acFinish(ok,codeChanged){
-    var c=acEl();if(!c)return;
+    var c=acEl();if(!c)return;acClearTimer();
+    var body=$('#ds-ac-body');if(body&&body.className.indexOf('is-hint')>=0){body.className='ds-ac-body';body.textContent=ok?'Finished — replies are on your comments below.':'';}
     var sp=$('.ds-ac-spin',c);if(sp)sp.hidden=true;
     var t=$('.ds-ac-title',c);if(t)t.textContent=ok?'Done':'Agent run failed';
     var cl=$('[data-ac-close]',c);if(cl)cl.hidden=false;
@@ -784,11 +793,16 @@ export const PAGE_JS = `
       return pump(reader,dec,buf,result);
     });
   }
+  function runTitle(ids){
+    if(ids==='all'){var n=collectOpenIds().length;return 'Addressing '+n+' open '+(n===1?'comment':'comments')+'…';}
+    if(ids&&ids.length>1)return 'Addressing '+ids.length+' comments…';
+    return 'Replying to your comment…';
+  }
   function sendToAgent(ids){
     if(agentBusy)return;
     var payload=ids==='all'?{all:true}:{commentIds:ids};
     var result={ok:false,codeChanged:false};
-    setBusy(true);acOpen();
+    setBusy(true);acOpen(runTitle(ids));
     fetch(ADDRESS_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){
         if(r.status===409){acAppend('Another agent run is already in progress.');return null;}
