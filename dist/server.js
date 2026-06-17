@@ -1,21 +1,33 @@
 // Tiny HTTP server over Node built-ins. The page is re-rendered on every GET, so
-// refreshing reflects the current diff and tour with no watch process — exactly
-// what the manual round-trip loop needs.
+// refreshing reflects the current diff and tour with no watch process. The repo
+// is held in a mutable Session, so the same server can boot empty (app/picker
+// mode) and switch repos at runtime via /api/repo/open.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { resolveBase, getDiff, describeBase, readWholeFile } from './git.js';
+import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranches, listRecentCommits, currentBranch } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
+import { renderPickerStub } from './picker.js';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
-import { availableAgents, streamAgent, addressPrompt } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight } from './agent.js';
+import { createSession, openSession, closeSession } from './session.js';
+import { inspectRepo } from './repo-state.js';
+import { recordRecent, loadRecents } from './recents.js';
+import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
-    const server = createServer((req, res) => handle(req, res, opts));
+    const session = createSession({
+        repo: opts.repo,
+        base: opts.baseOverride,
+        head: opts.headOverride,
+    });
+    const server = createServer((req, res) => handle(req, res, session));
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
             console.error(`Port ${opts.port} is in use. Try: ${APP_NAME} serve --port ${opts.port + 1}`);
@@ -26,33 +38,85 @@ export function serve(opts) {
         process.exit(1);
     });
     server.listen(opts.port, () => {
-        const url = `http://localhost:${opts.port}/`;
-        console.log(`\n  ${APP_BRAND} review ready → ${url}`);
-        console.log(`  reviewing ${resolveStoryPath(opts.repo)}`);
-        console.log(`  comments save as you go; click "Ask agent" or "Address all open" in the page to get replies live.\n`);
+        const addr = server.address();
+        const port = typeof addr === 'object' && addr ? addr.port : opts.port;
+        const url = `http://localhost:${port}/`;
+        if (session.repo == null) {
+            console.log(`\n  ${APP_BRAND} app ready → ${url}`);
+            console.log(`  pick a repo to review (or open one you've used before).\n`);
+        }
+        else {
+            console.log(`\n  ${APP_BRAND} review ready → ${url}`);
+            console.log(`  reviewing ${resolveStoryPath(session.repo)}`);
+            console.log(`  comments save as you go; click "Ask agent" or "Address all open" to get replies live.\n`);
+        }
         console.log(`  Ctrl-C to stop.\n`);
         if (opts.open)
             openBrowser(url);
     });
+    return server;
 }
-function handle(req, res, opts) {
+function noRepo(res) {
+    sendJson(res, 409, { error: 'No repo is open.' });
+}
+function handle(req, res, session) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
     try {
         if (method === 'GET' && url.pathname === '/') {
-            return sendHtml(res, renderReview(opts));
+            if (session.repo == null)
+                return sendHtml(res, pickerStub());
+            return sendHtml(res, renderReview(session));
+        }
+        if (method === 'GET' && url.pathname === '/api/repos/recent') {
+            return sendJson(res, 200, listRecentRepos());
+        }
+        if (method === 'POST' && url.pathname === '/api/repo/open') {
+            return readBody(req, (body) => {
+                let path = '';
+                try {
+                    path = String(JSON.parse(body || '{}').path ?? '');
+                }
+                catch {
+                    return sendJson(res, 400, { error: 'invalid JSON' });
+                }
+                if (!path || !isGitRepo(path)) {
+                    return sendJson(res, 400, { error: 'Not a git repository.' });
+                }
+                openSession(session, path);
+                recordRecent(homedir(), path, nowMs());
+                sendJson(res, 200, inspectRepo(path));
+            });
+        }
+        if (method === 'POST' && url.pathname === '/api/repo/close') {
+            closeSession(session);
+            return sendJson(res, 200, { ok: true });
+        }
+        if (method === 'GET' && url.pathname === '/api/refs') {
+            if (!session.repo)
+                return noRepo(res);
+            return sendJson(res, 200, {
+                current: currentBranch(session.repo),
+                branches: listBranches(session.repo),
+                commits: listRecentCommits(session.repo),
+            });
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
-            return sendHtml(res, renderFullFileResponse(opts, url.searchParams.get('file') ?? ''));
+            return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
         }
         if (method === 'GET' && url.pathname === '/api/comments') {
-            return sendJson(res, 200, loadComments(opts.repo));
+            if (!session.repo)
+                return noRepo(res);
+            return sendJson(res, 200, loadComments(session.repo));
         }
         if (method === 'POST' && url.pathname === '/api/comments') {
+            if (!session.repo)
+                return noRepo(res);
+            const repo = session.repo;
             return readBody(req, (body) => {
                 try {
                     const input = JSON.parse(body);
-                    sendJson(res, 201, addComment(opts.repo, input));
+                    sendJson(res, 201, addComment(repo, input));
                 }
                 catch (e) {
                     sendJson(res, 400, { error: e.message });
@@ -60,16 +124,20 @@ function handle(req, res, opts) {
             });
         }
         if (method === 'POST' && url.pathname === '/api/address') {
-            if (agentBusy)
-                return sendJson(res, 409, { error: 'An agent run is already in progress.' });
-            return readBody(req, (body) => runAddress(res, opts, body));
+            return readBody(req, (body) => runAddress(res, session, body));
+        }
+        if (method === 'POST' && url.pathname === '/api/generate') {
+            return readBody(req, (body) => runGenerate(res, session, body));
         }
         if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
+            if (!session.repo)
+                return noRepo(res);
+            const repo = session.repo;
             const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
             return readBody(req, (body) => {
                 try {
                     const { status } = JSON.parse(body || '{}');
-                    const updated = setCommentStatus(opts.repo, id, status ?? '');
+                    const updated = setCommentStatus(repo, id, status ?? '');
                     if (updated)
                         sendJson(res, 200, updated);
                     else
@@ -81,8 +149,10 @@ function handle(req, res, opts) {
             });
         }
         if (method === 'DELETE' && url.pathname.startsWith('/api/comments/')) {
+            if (!session.repo)
+                return noRepo(res);
             const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
-            const ok = deleteComment(opts.repo, id);
+            const ok = deleteComment(session.repo, id);
             res.statusCode = ok ? 204 : 404;
             res.end();
             return;
@@ -94,34 +164,49 @@ function handle(req, res, opts) {
         sendHtml(res, errorPage(e.message), 500);
     }
 }
-function loadReview(opts) {
-    const tour = loadTour(resolveStoryPath(opts.repo));
-    const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
-    const files = parseUnifiedDiff(getDiff(opts.repo, base, opts.headOverride));
+function pickerStub() {
+    return renderPickerStub(loadRecents(homedir()).map((e) => {
+        const s = inspectRepo(e.path);
+        return { path: s.path, name: s.name, hasTour: s.hasTour };
+    }));
+}
+/** The recents list, each entry enriched with its current repo state for the picker. */
+function listRecentRepos() {
+    return loadRecents(homedir()).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
+}
+function loadReview(session) {
+    if (!session.repo)
+        throw new Error('No repo is open.');
+    const repo = session.repo;
+    const tour = loadTour(resolveStoryPath(repo));
+    const base = resolveBase(repo, session.base ?? tour.base);
+    const files = parseUnifiedDiff(getDiff(repo, base, session.head));
     return { tour, base, files };
 }
-function renderReview(opts) {
-    const { tour, base, files } = loadReview(opts);
+function renderReview(session) {
+    const repo = session.repo;
+    const { tour, base, files } = loadReview(session);
     return renderPage({
-        repo: opts.repo,
+        repo,
         tour,
         files,
-        baseLabel: describeBase(opts.repo, base),
-        comments: loadComments(opts.repo),
+        baseLabel: describeBase(repo, base),
+        comments: loadComments(repo),
     });
 }
 /** The lazily-loaded "Full file" side-by-side view for one file. */
-function renderFullFileResponse(opts, file) {
+function renderFullFileResponse(session, file) {
+    if (!session.repo)
+        return `<div class="ds-diffnote">No repo is open.</div>`;
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
-    const { tour, files } = loadReview(opts);
-    // Allowlist: only files that appear in the diff or the tour can be read back —
-    // keeps the endpoint from reading arbitrary paths off the working tree.
+    const repo = session.repo;
+    const { tour, files } = loadReview(session);
     const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     const df = files.find((f) => f.newPath === file);
-    const newLines = readWholeFile(opts.repo, file) ?? [];
+    const newLines = readWholeFile(repo, file) ?? [];
     const ranges = computeCoverage(tour, files)
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
@@ -129,11 +214,14 @@ function renderFullFileResponse(opts, file) {
     return renderFullFile(rows, { file, newFile: df?.status === 'added' });
 }
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */
-function currentDiff(opts) {
+function currentDiff(session) {
     try {
-        const tour = loadTour(resolveStoryPath(opts.repo));
-        const base = resolveBase(opts.repo, opts.baseOverride ?? tour.base);
-        return getDiff(opts.repo, base, opts.headOverride);
+        if (!session.repo)
+            return '';
+        const repo = session.repo;
+        const tour = loadTour(resolveStoryPath(repo));
+        const base = resolveBase(repo, session.base ?? tour.base);
+        return getDiff(repo, base, session.head);
     }
     catch {
         return '';
@@ -142,12 +230,11 @@ function currentDiff(opts) {
 function tailLines(s, n) {
     return s.trimEnd().split('\n').slice(-n).join('\n');
 }
-/**
- * Drive the user's agent to address review comments and stream its output as NDJSON
- * (one JSON event per line: {type:'text'|'tool'|'error'|'done', ...}). Reuses the
- * address-review skill — the agent writes replies + edits code itself.
- */
-function runAddress(res, opts, body) {
+function nowMs() {
+    return Date.now();
+}
+/** Drive the user's agent to address review comments and stream NDJSON events. */
+function runAddress(res, session, body) {
     let input;
     try {
         input = JSON.parse(body || '{}');
@@ -163,16 +250,16 @@ function runAddress(res, opts, body) {
     if (target !== 'all' && target.length === 0) {
         return sendJson(res, 400, { error: 'no comments specified' });
     }
-    const agents = availableAgents();
-    if (agents.length === 0) {
-        return sendJson(res, 400, { error: 'No agent CLI found (looked for "claude" and "codex").' });
-    }
-    const agent = agents[0];
+    const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+    if (!pre.ok)
+        return sendJson(res, pre.status, { error: pre.error });
+    const agent = pre.agent;
+    const repo = session.repo;
     agentBusy = true;
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
-    const before = currentDiff(opts);
+    const before = currentDiff(session);
     const send = (e) => {
         try {
             res.write(JSON.stringify(e) + '\n');
@@ -181,12 +268,54 @@ function runAddress(res, opts, body) {
             /* client disconnected */
         }
     };
-    streamAgent(agent, opts.repo, addressPrompt(target), (e) => send(e))
+    streamAgent(agent, repo, addressPrompt(target), (e) => send(e))
         .then(({ ok, output }) => {
-        const codeChanged = currentDiff(opts) !== before;
+        const codeChanged = currentDiff(session) !== before;
         if (!ok)
             send({ type: 'error', data: tailLines(output, 30) });
         send({ type: 'done', ok, codeChanged });
+    })
+        .catch((err) => send({ type: 'error', data: String(err) }))
+        .finally(() => {
+        res.end();
+        agentBusy = false;
+    });
+}
+/** Drive the agent to write a tour for the current repo, streaming NDJSON like address. */
+function runGenerate(res, session, body) {
+    let input = {};
+    try {
+        input = JSON.parse(body || '{}');
+    }
+    catch {
+        return sendJson(res, 400, { error: 'invalid JSON' });
+    }
+    const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+    if (!pre.ok)
+        return sendJson(res, pre.status, { error: pre.error });
+    const agent = pre.agent;
+    const repo = session.repo;
+    session.base = input.base;
+    session.head = input.head;
+    const base = resolveBase(repo, input.base);
+    agentBusy = true;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    const send = (e) => {
+        try {
+            res.write(JSON.stringify(e) + '\n');
+        }
+        catch {
+            /* client disconnected */
+        }
+    };
+    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e))
+        .then(({ ok, output }) => {
+        const storyWritten = existsSync(resolveStoryPath(repo));
+        if (!ok && !storyWritten)
+            send({ type: 'error', data: tailLines(output, 30) });
+        send({ type: 'done', ok: ok && storyWritten, storyWritten });
     })
         .catch((err) => send({ type: 'error', data: String(err) }))
         .finally(() => {

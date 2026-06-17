@@ -167,3 +167,14 @@ export function streamAgent(agent, repo, prompt, onEvent, model) {
         });
     });
 }
+/** Guard a would-be agent run: one-at-a-time, a repo open, an agent installed. */
+export function agentPreflight(a) {
+    if (a.busy)
+        return { ok: false, status: 409, error: 'An agent run is already in progress.' };
+    if (!a.repo)
+        return { ok: false, status: 409, error: 'No repo is open.' };
+    if (a.agents.length === 0) {
+        return { ok: false, status: 400, error: 'No agent CLI found (looked for "claude" and "codex").' };
+    }
+    return { ok: true, agent: a.agents[0] };
+}
