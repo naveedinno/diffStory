@@ -19,11 +19,12 @@ import {
 } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
-import { availableAgents, streamAgent, addressPrompt, type AgentEvent } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, type AgentEvent } from './agent.js';
 import { createSession, openSession, closeSession, type Session } from './session.js';
 import { inspectRepo } from './repo-state.js';
 import { recordRecent, loadRecents } from './recents.js';
 import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
 
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -137,6 +138,9 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     }
     if (method === 'POST' && url.pathname === '/api/address') {
       return readBody(req, (body) => runAddress(res, session, body));
+    }
+    if (method === 'POST' && url.pathname === '/api/generate') {
+      return readBody(req, (body) => runGenerate(res, session, body));
     }
     if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
       if (!session.repo) return noRepo(res);
@@ -262,14 +266,10 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     return sendJson(res, 400, { error: 'no comments specified' });
   }
 
-  if (agentBusy) return sendJson(res, 409, { error: 'An agent run is already in progress.' });
-  if (!session.repo) return noRepo(res);
-  const agents = availableAgents();
-  if (agents.length === 0) {
-    return sendJson(res, 400, { error: 'No agent CLI found (looked for "claude" and "codex").' });
-  }
-  const agent = agents[0];
-  const repo = session.repo;
+  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+  if (!pre.ok) return sendJson(res, pre.status, { error: pre.error });
+  const agent = pre.agent;
+  const repo = session.repo as string;
 
   agentBusy = true;
   res.statusCode = 200;
@@ -290,6 +290,50 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
       const codeChanged = currentDiff(session) !== before;
       if (!ok) send({ type: 'error', data: tailLines(output, 30) });
       send({ type: 'done', ok, codeChanged });
+    })
+    .catch((err) => send({ type: 'error', data: String(err) }))
+    .finally(() => {
+      res.end();
+      agentBusy = false;
+    });
+}
+
+/** Drive the agent to write a tour for the current repo, streaming NDJSON like address. */
+function runGenerate(res: ServerResponse, session: Session, body: string): void {
+  let input: { base?: string; head?: string } = {};
+  try {
+    input = JSON.parse(body || '{}');
+  } catch {
+    return sendJson(res, 400, { error: 'invalid JSON' });
+  }
+
+  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+  if (!pre.ok) return sendJson(res, pre.status, { error: pre.error });
+  const agent = pre.agent;
+  const repo = session.repo as string;
+
+  session.base = input.base;
+  session.head = input.head;
+  const base = resolveBase(repo, input.base);
+
+  agentBusy = true;
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+
+  const send = (e: object) => {
+    try {
+      res.write(JSON.stringify(e) + '\n');
+    } catch {
+      /* client disconnected */
+    }
+  };
+
+  streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e: AgentEvent) => send(e))
+    .then(({ ok, output }) => {
+      const storyWritten = existsSync(resolveStoryPath(repo));
+      if (!ok && !storyWritten) send({ type: 'error', data: tailLines(output, 30) });
+      send({ type: 'done', ok: ok && storyWritten, storyWritten });
     })
     .catch((err) => send({ type: 'error', data: String(err) }))
     .finally(() => {

@@ -192,3 +192,18 @@ export function streamAgent(
     });
   });
 }
+
+/** Result of the shared pre-run guard for any agent run (address or generate). */
+export type Preflight =
+  | { ok: true; agent: Agent }
+  | { ok: false; status: number; error: string };
+
+/** Guard a would-be agent run: one-at-a-time, a repo open, an agent installed. */
+export function agentPreflight(a: { repo: string | null; busy: boolean; agents: Agent[] }): Preflight {
+  if (a.busy) return { ok: false, status: 409, error: 'An agent run is already in progress.' };
+  if (!a.repo) return { ok: false, status: 409, error: 'No repo is open.' };
+  if (a.agents.length === 0) {
+    return { ok: false, status: 400, error: 'No agent CLI found (looked for "claude" and "codex").' };
+  }
+  return { ok: true, agent: a.agents[0] };
+}

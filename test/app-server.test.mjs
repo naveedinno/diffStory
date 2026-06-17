@@ -67,6 +67,14 @@ test('app server drives picker → open → refs → recent → close', async ()
       body: JSON.stringify({ path: tmpHome }),
     });
     assert.equal(bad.status, 400);
+
+    // generate without a repo open → 409 (guard returns before any spawn)
+    const gen = await fetch(`${base}/api/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(gen.status, 409);
   } finally {
     server.close();
     process.env.HOME = realHome;
