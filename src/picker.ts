@@ -51,9 +51,10 @@ const ICON_MARK =
   '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h9l5 5v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1z"/><path d="M13.5 4.5V10H19"/><path d="M7.5 14h6M7.5 17h4"/></svg>';
 
 function statusPill(r: RecentRow): string {
+  // Tour status is an internal concept and confused users — don't surface it here.
+  // Only flag a recent whose folder is gone / no longer a git repo.
   if (!r.isGit) return `<span class="pill pill-missing">Missing</span>`;
-  if (r.hasTour) return `<span class="pill pill-ready">Tour ready</span>`;
-  return `<span class="pill pill-none">No tour</span>`;
+  return '';
 }
 
 function recentCard(r: RecentRow, home: string, now: number): string {
