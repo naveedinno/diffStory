@@ -1,0 +1,132 @@
+// The "Your change" screen — the app's honest front door. Pure git, NO agent runs
+// here. Shows the current change + a scope switcher, and a single "Generate guided
+// review" button that streams POST /api/generate into a small cancelable console and
+// navigates into the review on success. Self-contained; all server values escaped.
+import { APP_BRAND } from './config.js';
+function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function count(n, sign) {
+    return n == null ? '' : `<span class="${sign === '+' ? 'add' : 'del'}">${sign}${n}</span>`;
+}
+export function renderChangePage(sum, opts) {
+    const rows = sum.files
+        .map((f) => `<div class="frow"><span class="fp" title="${esc(f.path)}">${esc(f.path)}</span>` +
+        `<span class="fc">${count(f.added, '+')} ${count(f.removed, '−')}</span></div>`)
+        .join('');
+    const action = sum.hasChanges
+        ? `<button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
+       <p class="gennote">Runs your local Claude / Codex to write the walkthrough — about a minute. Nothing starts until you click.</p>`
+        : `<div class="empty">Nothing to review against ${esc(sum.baseLabel)}. Make a change, or pick another scope.</div>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(APP_BRAND)} — your change</title>
+<style>
+:root{--bg:#f5f5f7;--elev:#fff;--label:#1d1d1f;--l2:#6e6e73;--l3:#8e8e93;--hair:rgba(0,0,0,.1);--sep:rgba(0,0,0,.08);
+  --blue:#007aff;--blue2:#0067d6;--add:#1d7d3f;--del:#c4271f;--fill:rgba(120,120,128,.12);--con:#1e1e21;--cont:#e8e8ec;--conl:rgba(255,255,255,.1)}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1e;--elev:#2c2c2e;--label:#f5f5f7;--l2:#aeaeb2;--l3:#8e8e93;--hair:rgba(255,255,255,.12);
+  --sep:rgba(255,255,255,.1);--blue:#0a84ff;--blue2:#3395ff;--add:#30d158;--del:#ff6961;--fill:rgba(120,120,128,.24)}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+.wrap{max-width:680px;margin:0 auto;padding:52px 24px 72px}
+h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
+.what{color:var(--l2);font-size:15px;margin:10px 0 28px;line-height:1.45}
+.card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
+.scope{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 15px;border-bottom:.5px solid var(--sep);font-size:13px;color:var(--l2)}
+.scope b{color:var(--label);font-weight:590}
+.slink{font:inherit;font-size:12.5px;color:var(--blue);background:none;border:none;cursor:pointer;padding:3px 7px;border-radius:7px;text-decoration:none}
+.slink:hover{background:var(--fill)}
+.cmplist{display:flex;flex-wrap:wrap;gap:4px;padding:0 15px 12px}
+.cmplist a{font-size:12px;color:var(--blue);background:var(--fill);border-radius:7px;padding:3px 8px;text-decoration:none}
+.files{max-height:46vh;overflow:auto}
+.frow{display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:.5px solid var(--sep);font-size:13px}
+.frow:last-child{border-bottom:none}
+.fp{flex:1;min-width:0;font-family:"SF Mono",ui-monospace,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;flex:none}
+.add{color:var(--add)}.del{color:var(--del);margin-left:5px}
+.gen{margin-top:22px;height:42px;padding:0 20px;font:inherit;font-size:15px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:11px;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18);letter-spacing:-.01em}
+.gen:hover{background:var(--blue2)}.gen:active{transform:scale(.99)}.gen:disabled{opacity:.5;cursor:default}
+.gennote{color:var(--l3);font-size:12.5px;margin:9px 2px 0;line-height:1.4}
+.empty{padding:30px 16px;text-align:center;color:var(--l2);font-size:14px}
+.gencon{margin-top:20px;background:var(--con);border:.5px solid var(--conl);border-radius:12px;overflow:hidden}
+.genhd{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--conl);font-size:12.5px;font-weight:600;color:var(--cont)}
+.genspin{width:13px;height:13px;border-radius:50%;border:2px solid var(--conl);border-top-color:var(--blue);animation:gs .7s linear infinite;flex:none}
+@keyframes gs{to{transform:rotate(360deg)}}
+.genstop{margin-left:auto;font:inherit;font-size:12px;font-weight:550;color:var(--cont);background:transparent;border:.5px solid var(--conl);border-radius:7px;padding:5px 11px;cursor:pointer}
+.genbody{margin:0;padding:11px 13px;max-height:34vh;overflow:auto;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9a9aa3;white-space:pre-wrap;word-break:break-word}
+</style></head>
+<body>
+<main class="wrap">
+  <h1>${esc(APP_BRAND)}</h1>
+  <p class="what">The agent that wrote your change walks you through it — in the order the code actually flows, not by filename.</p>
+  <div class="card">
+    <div class="scope">
+      <span>Reviewing <b>${esc(sum.baseLabel)}</b></span>
+      <span style="flex:1"></span>
+      <a class="slink" href="/?scope=auto">Whole change</a>
+      <a class="slink" href="/?base=HEAD">Uncommitted</a>
+      <button class="slink" id="cmpBtn" type="button">Compare…</button>
+    </div>
+    <div class="cmplist" id="cmplist" hidden></div>
+    ${sum.hasChanges ? `<div class="files">${rows}</div>` : ''}
+  </div>
+  ${action}
+  <div class="gencon" id="gencon" hidden>
+    <div class="genhd"><span class="genspin"></span><span>Writing your guided review…</span><button class="genstop" id="genstop" type="button">Stop</button></div>
+    <pre class="genbody" id="genbody"></pre>
+  </div>
+</main>
+<script>
+(function(){
+  var cmp=document.getElementById('cmpBtn'),cl=document.getElementById('cmplist');
+  if(cmp)cmp.addEventListener('click',function(){
+    if(!cl.hidden){cl.hidden=true;return;}
+    cl.hidden=false;cl.textContent='Loading…';
+    fetch('/api/refs').then(function(r){return r.json();}).then(function(d){
+      cl.textContent='';
+      (d.branches||[]).concat((d.commits||[]).map(function(c){return c.sha;})).slice(0,24).forEach(function(ref){
+        var a=document.createElement('a');a.href='/?base='+encodeURIComponent(ref);a.textContent=ref;cl.appendChild(a);
+      });
+      if(!cl.children.length)cl.textContent='No other refs.';
+    }).catch(function(){cl.textContent='Could not load refs.';});
+  });
+  var gen=document.getElementById('genBtn');
+  if(!gen)return;
+  gen.addEventListener('click',function(){
+    gen.disabled=true;
+    var con=document.getElementById('gencon');con.hidden=false;
+    var body=document.getElementById('genbody');body.textContent='Warming up — your agent is reading the change…';
+    var stop=document.getElementById('genstop');
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    stop.onclick=function(){if(ctrl)ctrl.abort();};
+    var hint=true,NL=String.fromCharCode(10);
+    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined};
+    fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){
+        if(!r.ok||!r.body){return r.json().then(function(j){body.textContent=(j&&j.error)||'Could not start.';},function(){body.textContent='Could not start.';});}
+        var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
+        function clr(){if(hint){hint=false;body.textContent='';}}
+        function pump(){return rd.read().then(function(res){
+          if(res.done)return;
+          buf+=dec.decode(res.value,{stream:true});var parts=buf.split(NL);buf=parts.pop();
+          for(var i=0;i<parts.length;i++){var ln=parts[i];if(!ln.trim())continue;var ev;try{ev=JSON.parse(ln);}catch(e){continue;}
+            if(ev.type==='text'){clr();body.textContent+=ev.data||'';}
+            else if(ev.type==='tool'){clr();body.textContent+=NL+(ev.data||'')+NL;}
+            else if(ev.type==='error'){clr();body.textContent+=NL+(ev.data||'');}
+            else if(ev.type==='done'){if(ev.storyWritten){location.href='/';return;}}
+            body.scrollTop=body.scrollHeight;}
+          return pump();
+        });}
+        return pump();
+      })
+      .then(function(){ var sp=document.querySelector('.genspin'); if(sp)sp.style.display='none'; gen.disabled=false; })
+      .catch(function(){
+        var sp=document.querySelector('.genspin');if(sp)sp.style.display='none';
+        if(ctrl&&ctrl.signal.aborted)body.textContent+=NL+'Stopped.';else body.textContent+=NL+'Something went wrong.';
+        gen.disabled=false;
+      });
+  });
+})();
+</script>
+</body></html>`;
+}
