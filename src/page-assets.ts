@@ -718,6 +718,7 @@ export const PAGE_JS = `
     var t=$('.ds-ac-title',c);if(t)t.textContent=title||'Agent is working…';
     var sp=$('.ds-ac-spin',c);if(sp)sp.hidden=false;
     var cl=$('[data-ac-close]',c);if(cl)cl.hidden=true;
+    var st=$('[data-ac-stop]',c);if(st)st.hidden=false;
     acClearTimer();var t0=Date.now();
     acTimer=setInterval(function(){
       var b=$('#ds-ac-body');if(!b||b.className.indexOf('is-hint')<0){acClearTimer();return;}
@@ -729,6 +730,7 @@ export const PAGE_JS = `
     var c=acEl();if(!c)return;acClearTimer();
     var body=$('#ds-ac-body');if(body&&body.className.indexOf('is-hint')>=0){body.className='ds-ac-body';body.textContent=ok?'Finished — replies are on your comments below.':'';}
     var sp=$('.ds-ac-spin',c);if(sp)sp.hidden=true;
+    var st=$('[data-ac-stop]',c);if(st)st.hidden=true;
     var t=$('.ds-ac-title',c);if(t)t.textContent=ok?'Done':'Agent run failed';
     var cl=$('[data-ac-close]',c);if(cl)cl.hidden=false;
     if(ok&&codeChanged){
@@ -800,12 +802,23 @@ export const PAGE_JS = `
     if(ids&&ids.length>1)return 'Addressing '+ids.length+' comments…';
     return 'Replying to your comment…';
   }
+  var acAbort=null;
+  function acStopped(){
+    var c=acEl();if(!c)return;acClearTimer();
+    var sp=$('.ds-ac-spin',c);if(sp)sp.hidden=true;
+    var st=$('[data-ac-stop]',c);if(st)st.hidden=true;
+    var cl=$('[data-ac-close]',c);if(cl)cl.hidden=false;
+    var t=$('.ds-ac-title',c);if(t)t.textContent='Stopped';
+    var body=$('#ds-ac-body');if(body){if(body.className.indexOf('is-hint')>=0){body.className='ds-ac-body';body.textContent='';}body.textContent+=(body.textContent?NL:'')+'Stopped.';}
+  }
   function sendToAgent(ids){
     if(agentBusy)return;
     var payload=ids==='all'?{all:true}:{commentIds:ids};
     var result={ok:false,codeChanged:false};
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    acAbort=ctrl;
     setBusy(true);acOpen(runTitle(ids));
-    fetch(ADDRESS_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    fetch(ADDRESS_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
       .then(function(r){
         if(r.status===409){acAppend('Another agent run is already in progress.');return null;}
         if(!r.ok||!r.body){
@@ -817,9 +830,13 @@ export const PAGE_JS = `
       .then(function(res){
         if(res){acFinish(result.ok,result.codeChanged);if(result.ok)refreshComments();}
         else{acFinish(false,false);}
-        setBusy(false);
+        setBusy(false);acAbort=null;
       })
-      .catch(function(err){acAppend(NL+String(err));acFinish(false,false);setBusy(false);});
+      .catch(function(err){
+        if(ctrl&&ctrl.signal.aborted)acStopped();
+        else{acAppend(NL+String(err));acFinish(false,false);}
+        setBusy(false);acAbort=null;
+      });
   }
   function refreshCount(){
     var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
@@ -856,6 +873,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-send]');if(b){if(b.disabled)return;var cm=closest(b,'.ds-comment');if(cm)sendToAgent([cm.getAttribute('data-comment-id')]);return;}
     b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;sendToAgent('all');return;}
+    b=closest(t,'[data-ac-stop]');if(b){if(acAbort)acAbort.abort();return;}
     b=closest(t,'[data-ac-close]');if(b){var ac=acEl();if(ac)ac.hidden=true;return;}
     b=closest(t,'[data-mode]');if(b){setMode(b);return;}
     b=closest(t,'[data-trust-open]');if(b){openDrawer();return;}

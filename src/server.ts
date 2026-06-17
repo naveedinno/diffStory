@@ -281,6 +281,10 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
 
+  // Kill the agent if the client disconnects (closed the page or hit Stop).
+  const ac = new AbortController();
+  res.on('close', () => ac.abort());
+
   const before = currentDiff(session);
   const send = (e: object) => {
     try {
@@ -290,7 +294,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     }
   };
 
-  streamAgent(agent, repo, addressPrompt(target), (e: AgentEvent) => send(e))
+  streamAgent(agent, repo, addressPrompt(target), (e: AgentEvent) => send(e), undefined, ac.signal)
     .then(({ ok, output }) => {
       const codeChanged = currentDiff(session) !== before;
       if (!ok) send({ type: 'error', data: tailLines(output, 30) });
@@ -326,6 +330,10 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
 
+  // Kill the agent if the client disconnects (closed the page or hit Stop).
+  const ac = new AbortController();
+  res.on('close', () => ac.abort());
+
   const send = (e: object) => {
     try {
       res.write(JSON.stringify(e) + '\n');
@@ -334,7 +342,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     }
   };
 
-  streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e: AgentEvent) => send(e))
+  streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e: AgentEvent) => send(e), undefined, ac.signal)
     .then(({ ok, output }) => {
       const storyWritten = existsSync(resolveStoryPath(repo));
       if (!ok && !storyWritten) send({ type: 'error', data: tailLines(output, 30) });

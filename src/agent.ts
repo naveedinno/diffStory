@@ -167,11 +167,13 @@ export function streamAgent(
   prompt: string,
   onEvent: (e: AgentEvent) => void,
   model?: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; output: string }> {
   const [cmd, args] = streamCommand(agent, prompt, model);
   const parse = lineParser(agent);
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    // `signal` lets the server kill the agent when the client disconnects or hits Stop.
+    const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'], signal });
     let output = '';
     let buf = '';
     const feed = (b: Buffer) => {

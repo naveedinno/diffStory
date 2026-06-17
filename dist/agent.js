@@ -137,11 +137,12 @@ function lineParser(agent) {
  * per parsed event. Resolves with the exit-ok flag and captured output (used for a
  * failure tail). The spawn itself is integration-only — the parsers are unit-tested.
  */
-export function streamAgent(agent, repo, prompt, onEvent, model) {
+export function streamAgent(agent, repo, prompt, onEvent, model, signal) {
     const [cmd, args] = streamCommand(agent, prompt, model);
     const parse = lineParser(agent);
     return new Promise((resolve) => {
-        const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+        // `signal` lets the server kill the agent when the client disconnects or hits Stop.
+        const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'], signal });
         let output = '';
         let buf = '';
         const feed = (b) => {

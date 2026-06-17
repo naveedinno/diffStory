@@ -261,6 +261,9 @@ function runAddress(res, session, body) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
+    // Kill the agent if the client disconnects (closed the page or hit Stop).
+    const ac = new AbortController();
+    res.on('close', () => ac.abort());
     const before = currentDiff(session);
     const send = (e) => {
         try {
@@ -270,7 +273,7 @@ function runAddress(res, session, body) {
             /* client disconnected */
         }
     };
-    streamAgent(agent, repo, addressPrompt(target), (e) => send(e))
+    streamAgent(agent, repo, addressPrompt(target), (e) => send(e), undefined, ac.signal)
         .then(({ ok, output }) => {
         const codeChanged = currentDiff(session) !== before;
         if (!ok)
@@ -304,6 +307,9 @@ function runGenerate(res, session, body) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
+    // Kill the agent if the client disconnects (closed the page or hit Stop).
+    const ac = new AbortController();
+    res.on('close', () => ac.abort());
     const send = (e) => {
         try {
             res.write(JSON.stringify(e) + '\n');
@@ -312,7 +318,7 @@ function runGenerate(res, session, body) {
             /* client disconnected */
         }
     };
-    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e))
+    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e), undefined, ac.signal)
         .then(({ ok, output }) => {
         const storyWritten = existsSync(resolveStoryPath(repo));
         if (!ok && !storyWritten)
