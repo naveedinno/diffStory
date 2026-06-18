@@ -552,20 +552,20 @@ export const PAGE_JS = `
     speakStep(i);
   }
 
-  function speak(text){
-    var synth=window.speechSynthesis;if(!synth||!text)return;
+  function speak(text,fallback){
+    var synth=window.speechSynthesis;if(!synth||!text)return false;
     synth.cancel();
     var u=new SpeechSynthesisUtterance(text);
-    var profile=VOICE_PROFILES[operator]||VOICE_PROFILES.story;
+    var profile=fallback?VOICE_PROFILES.system:(VOICE_PROFILES[operator]||VOICE_PROFILES.story);
     u.rate=Math.max(0.55,Math.min(1.65,rate*profile.rate));
     u.pitch=profile.pitch;
     u.volume=profile.volume;
-    var v=pickVoice(operator);if(v)u.voice=v;
+    var v=fallback?null:pickVoice(operator);if(v)u.voice=v;
     var btn=$('[data-readaloud]');
     u.onstart=function(){if(btn)btn.classList.add('is-speaking');};
     u.onend=function(){if(btn)btn.classList.remove('is-speaking');};
-    u.onerror=function(){if(btn)btn.classList.remove('is-speaking');};
-    synth.speak(u);
+    u.onerror=function(){if(btn)btn.classList.remove('is-speaking');if(!fallback)speak(text,true);};
+    try{if(synth.paused)synth.resume();synth.speak(u);return true;}catch(e){if(!fallback)return speak(text,true);return false;}
   }
   function speechClean(text){
     return (text||'')
@@ -581,7 +581,12 @@ export const PAGE_JS = `
     var w=$('.ds-why-text',panel);
     return speechClean(w?w.textContent:'');
   }
-  function speakStep(i){var p=stepPanels[i];if(readAloud&&p)speak(stepText(p));}
+  function speakStep(i){var p=stepPanels[i];if(readAloud&&p)return speak(stepText(p));return false;}
+  function firstSpeakableStep(){
+    for(var j=Math.max(1,active);j<total;j++){if(stepText(stepPanels[j]))return j;}
+    for(var k=1;k<Math.min(total,Math.max(1,active));k++){if(stepText(stepPanels[k]))return k;}
+    return -1;
+  }
   function setRate(r){rate=r;try{localStorage.setItem('ds-rate',String(r));}catch(e){}$all('[data-rate]').forEach(function(b){b.classList.toggle('is-active',parseFloat(b.getAttribute('data-rate'))===r);});}
   function normalizeOperator(op){
     if(op==='balanced')return 'story';
@@ -628,7 +633,9 @@ export const PAGE_JS = `
     readAloud=!readAloud;
     try{localStorage.setItem('ds-readaloud',readAloud?'1':'');}catch(e){}
     var btn=$('[data-readaloud]');if(btn)btn.classList.toggle('is-active',readAloud);
-    if(readAloud)speakStep(active);
+    if(readAloud){
+      if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
+    }
     else if(window.speechSynthesis){window.speechSynthesis.cancel();if(btn)btn.classList.remove('is-speaking');}
   }
 

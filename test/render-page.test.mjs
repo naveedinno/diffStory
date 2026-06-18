@@ -67,3 +67,11 @@ test('read aloud operators have distinct visual and speech profiles', () => {
   assert.match(html, /button\[data-operator="warm"\]\.is-active/);
   assert.match(html, /button\[data-operator="reviewer"\]\.is-active/);
 });
+
+test('read aloud starts on a speakable story step and falls back safely', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /function firstSpeakableStep\(\)/);
+  assert.match(html, /if\(!speakStep\(active\)\)\{var si=firstSpeakableStep\(\);if\(si>=0\)setActive\(si\);\}/);
+  assert.match(html, /u\.onerror=function\(\)\{if\(btn\)btn\.classList\.remove\('is-speaking'\);if\(!fallback\)speak\(text,true\);\}/);
+  assert.match(html, /catch\(e\)\{if\(!fallback\)return speak\(text,true\);return false;\}/);
+});
