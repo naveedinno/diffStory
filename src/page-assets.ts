@@ -205,17 +205,17 @@ body.ds-rail-collapsed .ds-rail>*{visibility:hidden;pointer-events:none}
 /* ---- overview (step 0) ---- */
 .ds-storymark{display:block}
 .ds-stepcard[hidden]{display:none}
-.ds-stepcard.is-intro{align-items:center;margin:10px 12px 12px;padding:16px 14px 16px 0;border-radius:24px;background:var(--md-primary-container);
-  border:none;box-shadow:none}
-.ds-stepcard.is-intro:hover{background:color-mix(in srgb,var(--md-primary-container),var(--md-on-primary-container) 7%)}
-.ds-stepcard.is-intro.is-active{background:var(--md-primary-container);box-shadow:none}
-.ds-stepcard.is-intro .ds-num{grid-column:1;width:44px;height:44px;margin:0 0 0 18px;border-radius:16px;border:none;box-shadow:none;
-  background:rgba(255,255,255,0.10);color:var(--md-on-primary-container)}
-.ds-stepcard.is-intro.is-active .ds-num{background:rgba(255,255,255,0.14);color:var(--md-on-primary-container)}
-.ds-stepcard.is-intro .ds-stepcard-title{color:var(--md-on-primary-container)}
-.ds-stepcard.is-intro.is-active .ds-stepcard-title{color:var(--md-on-primary-container)}
-.ds-stepcard.is-intro .ds-stepcard-title{font-size:14px;line-height:1.25}
-.ds-intro-cardsub{font-size:12px;color:color-mix(in srgb,var(--md-on-primary-container),transparent 34%);line-height:1.35;margin-top:5px}
+.ds-stepcard.is-intro{width:auto;grid-template-columns:48px 1fr;align-items:center;margin:8px 14px 10px;padding:12px 14px 12px 0;
+  border-radius:18px;background:var(--md-surface-container);border:1px solid var(--line-soft);box-shadow:none}
+.ds-stepcard.is-intro:hover{background:var(--md-surface-container-high)}
+.ds-stepcard.is-intro.is-active{background:var(--md-secondary-container);border-color:transparent;box-shadow:none}
+.ds-stepcard.is-intro .ds-num{grid-column:1;width:34px;height:34px;margin:0 0 0 10px;border-radius:12px;border:none;box-shadow:none;
+  background:var(--md-surface-container-highest);color:var(--md-primary)}
+.ds-stepcard.is-intro.is-active .ds-num{background:rgba(208,188,255,0.16);color:var(--md-on-secondary-container)}
+.ds-stepcard.is-intro .ds-stepcard-title{color:var(--text);font-size:13.5px;line-height:1.25}
+.ds-stepcard.is-intro.is-active .ds-stepcard-title{color:var(--md-on-secondary-container)}
+.ds-intro-cardsub{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:3px}
+.ds-stepcard.is-intro.is-active .ds-intro-cardsub{color:rgba(232,222,248,0.72)}
 .ds-step.is-intro{display:block;overflow-y:auto}
 .ds-introwrap{max-width:660px;margin:0 auto;padding:64px 40px 80px}
 .ds-intro-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-blue)}
