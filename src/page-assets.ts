@@ -129,14 +129,15 @@ a{color:inherit;text-decoration:none}
 .ds-settings-wrap{position:relative;display:flex;align-items:center;gap:5px}
 .ds-gear{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
 .ds-gear:hover{background:var(--fill-2);color:var(--text)}
-.ds-settings-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:30;min-width:326px;background:var(--md-surface-container-high);border:1px solid var(--line-soft);border-radius:20px;padding:16px;box-shadow:var(--shadow)}
+.ds-settings-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:30;width:360px;max-width:calc(100vw - 24px);
+  background:var(--md-surface-container-high);border:1px solid var(--line-soft);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 .ds-settings-pop[hidden]{display:none}
-.ds-settings-title{font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--dim2);font-weight:600;margin-bottom:10px}
-.ds-settings-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:9px}
+.ds-settings-title{font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim2);font-weight:700;margin-bottom:14px}
+.ds-settings-row{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:14px}
 .ds-settings-row:first-of-type{margin-top:0}
-.ds-settings-label{font-size:12.5px;color:var(--muted)}
-.ds-seg{display:flex;gap:0;padding:0;border-radius:999px;background:transparent;border:1px solid var(--line);overflow:hidden;flex-wrap:wrap;justify-content:flex-end}
-.ds-seg button{font-size:11.5px;font-weight:700;padding:7px 11px;border-radius:0;border:none;border-left:1px solid var(--line);cursor:pointer;background:transparent;color:var(--muted)}
+.ds-settings-label{font-size:12px;color:var(--muted);font-weight:600}
+.ds-seg{display:flex;gap:0;width:100%;padding:0;border-radius:14px;background:var(--md-surface-container);border:1px solid var(--line);overflow:hidden;flex-wrap:nowrap}
+.ds-seg button{flex:1 1 0;min-width:0;white-space:nowrap;font-size:12px;font-weight:700;padding:9px 8px;border-radius:0;border:none;border-left:1px solid var(--line);cursor:pointer;background:transparent;color:var(--muted)}
 .ds-seg button:first-child{border-left:none}
 .ds-seg button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
 .ds-playstep{margin-left:auto;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(10,132,255,0.3);background:rgba(10,132,255,0.08);color:var(--accent-blue);cursor:pointer;font-size:10px;padding:0;line-height:1}
