@@ -39,4 +39,5 @@ test('renderChangePage shows the human scope label and highlights the active seg
   const html = renderChangePage(withChanges, { repoName: 'demo', scopeLabel: 'Uncommitted changes', active: 'uncommitted' });
   assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
+  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has base + head compare pickers');
 });

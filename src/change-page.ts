@@ -52,8 +52,11 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .sopt{font:inherit;font-size:12.5px;color:var(--l2);background:none;border:none;cursor:pointer;padding:5px 11px;border-radius:7px;text-decoration:none;white-space:nowrap}
 .sopt:hover{color:var(--label)}
 .sopt.on{background:var(--elev);color:var(--label);font-weight:590;box-shadow:0 1px 2px rgba(0,0,0,.14)}
-.cmplist{display:flex;flex-wrap:wrap;gap:4px;padding:0 15px 12px}
-.cmplist a{font-size:12px;color:var(--blue);background:var(--fill);border-radius:7px;padding:3px 8px;text-decoration:none}
+.cmppanel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 15px 13px}
+.cmprow{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--l2)}
+.cmppanel select{font:inherit;font-size:12.5px;color:var(--label);background:var(--bg);border:.5px solid var(--hair);border-radius:8px;padding:5px 8px;max-width:210px}
+.cmparrow{color:var(--l3)}
+.cmpgo{font:inherit;font-size:12.5px;font-weight:590;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 13px;cursor:pointer}
 .files{max-height:46vh;overflow:auto}
 .frow{display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:.5px solid var(--sep);font-size:13px}
 .frow:last-child{border-bottom:none}
@@ -85,7 +88,12 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
         <button class="sopt${active === 'ref' ? ' on' : ''}" id="cmpBtn" type="button">Compare…</button>
       </div>
     </div>
-    <div class="cmplist" id="cmplist" hidden></div>
+    <div class="cmppanel" id="cmppanel" hidden>
+      <label class="cmprow">Base <select id="cmpBase"></select></label>
+      <span class="cmparrow" aria-hidden="true">→</span>
+      <label class="cmprow">Head <select id="cmpHead"></select></label>
+      <button class="cmpgo" id="cmpGo" type="button">Compare</button>
+    </div>
     ${sum.hasChanges ? `<div class="files">${rows}</div>` : ''}
   </div>
   ${action}
@@ -96,17 +104,27 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 </main>
 <script>
 (function(){
-  var cmp=document.getElementById('cmpBtn'),cl=document.getElementById('cmplist');
+  var cmp=document.getElementById('cmpBtn'),panel=document.getElementById('cmppanel'),
+      baseSel=document.getElementById('cmpBase'),headSel=document.getElementById('cmpHead'),loaded=false;
+  function group(sel,lbl){var g=document.createElement('optgroup');g.label=lbl;sel.appendChild(g);return g;}
+  function fillRefs(d){
+    headSel.add(new Option('Working tree (uncommitted)',''));
+    headSel.add(new Option('Latest commit (HEAD)','HEAD'));
+    var bb=group(baseSel,'Branches'),hb=group(headSel,'Branches');
+    (d.branches||[]).forEach(function(b){bb.appendChild(new Option(b,b));hb.appendChild(new Option(b,b));});
+    var bc=group(baseSel,'Recent commits'),hc=group(headSel,'Recent commits');
+    (d.commits||[]).forEach(function(c){var t=c.sha+(c.subject?(' — '+c.subject):'');bc.appendChild(new Option(t,c.sha));hc.appendChild(new Option(t,c.sha));});
+  }
   if(cmp)cmp.addEventListener('click',function(){
-    if(!cl.hidden){cl.hidden=true;return;}
-    cl.hidden=false;cl.textContent='Loading…';
-    fetch('/api/refs').then(function(r){return r.json();}).then(function(d){
-      cl.textContent='';
-      (d.branches||[]).concat((d.commits||[]).map(function(c){return c.sha;})).slice(0,24).forEach(function(ref){
-        var a=document.createElement('a');a.href='/?base='+encodeURIComponent(ref);a.textContent=ref;cl.appendChild(a);
-      });
-      if(!cl.children.length)cl.textContent='No other refs.';
-    }).catch(function(){cl.textContent='Could not load refs.';});
+    if(!panel.hidden){panel.hidden=true;return;}
+    panel.hidden=false;
+    if(loaded)return;loaded=true;
+    fetch('/api/refs').then(function(r){return r.json();}).then(fillRefs).catch(function(){loaded=false;});
+  });
+  var go=document.getElementById('cmpGo');
+  if(go)go.addEventListener('click',function(){
+    var b=baseSel.value,h=headSel.value;if(!b)return;
+    var u='/?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
   var gen=document.getElementById('genBtn');
   if(!gen)return;

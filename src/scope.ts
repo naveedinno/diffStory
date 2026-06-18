@@ -14,7 +14,9 @@ export interface Scope {
 export function resolveScope(repo: string, params: URLSearchParams): Scope {
   const ref = params.get('base');
   if (ref) {
-    return { base: ref, head: params.get('head') || undefined, label: describeBase(repo, ref), active: 'ref' };
+    const head = params.get('head') || undefined;
+    // A base→head compare reads cleaner with the refs the user picked than name-rev.
+    return { base: ref, head, label: head ? `${ref} → ${head}` : describeBase(repo, ref), active: 'ref' };
   }
   const sel = params.get('scope'); // 'uncommitted' | 'last' | 'branch' | null (auto)
   if (sel === 'branch') {
