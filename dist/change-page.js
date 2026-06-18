@@ -22,7 +22,8 @@ export function renderChangePage(sum, opts) {
     const action = sum.hasChanges
         ? `<div class="genctl">
          <label class="genfield">Agent <select id="agentSel" aria-label="Agent"></select></label>
-         <label class="genfield">Model <input id="modelInp" type="text" placeholder="default" autocomplete="off" spellcheck="false" aria-label="Model" /></label>
+         <label class="genfield">Model <select id="modelSel" aria-label="Model"></select></label>
+         <input id="modelInp" class="modelother" type="text" placeholder="model name" autocomplete="off" spellcheck="false" aria-label="Custom model" hidden />
        </div>
        <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
        <p class="gennote">Runs the agent you pick to write the walkthrough — about a minute. Nothing starts until you click.</p>`
@@ -73,6 +74,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .genfield select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
 .genfield input{min-width:130px}
 .genfield select:focus,.genfield input:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
+.modelother{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:32px;padding:0 11px;min-width:140px}
+.modelother:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
+.modelother[hidden]{display:none}
 .empty{padding:30px 16px;text-align:center;color:var(--l2);font-size:14px}
 .gencon{margin-top:20px;background:var(--con);border:.5px solid var(--conl);border-radius:12px;overflow:hidden}
 .genhd{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--conl);font-size:12.5px;font-weight:600;color:var(--cont)}
@@ -135,16 +139,24 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     var b=baseSel.value,h=headSel.value;if(!b)return;
     var u='/?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
-  var agentSel=document.getElementById('agentSel'),modelInp=document.getElementById('modelInp');
-  var DEFMODEL={claude:'sonnet',codex:'default'};
-  function syncPh(){if(modelInp&&agentSel)modelInp.placeholder=DEFMODEL[agentSel.value]||'default';}
+  var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp');
+  var MODELS={claude:[['Default (Sonnet)',''],['Opus','opus'],['Haiku','haiku'],['Other…','__other__']],codex:[['Default',''],['Other…','__other__']]};
+  function syncOther(){if(modelInp&&modelSel)modelInp.hidden=(modelSel.value!=='__other__');}
+  function fillModels(){
+    if(!modelSel)return;
+    while(modelSel.options.length)modelSel.remove(0);
+    var ms=MODELS[agentSel?agentSel.value:'']||[['Default','']];
+    ms.forEach(function(m){modelSel.add(new Option(m[0],m[1]));});
+    syncOther();
+  }
+  if(modelSel)modelSel.addEventListener('change',syncOther);
   if(agentSel){
     fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
       (d.agents||[]).forEach(function(a){agentSel.add(new Option(a,a));});
       if(!agentSel.options.length)agentSel.add(new Option('no agent found',''));
-      syncPh();
+      fillModels();
     }).catch(function(){});
-    agentSel.addEventListener('change',syncPh);
+    agentSel.addEventListener('change',fillModels);
   }
   var gen=document.getElementById('genBtn');
   if(!gen)return;
@@ -156,7 +168,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
     stop.onclick=function(){if(ctrl)ctrl.abort();};
     var hint=true,NL=String.fromCharCode(10);
-    var agent=agentSel?agentSel.value:'',model=modelInp?modelInp.value.trim():'';
+    var agent=agentSel?agentSel.value:'';
+    var msel=modelSel?modelSel.value:'';
+    var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
     var ttl=document.getElementById('genTitle');
     if(ttl)ttl.textContent='Writing your guided review with '+(agent||'your agent')+(model?(' ('+model+')'):'')+'…';
     var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined};
