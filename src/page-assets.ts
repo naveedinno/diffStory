@@ -571,12 +571,8 @@ export const PAGE_JS = `
       .trim();
   }
   function stepText(panel){
-    var w=$('.ds-why-text',panel),t=$('.ds-step-title',panel),count=$('.ds-step-count',panel);
-    var parts=[];
-    if(count)parts.push(count.textContent);
-    if(t)parts.push(t.textContent);
-    if(w)parts.push(w.textContent);
-    return speechClean(parts.join('. '));
+    var w=$('.ds-why-text',panel);
+    return speechClean(w?w.textContent:'');
   }
   function speakStep(i){var p=stepPanels[i];if(readAloud&&p)speak(stepText(p));}
   function setRate(r){rate=r;try{localStorage.setItem('ds-rate',String(r));}catch(e){}$all('[data-rate]').forEach(function(b){b.classList.toggle('is-active',parseFloat(b.getAttribute('data-rate'))===r);});}
