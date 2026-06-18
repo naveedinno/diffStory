@@ -12,6 +12,7 @@ import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
 import { summarizeChange } from './change-view.js';
+import { resolveScope } from './scope.js';
 import { basename } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
@@ -70,10 +71,15 @@ function handle(req, res, session) {
         if (method === 'GET' && url.pathname === '/') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            applyScope(session, url.searchParams);
-            if (existsSync(resolveStoryPath(session.repo)))
+            // A built review uses the tour's own base; only the change screen picks a scope.
+            if (existsSync(resolveStoryPath(session.repo))) {
+                applyScope(session, url.searchParams);
                 return sendHtml(res, renderReview(session));
-            return sendHtml(res, renderChange(session));
+            }
+            const scope = resolveScope(session.repo, url.searchParams);
+            session.base = scope.base;
+            session.head = scope.head;
+            return sendHtml(res, renderChange(session, scope));
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
             return sendJson(res, 200, listRecentRepos());
@@ -193,12 +199,14 @@ function applyScope(session, params) {
         session.head = head;
 }
 /** The "Your change" screen for a repo that has no tour yet. */
-function renderChange(session) {
+function renderChange(session, scope) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
         repoName: basename(repo),
         base: session.base,
         head: session.head,
+        scopeLabel: scope.label,
+        active: scope.active,
     });
 }
 /** The recents list, each entry enriched with its current repo state for the picker. */

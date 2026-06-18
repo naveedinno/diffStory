@@ -12,6 +12,7 @@ import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
 import { summarizeChange } from './change-view.js';
+import { resolveScope, type Scope } from './scope.js';
 import { basename } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import {
@@ -89,9 +90,15 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
   try {
     if (method === 'GET' && url.pathname === '/') {
       if (session.repo == null) return sendHtml(res, pickerStub());
-      applyScope(session, url.searchParams);
-      if (existsSync(resolveStoryPath(session.repo))) return sendHtml(res, renderReview(session));
-      return sendHtml(res, renderChange(session));
+      // A built review uses the tour's own base; only the change screen picks a scope.
+      if (existsSync(resolveStoryPath(session.repo))) {
+        applyScope(session, url.searchParams);
+        return sendHtml(res, renderReview(session));
+      }
+      const scope = resolveScope(session.repo, url.searchParams);
+      session.base = scope.base;
+      session.head = scope.head;
+      return sendHtml(res, renderChange(session, scope));
     }
     if (method === 'GET' && url.pathname === '/api/repos/recent') {
       return sendJson(res, 200, listRecentRepos());
@@ -201,12 +208,14 @@ function applyScope(session: Session, params: URLSearchParams): void {
 }
 
 /** The "Your change" screen for a repo that has no tour yet. */
-function renderChange(session: Session): string {
+function renderChange(session: Session, scope: Scope): string {
   const repo = session.repo as string;
   return renderChangePage(summarizeChange(repo, session.base, session.head), {
     repoName: basename(repo),
     base: session.base,
     head: session.head,
+    scopeLabel: scope.label,
+    active: scope.active,
   });
 }
 

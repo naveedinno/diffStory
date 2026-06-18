@@ -10,6 +10,8 @@ function count(n, sign) {
     return n == null ? '' : `<span class="${sign === '+' ? 'add' : 'del'}">${sign}${n}</span>`;
 }
 export function renderChangePage(sum, opts) {
+    const label = opts.scopeLabel ?? sum.baseLabel;
+    const active = opts.active ?? '';
     const rows = sum.files
         .map((f) => `<div class="frow"><span class="fp" title="${esc(f.path)}">${esc(f.path)}</span>` +
         `<span class="fc">${count(f.added, '+')} ${count(f.removed, '−')}</span></div>`)
@@ -17,7 +19,7 @@ export function renderChangePage(sum, opts) {
     const action = sum.hasChanges
         ? `<button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
        <p class="gennote">Runs your local Claude / Codex to write the walkthrough — about a minute. Nothing starts until you click.</p>`
-        : `<div class="empty">Nothing to review against ${esc(sum.baseLabel)}. Make a change, or pick another scope.</div>`;
+        : `<div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(APP_BRAND)} — your change</title>
@@ -32,10 +34,12 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .what{color:var(--l2);font-size:15px;margin:10px 0 28px;line-height:1.45}
 .card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
-.scope{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 15px;border-bottom:.5px solid var(--sep);font-size:13px;color:var(--l2)}
-.scope b{color:var(--label);font-weight:590}
-.slink{font:inherit;font-size:12.5px;color:var(--blue);background:none;border:none;cursor:pointer;padding:3px 7px;border-radius:7px;text-decoration:none}
-.slink:hover{background:var(--fill)}
+.scope{display:flex;flex-direction:column;gap:10px;padding:13px 15px;border-bottom:.5px solid var(--sep);font-size:13px;color:var(--l2)}
+.scur b{color:var(--label);font-weight:600}
+.sopts{display:inline-flex;gap:2px;align-self:flex-start;background:var(--fill);border-radius:9px;padding:2px;max-width:100%;flex-wrap:wrap}
+.sopt{font:inherit;font-size:12.5px;color:var(--l2);background:none;border:none;cursor:pointer;padding:5px 11px;border-radius:7px;text-decoration:none;white-space:nowrap}
+.sopt:hover{color:var(--label)}
+.sopt.on{background:var(--elev);color:var(--label);font-weight:590;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .cmplist{display:flex;flex-wrap:wrap;gap:4px;padding:0 15px 12px}
 .cmplist a{font-size:12px;color:var(--blue);background:var(--fill);border-radius:7px;padding:3px 8px;text-decoration:none}
 .files{max-height:46vh;overflow:auto}
@@ -61,11 +65,13 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
   <p class="what">The agent that wrote your change walks you through it — in the order the code actually flows, not by filename.</p>
   <div class="card">
     <div class="scope">
-      <span>Reviewing <b>${esc(sum.baseLabel)}</b></span>
-      <span style="flex:1"></span>
-      <a class="slink" href="/?scope=auto">Whole change</a>
-      <a class="slink" href="/?base=HEAD">Uncommitted</a>
-      <button class="slink" id="cmpBtn" type="button">Compare…</button>
+      <span class="scur">Reviewing <b>${esc(label)}</b></span>
+      <div class="sopts" role="group" aria-label="Review scope">
+        <a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="/?scope=uncommitted">Uncommitted</a>
+        <a class="sopt${active === 'last' ? ' on' : ''}" href="/?scope=last">Latest commit</a>
+        <a class="sopt${active === 'branch' ? ' on' : ''}" href="/?scope=branch">Whole branch</a>
+        <button class="sopt${active === 'ref' ? ' on' : ''}" id="cmpBtn" type="button">Compare…</button>
+      </div>
     </div>
     <div class="cmplist" id="cmplist" hidden></div>
     ${sum.hasChanges ? `<div class="files">${rows}</div>` : ''}

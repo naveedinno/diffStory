@@ -34,3 +34,9 @@ test('renderChangePage escapes file paths and shows an empty-change guard', () =
   assert.ok(empty.toLowerCase().includes('nothing to review'));
   assert.ok(!empty.includes('Generate guided review'));
 });
+
+test('renderChangePage shows the human scope label and highlights the active segment', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', scopeLabel: 'Uncommitted changes', active: 'uncommitted' });
+  assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
+  assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
+});

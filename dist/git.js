@@ -123,6 +123,19 @@ export function describeBase(repo, base) {
         return `${name} (${short ?? base})`;
     return short ?? base;
 }
+/** True when the working tree has uncommitted changes (staged or unstaged, incl. untracked). */
+export function isDirty(repo) {
+    const out = tryGit(repo, ['status', '--porcelain']);
+    return out != null && out.trim().length > 0;
+}
+/** True when HEAD has a parent commit (so HEAD~1 is a valid ref). */
+export function hasParentCommit(repo) {
+    return tryGit(repo, ['rev-parse', '--verify', 'HEAD~1']) !== null;
+}
+/** The empty-tree object — diffing against it shows a commit's whole content as added. */
+export function emptyTree(repo) {
+    return git(repo, ['hash-object', '-t', 'tree', '/dev/null']).trim();
+}
 /**
  * Per-file added/removed line counts for the change (`git diff --numstat`).
  * Binary files report `-`/`-`, which we surface as null. Used by the change summary.
