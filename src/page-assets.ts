@@ -376,6 +376,7 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .ds-agentconsole{position:fixed;right:18px;bottom:18px;width:min(440px,calc(100vw - 36px));max-height:min(60vh,520px);display:flex;flex-direction:column;
   background:var(--material);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
   border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);z-index:90;overflow:hidden}
+.ds-agentconsole[hidden]{display:none}
 .ds-ac-head{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--line-soft);font-size:12.5px;font-weight:600;color:var(--text)}
 .ds-ac-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent-blue);animation:ds-spin .7s linear infinite;flex:none}
 @keyframes ds-spin{to{transform:rotate(360deg)}}

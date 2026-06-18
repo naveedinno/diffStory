@@ -132,8 +132,8 @@ export function renderPage(input: RenderInput): string {
 
 <div class="ds-agentconsole" id="ds-agentconsole" hidden aria-live="polite">
   <div class="ds-ac-head">
-    <span class="ds-ac-spin" aria-hidden="true"></span>
-    <span class="ds-ac-title">Agent is working…</span>
+    <span class="ds-ac-spin" aria-hidden="true" hidden></span>
+    <span class="ds-ac-title">Agent activity</span>
     <span class="ds-flex"></span>
     <button class="ds-ghost ds-ac-stop" data-ac-stop hidden>Stop</button>
     <button class="ds-ghost ds-ac-close" data-ac-close hidden>Close</button>
