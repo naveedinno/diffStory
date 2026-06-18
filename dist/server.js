@@ -71,18 +71,25 @@ function handle(req, res, session) {
         if (method === 'GET' && url.pathname === '/') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            // A built review uses the tour's own base; only the change screen picks a scope.
+            // A built, VALID review uses the tour's own base. A missing OR malformed story
+            // falls through to the change screen (with a notice) — never the raw error page.
             if (existsSync(resolveStoryPath(session.repo))) {
-                applyScope(session, url.searchParams);
-                return sendHtml(res, renderReview(session));
+                try {
+                    loadTour(resolveStoryPath(session.repo));
+                    applyScope(session, url.searchParams);
+                    return sendHtml(res, renderReview(session));
+                }
+                catch (e) {
+                    return sendHtml(res, changeScreen(session, url.searchParams, e.message));
+                }
             }
-            const scope = resolveScope(session.repo, url.searchParams);
-            session.base = scope.base;
-            session.head = scope.head;
-            return sendHtml(res, renderChange(session, scope));
+            return sendHtml(res, changeScreen(session, url.searchParams));
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
             return sendJson(res, 200, listRecentRepos());
+        }
+        if (method === 'GET' && url.pathname === '/api/agents') {
+            return sendJson(res, 200, { agents: availableAgents() });
         }
         if (method === 'GET' && url.pathname === '/api/fs') {
             const p = url.searchParams.get('path');
@@ -198,8 +205,15 @@ function applyScope(session, params) {
     if (head)
         session.head = head;
 }
-/** The "Your change" screen for a repo that has no tour yet. */
-function renderChange(session, scope) {
+/** Resolve scope from the request, stash it on the session, and render the change screen. */
+function changeScreen(session, params, notice) {
+    const scope = resolveScope(session.repo, params);
+    session.base = scope.base;
+    session.head = scope.head;
+    return renderChange(session, scope, notice);
+}
+/** The "Your change" screen for a repo that has no (valid) tour yet. */
+function renderChange(session, scope, notice) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
         repoName: basename(repo),
@@ -207,6 +221,7 @@ function renderChange(session, scope) {
         head: session.head,
         scopeLabel: scope.label,
         active: scope.active,
+        notice,
     });
 }
 /** The recents list, each entry enriched with its current repo state for the picker. */
@@ -332,10 +347,15 @@ function runGenerate(res, session, body) {
     catch {
         return sendJson(res, 400, { error: 'invalid JSON' });
     }
-    const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+    const agents = availableAgents();
+    const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
     if (!pre.ok)
         return sendJson(res, pre.status, { error: pre.error });
-    const agent = pre.agent;
+    // Honor the agent/model the user picked; fall back to the default agent + each CLI's default model.
+    const agent = (input.agent === 'claude' || input.agent === 'codex') && agents.includes(input.agent)
+        ? input.agent
+        : pre.agent;
+    const model = input.model && input.model.trim() ? input.model.trim() : undefined;
     const repo = session.repo;
     session.base = input.base;
     session.head = input.head;
@@ -355,7 +375,7 @@ function runGenerate(res, session, body) {
             /* client disconnected */
         }
     };
-    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e), undefined, ac.signal)
+    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e), model, ac.signal)
         .then(({ ok, output }) => {
         const storyWritten = existsSync(resolveStoryPath(repo));
         if (!ok && !storyWritten)

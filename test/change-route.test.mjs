@@ -2,7 +2,7 @@
 // (NOT an error page), and no agent is started. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -38,6 +38,30 @@ test('opening a no-tour repo lands on the change screen, not an error', async ()
     assert.ok(html.includes('Generate guided review'), 'shows the Generate action');
     assert.ok(html.includes('a.txt'), 'shows the changed file');
     assert.ok(!html.includes("Couldn't build the review"), 'is not the error page');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('a malformed story shows the change screen with a notice, not the raw error page', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), '{"bogus":true}'); // invalid tour
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
+    });
+    const html = await (await fetch(`${base}/`)).text();
+    assert.ok(html.includes('class="notice"'), 'shows a notice about the bad review');
+    assert.ok(html.includes('Generate guided review'), 'offers regenerate');
+    assert.ok(!html.includes("Couldn't build the review"), 'is not the raw error page');
   } finally {
     server.close();
     process.env.HOME = realHome;

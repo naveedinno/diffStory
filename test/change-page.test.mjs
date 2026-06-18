@@ -41,3 +41,9 @@ test('renderChangePage shows the human scope label and highlights the active seg
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
   assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has base + head compare pickers');
 });
+
+test('renderChangePage shows a notice banner and the agent + model picker', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', notice: 'steps must be a non-empty array' });
+  assert.ok(html.includes('class="notice"') && html.includes('steps must be a non-empty array'), 'shows the notice');
+  assert.ok(html.includes('id="agentSel"') && html.includes('id="modelInp"'), 'has the agent + model picker');
+});

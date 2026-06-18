@@ -15,10 +15,13 @@ function count(n: number | null, sign: string): string {
 
 export function renderChangePage(
   sum: ChangeSummary,
-  opts: { repoName: string; base?: string; head?: string; scopeLabel?: string; active?: string },
+  opts: { repoName: string; base?: string; head?: string; scopeLabel?: string; active?: string; notice?: string },
 ): string {
   const label = opts.scopeLabel ?? sum.baseLabel;
   const active = opts.active ?? '';
+  const notice = opts.notice
+    ? `<div class="notice"><b>That review couldn't be loaded.</b> ${esc(opts.notice)} Generate a fresh one below.</div>`
+    : '';
   const rows = sum.files
     .map(
       (f) =>
@@ -28,8 +31,12 @@ export function renderChangePage(
     .join('');
 
   const action = sum.hasChanges
-    ? `<button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
-       <p class="gennote">Runs your local Claude / Codex to write the walkthrough — about a minute. Nothing starts until you click.</p>`
+    ? `<div class="genctl">
+         <label class="genfield">Agent <select id="agentSel" aria-label="Agent"></select></label>
+         <label class="genfield">Model <input id="modelInp" type="text" placeholder="default" autocomplete="off" spellcheck="false" aria-label="Model" /></label>
+       </div>
+       <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
+       <p class="gennote">Runs the agent you pick to write the walkthrough — about a minute. Nothing starts until you click.</p>`
     : `<div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -67,9 +74,17 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .fp{flex:1;min-width:0;font-family:"SF Mono",ui-monospace,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fc{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;flex:none}
 .add{color:var(--add)}.del{color:var(--del);margin-left:5px}
-.gen{margin-top:22px;height:42px;padding:0 20px;font:inherit;font-size:15px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:11px;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18);letter-spacing:-.01em}
+.gen{margin-top:14px;height:42px;padding:0 20px;font:inherit;font-size:15px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:11px;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18);letter-spacing:-.01em}
 .gen:hover{background:var(--blue2)}.gen:active{transform:scale(.99)}.gen:disabled{opacity:.5;cursor:default}
 .gennote{color:var(--l3);font-size:12.5px;margin:9px 2px 0;line-height:1.4}
+.notice{background:rgba(255,159,10,.13);border:.5px solid rgba(255,159,10,.42);color:var(--label);border-radius:12px;padding:12px 15px;margin-bottom:16px;font-size:13.5px;line-height:1.5}
+.notice b{font-weight:600}
+.genctl{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+.genfield{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--l2)}
+.genfield select,.genfield input{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:32px;padding:0 11px}
+.genfield select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
+.genfield input{min-width:130px}
+.genfield select:focus,.genfield input:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
 .empty{padding:30px 16px;text-align:center;color:var(--l2);font-size:14px}
 .gencon{margin-top:20px;background:var(--con);border:.5px solid var(--conl);border-radius:12px;overflow:hidden}
 .genhd{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--conl);font-size:12.5px;font-weight:600;color:var(--cont)}
@@ -82,6 +97,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 <main class="wrap">
   <h1>${esc(APP_BRAND)}</h1>
   <p class="what">The agent that wrote your change walks you through it — in the order the code actually flows, not by filename.</p>
+  ${notice}
   <div class="card">
     <div class="scope">
       <span class="scur">Reviewing <b>${esc(label)}</b></span>
@@ -102,7 +118,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
   </div>
   ${action}
   <div class="gencon" id="gencon" hidden>
-    <div class="genhd"><span class="genspin"></span><span>Writing your guided review…</span><button class="genstop" id="genstop" type="button">Stop</button></div>
+    <div class="genhd"><span class="genspin"></span><span id="genTitle">Writing your guided review…</span><button class="genstop" id="genstop" type="button">Stop</button></div>
     <pre class="genbody" id="genbody"></pre>
   </div>
 </main>
@@ -131,6 +147,17 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     var b=baseSel.value,h=headSel.value;if(!b)return;
     var u='/?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
+  var agentSel=document.getElementById('agentSel'),modelInp=document.getElementById('modelInp');
+  var DEFMODEL={claude:'sonnet',codex:'default'};
+  function syncPh(){if(modelInp&&agentSel)modelInp.placeholder=DEFMODEL[agentSel.value]||'default';}
+  if(agentSel){
+    fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
+      (d.agents||[]).forEach(function(a){agentSel.add(new Option(a,a));});
+      if(!agentSel.options.length)agentSel.add(new Option('no agent found',''));
+      syncPh();
+    }).catch(function(){});
+    agentSel.addEventListener('change',syncPh);
+  }
   var gen=document.getElementById('genBtn');
   if(!gen)return;
   gen.addEventListener('click',function(){
@@ -141,7 +168,10 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
     stop.onclick=function(){if(ctrl)ctrl.abort();};
     var hint=true,NL=String.fromCharCode(10);
-    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined};
+    var agent=agentSel?agentSel.value:'',model=modelInp?modelInp.value.trim():'';
+    var ttl=document.getElementById('genTitle');
+    if(ttl)ttl.textContent='Writing your guided review with '+(agent||'your agent')+(model?(' ('+model+')'):'')+'…';
+    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined};
     fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
       .then(function(r){
         if(!r.ok||!r.body){return r.json().then(function(j){body.textContent=(j&&j.error)||'Could not start.';},function(){body.textContent='Could not start.';});}

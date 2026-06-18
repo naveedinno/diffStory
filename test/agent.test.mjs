@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   onPath, storyPrompt, agentCommand, addressPrompt,
-  streamCommand, parseClaudeStreamLine, parseCodexStreamLine,
+  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -68,7 +68,15 @@ test('parseClaudeStreamLine extracts assistant text and tool notices', () => {
     type: 'assistant',
     message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'src/x.ts' } }] },
   });
-  assert.deepEqual(parseClaudeStreamLine(toolLine), [{ type: 'tool', data: '✏️ Edit src/x.ts' }]);
+  assert.deepEqual(parseClaudeStreamLine(toolLine), [{ type: 'tool', data: 'Edit src/x.ts' }]);
+});
+
+test('toolSummary shows the command for Bash and the target for file tools', () => {
+  assert.equal(toolSummary('Bash', { command: 'git   diff --stat' }), '$ git diff --stat');
+  assert.equal(toolSummary('Read', { file_path: 'src/api.ts' }), 'Read src/api.ts');
+  assert.equal(toolSummary('Grep', { pattern: 'foo' }), 'Grep foo');
+  assert.equal(toolSummary('SomethingElse', {}), 'SomethingElse');
+  assert.ok(toolSummary('Bash', { command: 'x'.repeat(200) }).endsWith('…'));
 });
 
 test('parseClaudeStreamLine ignores non-JSON, empty, and non-assistant lines', () => {

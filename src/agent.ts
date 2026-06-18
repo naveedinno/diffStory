@@ -123,6 +123,16 @@ export function streamCommand(agent: Agent, prompt: string, model?: string): [st
   return ['codex', args];
 }
 
+/** A readable one-line summary of a tool call for the live activity feed. */
+export function toolSummary(name: string, input: any): string {
+  if (name === 'Bash') {
+    const cmd = String(input?.command ?? '').replace(/\s+/g, ' ').trim();
+    return cmd ? `$ ${cmd.length > 100 ? cmd.slice(0, 100) + '…' : cmd}` : '$ …';
+  }
+  const target = input?.file_path ?? input?.path ?? input?.pattern ?? '';
+  return target ? `${name} ${target}` : name;
+}
+
 /** Parse one line of Claude's --output-format stream-json into events (non-JSON → none). */
 export function parseClaudeStreamLine(line: string): AgentEvent[] {
   const s = line.trim();
@@ -139,8 +149,7 @@ export function parseClaudeStreamLine(line: string): AgentEvent[] {
     if (block?.type === 'text' && block.text) {
       out.push({ type: 'text', data: block.text });
     } else if (block?.type === 'tool_use') {
-      const f = block.input?.file_path ?? block.input?.path ?? '';
-      out.push({ type: 'tool', data: `✏️ ${block.name}${f ? ' ' + f : ''}` });
+      out.push({ type: 'tool', data: toolSummary(block.name, block.input) });
     }
   }
   return out;
