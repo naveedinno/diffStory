@@ -9,8 +9,9 @@ You just changed code. The reviewer now has to understand it. A raw diff sorts f
 alphabetically — the worst order for understanding. Your job: write the **reading order**
 you'd give a colleague looking over your shoulder, and save it as a tour diffStory can render.
 
-You have something no diff tool has: you know *why* the code is shaped this way and what
-calls what. Capture that.
+You have something no diff tool has: you know the story of the code — what changed,
+what was missing before, and how the call/data flow now moves through the system.
+Capture that.
 
 ## Steps
 
@@ -30,9 +31,12 @@ calls what. Capture that.
    - `kind`: `changed` (the diff touched it), `new-file` (brand new), or `context`
      (unchanged code shown only so the change makes sense — e.g. the signature of a callee
      you didn't modify but the reader needs to see).
-   - `why`: the most important field. **Review-oriented**, not narration. Say what to verify,
-     what's subtle, why an approach is safe, what you were unsure about. Not "adds a cap" —
-     instead "clamps the rate here; the unchecked block is safe because cap ≤ uint128 max."
+   - `why`: the most important field. This is the story paragraph for the stop, even though
+     the schema key is still called `why`. Explain the code causally: what you changed here,
+     what the old flow did not handle well enough, and how this lets the next caller/helper/path
+     do its job. Good shape: "I added this parameter to method X so method Y can pass Z through;
+     that gives helper H the context it needs to handle the liquidation case." Include review
+     checks only inside that story, not as a detached checklist.
    - `title`: name the behavior or risk being reviewed, not just the file. Good titles sound
      like "Entry point: reject over-cap orders before placement" or "Reserve accounting now
      follows each pending settlement." Weak titles sound like "Update OrderService" or
@@ -68,7 +72,7 @@ calls what. Capture that.
       "file": "contracts/Funding.sol",
       "range": [120, 145],             // [startLine, endLine] in the POST-change file
       "kind": "changed",               // changed | context | new-file
-      "why": "Start here — the keeper calls this. The new clamp on 132 is the core behavior.",
+      "why": "Start here — the keeper calls this. I clamp the rate before settlement hands off to the math helper, because the old path let an over-cap value travel too far before being bounded.",
       "calls": ["s2"],                 // optional
       "tags": ["entrypoint", "core"]   // optional
     },
@@ -79,7 +83,7 @@ calls what. Capture that.
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
       "kind": "new-file",
-      "why": "settleFunding() hands off here. The unchecked block is safe because cap ≤ uint128 max — see the require on 44.",
+      "why": "settleFunding() hands off here after the entry point has bounded the rate. This helper can stay small because it only receives capped values; the require on 44 is what makes the unchecked math safe.",
       "returnsTo": "s1"
     }
   ]
@@ -92,6 +96,8 @@ calls what. Capture that.
 - Don't write a step per file mechanically — write the *path a human should walk*.
 - Don't restate the diff with bland verbs like "adds", "updates", "modifies", or "changes"
   unless the sentence also says what the reviewer should verify.
+- Don't write checklist-only copy. The reviewer should feel the code path moving from one
+  method to the next, not read disconnected reasons.
 - Don't sound like release notes. Avoid sleepy openings like "This updates..." or generic
   captions that could fit any pull request.
 - Don't make jokes that hide uncertainty. The writing can be fun; the facts still have to

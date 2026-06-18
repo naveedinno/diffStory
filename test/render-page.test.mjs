@@ -15,7 +15,7 @@ const tour = {
       file: 'a.ts',
       range: [1, 1],
       kind: 'changed',
-      why: 'Verify the only changed line.',
+      why: 'I changed this line so the next helper receives the value it needs.',
     },
   ],
 };
@@ -50,4 +50,10 @@ test('rail step numbers stay stable after visiting steps', () => {
   assert.match(html, /c\.classList\.toggle\('is-visited',isV\)/);
   assert.match(html, /num\.textContent=String\(idx\)/);
   assert.doesNotMatch(html, /isD\?'✓'/);
+});
+
+test('step narrative is labeled as story, not why-this-step', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, />Story<\/span>/);
+  assert.doesNotMatch(html, /Why this step/);
 });

@@ -30,7 +30,10 @@ export function storyPrompt(baseRef: string, headRef?: string): string {
     `- Put tests, snapshots, docs, and generated files after the behavior they verify or explain.\n\n` +
     `Writing contract:\n` +
     `- Step titles should name the exact behavior or risk being reviewed.\n` +
-    `- Each "why" must say what to verify, what is subtle, or why the change is safe.\n` +
+    `- Each "why" is the story paragraph for that stop: explain what changed here, why the old flow was not enough, ` +
+    `and how this code lets the next caller/helper/path do its job.\n` +
+    `- Prefer causal chains like "I added this parameter to method X so method Y can pass Z, which lets H handle...".\n` +
+    `- Include what to verify only inside that story, not as a detached checklist.\n` +
     `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
     `- Prefer specific protocol/product language from the code over generic narrative.\n\n` +
     `Voice contract:\n` +

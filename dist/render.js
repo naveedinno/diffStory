@@ -66,7 +66,7 @@ export function renderPage(input) {
         : `<span class="ds-check">✓</span> all changes explained`}</button>
   </div>
   <div class="ds-settings-wrap">
-    <button class="ds-readaloud" data-readaloud title="Read each step's reason aloud as you walk the story"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
+    <button class="ds-readaloud" data-readaloud title="Read each step's story aloud as you walk the change"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
     <button class="ds-gear" data-settings title="Read-aloud settings" aria-label="Read-aloud settings">⚙</button>
     <div class="ds-settings-pop" id="ds-settings" hidden>
       <div class="ds-settings-title">Read aloud</div>
@@ -306,7 +306,7 @@ function stepPanel(repo, s, i, total, comments) {
       </div>
     </div>
     <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Why this step</span><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
       <p class="ds-why-text">${nl(esc(s.why))}</p>
     </div>
     <div class="ds-diffscroll">

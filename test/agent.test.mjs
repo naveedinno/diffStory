@@ -17,7 +17,8 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('.diffstory/story.json'));
   assert.ok(p.includes('Reading order contract'));
   assert.ok(p.includes('do not emit one step per file'));
-  assert.ok(p.includes('what to verify'));
+  assert.ok(p.includes('story paragraph'));
+  assert.ok(p.includes('I added this parameter to method X'));
   assert.ok(p.includes('Voice contract'));
   assert.ok(p.includes('lively, specific, and a little fun'));
   assert.ok(p.includes('No corporate changelog voice'));
