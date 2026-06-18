@@ -60,15 +60,15 @@ test('step narrative is labeled as story, not why-this-step', () => {
 
 test('read aloud operators have distinct visual and speech profiles', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /story:\{rate:1\.24,pitch:1\.16,volume:1\}/);
-  assert.match(html, /warm:\{rate:0\.72,pitch:1\.30,volume:1\}/);
-  assert.match(html, /reviewer:\{rate:0\.66,pitch:0\.72,volume:1\}/);
+  assert.match(html, /story:\{rate:1\.18,pitch:1\.10,volume:1\}/);
+  assert.match(html, /flirty:\{rate:0\.80,pitch:1\.34,volume:1\}/);
+  assert.match(html, /bass:\{rate:0\.64,pitch:0\.62,volume:1\}/);
   assert.match(html, /system:\{rate:1\.42,pitch:0\.94,volume:1\}/);
   assert.match(html, /function voiceSlot\(pool,idx\)/);
-  assert.match(html, /if\(op==='warm'\).*voiceSlot\(pool,1\)/s);
-  assert.match(html, /if\(op==='reviewer'\).*voiceSlot\(pool,2\)/s);
-  assert.match(html, /button\[data-operator="warm"\]\.is-active/);
-  assert.match(html, /button\[data-operator="reviewer"\]\.is-active/);
+  assert.match(html, /if\(op==='flirty'\).*voiceSlot\(pool,1\)/s);
+  assert.match(html, /if\(op==='bass'\).*voiceSlot\(pool,2\)/s);
+  assert.match(html, /button\[data-operator="flirty"\]\.is-active/);
+  assert.match(html, /button\[data-operator="bass"\]\.is-active/);
 });
 
 test('read aloud starts on a speakable story step and falls back safely', () => {
@@ -76,5 +76,14 @@ test('read aloud starts on a speakable story step and falls back safely', () => 
   assert.match(html, /function firstSpeakableStep\(\)/);
   assert.match(html, /if\(!speakStep\(active\)\)\{var si=firstSpeakableStep\(\);if\(si>=0\)setActive\(si\);\}/);
   assert.match(html, /u\.onerror=function\(\)\{if\(btn\)btn\.classList\.remove\('is-speaking'\);if\(!fallback\)speak\(text,true\);\}/);
-  assert.match(html, /catch\(e\)\{if\(!fallback\)return speak\(text,true\);return false;\}/);
+  assert.match(html, /function cancelSpeech\(\)/);
+  assert.match(html, /clearTimeout\(speechTimer\)/);
+  assert.match(html, /try\{synth\.speak\(u\);\}catch\(e\)\{if\(!fallback\)speak\(text,true\);\}/);
+});
+
+test('read aloud operator switch migrates old modes and re-speaks safely', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /if\(op==='warm'\)return 'flirty'/);
+  assert.match(html, /if\(op==='precise'\|\|op==='reviewer'\)return 'bass'/);
+  assert.match(html, /if\(readAloud&&!speakStep\(active\)\)\{var si=firstSpeakableStep\(\);if\(si>=0\)setActive\(si\);\}/);
 });
