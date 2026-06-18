@@ -501,10 +501,10 @@ export const PAGE_JS = `
   var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer;
   var filePanels=[],fileItems=[],selectedFile=-1,readAloud=false,rate=1.05,operator='story',voices=[];
   var VOICE_PROFILES={
-    story:{rate:1.12,pitch:1.16,volume:1},
-    warm:{rate:0.86,pitch:1.22,volume:1},
-    reviewer:{rate:0.78,pitch:0.82,volume:1},
-    system:{rate:1.28,pitch:0.98,volume:1}
+    story:{rate:1.24,pitch:1.16,volume:1},
+    warm:{rate:0.72,pitch:1.30,volume:1},
+    reviewer:{rate:0.66,pitch:0.72,volume:1},
+    system:{rate:1.42,pitch:0.94,volume:1}
   };
 
   function $(s,r){return (r||document).querySelector(s);}
@@ -621,10 +621,37 @@ export const PAGE_JS = `
     }
     return score;
   }
+  function voiceQuality(v){
+    var name=(v.name||'').toLowerCase(),lang=(v.lang||'').toLowerCase(),score=0;
+    if(lang.indexOf('en')===0)score+=40;
+    if(/natural|premium|enhanced|neural/.test(name))score+=20;
+    if(v.localService)score+=8;
+    if(v.default)score+=6;
+    return score;
+  }
+  function voicePool(){
+    return voices.slice().sort(function(a,b){return voiceQuality(b)-voiceQuality(a);});
+  }
+  function voiceByNames(pool,patterns){
+    for(var i=0;i<patterns.length;i++){
+      var re=patterns[i];
+      for(var j=0;j<pool.length;j++){if(re.test((pool[j].name||'').toLowerCase()))return pool[j];}
+    }
+    return null;
+  }
+  function voiceSlot(pool,idx){
+    if(!pool.length)return null;
+    if(pool.length===1)return pool[0];
+    return pool[Math.min(idx,pool.length-1)];
+  }
   function pickVoice(op){
     if(op==='system')return null;
     if(!voices.length)loadVoices();
     if(!voices.length)return null;
+    var pool=voicePool();
+    if(op==='story')return voiceByNames(pool,[/ava/,/samantha/,/google us english/,/microsoft.*jenny/,/natural/])||voiceSlot(pool,0);
+    if(op==='warm')return voiceByNames(pool,[/victoria/,/serena/,/karen/,/moira/,/tessa/,/zira/])||voiceSlot(pool,1);
+    if(op==='reviewer')return voiceByNames(pool,[/alex/,/daniel/,/tom/,/david/,/mark/,/fred/,/ralph/,/male/])||voiceSlot(pool,2);
     return voices.slice().sort(function(a,b){return voiceScore(b,op)-voiceScore(a,op);})[0]||null;
   }
   function toggleReadAloud(){
