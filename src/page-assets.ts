@@ -137,9 +137,14 @@ a{color:inherit;text-decoration:none}
 .ds-settings-row:first-of-type{margin-top:0}
 .ds-settings-label{font-size:12px;color:var(--muted);font-weight:600}
 .ds-seg{display:flex;gap:0;width:100%;padding:0;border-radius:14px;background:var(--md-surface-container);border:1px solid var(--line);overflow:hidden;flex-wrap:nowrap}
-.ds-seg button{flex:1 1 0;min-width:0;white-space:nowrap;font-size:12px;font-weight:700;padding:9px 8px;border-radius:0;border:none;border-left:1px solid var(--line);cursor:pointer;background:transparent;color:var(--muted)}
+.ds-seg button{flex:1 1 0;min-width:0;white-space:nowrap;font-size:12px;font-weight:700;padding:9px 8px;border-radius:0;border:none;border-left:1px solid var(--line);cursor:pointer;background:transparent;color:var(--muted);
+  box-shadow:inset 0 0 0 0 transparent;transition:background .14s,color .14s,box-shadow .14s}
 .ds-seg button:first-child{border-left:none}
-.ds-seg button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
+.ds-seg button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);box-shadow:inset 0 0 0 2px var(--md-primary)}
+.ds-seg button[data-operator="story"].is-active{background:rgba(208,188,255,0.22);color:var(--md-on-primary-container);box-shadow:inset 0 0 0 2px var(--md-primary)}
+.ds-seg button[data-operator="warm"].is-active{background:rgba(239,184,200,0.20);color:#FFD8E4;box-shadow:inset 0 0 0 2px var(--md-tertiary)}
+.ds-seg button[data-operator="reviewer"].is-active{background:rgba(143,180,255,0.20);color:#DCE7FF;box-shadow:inset 0 0 0 2px #8FB4FF}
+.ds-seg button[data-operator="system"].is-active{background:var(--md-surface-container-highest);color:var(--text);box-shadow:inset 0 0 0 2px var(--md-outline)}
 .ds-playstep{margin-left:auto;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(10,132,255,0.3);background:rgba(10,132,255,0.08);color:var(--accent-blue);cursor:pointer;font-size:10px;padding:0;line-height:1}
 .ds-playstep:hover{background:rgba(10,132,255,0.18)}
 .ds-btn-solid{font-weight:600;color:var(--on-accent);padding:7px 13px;border:none;background:var(--accent)}
@@ -498,10 +503,10 @@ export const PAGE_JS = `
   var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer;
   var filePanels=[],fileItems=[],selectedFile=-1,readAloud=false,rate=1.05,operator='story',voices=[];
   var VOICE_PROFILES={
-    story:{rate:1.03,pitch:1.08,volume:1},
-    warm:{rate:0.97,pitch:1.04,volume:1},
-    reviewer:{rate:0.92,pitch:0.96,volume:1},
-    system:{rate:1,pitch:1,volume:1}
+    story:{rate:1.12,pitch:1.16,volume:1},
+    warm:{rate:0.86,pitch:1.22,volume:1},
+    reviewer:{rate:0.78,pitch:0.82,volume:1},
+    system:{rate:1.28,pitch:0.98,volume:1}
   };
 
   function $(s,r){return (r||document).querySelector(s);}
@@ -599,14 +604,17 @@ export const PAGE_JS = `
     if(v.default)score+=10;
     if(v.localService)score+=5;
     if(op==='warm'){
-      if(/samantha|ava|serena|victoria|karen|moira|tessa|zira|female/.test(name))score+=28;
-      if(/natural|premium|enhanced|neural/.test(name))score+=12;
+      if(/samantha|ava|serena|victoria|karen|moira|tessa|zira|female/.test(name))score+=36;
+      if(/natural|premium|enhanced|neural/.test(name))score+=18;
+      if(/compact|robot|fred|ralph/.test(name))score-=18;
     }else if(op==='reviewer'){
-      if(/alex|daniel|fred|tom|david|mark|male/.test(name))score+=24;
-      if(/compact|google|microsoft|natural|enhanced/.test(name))score+=9;
+      if(/alex|daniel|fred|tom|david|mark|male|ralph/.test(name))score+=36;
+      if(/compact|google|microsoft|natural|enhanced/.test(name))score+=12;
+      if(/samantha|ava|serena|victoria/.test(name))score-=10;
     }else{
-      if(/samantha|ava|alex|daniel|google us english|microsoft/.test(name))score+=16;
-      if(/natural|enhanced|premium|neural/.test(name))score+=14;
+      if(/samantha|ava|alex|daniel|google us english|microsoft/.test(name))score+=22;
+      if(/natural|enhanced|premium|neural/.test(name))score+=20;
+      if(/compact|fred|ralph/.test(name))score-=10;
     }
     return score;
   }

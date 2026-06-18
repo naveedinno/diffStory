@@ -57,3 +57,13 @@ test('step narrative is labeled as story, not why-this-step', () => {
   assert.match(html, />Story<\/span>/);
   assert.doesNotMatch(html, /Why this step/);
 });
+
+test('read aloud operators have distinct visual and speech profiles', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /story:\{rate:1\.12,pitch:1\.16,volume:1\}/);
+  assert.match(html, /warm:\{rate:0\.86,pitch:1\.22,volume:1\}/);
+  assert.match(html, /reviewer:\{rate:0\.78,pitch:0\.82,volume:1\}/);
+  assert.match(html, /system:\{rate:1\.28,pitch:0\.98,volume:1\}/);
+  assert.match(html, /button\[data-operator="warm"\]\.is-active/);
+  assert.match(html, /button\[data-operator="reviewer"\]\.is-active/);
+});
