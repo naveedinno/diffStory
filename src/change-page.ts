@@ -52,11 +52,15 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .sopt{font:inherit;font-size:12.5px;color:var(--l2);background:none;border:none;cursor:pointer;padding:5px 11px;border-radius:7px;text-decoration:none;white-space:nowrap}
 .sopt:hover{color:var(--label)}
 .sopt.on{background:var(--elev);color:var(--label);font-weight:590;box-shadow:0 1px 2px rgba(0,0,0,.14)}
-.cmppanel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 15px 13px}
-.cmprow{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--l2)}
-.cmppanel select{font:inherit;font-size:12.5px;color:var(--label);background:var(--bg);border:.5px solid var(--hair);border-radius:8px;padding:5px 8px;max-width:210px}
-.cmparrow{color:var(--l3)}
-.cmpgo{font:inherit;font-size:12.5px;font-weight:590;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 13px;cursor:pointer}
+.cmppanel{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:4px 15px 15px}
+.cmppanel[hidden]{display:none}
+.cmprow{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--l2)}
+.cmppanel select{appearance:none;-webkit-appearance:none;font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:32px;padding:0 30px 0 11px;min-width:172px;max-width:232px;cursor:pointer;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
+.cmppanel select:hover{border-color:var(--l3)}
+.cmppanel select:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
+.cmparrow{color:var(--l3);display:inline-flex}
+.cmpgo{font:inherit;font-size:13px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:8px;height:32px;padding:0 16px;cursor:pointer}
+.cmpgo:hover{background:var(--blue2)}
 .files{max-height:46vh;overflow:auto}
 .frow{display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:.5px solid var(--sep);font-size:13px}
 .frow:last-child{border-bottom:none}
@@ -108,6 +112,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
       baseSel=document.getElementById('cmpBase'),headSel=document.getElementById('cmpHead'),loaded=false;
   function group(sel,lbl){var g=document.createElement('optgroup');g.label=lbl;sel.appendChild(g);return g;}
   function fillRefs(d){
+    baseSel.add(new Option('Choose a base…',''));
     headSel.add(new Option('Working tree (uncommitted)',''));
     headSel.add(new Option('Latest commit (HEAD)','HEAD'));
     var bb=group(baseSel,'Branches'),hb=group(headSel,'Branches');
