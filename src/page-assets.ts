@@ -166,7 +166,7 @@ body.ds-rail-collapsed .ds-rail>*{visibility:hidden;pointer-events:none}
 .ds-readhead-count{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;font-weight:500}
 .ds-readhead-track{position:absolute;left:14px;right:14px;bottom:8px;height:3px;background:var(--md-surface-container-highest);border-radius:99px}
 .ds-readhead-fill{height:100%;background:var(--md-primary);border-radius:99px;transition:width .25s}
-.ds-railscroll{flex:1;overflow-y:auto;padding:8px 12px 8px 0}
+.ds-railscroll{flex:1;overflow-y:auto;padding:8px 12px 8px 14px}
 .ds-railsteps{position:relative}
 .ds-spine{position:absolute;left:34px;top:22px;bottom:22px;width:2px;background:var(--line)}
 .ds-stepcard{display:grid;grid-template-columns:58px 1fr;align-items:start;width:100%;text-align:left;border:none;cursor:pointer;
