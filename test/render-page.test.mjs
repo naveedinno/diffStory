@@ -44,3 +44,10 @@ test('agent activity console starts hidden and idle', () => {
   assert.match(html, /<span class="ds-ac-spin" aria-hidden="true" hidden><\/span>/);
   assert.match(html, /<span class="ds-ac-title">Agent activity<\/span>/);
 });
+
+test('rail step numbers stay stable after visiting steps', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /c\.classList\.toggle\('is-visited',isV\)/);
+  assert.match(html, /num\.textContent=String\(idx\)/);
+  assert.doesNotMatch(html, /isD\?'✓'/);
+});

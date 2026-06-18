@@ -175,7 +175,8 @@ body.ds-rail-collapsed .ds-rail>*{visibility:hidden;pointer-events:none}
 .ds-num{grid-column:1;width:24px;height:24px;margin:1px 0 0 22px;border-radius:12px;display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;position:relative;z-index:1;
   background:var(--md-surface-container);border:1px solid var(--line);color:var(--muted)}
-.ds-stepcard.is-done .ds-num{background:rgba(48,209,88,0.18);border-color:rgba(48,209,88,0.55);color:var(--add)}
+.ds-stepcard.is-visited:not(.is-active) .ds-num{background:var(--md-surface-container-high);border-color:var(--line);color:var(--muted)}
+.ds-stepcard.is-visited:not(.is-active) .ds-stepcard-title{color:var(--muted)}
 .ds-stepcard.is-active .ds-num{background:var(--md-primary);border-color:var(--md-primary);color:var(--md-on-primary);box-shadow:none}
 .ds-stepcard-body{grid-column:2;min-width:0;display:flex;flex-direction:column;gap:3px}
 .ds-stepcard-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.32;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -530,11 +531,11 @@ export const PAGE_JS = `
     if(i<0)i=0;if(i>total-1)i=total-1;active=i;visited[i]=true;
     stepPanels.forEach(function(p,idx){p.hidden=idx!==i;});
     stepCards.forEach(function(c,idx){
-      var isA=idx===i,isD=visited[idx]&&!isA;
+      var isA=idx===i,isV=visited[idx]&&!isA;
       c.classList.toggle('is-active',isA);
-      c.classList.toggle('is-done',isD);
-      // Index 0 is the Overview — leave its mark alone; real steps show their number.
-      var num=$('.ds-num',c);if(num&&!c.hasAttribute('data-intro'))num.textContent=isD?'✓':String(idx);
+      c.classList.toggle('is-visited',isV);
+      // Index 0 is the Overview — leave its mark alone; real steps keep stable numbers.
+      var num=$('.ds-num',c);if(num&&!c.hasAttribute('data-intro'))num.textContent=String(idx);
     });
     var steps=total-1; // real steps, with the Overview excluded
     var pt=$('#ds-progress-text');if(pt)pt.textContent=i===0?'Overview':(i+' / '+steps);
