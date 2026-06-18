@@ -27,6 +27,11 @@ export function storyPrompt(baseRef, headRef) {
         `- Each "why" must say what to verify, what is subtle, or why the change is safe.\n` +
         `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
         `- Prefer specific protocol/product language from the code over generic narrative.\n\n` +
+        `Voice contract:\n` +
+        `- Make the tour lively, specific, and a little fun, like a sharp teammate guiding review.\n` +
+        `- Use active verbs, concrete nouns, and quick stakes: what could break, what now holds, what got simpler.\n` +
+        `- No corporate changelog voice, no sleepy "This updates..." phrasing, and no bland summary captions.\n` +
+        `- Keep the fun in the wording, not in fake confidence: correctness beats jokes every time.\n\n` +
         `Coverage contract:\n` +
         `- Cover every changed hunk with a changed/new-file step.\n` +
         `- Use context steps only for unchanged code that makes the review easier.\n` +

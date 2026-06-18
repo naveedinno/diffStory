@@ -73,9 +73,9 @@ export function renderPage(input) {
       <div class="ds-settings-row">
         <span class="ds-settings-label">Operator</span>
         <div class="ds-seg" aria-label="Voice operator">
-          <button data-operator="balanced" class="is-active">Balanced</button>
+          <button data-operator="story" class="is-active">Story</button>
           <button data-operator="warm">Warm</button>
-          <button data-operator="precise">Precise</button>
+          <button data-operator="reviewer">Reviewer</button>
           <button data-operator="system">System</button>
         </div>
       </div>

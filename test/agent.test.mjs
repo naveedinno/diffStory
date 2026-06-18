@@ -18,6 +18,9 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('Reading order contract'));
   assert.ok(p.includes('do not emit one step per file'));
   assert.ok(p.includes('what to verify'));
+  assert.ok(p.includes('Voice contract'));
+  assert.ok(p.includes('lively, specific, and a little fun'));
+  assert.ok(p.includes('No corporate changelog voice'));
   assert.ok(p.includes('Run diffstory check'));
 });
 

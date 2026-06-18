@@ -40,6 +40,11 @@ calls what. Capture that.
    - `calls`: ids of steps this one leads into (renders the A→B jump). `returnsTo`: the step
      to come back to.
 
+   Write with some pulse. The tone should feel like a sharp teammate walking the reviewer
+   through the interesting parts: lively, specific, occasionally witty, and still exact.
+   Use active verbs and quick stakes. Name what could break, what now holds, what got simpler,
+   or where the reviewer should squint. Do not drift into corporate changelog voice.
+
 4. **Cover every change.** Every changed hunk MUST be pointed at by at least one `changed` or
    `new-file` step. This is enforced — run `diffstory check` and fix anything it lists under
    "not in the tour" until it passes. Don't quietly leave a change out of the narrative.
@@ -87,6 +92,10 @@ calls what. Capture that.
 - Don't write a step per file mechanically — write the *path a human should walk*.
 - Don't restate the diff with bland verbs like "adds", "updates", "modifies", or "changes"
   unless the sentence also says what the reviewer should verify.
+- Don't sound like release notes. Avoid sleepy openings like "This updates..." or generic
+  captions that could fit any pull request.
+- Don't make jokes that hide uncertainty. The writing can be fun; the facts still have to
+  carry the tour.
 - Don't bury the core behavior behind docs, tests, generated files, or cleanup. Show those after
   the implementation they support.
 - Don't skip the `diffstory check` gate.
