@@ -119,39 +119,54 @@ a{color:inherit;text-decoration:none}
 .ds-btn-approve{display:flex;align-items:center;gap:7px;font-weight:700;color:var(--on-accent);padding:10px 18px;border:none;background:var(--accent)}
 .ds-btn-approve:hover{background:var(--accent-hi)}
 .ds-btn-approve:disabled{opacity:0.4;cursor:not-allowed}
-.ds-readaloud{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent-text);padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;cursor:pointer;white-space:nowrap}
-.ds-readaloud:hover{background:var(--fill-2)}
-.ds-readaloud-ico{font-size:10px;color:var(--accent-blue)}
-.ds-readaloud.is-active{background:var(--accent-soft);border-color:transparent;color:var(--accent-text)}
-.ds-readaloud.is-active .ds-readaloud-ico{color:var(--accent-text)}
+.ds-readaloud{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--md-on-secondary-container);padding:8px 13px;border-radius:999px;border:1px solid var(--line);
+  background:var(--md-surface-container-high);cursor:pointer;white-space:nowrap;min-width:112px;justify-content:center}
+.ds-readaloud:hover{background:var(--md-surface-container-highest)}
+.ds-readaloud-ico{width:17px;height:17px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--md-on-primary);background:var(--md-primary)}
+.ds-readaloud.is-active{background:var(--md-secondary-container);border-color:transparent;color:var(--md-on-secondary-container)}
+.ds-readaloud.is-active .ds-readaloud-ico{background:var(--md-on-secondary-container);color:var(--md-secondary-container)}
 .ds-readaloud.is-speaking .ds-readaloud-ico{animation:dsPulse 1s ease-in-out infinite}
 @keyframes dsPulse{0%,100%{opacity:1}50%{opacity:0.3}}
 .ds-settings-wrap{position:relative;display:flex;align-items:center;gap:5px}
 .ds-gear{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
 .ds-gear:hover{background:var(--fill-2);color:var(--text)}
-.ds-settings-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:30;width:360px;max-width:calc(100vw - 24px);
-  background:var(--md-surface-container-high);border:1px solid var(--line-soft);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.ds-settings-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:30;width:420px;max-width:calc(100vw - 24px);
+  background:var(--md-surface-container-high);border:1px solid var(--line-soft);border-radius:22px;padding:16px;box-shadow:var(--shadow)}
 .ds-settings-pop[hidden]{display:none}
-.ds-settings-title{font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim2);font-weight:700;margin-bottom:14px}
+.ds-voice-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+.ds-settings-title{font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim2);font-weight:700;margin-bottom:3px}
+.ds-voice-now{font-size:12px;color:var(--muted);line-height:1.35;min-height:16px}
+.ds-preview{margin-left:auto;display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.ds-preview:hover{background:var(--fill-2)}
+.ds-preview-ico{font-size:9px;color:var(--md-primary)}
+.ds-voice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.ds-voice-card{display:grid;grid-template-columns:34px 1fr;gap:10px;text-align:left;border:1px solid var(--line-soft);border-radius:16px;background:var(--md-surface-container);padding:11px;cursor:pointer;color:var(--text);
+  min-height:82px;transition:background .14s,border-color .14s,box-shadow .14s,transform .14s}
+.ds-voice-card:hover{background:var(--md-surface-container-highest);transform:translateY(-1px)}
+.ds-voice-card.is-active{border-color:var(--voice-accent,var(--md-primary));box-shadow:inset 0 0 0 1px var(--voice-accent,var(--md-primary));background:linear-gradient(135deg,var(--voice-bg,var(--accent-soft)),var(--md-surface-container))}
+.ds-voice-card[data-voice-preset="story"]{--voice-accent:var(--md-primary);--voice-bg:rgba(208,188,255,0.16)}
+.ds-voice-card[data-voice-preset="flirty"]{--voice-accent:var(--md-tertiary);--voice-bg:rgba(239,184,200,0.18)}
+.ds-voice-card[data-voice-preset="bass"]{--voice-accent:#8FB4FF;--voice-bg:rgba(143,180,255,0.16)}
+.ds-voice-card[data-voice-preset="system"]{--voice-accent:var(--md-outline);--voice-bg:rgba(202,196,208,0.10)}
+.ds-voice-badge{width:32px;height:32px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--voice-accent,var(--md-primary));background:var(--voice-bg,var(--accent-soft));letter-spacing:0.02em}
+.ds-voice-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;line-height:1.2}
+.ds-voice-check{display:none;color:var(--voice-accent,var(--md-primary));font-size:12px}
+.ds-voice-card.is-active .ds-voice-check{display:inline}
+.ds-voice-desc{display:block;margin-top:4px;font-size:11.5px;line-height:1.35;color:var(--muted);text-wrap:pretty}
 .ds-settings-row{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:14px}
-.ds-settings-row:first-of-type{margin-top:0}
-.ds-settings-label{font-size:12px;color:var(--muted);font-weight:600}
-.ds-seg{display:flex;gap:0;width:100%;padding:0;border-radius:14px;background:var(--md-surface-container);border:1px solid var(--line);overflow:hidden;flex-wrap:nowrap}
-.ds-seg button{flex:1 1 0;min-width:0;white-space:nowrap;font-size:12px;font-weight:700;padding:9px 8px;border-radius:0;border:none;border-left:1px solid var(--line);cursor:pointer;background:transparent;color:var(--muted);
-  box-shadow:inset 0 0 0 0 transparent;transition:background .14s,color .14s,box-shadow .14s}
-.ds-seg button:first-child{border-left:none}
-.ds-seg button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);box-shadow:inset 0 0 0 2px var(--md-primary)}
-.ds-seg button[data-operator="story"].is-active{background:rgba(208,188,255,0.22);color:var(--md-on-primary-container);box-shadow:inset 0 0 0 2px var(--md-primary)}
-.ds-seg button[data-operator="flirty"].is-active{background:rgba(239,184,200,0.22);color:#FFD8E4;box-shadow:inset 0 0 0 2px var(--md-tertiary)}
-.ds-seg button[data-operator="bass"].is-active{background:rgba(143,180,255,0.22);color:#DCE7FF;box-shadow:inset 0 0 0 2px #8FB4FF}
-.ds-seg button[data-operator="system"].is-active{background:var(--md-surface-container-highest);color:var(--text);box-shadow:inset 0 0 0 2px var(--md-outline)}
+.ds-settings-label{font-size:12px;color:var(--muted);font-weight:700}
+.ds-speed-row{display:flex;gap:8px}
+.ds-speed-row button{flex:1;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font-size:12px;font-weight:800;padding:8px 10px;cursor:pointer}
+.ds-speed-row button:hover{background:var(--fill-2);color:var(--text)}
+.ds-speed-row button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border-color:transparent}
 .ds-playstep{margin-left:auto;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(10,132,255,0.3);background:rgba(10,132,255,0.08);color:var(--accent-blue);cursor:pointer;font-size:10px;padding:0;line-height:1}
 .ds-playstep:hover{background:rgba(10,132,255,0.18)}
 .ds-btn-solid{font-weight:600;color:var(--on-accent);padding:7px 13px;border:none;background:var(--accent)}
 .ds-btn-solid:hover{background:var(--accent-hi)}
 /* header responsiveness: drop the kicker, then tighten pills/buttons as it narrows */
 @media (max-width:1180px){.ds-top{gap:9px}.ds-kicker{display:none}}
-@media (max-width:980px){.ds-open,.ds-trustpill{padding:6px 9px}.ds-btn-ghost,.ds-btn-approve{padding:8px 11px}.ds-readaloud{padding:7px 9px}.ds-gear{width:28px;height:28px}}
+@media (max-width:980px){.ds-open,.ds-trustpill{padding:6px 9px}.ds-btn-ghost,.ds-btn-approve{padding:8px 11px}.ds-readaloud{padding:7px 9px;min-width:auto}.ds-gear{width:28px;height:28px}}
+@media (max-width:520px){.ds-settings-pop{width:calc(100vw - 24px)}.ds-voice-grid{grid-template-columns:1fr}.ds-voice-head{align-items:stretch;flex-direction:column}.ds-preview{margin-left:0;justify-content:center}}
 
 /* ---- layout ---- */
 .ds-layout{flex:1;display:flex;min-height:0}
@@ -501,12 +516,32 @@ export const PAGE_JS = `
   var FLAVOR={change:{label:'Change request',ico:'◆'},question:{label:'Question',ico:'?'},nit:{label:'Nit',ico:'○'}};
   var STATUS={open:'Open',addressed:'Addressed',resolved:'Resolved'};
   var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,speechTimer;
-  var filePanels=[],fileItems=[],selectedFile=-1,readAloud=false,rate=1.05,operator='story',voices=[];
-  var VOICE_PROFILES={
-    story:{rate:1.18,pitch:1.10,volume:1},
-    flirty:{rate:0.80,pitch:1.34,volume:1},
-    bass:{rate:0.64,pitch:0.62,volume:1},
-    system:{rate:1.42,pitch:0.94,volume:1}
+  var filePanels=[],fileItems=[],selectedFile=-1,readAloud=false,rate=1.05,voicePreset='story',voices=[],activeUtterance=null;
+  var VOICE_PRESETS={
+    story:{
+      label:'Story',badge:'S',rate:1.06,pitch:1.02,volume:1,
+      sample:'Story mode. I changed this helper so the caller can pass the missing value clearly.',
+      prefer:[/samantha/,/ava/,/jenny/,/google us english/,/microsoft.*aria/,/natural/],
+      avoid:[/fred/,/ralph/,/robot/]
+    },
+    flirty:{
+      label:'Flirty',badge:'F',rate:0.88,pitch:1.42,volume:1,
+      sample:'Flirty mode. I made this path smoother, cleaner, and a little more charming.',
+      prefer:[/ava/,/samantha/,/serena/,/victoria/,/karen/,/moira/,/tessa/,/zira/,/jenny/,/aria/,/female/],
+      avoid:[/alex/,/daniel/,/tom/,/david/,/mark/,/fred/,/ralph/,/bruce/,/reed/,/male/,/robot/]
+    },
+    bass:{
+      label:'Bass',badge:'M',rate:0.66,pitch:0.48,volume:1,
+      sample:'Bass mode. I changed this branch because the old path was not handling the edge case deeply enough.',
+      prefer:[/alex/,/daniel/,/tom/,/david/,/mark/,/guy/,/brian/,/bruce/,/reed/,/fred/,/ralph/,/male/],
+      avoid:[/ava/,/samantha/,/serena/,/victoria/,/karen/,/moira/,/tessa/,/zira/,/jenny/,/aria/,/female/]
+    },
+    system:{
+      label:'System',badge:'SYS',rate:1.35,pitch:0.94,volume:1,
+      sample:'System mode. Plain browser voice.',
+      prefer:[],
+      avoid:[]
+    }
   };
 
   function $(s,r){return (r||document).querySelector(s);}
@@ -531,7 +566,7 @@ export const PAGE_JS = `
     $all('.ds-tab').forEach(function(t){t.classList.toggle('is-active',t.getAttribute('data-view')===v);});
     $all('[data-rail]').forEach(function(r){r.hidden=r.getAttribute('data-rail')!==v;});
     if(v==='files'&&selectedFile<0)selectFile(0);
-    if(v!=='tour')cancelSpeech();
+    if(v!=='tour'){readAloud=false;try{localStorage.setItem('ds-readaloud','');}catch(e){}cancelSpeech();}
   }
 
   function setActive(i){
@@ -552,33 +587,37 @@ export const PAGE_JS = `
     speakStep(i);
   }
 
-  function speak(text,fallback){
+  function speak(text,opts){
     var synth=window.speechSynthesis;if(!synth||!text)return false;
+    opts=opts||{};
     if(speechTimer){clearTimeout(speechTimer);speechTimer=null;}
     synth.cancel();
+    activeUtterance=null;
     var u=new SpeechSynthesisUtterance(text);
-    var profile=fallback?VOICE_PROFILES.system:(VOICE_PROFILES[operator]||VOICE_PROFILES.story);
-    u.rate=Math.max(0.55,Math.min(1.65,rate*profile.rate));
-    u.pitch=profile.pitch;
-    u.volume=profile.volume;
-    var v=fallback?null:pickVoice(operator);if(v)u.voice=v;
+    var preset=VOICE_PRESETS[opts.preset||voicePreset]||VOICE_PRESETS.story;
+    u.rate=Math.max(0.5,Math.min(1.75,(opts.rate||rate)*preset.rate));
+    u.pitch=preset.pitch;
+    u.volume=preset.volume;
+    var v=preset===VOICE_PRESETS.system?null:pickVoice(opts.preset||voicePreset);if(v)u.voice=v;
     var btn=$('[data-readaloud]');
-    u.onstart=function(){if(btn)btn.classList.add('is-speaking');};
-    u.onend=function(){if(btn)btn.classList.remove('is-speaking');};
-    u.onerror=function(){if(btn)btn.classList.remove('is-speaking');if(!fallback)speak(text,true);};
+    u.onstart=function(){activeUtterance=u;if(btn)btn.classList.add('is-speaking');updateReadAloudButton();};
+    u.onend=function(){if(activeUtterance===u)activeUtterance=null;if(btn)btn.classList.remove('is-speaking');updateReadAloudButton();};
+    u.onerror=function(){if(activeUtterance===u)activeUtterance=null;if(btn)btn.classList.remove('is-speaking');updateReadAloudButton();};
     try{
       if(synth.paused)synth.resume();
       speechTimer=setTimeout(function(){
         speechTimer=null;
-        try{synth.speak(u);}catch(e){if(!fallback)speak(text,true);}
+        try{synth.speak(u);}catch(e){activeUtterance=null;updateReadAloudButton();}
       },70);
       return true;
-    }catch(e){if(!fallback)return speak(text,true);return false;}
+    }catch(e){activeUtterance=null;updateReadAloudButton();return false;}
   }
   function cancelSpeech(){
     if(speechTimer){clearTimeout(speechTimer);speechTimer=null;}
     if(window.speechSynthesis)window.speechSynthesis.cancel();
+    activeUtterance=null;
     var btn=$('[data-readaloud]');if(btn)btn.classList.remove('is-speaking');
+    updateReadAloudButton();
   }
   function speechClean(text){
     return (text||'')
@@ -600,41 +639,35 @@ export const PAGE_JS = `
     for(var k=1;k<Math.min(total,Math.max(1,active));k++){if(stepText(stepPanels[k]))return k;}
     return -1;
   }
-  function setRate(r){rate=r;try{localStorage.setItem('ds-rate',String(r));}catch(e){}$all('[data-rate]').forEach(function(b){b.classList.toggle('is-active',parseFloat(b.getAttribute('data-rate'))===r);});}
-  function normalizeOperator(op){
-    if(op==='balanced')return 'story';
-    if(op==='warm')return 'flirty';
-    if(op==='precise'||op==='reviewer')return 'bass';
-    return VOICE_PROFILES[op]?op:'story';
+  function setRate(r){rate=r;try{localStorage.setItem('ds-rate',String(r));}catch(e){}$all('[data-rate]').forEach(function(b){b.classList.toggle('is-active',parseFloat(b.getAttribute('data-rate'))===r);});if(readAloud)restartReadAloud();}
+  function normalizePreset(p){
+    if(p==='balanced'||p==='operator'||p==='story')return 'story';
+    if(p==='warm'||p==='flirty')return 'flirty';
+    if(p==='precise'||p==='reviewer'||p==='bass')return 'bass';
+    return VOICE_PRESETS[p]?p:'story';
   }
-  function setOperator(op){
-    operator=normalizeOperator(op);
-    try{localStorage.setItem('ds-operator',operator);}catch(e){}
-    $all('[data-operator]').forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-operator')===operator);});
-    if(readAloud&&!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
+  function setVoicePreset(p,preview){
+    voicePreset=normalizePreset(p);
+    try{localStorage.setItem('ds-voice-preset',voicePreset);localStorage.setItem('ds-operator',voicePreset);}catch(e){}
+    updateVoiceControls();
+    updateReadAloudButton();
+    if(preview)speakVoicePreview();
+    else if(readAloud)restartReadAloud();
   }
   function loadVoices(){
     if(!window.speechSynthesis)return;
     voices=window.speechSynthesis.getVoices()||[];
   }
-  function voiceScore(v,op){
+  function voiceScore(v,presetName){
+    var preset=VOICE_PRESETS[presetName]||VOICE_PRESETS.story;
     var name=(v.name||'').toLowerCase(),lang=(v.lang||'').toLowerCase(),score=0;
     if(lang.indexOf('en')===0)score+=20;
     if(v.default)score+=10;
     if(v.localService)score+=5;
-    if(op==='flirty'){
-      if(/samantha|ava|serena|victoria|karen|moira|tessa|zira|female/.test(name))score+=36;
-      if(/natural|premium|enhanced|neural/.test(name))score+=18;
-      if(/compact|robot|fred|ralph/.test(name))score-=18;
-    }else if(op==='bass'){
-      if(/alex|daniel|tom|david|mark|fred|ralph|bruce|reed|male/.test(name))score+=42;
-      if(/compact|google|microsoft|natural|enhanced/.test(name))score+=12;
-      if(/samantha|ava|serena|victoria/.test(name))score-=10;
-    }else{
-      if(/samantha|ava|alex|daniel|google us english|microsoft/.test(name))score+=22;
-      if(/natural|enhanced|premium|neural/.test(name))score+=20;
-      if(/compact|fred|ralph/.test(name))score-=10;
-    }
+    preset.prefer.forEach(function(re){if(re.test(name))score+=44;});
+    preset.avoid.forEach(function(re){if(re.test(name))score-=34;});
+    if(/natural|premium|enhanced|neural/.test(name))score+=18;
+    if(/compact|robot/.test(name))score-=14;
     return score;
   }
   function voiceQuality(v){
@@ -648,36 +681,51 @@ export const PAGE_JS = `
   function voicePool(){
     return voices.slice().sort(function(a,b){return voiceQuality(b)-voiceQuality(a);});
   }
-  function voiceByNames(pool,patterns){
-    for(var i=0;i<patterns.length;i++){
-      var re=patterns[i];
-      for(var j=0;j<pool.length;j++){if(re.test((pool[j].name||'').toLowerCase()))return pool[j];}
-    }
-    return null;
-  }
-  function voiceSlot(pool,idx){
-    if(!pool.length)return null;
-    if(pool.length===1)return pool[0];
-    return pool[Math.min(idx,pool.length-1)];
-  }
-  function pickVoice(op){
-    if(op==='system')return null;
+  function pickVoice(presetName){
+    presetName=normalizePreset(presetName);
+    if(presetName==='system')return null;
     if(!voices.length)loadVoices();
     if(!voices.length)return null;
-    var pool=voicePool();
-    if(op==='story')return voiceByNames(pool,[/ava/,/samantha/,/google us english/,/microsoft.*jenny/,/natural/])||voiceSlot(pool,0);
-    if(op==='flirty')return voiceByNames(pool,[/ava/,/samantha/,/serena/,/victoria/,/karen/,/moira/,/tessa/,/zira/,/jenny/,/female/])||voiceSlot(pool,1);
-    if(op==='bass')return voiceByNames(pool,[/alex/,/daniel/,/tom/,/david/,/mark/,/fred/,/ralph/,/bruce/,/reed/,/male/])||voiceSlot(pool,2);
-    return voices.slice().sort(function(a,b){return voiceScore(b,op)-voiceScore(a,op);})[0]||null;
+    return voicePool().sort(function(a,b){return voiceScore(b,presetName)-voiceScore(a,presetName);})[0]||null;
+  }
+  function describeVoice(){
+    var preset=VOICE_PRESETS[voicePreset]||VOICE_PRESETS.story;
+    var v=pickVoice(voicePreset);
+    if(voicePreset==='system')return 'System voice · browser default';
+    if(v)return preset.label+' · '+v.name;
+    return preset.label+' · voice loads when the browser is ready';
+  }
+  function updateVoiceControls(){
+    $all('[data-voice-preset]').forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-voice-preset')===voicePreset);});
+    var s=$('[data-voice-status]');if(s)s.textContent=describeVoice();
+  }
+  function updateReadAloudButton(){
+    var btn=$('[data-readaloud]');if(!btn)return;
+    var label=$('[data-readaloud-label]',btn),ico=$('.ds-readaloud-ico',btn);
+    btn.classList.toggle('is-active',readAloud);
+    btn.setAttribute('aria-pressed',readAloud?'true':'false');
+    if(label)label.textContent=readAloud?'Stop':'Read aloud';
+    if(ico)ico.textContent=readAloud?'■':'▶';
+  }
+  function restartReadAloud(){
+    cancelSpeech();
+    readAloud=true;
+    updateReadAloudButton();
+    if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
+  }
+  function speakVoicePreview(){
+    var preset=VOICE_PRESETS[voicePreset]||VOICE_PRESETS.story;
+    readAloud=false;
+    try{localStorage.setItem('ds-readaloud','');}catch(e){}
+    updateReadAloudButton();
+    speak(preset.sample,{preset:voicePreset,rate:1});
   }
   function toggleReadAloud(){
-    readAloud=!readAloud;
+    if(readAloud){readAloud=false;try{localStorage.setItem('ds-readaloud','');}catch(e){}cancelSpeech();return;}
+    readAloud=true;
     try{localStorage.setItem('ds-readaloud',readAloud?'1':'');}catch(e){}
-    var btn=$('[data-readaloud]');if(btn)btn.classList.toggle('is-active',readAloud);
-    if(readAloud){
-      if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
-    }
-    else cancelSpeech();
+    updateReadAloudButton();
+    if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
   }
 
   function selectFile(i){
@@ -957,7 +1005,8 @@ export const PAGE_JS = `
     b=closest(t,'[data-view]');if(b){setView(b.getAttribute('data-view'));return;}
     b=closest(t,'[data-settings]');if(b){if(sp)sp.hidden=!sp.hidden;return;}
     b=closest(t,'[data-rate]');if(b){setRate(parseFloat(b.getAttribute('data-rate')));return;}
-    b=closest(t,'[data-operator]');if(b){setOperator(b.getAttribute('data-operator'));return;}
+    b=closest(t,'[data-voice-preset]');if(b){setVoicePreset(b.getAttribute('data-voice-preset'),false);return;}
+    b=closest(t,'[data-preview-voice]');if(b){speakVoicePreview();return;}
     b=closest(t,'[data-playstep]');if(b){var pp=closest(t,'.ds-step');if(pp)speak(stepText(pp));return;}
     b=closest(t,'[data-readaloud]');if(b){toggleReadAloud();return;}
     b=closest(t,'.ds-fileitem');if(b){setView('files');selectFile(Number(b.getAttribute('data-file-index')));return;}
@@ -1023,14 +1072,14 @@ export const PAGE_JS = `
       if(!window.speechSynthesis){rab.style.display='none';var gear=$('[data-settings]');if(gear)gear.style.display='none';}
       else{
         loadVoices();
-        window.speechSynthesis.onvoiceschanged=loadVoices;
-        try{readAloud=!!localStorage.getItem('ds-readaloud');operator=normalizeOperator(localStorage.getItem('ds-operator')||operator);}catch(e){}
-        rab.classList.toggle('is-active',readAloud);
+        window.speechSynthesis.onvoiceschanged=function(){loadVoices();updateVoiceControls();};
+        try{readAloud=!!localStorage.getItem('ds-readaloud');voicePreset=normalizePreset(localStorage.getItem('ds-voice-preset')||localStorage.getItem('ds-operator')||voicePreset);}catch(e){}
+        updateReadAloudButton();
       }
     }
     try{var r0=parseFloat(localStorage.getItem('ds-rate'));if(r0)rate=r0;}catch(e){}
     $all('[data-rate]').forEach(function(b){b.classList.toggle('is-active',parseFloat(b.getAttribute('data-rate'))===rate);});
-    $all('[data-operator]').forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-operator')===operator);});
+    updateVoiceControls();
   }
   if(document.readyState!=='loading')init();else document.addEventListener('DOMContentLoaded',init);
 })();

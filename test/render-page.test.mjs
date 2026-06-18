@@ -58,32 +58,50 @@ test('step narrative is labeled as story, not why-this-step', () => {
   assert.doesNotMatch(html, /Why this step/);
 });
 
-test('read aloud operators have distinct visual and speech profiles', () => {
+test('read aloud uses a voice dock with distinct preset cards', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /story:\{rate:1\.18,pitch:1\.10,volume:1\}/);
-  assert.match(html, /flirty:\{rate:0\.80,pitch:1\.34,volume:1\}/);
-  assert.match(html, /bass:\{rate:0\.64,pitch:0\.62,volume:1\}/);
-  assert.match(html, /system:\{rate:1\.42,pitch:0\.94,volume:1\}/);
-  assert.match(html, /function voiceSlot\(pool,idx\)/);
-  assert.match(html, /if\(op==='flirty'\).*voiceSlot\(pool,1\)/s);
-  assert.match(html, /if\(op==='bass'\).*voiceSlot\(pool,2\)/s);
-  assert.match(html, /button\[data-operator="flirty"\]\.is-active/);
-  assert.match(html, /button\[data-operator="bass"\]\.is-active/);
+  assert.match(html, /data-voice-preset="story"/);
+  assert.match(html, /data-voice-preset="flirty"/);
+  assert.match(html, /data-voice-preset="bass"/);
+  assert.match(html, /data-voice-preset="system"/);
+  assert.match(html, /Female, playful, warmer delivery\./);
+  assert.match(html, /Male preference with deeper pitch\./);
+  assert.match(html, /\.ds-voice-grid/);
+  assert.match(html, /\.ds-voice-card\[data-voice-preset="flirty"\]/);
+  assert.match(html, /\.ds-voice-card\[data-voice-preset="bass"\]/);
 });
 
-test('read aloud starts on a speakable story step and falls back safely', () => {
+test('read aloud presets have explicit voice preferences and samples', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /flirty:\{[^}]*rate:0\.88,pitch:1\.42,volume:1/s);
+  assert.match(html, /bass:\{[^}]*rate:0\.66,pitch:0\.48,volume:1/s);
+  assert.match(html, /prefer:\[\/ava\/,\/samantha\/,\/serena\/,\/victoria\/,\/karen\/,\/moira\/,\/tessa\/,\/zira\/,\/jenny\/,\/aria\/,\/female\/\]/);
+  assert.match(html, /prefer:\[\/alex\/,\/daniel\/,\/tom\/,\/david\/,\/mark\/,\/guy\/,\/brian\/,\/bruce\/,\/reed\/,\/fred\/,\/ralph\/,\/male\/\]/);
+  assert.match(html, /sample:'Flirty mode\./);
+  assert.match(html, /sample:'Bass mode\./);
+  assert.match(html, /function pickVoice\(presetName\)/);
+  assert.match(html, /voiceScore\(b,presetName\)-voiceScore\(a,presetName\)/);
+});
+
+test('read aloud start stop and preview are controlled by one speech state', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /function firstSpeakableStep\(\)/);
-  assert.match(html, /if\(!speakStep\(active\)\)\{var si=firstSpeakableStep\(\);if\(si>=0\)setActive\(si\);\}/);
-  assert.match(html, /u\.onerror=function\(\)\{if\(btn\)btn\.classList\.remove\('is-speaking'\);if\(!fallback\)speak\(text,true\);\}/);
   assert.match(html, /function cancelSpeech\(\)/);
-  assert.match(html, /clearTimeout\(speechTimer\)/);
-  assert.match(html, /try\{synth\.speak\(u\);\}catch\(e\)\{if\(!fallback\)speak\(text,true\);\}/);
+  assert.match(html, /activeUtterance=null/);
+  assert.match(html, /function updateReadAloudButton\(\)/);
+  assert.match(html, /label\.textContent=readAloud\?'Stop':'Read aloud'/);
+  assert.match(html, /function restartReadAloud\(\)/);
+  assert.match(html, /function speakVoicePreview\(\)/);
+  assert.match(html, /readAloud=false;\n    try\{localStorage\.setItem\('ds-readaloud',''\);\}catch\(e\)\{\}/);
+  assert.match(html, /b=closest\(t,'\[data-preview-voice\]'\);if\(b\)\{speakVoicePreview\(\);return;\}/);
 });
 
-test('read aloud operator switch migrates old modes and re-speaks safely', () => {
+test('read aloud preset switch migrates old modes and restarts active reading', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /if\(op==='warm'\)return 'flirty'/);
-  assert.match(html, /if\(op==='precise'\|\|op==='reviewer'\)return 'bass'/);
-  assert.match(html, /if\(readAloud&&!speakStep\(active\)\)\{var si=firstSpeakableStep\(\);if\(si>=0\)setActive\(si\);\}/);
+  assert.match(html, /function normalizePreset\(p\)/);
+  assert.match(html, /if\(p==='warm'\|\|p==='flirty'\)return 'flirty'/);
+  assert.match(html, /if\(p==='precise'\|\|p==='reviewer'\|\|p==='bass'\)return 'bass'/);
+  assert.match(html, /localStorage\.getItem\('ds-voice-preset'\)\|\|localStorage\.getItem\('ds-operator'\)/);
+  assert.match(html, /else if\(readAloud\)restartReadAloud\(\)/);
+  assert.match(html, /if\(readAloud\)restartReadAloud\(\)/);
 });

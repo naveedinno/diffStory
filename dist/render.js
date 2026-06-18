@@ -66,22 +66,37 @@ export function renderPage(input) {
         : `<span class="ds-check">✓</span> all changes explained`}</button>
   </div>
   <div class="ds-settings-wrap">
-    <button class="ds-readaloud" data-readaloud title="Read each step's story aloud as you walk the change"><span class="ds-readaloud-ico">▸</span> Read aloud</button>
-    <button class="ds-gear" data-settings title="Read-aloud settings" aria-label="Read-aloud settings">⚙</button>
+    <button class="ds-readaloud" data-readaloud title="Read each step's story aloud as you walk the change" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span data-readaloud-label>Read aloud</span></button>
+    <button class="ds-gear" data-settings title="Voice settings" aria-label="Voice settings">⚙</button>
     <div class="ds-settings-pop" id="ds-settings" hidden>
-      <div class="ds-settings-title">Read aloud</div>
-      <div class="ds-settings-row">
-        <span class="ds-settings-label">Operator</span>
-        <div class="ds-seg" aria-label="Voice operator">
-          <button data-operator="story" class="is-active">Story</button>
-          <button data-operator="flirty">Flirty</button>
-          <button data-operator="bass">Bass</button>
-          <button data-operator="system">System</button>
+      <div class="ds-voice-head">
+        <div>
+          <div class="ds-settings-title">Read aloud</div>
+          <div class="ds-voice-now" data-voice-status>Voice ready</div>
         </div>
+        <button class="ds-preview" data-preview-voice><span class="ds-preview-ico">▶</span> Preview</button>
+      </div>
+      <div class="ds-voice-grid" aria-label="Voice style">
+        <button class="ds-voice-card is-active" data-voice-preset="story">
+          <span class="ds-voice-badge">S</span>
+          <span><span class="ds-voice-name">Story <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Clean narrator for code walkthroughs.</span></span>
+        </button>
+        <button class="ds-voice-card" data-voice-preset="flirty">
+          <span class="ds-voice-badge">F</span>
+          <span><span class="ds-voice-name">Flirty <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Female, playful, warmer delivery.</span></span>
+        </button>
+        <button class="ds-voice-card" data-voice-preset="bass">
+          <span class="ds-voice-badge">M</span>
+          <span><span class="ds-voice-name">Bass <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Male preference with deeper pitch.</span></span>
+        </button>
+        <button class="ds-voice-card" data-voice-preset="system">
+          <span class="ds-voice-badge">SYS</span>
+          <span><span class="ds-voice-name">System <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Browser default, fastest and plainest.</span></span>
+        </button>
       </div>
       <div class="ds-settings-row">
         <span class="ds-settings-label">Speed</span>
-        <div class="ds-seg">
+        <div class="ds-speed-row" aria-label="Read aloud speed">
           <button data-rate="0.8">Slow</button>
           <button data-rate="1.05" class="is-active">Normal</button>
           <button data-rate="1.4">Fast</button>
