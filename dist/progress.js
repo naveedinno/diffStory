@@ -28,7 +28,10 @@ export function phaseRank(phase) {
     if (phase === 'failed' || phase === 'stopped')
         return PHASE_ORDER.length;
     const i = PHASE_ORDER.indexOf(phase);
-    return i < 0 ? 0 : i;
+    // Fail loud if the Phase union grows without PHASE_ORDER being updated.
+    if (i < 0)
+        throw new RangeError(`phaseRank: unknown phase "${phase}"`);
+    return i;
 }
 export function runStarted(workflow, label) {
     return { type: 'run_started', workflow, label };

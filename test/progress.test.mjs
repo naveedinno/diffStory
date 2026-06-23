@@ -87,5 +87,10 @@ test('observedPhase proves reading on reads/searches and writing on target write
   assert.equal(observedPhase(fileEvent('write', 'Write', 'a.ts'), false), null);
   assert.equal(observedPhase(fileEvent('write', 'Write', 'story.json'), true), 'writing_output');
   assert.equal(observedPhase(fileEvent('edit', 'Edit', 'a.ts'), true), 'writing_output');
+  assert.equal(observedPhase(fileEvent('edit', 'Edit', 'a.ts'), false), null);
   assert.equal(observedPhase(textEvent('hello'), true), null);
+});
+
+test('phaseRank throws on a phase missing from PHASE_ORDER', () => {
+  assert.throws(() => phaseRank('not_a_phase'), /unknown phase/);
 });
