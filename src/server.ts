@@ -25,7 +25,8 @@ import {
 } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
-import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, type AgentEvent } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
+import type { ProgressEvent } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession, type Session } from './session.js';
 import { inspectRepo } from './repo-state.js';
@@ -438,7 +439,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     }
   };
 
-  streamAgent(agent, repo, addressPrompt(target), (e: AgentEvent) => send(e), undefined, ac.signal)
+  streamAgent(agent, repo, addressPrompt(target), (e: ProgressEvent) => send(e), undefined, ac.signal)
     .then(({ ok, output }) => {
       const codeChanged = currentDiff(session) !== before;
       if (!ok) send({ type: 'error', data: tailLines(output, 30) });
@@ -493,7 +494,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     }
   };
 
-  streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head, mode), (e: AgentEvent) => send(e), model, ac.signal)
+  streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head, mode), (e: ProgressEvent) => send(e), model, ac.signal)
     .then(({ ok, output }) => {
       const storyWritten = existsSync(resolveStoryPath(repo));
       if (!ok && !storyWritten) send({ type: 'error', data: tailLines(output, 30) });

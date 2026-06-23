@@ -4,6 +4,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
 import type { StoryMode } from './types.js';
+import {
+  type ProgressEvent, fileEvent, commandEvent, activityEvent, toolEvent, textEvent,
+} from './progress.js';
 
 export type Agent = 'claude' | 'codex';
 
@@ -174,11 +177,6 @@ export function runAgent(
 
 // ---- live address loop: stream the agent's output to the review page ----
 
-/** A normalized event from a streaming agent run. */
-export type AgentEvent =
-  | { type: 'text'; data: string }
-  | { type: 'tool'; data: string };
-
 /** The streaming command + args for an agent. Flags verified against each CLI's --help. */
 export function streamCommand(agent: Agent, prompt: string, model?: string): [string, string[]] {
   if (agent === 'claude') {
@@ -194,7 +192,7 @@ export function streamCommand(agent: Agent, prompt: string, model?: string): [st
   return ['codex', args];
 }
 
-/** A readable one-line summary of a tool call for the live activity feed. */
+/** A readable one-line summary of a tool call for the activity feed. */
 export function toolSummary(name: string, input: any): string {
   if (name === 'Bash') {
     const cmd = String(input?.command ?? '').replace(/\s+/g, ' ').trim();
@@ -204,8 +202,37 @@ export function toolSummary(name: string, input: any): string {
   return target ? `${name} ${target}` : name;
 }
 
-/** Parse one line of Claude's --output-format stream-json into events (non-JSON → none). */
-export function parseClaudeStreamLine(line: string): AgentEvent[] {
+/** Normalize one agent tool call into the most specific progress event. */
+export function classifyTool(name: string, input: any): ProgressEvent {
+  const file = input?.file_path ?? input?.path;
+  switch (name) {
+    case 'Read':
+      return file ? fileEvent('read', name, String(file)) : toolEvent(name, name);
+    case 'Write':
+      return file ? fileEvent('write', name, String(file)) : toolEvent(name, name);
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return file ? fileEvent('edit', name, String(file)) : toolEvent(name, name);
+    case 'Bash':
+      return commandEvent(String(input?.command ?? ''));
+    case 'Grep':
+    case 'Glob':
+      return activityEvent('search', toolSummary(name, input));
+    case 'TodoWrite':
+      return activityEvent('plan', 'Updating the plan');
+    case 'WebFetch':
+    case 'WebSearch':
+      return activityEvent('web', toolSummary(name, input));
+    case 'Task':
+      return activityEvent('task', 'Running a subtask');
+    default:
+      return toolEvent(toolSummary(name, input), name, file ? String(file) : undefined);
+  }
+}
+
+/** Parse one line of Claude's stream-json into normalized events (non-JSON → none). */
+export function parseClaudeStreamLine(line: string): ProgressEvent[] {
   const s = line.trim();
   if (!s) return [];
   let obj: any;
@@ -215,44 +242,50 @@ export function parseClaudeStreamLine(line: string): AgentEvent[] {
     return [];
   }
   if (obj?.type !== 'assistant' || !Array.isArray(obj.message?.content)) return [];
-  const out: AgentEvent[] = [];
+  const out: ProgressEvent[] = [];
   for (const block of obj.message.content) {
-    if (block?.type === 'text' && block.text) {
-      out.push({ type: 'text', data: block.text });
-    } else if (block?.type === 'tool_use') {
-      out.push({ type: 'tool', data: toolSummary(block.name, block.input) });
-    }
+    if (block?.type === 'text' && block.text) out.push(textEvent(block.text));
+    else if (block?.type === 'tool_use') out.push(classifyTool(block.name, block.input));
   }
   return out;
 }
 
-/** Codex exec streams human-readable text; forward non-empty lines as text. */
-export function parseCodexStreamLine(line: string): AgentEvent[] {
+/** Codex exec streams human-readable text; forward prose, promote `$ cmd` lines. */
+export function parseCodexStreamLine(line: string): ProgressEvent[] {
   const s = line.replace(/\s+$/, '');
-  return s.trim() ? [{ type: 'text', data: s }] : [];
+  if (!s.trim()) return [];
+  const m = s.match(/^\s*\$\s+(.+)$/);
+  if (m) return [commandEvent(m[1])];
+  return [textEvent(s)];
 }
 
-function lineParser(agent: Agent): (line: string) => AgentEvent[] {
+function lineParser(agent: Agent): (line: string) => ProgressEvent[] {
   return agent === 'claude' ? parseClaudeStreamLine : parseCodexStreamLine;
+}
+
+/** Result of a streaming agent run; `failure` stages spawn vs non-zero-exit. */
+export interface StreamResult {
+  ok: boolean;
+  output: string;
+  failure?: 'startup' | 'execution';
 }
 
 /**
  * Spawn the agent and stream normalized events as output arrives, calling `onEvent`
- * per parsed event. Resolves with the exit-ok flag and captured output (used for a
- * failure tail). The spawn itself is integration-only — the parsers are unit-tested.
+ * per parsed event. Resolves with ok/output and a `failure` discriminator the server
+ * uses to stage errors. The spawn itself is integration-only — parsers are unit-tested.
  */
 export function streamAgent(
   agent: Agent,
   repo: string,
   prompt: string,
-  onEvent: (e: AgentEvent) => void,
+  onEvent: (e: ProgressEvent) => void,
   model?: string,
   signal?: AbortSignal,
-): Promise<{ ok: boolean; output: string }> {
+): Promise<StreamResult> {
   const [cmd, args] = streamCommand(agent, prompt, model);
   const parse = lineParser(agent);
   return new Promise((resolve) => {
-    // `signal` lets the server kill the agent when the client disconnects or hits Stop.
     const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'], signal });
     let output = '';
     let buf = '';
@@ -267,10 +300,10 @@ export function streamAgent(
     };
     child.stdout?.on('data', feed);
     child.stderr?.on('data', feed);
-    child.on('error', (e) => resolve({ ok: false, output: `${output}\n${String(e)}` }));
+    child.on('error', (e) => resolve({ ok: false, output: `${output}\n${String(e)}`, failure: 'startup' }));
     child.on('close', (code) => {
       if (buf) for (const e of parse(buf)) onEvent(e); // flush the last partial line
-      resolve({ ok: code === 0, output });
+      resolve(code === 0 ? { ok: true, output } : { ok: false, output, failure: 'execution' });
     });
   });
 }

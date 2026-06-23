@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
-  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary,
+  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -148,7 +148,26 @@ test('streamCommand uses stream-json for claude and exec for codex', () => {
   assert.deepEqual(streamCommand('codex', 'GO', 'gpt-5')[1], ['exec', '--full-auto', '--model', 'gpt-5', 'GO']);
 });
 
-test('parseClaudeStreamLine extracts assistant text and tool notices', () => {
+test('classifyTool maps tools to the most specific progress event', () => {
+  assert.deepEqual(classifyTool('Read', { file_path: 'src/x.ts' }),
+    { type: 'file', action: 'read', rawTool: 'Read', target: 'src/x.ts', label: 'Reading src/x.ts' });
+  assert.deepEqual(classifyTool('Write', { file_path: 'a/story.json' }),
+    { type: 'file', action: 'write', rawTool: 'Write', target: 'a/story.json', label: 'Writing a/story.json' });
+  assert.deepEqual(classifyTool('Edit', { file_path: 'src/y.ts' }),
+    { type: 'file', action: 'edit', rawTool: 'Edit', target: 'src/y.ts', label: 'Editing src/y.ts' });
+  const bash = classifyTool('Bash', { command: 'git   diff --stat' });
+  assert.equal(bash.type, 'command');
+  assert.equal(bash.command, 'git diff --stat');
+  assert.deepEqual(classifyTool('Grep', { pattern: 'foo' }),
+    { type: 'activity', kind: 'search', label: 'Grep foo' });
+  assert.deepEqual(classifyTool('TodoWrite', {}),
+    { type: 'activity', kind: 'plan', label: 'Updating the plan' });
+  const unknown = classifyTool('MysteryTool', { path: 'p' });
+  assert.equal(unknown.type, 'tool');
+  assert.equal(unknown.rawTool, 'MysteryTool');
+});
+
+test('parseClaudeStreamLine yields text and classified tool events', () => {
   const textLine = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Hello' }] } });
   assert.deepEqual(parseClaudeStreamLine(textLine), [{ type: 'text', data: 'Hello' }]);
 
@@ -156,7 +175,8 @@ test('parseClaudeStreamLine extracts assistant text and tool notices', () => {
     type: 'assistant',
     message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'src/x.ts' } }] },
   });
-  assert.deepEqual(parseClaudeStreamLine(toolLine), [{ type: 'tool', data: 'Edit src/x.ts' }]);
+  assert.deepEqual(parseClaudeStreamLine(toolLine),
+    [{ type: 'file', action: 'edit', rawTool: 'Edit', target: 'src/x.ts', label: 'Editing src/x.ts' }]);
 });
 
 test('toolSummary shows the command for Bash and the target for file tools', () => {
@@ -173,7 +193,11 @@ test('parseClaudeStreamLine ignores non-JSON, empty, and non-assistant lines', (
   assert.deepEqual(parseClaudeStreamLine(JSON.stringify({ type: 'system', subtype: 'init' })), []);
 });
 
-test('parseCodexStreamLine forwards non-empty lines as text', () => {
+test('parseCodexStreamLine forwards prose as text and $-lines as commands', () => {
   assert.deepEqual(parseCodexStreamLine('working on it'), [{ type: 'text', data: 'working on it' }]);
   assert.deepEqual(parseCodexStreamLine('   '), []);
+  const cmd = parseCodexStreamLine('$ npm test');
+  assert.equal(cmd.length, 1);
+  assert.equal(cmd[0].type, 'command');
+  assert.equal(cmd[0].command, 'npm test');
 });
