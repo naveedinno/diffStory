@@ -1170,16 +1170,15 @@ export const PAGE_JS = `
       refreshCount();
     }).catch(function(){});
   }
-  var acAbort=null, acPanel=null;
+  var acAbort=null;
   function acRoot(){ var w=document.getElementById('ds-agentpanel'); return w?w.querySelector('.ds-pp'):null; }
   function ensurePanel(onDoneExtra){
     var root=acRoot(); if(!root)return null;
-    acPanel=new ProgressPanel(root,{
+    return new ProgressPanel(root,{
       onStop:function(){ if(acAbort)acAbort.abort(); },
       onClose:function(){ root.hidden=true; },
       onDone:function(status,result){ if(onDoneExtra)onDoneExtra(status,result); }
     });
-    return acPanel;
   }
   function sendToAgent(ids){
     if(agentBusy)return;

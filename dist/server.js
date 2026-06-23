@@ -545,10 +545,13 @@ function runGenerate(res, session, body) {
             repoName: basename(repo), repoPath: repo, workflow, agent, model,
             base: describeBase(repo, base),
             head: input.head ?? 'working tree',
+            scopeLabel: input.scopeLabel,
         },
         // For generate, the output is the story file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
         finish: (r) => {
+            // Branch order matters: success (story written) short-circuits before we
+            // stage a failure, so startup/execution/output_missing only run when no story landed.
             const storyWritten = existsSync(storyPath);
             const events = [];
             let status = 'complete';
