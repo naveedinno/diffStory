@@ -124,13 +124,29 @@ test('app server drives picker → open → refs → recent → close', async ()
     });
     assert.equal(bad.status, 400);
 
-    // generate without a repo open → 409 (guard returns before any spawn)
+    // generate without a repo open → 409 with a structured preflight error event
     const gen = await fetch(`${base}/api/generate`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
     assert.equal(gen.status, 409);
+    const genBody = await gen.json();
+    assert.equal(genBody.type, 'error');
+    assert.equal(genBody.stage, 'preflight');
+    assert.match(genBody.label, /repository/i);
+    assert.ok(genBody.detail.length > 0);
+
+    // address without a repo open → 409 with the same structured blocked shape
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    });
+    assert.equal(addr.status, 409);
+    const addrBody = await addr.json();
+    assert.equal(addrBody.type, 'error');
+    assert.equal(addrBody.stage, 'preflight');
   } finally {
     server.close();
     process.env.HOME = realHome;

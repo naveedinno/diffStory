@@ -19,7 +19,7 @@ import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
-import { errorEvent } from './progress.js';
+import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
@@ -379,14 +379,88 @@ function tailLines(s, n) {
 function nowMs() {
     return Date.now();
 }
-/** Drive the user's agent to address review comments and stream NDJSON events. */
+/**
+ * The shared spine for every agent workflow: emit run_started → context → app
+ * phases, stream normalized agent events (advancing phases monotonically on real
+ * observation), heartbeat liveness while the child runs, then validate → run_done.
+ */
+function runWorkflow(res, repo, spec) {
+    agentBusy = true;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    const ac = new AbortController();
+    res.on('close', () => ac.abort());
+    let seq = 0;
+    const send = (e) => {
+        try {
+            res.write(JSON.stringify({ seq: seq++, ...e }) + '\n');
+        }
+        catch {
+            /* client disconnected */
+        }
+    };
+    // Phases only ever advance (monotonic by rank).
+    let curRank = -1;
+    const advance = (phase, label, detail) => {
+        if (phaseRank(phase) <= curRank)
+            return;
+        curRank = phaseRank(phase);
+        send(phaseEvent(phase, label, detail));
+    };
+    send(runStarted(spec.workflow, spec.title));
+    send(contextEvent(spec.context));
+    advance('resolving_context');
+    advance('preparing_prompt');
+    advance('starting_agent');
+    advance('agent_running');
+    let lastActivity = nowMs();
+    const heart = setInterval(() => {
+        if (!ac.signal.aborted)
+            send(heartbeatEvent(nowMs() - lastActivity));
+    }, 5000);
+    streamAgent(spec.agent, repo, spec.prompt, (ev) => {
+        lastActivity = nowMs();
+        send(ev);
+        const ph = observedPhase(ev, spec.isTargetWrite(ev));
+        if (ph)
+            advance(ph);
+    }, spec.model, ac.signal)
+        .then((r) => {
+        clearInterval(heart);
+        if (ac.signal.aborted) {
+            send(doneEvent('stopped'));
+            return;
+        }
+        advance('validating_output');
+        const { status, result, events } = spec.finish(r);
+        for (const e of events)
+            send(e);
+        send(doneEvent(status, result));
+    })
+        .catch((err) => {
+        clearInterval(heart);
+        if (ac.signal.aborted) {
+            send(doneEvent('stopped'));
+            return;
+        }
+        send(errorEvent('execution', 'The agent run crashed', String(err)));
+        send(doneEvent('failed'));
+    })
+        .finally(() => {
+        clearInterval(heart);
+        res.end();
+        agentBusy = false;
+    });
+}
+/** Drive the user's agent to address review comments, streaming progress NDJSON. */
 function runAddress(res, session, body) {
     let input;
     try {
         input = JSON.parse(body || '{}');
     }
     catch {
-        return sendJson(res, 400, { error: 'invalid JSON' });
+        return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
     }
     const target = input.all
         ? 'all'
@@ -394,95 +468,108 @@ function runAddress(res, session, body) {
             ? input.commentIds
             : [];
     if (target !== 'all' && target.length === 0) {
-        return sendJson(res, 400, { error: 'no comments specified' });
+        return sendJson(res, 400, errorEvent('preflight', 'No comments specified', 'Pick at least one comment to address.'));
     }
     const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
     if (!pre.ok)
         return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
     const agent = pre.agent;
     const repo = session.repo;
-    agentBusy = true;
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    // Kill the agent if the client disconnects (closed the page or hit Stop).
-    const ac = new AbortController();
-    res.on('close', () => ac.abort());
+    const openCount = loadComments(repo).filter((c) => c.status === 'open').length;
+    const targetCount = target === 'all' ? openCount : target.length;
+    const title = target === 'all'
+        ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
+        : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
     const before = currentDiff(session);
-    const send = (e) => {
-        try {
-            res.write(JSON.stringify(e) + '\n');
-        }
-        catch {
-            /* client disconnected */
-        }
-    };
-    streamAgent(agent, repo, addressPrompt(target), (e) => send(e), undefined, ac.signal)
-        .then(({ ok, output }) => {
-        const codeChanged = currentDiff(session) !== before;
-        if (!ok)
-            send({ type: 'error', data: tailLines(output, 30) });
-        send({ type: 'done', ok, codeChanged });
-    })
-        .catch((err) => send({ type: 'error', data: String(err) }))
-        .finally(() => {
-        res.end();
-        agentBusy = false;
+    runWorkflow(res, repo, {
+        workflow: 'address',
+        title,
+        agent,
+        prompt: addressPrompt(target),
+        context: {
+            repoName: basename(repo), repoPath: repo, workflow: 'address',
+            agent, targetCount,
+        },
+        // For address, the output is code: any non-read write to a non-JSON file.
+        isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && !ev.target.endsWith('.json'),
+        finish: (r) => {
+            const codeChanged = currentDiff(session) !== before;
+            const events = [];
+            let status = 'complete';
+            if (r.failure === 'startup') {
+                events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
+                status = 'failed';
+            }
+            else if (!r.ok) {
+                events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
+                status = 'failed';
+            }
+            else if (!codeChanged) {
+                events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
+            }
+            return { status, result: { codeChanged }, events };
+        },
     });
 }
-/** Drive the agent to write a story for the current repo, streaming NDJSON like address. */
+/** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
 function runGenerate(res, session, body) {
     let input = {};
     try {
         input = JSON.parse(body || '{}');
     }
     catch {
-        return sendJson(res, 400, { error: 'invalid JSON' });
+        return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
     }
     const agents = availableAgents();
     const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
     if (!pre.ok)
         return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
-    // Honor the agent/model the user picked; fall back to the default agent + each CLI's default model.
     const agent = (input.agent === 'claude' || input.agent === 'codex') && agents.includes(input.agent)
         ? input.agent
         : pre.agent;
     const model = input.model && input.model.trim() ? input.model.trim() : undefined;
     const mode = normalizeStoryMode(input.mode);
+    const workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
     const repo = session.repo;
     session.base = input.base;
     session.head = input.head;
     const base = resolveBase(repo, input.base);
-    agentBusy = true;
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    // Kill the agent if the client disconnects (closed the page or hit Stop).
-    const ac = new AbortController();
-    res.on('close', () => ac.abort());
-    const send = (e) => {
-        try {
-            res.write(JSON.stringify(e) + '\n');
-        }
-        catch {
-            /* client disconnected */
-        }
-    };
-    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head, mode), (e) => send(e), model, ac.signal)
-        .then(({ ok, output }) => {
-        const storyWritten = existsSync(resolveStoryPath(repo));
-        if (!ok && !storyWritten)
-            send({ type: 'error', data: tailLines(output, 30) });
-        if (storyWritten) {
-            session.selectedStory = resolveStoryPath(repo);
-            session.chooseStory = false;
-        }
-        send({ type: 'done', ok: ok && storyWritten, storyWritten });
-    })
-        .catch((err) => send({ type: 'error', data: String(err) }))
-        .finally(() => {
-        res.end();
-        agentBusy = false;
+    const storyPath = resolveStoryPath(repo);
+    runWorkflow(res, repo, {
+        workflow,
+        title: workflow === 'detailed_audit' ? 'Generating detailed audit' : 'Generating guided review',
+        agent,
+        model,
+        prompt: storyPrompt(input.base ?? base, input.head, mode),
+        context: {
+            repoName: basename(repo), repoPath: repo, workflow, agent, model,
+            base: describeBase(repo, base),
+            head: input.head ?? 'working tree',
+        },
+        // For generate, the output is the story file.
+        isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
+        finish: (r) => {
+            const storyWritten = existsSync(storyPath);
+            const events = [];
+            let status = 'complete';
+            if (storyWritten) {
+                session.selectedStory = storyPath;
+                session.chooseStory = false;
+            }
+            else if (r.failure === 'startup') {
+                events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
+                status = 'failed';
+            }
+            else if (!r.ok) {
+                events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
+                status = 'failed';
+            }
+            else {
+                events.push(errorEvent('output_missing', 'No story was written', 'The agent finished but .diffstory/story.json is missing. Check the raw output below.'));
+                status = 'failed';
+            }
+            return { status, result: { storyWritten }, events };
+        },
     });
 }
 function readBody(req, done) {
