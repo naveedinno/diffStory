@@ -187,6 +187,7 @@ ${progressPanelStyles()}
   gen.addEventListener('click',function(){
     gen.disabled=true;
     var root=document.querySelector('#genpanel .ds-pp');
+    if(!root){gen.disabled=false;return;}
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
     var panel=new ProgressPanel(root,{
       onStop:function(){ if(ctrl)ctrl.abort(); },
