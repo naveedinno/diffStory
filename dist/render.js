@@ -4,6 +4,7 @@
 // there is no HTML-injection sink.
 import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
+import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
@@ -44,7 +45,7 @@ export function renderPage(input) {
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
 <title>${esc(APP_BRAND)} — ${esc(tour.title)}</title>
-<style>${PAGE_CSS}</style>
+<style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
 <body>
 <header class="ds-top">
@@ -133,17 +134,7 @@ export function renderPage(input) {
   </div>
 </header>
 
-<div class="ds-agentconsole" id="ds-agentconsole" hidden aria-live="polite">
-  <div class="ds-ac-head">
-    <span class="ds-ac-spin" aria-hidden="true" hidden></span>
-    <span class="ds-ac-title">Agent activity</span>
-    <span class="ds-flex"></span>
-    <button class="ds-ghost ds-ac-stop" data-ac-stop hidden>Stop</button>
-    <button class="ds-ghost ds-ac-close" data-ac-close hidden>Close</button>
-  </div>
-  <pre class="ds-ac-body" id="ds-ac-body"></pre>
-  <div class="ds-ac-foot" id="ds-ac-foot" hidden></div>
-</div>
+<div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
 
 <div class="ds-layout">
   <aside class="ds-rail">
@@ -212,6 +203,7 @@ export function renderPage(input) {
 ${trustDrawer(model.trust, stepIndexById)}
 <div class="ds-toast" id="ds-toast" hidden></div>
 <noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
+<script>${progressPanelScript()}</script>
 <script>${PAGE_JS}</script>
 </body>
 </html>`;

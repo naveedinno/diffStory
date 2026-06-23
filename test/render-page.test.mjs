@@ -39,10 +39,10 @@ const files = [
 
 test('agent activity console starts hidden and idle', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /<div class="ds-agentconsole" id="ds-agentconsole" hidden aria-live="polite">/);
-  assert.match(html, /\.ds-agentconsole\[hidden\]\{display:none\}/);
-  assert.match(html, /<span class="ds-ac-spin" aria-hidden="true" hidden><\/span>/);
-  assert.match(html, /<span class="ds-ac-title">Agent activity<\/span>/);
+  assert.match(html, /<div id="ds-agentpanel">/);
+  assert.match(html, /class="ds-pp" data-variant="floating" hidden aria-live="polite"/);
+  assert.match(html, /class="ds-pp-spin" aria-hidden="true" hidden/);
+  assert.match(html, /class="ds-pp-title"/);
 });
 
 test('rail step numbers stay stable after visiting steps', () => {
@@ -304,4 +304,12 @@ test('read aloud preset switch migrates old modes and restarts active reading', 
   assert.match(html, /localStorage\.getItem\('ds-voice-preset'\)\|\|localStorage\.getItem\('ds-operator'\)/);
   assert.match(html, /if\(readAloud\)restartReadAloud\(\)/);
   assert.match(html, /else if\(preview\)speakVoicePreview\(\)/);
+});
+
+test('review page embeds the shared progress panel and ProgressPanel script', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /ds-pp-timeline/);
+  assert.match(html, /function ProgressPanel/);
+  assert.match(html, /run_done/);
+  assert.match(html, /data-pp-stop/);
 });
