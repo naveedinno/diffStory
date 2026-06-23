@@ -1001,6 +1001,7 @@ test('markup exposes the panel regions for both variants', () => {
 test('script defines ProgressPanel and handles every event type', () => {
   const s = progressPanelScript();
   assert.match(s, /function ProgressPanel/);
+  assert.match(s, /function runProgress/);
   for (const t of [
     'run_started', 'context', 'phase', 'file', 'command',
     'activity', 'tool', 'text', 'heartbeat', 'warning', 'error', 'run_done',
@@ -1202,6 +1203,30 @@ function ProgressPanel(root, opts){
   return { root:root, els:els, start:start, handle:handle, finish:finish, blocked:blocked,
            showFoot:function(node){ if(els.foot){els.foot.hidden=false; els.foot.textContent=''; els.foot.appendChild(node);} } };
 }
+
+/** Drive one agent run: POST the payload, stream NDJSON into the panel, stage blocked/stopped/failed. */
+function runProgress(panel, url, payload, ctrl){
+  var NL=String.fromCharCode(10);
+  return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
+    .then(function(r){
+      if(!r.ok||!r.body){
+        return r.json().then(function(j){ panel.blocked(j||{label:'Could not start.'}); },
+                            function(){ panel.blocked({label:'Could not start.'}); });
+      }
+      var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
+      function pump(){return rd.read().then(function(res){
+        if(res.done){ if(buf.trim()){try{panel.handle(JSON.parse(buf));}catch(e){}} return; }
+        buf+=dec.decode(res.value,{stream:true});var parts=buf.split(NL);buf=parts.pop();
+        for(var i=0;i<parts.length;i++){var ln=parts[i];if(!ln.trim())continue;var ev;try{ev=JSON.parse(ln);}catch(e){continue;}panel.handle(ev);}
+        return pump();
+      });}
+      return pump();
+    })
+    .catch(function(){
+      if(ctrl&&ctrl.signal.aborted)panel.finish('stopped',{});
+      else panel.finish('failed',{});
+    });
+}
 `;
 }
 ```
@@ -1317,27 +1342,7 @@ with:
     var msel=modelSel?modelSel.value:'';
     var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
     var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
-    var NL=String.fromCharCode(10);
-    fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
-      .then(function(r){
-        if(!r.ok||!r.body){
-          return r.json().then(function(j){ panel.blocked(j||{label:'Could not start.'}); gen.disabled=false; },
-                              function(){ panel.blocked({label:'Could not start.'}); gen.disabled=false; });
-        }
-        var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
-        function pump(){return rd.read().then(function(res){
-          if(res.done){ if(buf.trim()){try{panel.handle(JSON.parse(buf));}catch(e){}} return; }
-          buf+=dec.decode(res.value,{stream:true});var parts=buf.split(NL);buf=parts.pop();
-          for(var i=0;i<parts.length;i++){var ln=parts[i];if(!ln.trim())continue;var ev;try{ev=JSON.parse(ln);}catch(e){continue;}panel.handle(ev);}
-          return pump();
-        });}
-        return pump();
-      })
-      .catch(function(){
-        if(ctrl&&ctrl.signal.aborted)panel.finish('stopped',{});
-        else panel.finish('failed',{});
-        gen.disabled=false;
-      });
+    runProgress(panel,'/api/generate',payload,ctrl).then(function(){ gen.disabled=false; });
   });
 ```
 
@@ -1439,7 +1444,6 @@ with:
 5. Replace the address-console helper functions `acEl`, `acClearTimer`, `acOpen`, `acAppend`, `acFinish`, `acStopped`, `handleEvent`, `pump`, `runTitle`, and `sendToAgent` (the block roughly from `var NL=String.fromCharCode(10); function acEl(){...}` through the end of `sendToAgent`) with a single `ProgressPanel`-driven implementation:
 
 ```js
-  var NL=String.fromCharCode(10);
   var acAbort=null, acPanel=null;
   function acRoot(){ var w=document.getElementById('ds-agentpanel'); return w?w.querySelector('.ds-pp'):null; }
   function ensurePanel(onDoneExtra){
@@ -1469,26 +1473,7 @@ with:
     });
     if(!panel){ setBusy(false); return; }
     setBusy(true); panel.start();
-    fetch(ADDRESS_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
-      .then(function(r){
-        if(!r.ok||!r.body){
-          return r.json().then(function(j){ panel.blocked(j||{label:'Could not start the agent run.'}); setBusy(false); acAbort=null; },
-                              function(){ panel.blocked({label:'Could not start the agent run.'}); setBusy(false); acAbort=null; });
-        }
-        var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
-        function pump(){return rd.read().then(function(res){
-          if(res.done){ if(buf.trim()){try{panel.handle(JSON.parse(buf));}catch(e){}} return; }
-          buf+=dec.decode(res.value,{stream:true});var parts=buf.split(NL);buf=parts.pop();
-          for(var i=0;i<parts.length;i++){var ln=parts[i];if(!ln.trim())continue;var ev;try{ev=JSON.parse(ln);}catch(e){continue;}panel.handle(ev);}
-          return pump();
-        });}
-        return pump();
-      })
-      .catch(function(){
-        if(ctrl&&ctrl.signal.aborted)panel.finish('stopped',{});
-        else panel.finish('failed',{});
-        setBusy(false); acAbort=null;
-      });
+    runProgress(panel,ADDRESS_API,payload,ctrl).then(function(){ setBusy(false); acAbort=null; });
   }
 ```
 
