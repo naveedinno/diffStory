@@ -135,8 +135,9 @@ function ProgressPanel(root, opts){
         if(els.repo)els.repo.textContent=repoLine(ev);
         break;
       case 'phase':
-        if(els.phaseLabel)els.phaseLabel.textContent=ev.label||ev.phase;
-        if(ev.phase!=='agent_running') add('phase', ev.detail?(ev.label+' — '+ev.detail):ev.label);
+        var plbl=ev.label||ev.phase;
+        if(els.phaseLabel)els.phaseLabel.textContent=plbl;
+        if(ev.phase!=='agent_running') add('phase', ev.detail?(plbl+' — '+ev.detail):plbl);
         break;
       case 'file': add('file', ev.label); break;
       case 'command': add('command', ev.label); break;
