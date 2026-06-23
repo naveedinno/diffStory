@@ -8,3 +8,4 @@ node_modules/
 # diffStory working files live alongside the repo being reviewed.
 # Keep them local by default — they describe a single review session.
 .diffstory/
+.superpowers/
