@@ -4,6 +4,7 @@
 // navigates into the review on success. Self-contained; all server values escaped.
 import { APP_BRAND } from './config.js';
 import type { ChangeSummary } from './change-view.js';
+import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -97,12 +98,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .modelother:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
 .modelother[hidden]{display:none}
 .empty{padding:30px 16px;text-align:center;color:var(--l2);font-size:14px}
-.gencon{margin-top:20px;background:var(--con);border:.5px solid var(--conl);border-radius:12px;overflow:hidden}
-.genhd{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--conl);font-size:12.5px;font-weight:600;color:var(--cont)}
-.genspin{width:13px;height:13px;border-radius:50%;border:2px solid var(--conl);border-top-color:var(--blue);animation:gs .7s linear infinite;flex:none}
-@keyframes gs{to{transform:rotate(360deg)}}
-.genstop{margin-left:auto;font:inherit;font-size:12px;font-weight:550;color:var(--cont);background:transparent;border:.5px solid var(--conl);border-radius:7px;padding:5px 11px;cursor:pointer}
-.genbody{margin:0;padding:11px 13px;max-height:34vh;overflow:auto;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9a9aa3;white-space:pre-wrap;word-break:break-word}
+${progressPanelStyles()}
 </style></head>
 <body>
 <main class="wrap">
@@ -128,11 +124,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     ${sum.hasChanges ? `<div class="files">${rows}</div>` : ''}
   </div>
   ${action}
-  <div class="gencon" id="gencon" hidden>
-    <div class="genhd"><span class="genspin"></span><span id="genTitle">Writing your guided review…</span><button class="genstop" id="genstop" type="button">Stop</button></div>
-    <pre class="genbody" id="genbody"></pre>
-  </div>
+  <div id="genpanel">${progressPanelMarkup('inline')}</div>
 </main>
+<script>${progressPanelScript()}</script>
 <script>
 (function(){
   var cmp=document.getElementById('cmpBtn'),panel=document.getElementById('cmppanel'),
@@ -204,43 +198,22 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
   if(!gen)return;
   gen.addEventListener('click',function(){
     gen.disabled=true;
-    var con=document.getElementById('gencon');con.hidden=false;
-    var body=document.getElementById('genbody');body.textContent='Warming up — your agent is reading the change…';
-    var stop=document.getElementById('genstop');
+    var root=document.querySelector('#genpanel .ds-pp');
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-    stop.onclick=function(){if(ctrl)ctrl.abort();};
-    var hint=true,NL=String.fromCharCode(10);
+    var panel=new ProgressPanel(root,{
+      onStop:function(){ if(ctrl)ctrl.abort(); },
+      onClose:function(){ root.hidden=true; gen.disabled=false; },
+      onDone:function(status,result){
+        gen.disabled=false;
+        if(status==='complete'&&result&&result.storyWritten){ location.href='/review?story=story.json'; }
+      }
+    });
+    panel.start();
     var agent=agentSel?agentSel.value:'';
     var msel=modelSel?modelSel.value:'';
     var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
-    var modeLabel=modeSel&&modeSel.value==='detailed'?'detailed audit':'guided review';
-    var ttl=document.getElementById('genTitle');
-    if(ttl)ttl.textContent='Writing your '+modeLabel+' with '+(agent||'your agent')+(model?(' ('+model+')'):'')+'…';
     var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
-    fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
-      .then(function(r){
-        if(!r.ok||!r.body){return r.json().then(function(j){body.textContent=(j&&j.error)||'Could not start.';},function(){body.textContent='Could not start.';});}
-        var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
-        function clr(){if(hint){hint=false;body.textContent='';}}
-        function pump(){return rd.read().then(function(res){
-          if(res.done)return;
-          buf+=dec.decode(res.value,{stream:true});var parts=buf.split(NL);buf=parts.pop();
-          for(var i=0;i<parts.length;i++){var ln=parts[i];if(!ln.trim())continue;var ev;try{ev=JSON.parse(ln);}catch(e){continue;}
-            if(ev.type==='text'){clr();body.textContent+=ev.data||'';}
-            else if(ev.type==='tool'){clr();body.textContent+=NL+(ev.data||'')+NL;}
-            else if(ev.type==='error'){clr();body.textContent+=NL+(ev.data||'');}
-            else if(ev.type==='done'){if(ev.storyWritten){location.href='/review?story=story.json';return;}}
-            body.scrollTop=body.scrollHeight;}
-          return pump();
-        });}
-        return pump();
-      })
-      .then(function(){ var sp=document.querySelector('.genspin'); if(sp)sp.style.display='none'; gen.disabled=false; })
-      .catch(function(){
-        var sp=document.querySelector('.genspin');if(sp)sp.style.display='none';
-        if(ctrl&&ctrl.signal.aborted)body.textContent+=NL+'Stopped.';else body.textContent+=NL+'Something went wrong.';
-        gen.disabled=false;
-      });
+    runProgress(panel,'/api/generate',payload,ctrl).then(function(){ gen.disabled=false; });
   });
 })();
 </script>

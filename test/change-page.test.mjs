@@ -56,3 +56,14 @@ test('renderChangePage shows a notice banner and the agent + model picker', () =
   assert.ok(html.includes('Update skills'), 'has skill update action');
   assert.ok(html.includes('/api/skills/update'), 'calls the skill update endpoint');
 });
+
+test('change page embeds the shared progress panel and drives ProgressPanel', () => {
+  const html = renderChangePage(
+    { hasChanges: true, baseLabel: 'main', files: [{ path: 'a.ts', added: 1, removed: 0 }] },
+    { repoName: 'r', base: '', head: '', scopeLabel: 'Uncommitted', active: 'uncommitted' },
+  );
+  assert.match(html, /ds-pp-timeline/);
+  assert.match(html, /function ProgressPanel/);
+  assert.match(html, /new ProgressPanel|ProgressPanel\(/);
+  assert.match(html, /run_done/);
+});
