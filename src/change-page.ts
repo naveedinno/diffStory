@@ -39,7 +39,7 @@ export function renderChangePage(
          <label class="genfield">Story <select id="storyMode" aria-label="Story mode"><option value="guided" selected>Guided review</option><option value="detailed">Detailed audit</option></select></label>
        </div>
        <p class="skillwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
-       <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}" data-scope="${esc(label)}">Generate guided review</button>
+       <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
        <p class="gennote">Guided is the fast review path. Detailed audit is longer and walks code paths line by line. Nothing starts until you click.</p>`
     : `<div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div>`;
 
@@ -213,7 +213,7 @@ ${progressPanelStyles()}
     var agent=agentSel?agentSel.value:'';
     var msel=modelSel?modelSel.value:'';
     var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
-    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,scopeLabel:gen.getAttribute('data-scope')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
+    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
     runProgress(panel,'/api/generate',payload,ctrl).then(function(){ gen.disabled=false; });
   });
 })();

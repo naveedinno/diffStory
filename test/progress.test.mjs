@@ -15,7 +15,7 @@ test('runStarted and contextEvent carry workflow + context fields', () => {
   const ctx = contextEvent({
     repoName: 'SmartDiffChecker', repoPath: '/r', workflow: 'detailed_audit',
     agent: 'claude', model: 'opus', base: 'main', head: 'working tree',
-    scopeLabel: 'Uncommitted', targetCount: undefined,
+    targetCount: undefined,
   });
   assert.equal(ctx.type, 'context');
   assert.equal(ctx.repoName, 'SmartDiffChecker');

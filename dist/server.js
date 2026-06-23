@@ -545,7 +545,6 @@ function runGenerate(res, session, body) {
             repoName: basename(repo), repoPath: repo, workflow, agent, model,
             base: describeBase(repo, base),
             head: input.head ?? 'working tree',
-            scopeLabel: input.scopeLabel,
         },
         // For generate, the output is the story file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),

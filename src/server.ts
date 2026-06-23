@@ -561,7 +561,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
 
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
 function runGenerate(res: ServerResponse, session: Session, body: string): void {
-  let input: { base?: string; head?: string; scopeLabel?: string; agent?: string; model?: string; mode?: string } = {};
+  let input: { base?: string; head?: string; agent?: string; model?: string; mode?: string } = {};
   try {
     input = JSON.parse(body || '{}');
   } catch {
@@ -595,7 +595,6 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
       repoName: basename(repo), repoPath: repo, workflow, agent, model,
       base: describeBase(repo, base),
       head: input.head ?? 'working tree',
-      scopeLabel: input.scopeLabel,
     },
     // For generate, the output is the story file.
     isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),

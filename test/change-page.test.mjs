@@ -66,7 +66,4 @@ test('change page embeds the shared progress panel and drives ProgressPanel', ()
   assert.match(html, /function ProgressPanel/);
   assert.match(html, /new ProgressPanel|ProgressPanel\(/);
   assert.match(html, /run_done/);
-  // The Generate button carries the human scope label so the run context can show it.
-  assert.match(html, /id="genBtn"[^>]*data-scope="Uncommitted"/);
-  assert.match(html, /scopeLabel:gen\.getAttribute\('data-scope'\)/);
 });

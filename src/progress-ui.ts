@@ -16,6 +16,8 @@ export function progressPanelStyles(): string {
 @media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-text:#f2f2f7;--pp-muted:#a6a6ad;--pp-faint:#8a8a90;--pp-line:rgba(255,255,255,.12)}}
 .ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(70vh,560px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
 .ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(64vh,560px)}
+/* The variant rules set display:flex, which beats the [hidden] UA rule — re-assert hidden with higher specificity. */
+.ds-pp[data-variant][hidden]{display:none}
 .ds-pp-head{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--pp-line)}
 .ds-pp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--pp-line);border-top-color:var(--pp-blue);animation:ds-pp-spin .7s linear infinite;flex:none}
 .ds-pp-spin[hidden]{display:none}
@@ -45,7 +47,7 @@ export function progressPanelStyles(): string {
 .ds-pp-rawwrap{border-top:.5px solid var(--pp-line)}
 .ds-pp-rawhd{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--pp-faint);padding:7px 13px 3px}
 .ds-pp-raw{margin:0;padding:0 13px 10px;max-height:120px;overflow:auto;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--pp-faint);white-space:pre-wrap;word-break:break-word}
-.ds-pp-raw:empty,.ds-pp-raw:empty+*{display:none}
+.ds-pp-rawwrap:has(.ds-pp-raw:empty){display:none}
 .ds-pp-foot{padding:10px 13px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px}
 .ds-pp-foot[hidden]{display:none}
 .ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--pp-blue);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
@@ -111,7 +113,6 @@ function ProgressPanel(root, opts){
   function repoLine(ev){
     var p=ev.repoName||'';
     if(ev.base){ p+=' · '+ev.base+' → '+(ev.head||'working tree'); }
-    if(ev.scopeLabel){ p+=' · '+ev.scopeLabel; }
     if(typeof ev.targetCount==='number'){ p+=' · '+ev.targetCount+' '+(ev.targetCount===1?'comment':'comments'); }
     return p;
   }

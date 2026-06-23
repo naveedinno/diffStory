@@ -24,7 +24,6 @@ export interface RunContext {
   model?: string;
   base?: string;
   head?: string;
-  scopeLabel?: string;
   targetCount?: number;
 }
 
