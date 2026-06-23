@@ -26,7 +26,7 @@ import {
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import type { DiffFile, Tour } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
-import type { ProgressEvent } from './progress.js';
+import { errorEvent, type ProgressEvent } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession, type Session } from './session.js';
 import { inspectRepo } from './repo-state.js';
@@ -417,7 +417,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   }
 
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
-  if (!pre.ok) return sendJson(res, pre.status, { error: pre.error });
+  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
   const agent = pre.agent;
   const repo = session.repo as string;
 
@@ -463,7 +463,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
 
   const agents = availableAgents();
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
-  if (!pre.ok) return sendJson(res, pre.status, { error: pre.error });
+  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
   // Honor the agent/model the user picked; fall back to the default agent + each CLI's default model.
   const agent =
     (input.agent === 'claude' || input.agent === 'codex') && agents.includes(input.agent)

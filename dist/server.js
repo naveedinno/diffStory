@@ -19,6 +19,7 @@ import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
+import { errorEvent } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
@@ -397,7 +398,7 @@ function runAddress(res, session, body) {
     }
     const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
     if (!pre.ok)
-        return sendJson(res, pre.status, { error: pre.error });
+        return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
     const agent = pre.agent;
     const repo = session.repo;
     agentBusy = true;
@@ -441,7 +442,7 @@ function runGenerate(res, session, body) {
     const agents = availableAgents();
     const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
     if (!pre.ok)
-        return sendJson(res, pre.status, { error: pre.error });
+        return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
     // Honor the agent/model the user picked; fall back to the default agent + each CLI's default model.
     const agent = (input.agent === 'claude' || input.agent === 'codex') && agents.includes(input.agent)
         ? input.agent

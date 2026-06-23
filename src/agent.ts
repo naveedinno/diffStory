@@ -311,14 +311,30 @@ export function streamAgent(
 /** Result of the shared pre-run guard for any agent run (address or generate). */
 export type Preflight =
   | { ok: true; agent: Agent }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; stage: 'preflight'; label: string; detail: string };
 
 /** Guard a would-be agent run: one-at-a-time, a repo open, an agent installed. */
 export function agentPreflight(a: { repo: string | null; busy: boolean; agents: Agent[] }): Preflight {
-  if (a.busy) return { ok: false, status: 409, error: 'An agent run is already in progress.' };
-  if (!a.repo) return { ok: false, status: 409, error: 'No repo is open.' };
+  if (a.busy) {
+    return {
+      ok: false, status: 409, stage: 'preflight',
+      label: 'An agent run is already in progress',
+      detail: 'Wait for the current run to finish, or stop it, before starting another.',
+    };
+  }
+  if (!a.repo) {
+    return {
+      ok: false, status: 409, stage: 'preflight',
+      label: 'No repository is open',
+      detail: 'Pick a repository before starting an agent run.',
+    };
+  }
   if (a.agents.length === 0) {
-    return { ok: false, status: 400, error: 'No agent CLI found (looked for "claude" and "codex").' };
+    return {
+      ok: false, status: 400, stage: 'preflight',
+      label: 'No agent CLI found',
+      detail: 'Install "claude" or "codex" on your PATH to run the agent.',
+    };
   }
   return { ok: true, agent: a.agents[0] };
 }

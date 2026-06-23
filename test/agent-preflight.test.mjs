@@ -3,23 +3,31 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { agentPreflight } from '../dist/agent.js';
 
-test('agentPreflight blocks when an agent is already running', () => {
+test('agentPreflight blocks (409) when an agent is already running', () => {
   const r = agentPreflight({ repo: '/r', busy: true, agents: ['claude'] });
-  assert.deepEqual(r, { ok: false, status: 409, error: 'An agent run is already in progress.' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 409);
+  assert.equal(r.stage, 'preflight');
+  assert.match(r.label, /already/i);
+  assert.ok(r.detail.length > 0);
 });
 
-test('agentPreflight blocks when no repo is open', () => {
+test('agentPreflight blocks (409) when no repo is open', () => {
   const r = agentPreflight({ repo: null, busy: false, agents: ['claude'] });
-  assert.deepEqual(r, { ok: false, status: 409, error: 'No repo is open.' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 409);
+  assert.equal(r.stage, 'preflight');
+  assert.match(r.label, /repository/i);
+  assert.match(r.detail, /Pick a repository/i);
 });
 
-test('agentPreflight blocks when no agent CLI is installed', () => {
+test('agentPreflight blocks (400) when no agent CLI is installed', () => {
   const r = agentPreflight({ repo: '/r', busy: false, agents: [] });
-  assert.deepEqual(r, {
-    ok: false,
-    status: 400,
-    error: 'No agent CLI found (looked for "claude" and "codex").',
-  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.equal(r.stage, 'preflight');
+  assert.match(r.label, /agent/i);
+  assert.match(r.detail, /claude|codex/i);
 });
 
 test('agentPreflight passes and returns the chosen agent', () => {
