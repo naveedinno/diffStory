@@ -35,9 +35,11 @@ export function renderChangePage(
          <label class="genfield">Agent <select id="agentSel" aria-label="Agent"></select></label>
          <label class="genfield">Model <select id="modelSel" aria-label="Model"></select></label>
          <input id="modelInp" class="modelother" type="text" placeholder="model name" autocomplete="off" spellcheck="false" aria-label="Custom model" hidden />
+         <label class="genfield">Story <select id="storyMode" aria-label="Story mode"><option value="guided" selected>Guided review</option><option value="detailed">Detailed audit</option></select></label>
        </div>
+       <p class="skillwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
        <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
-       <p class="gennote">Runs the agent you pick to write the walkthrough — about a minute. Nothing starts until you click.</p>`
+       <p class="gennote">Guided is the fast review path. Detailed audit is longer and walks code paths line by line. Nothing starts until you click.</p>`
     : `<div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -81,6 +83,11 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .notice{background:rgba(255,159,10,.13);border:.5px solid rgba(255,159,10,.42);color:var(--label);border-radius:12px;padding:12px 15px;margin-bottom:16px;font-size:13.5px;line-height:1.5}
 .notice b{font-weight:600}
 .genctl{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+.skillwarn{max-width:620px;margin:13px 2px 0;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:10px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
+.skillwarn[hidden]{display:none}
+.skillwarn span{flex:1;min-width:0}
+.skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
+.skillfix:hover{background:var(--blue2)}.skillfix:disabled{opacity:.55;cursor:default}
 .genfield{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--l2)}
 .genfield select,.genfield input{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:32px;padding:0 11px}
 .genfield select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
@@ -106,9 +113,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     <div class="scope">
       <span class="scur">Reviewing <b>${esc(label)}</b></span>
       <div class="sopts" role="group" aria-label="Review scope">
-        <a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="/?scope=uncommitted">Uncommitted</a>
-        <a class="sopt${active === 'last' ? ' on' : ''}" href="/?scope=last">Latest commit</a>
-        <a class="sopt${active === 'branch' ? ' on' : ''}" href="/?scope=branch">Whole branch</a>
+        <a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="/change?scope=uncommitted">Uncommitted</a>
+        <a class="sopt${active === 'last' ? ' on' : ''}" href="/change?scope=last">Latest commit</a>
+        <a class="sopt${active === 'branch' ? ' on' : ''}" href="/change?scope=branch">Whole branch</a>
         <button class="sopt${active === 'ref' ? ' on' : ''}" id="cmpBtn" type="button">Compare…</button>
       </div>
     </div>
@@ -149,9 +156,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
   var go=document.getElementById('cmpGo');
   if(go)go.addEventListener('click',function(){
     var b=baseSel.value,h=headSel.value;if(!b)return;
-    var u='/?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
+    var u='/change?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
-  var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp');
+  var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp'),modeSel=document.getElementById('storyMode');
   var MODELS={claude:[['Default (Sonnet)',''],['Opus','opus'],['Haiku','haiku'],['Other…','__other__']],codex:[['Default',''],['Other…','__other__']]};
   function syncOther(){if(modelInp&&modelSel)modelInp.hidden=(modelSel.value!=='__other__');}
   function fillModels(){
@@ -162,10 +169,33 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     syncOther();
   }
   if(modelSel)modelSel.addEventListener('change',syncOther);
+  function showSkillState(sk){
+    var sw=document.getElementById('skillWarn'),txt=document.getElementById('skillWarnText'),btn=document.getElementById('skillUpdateBtn');
+    if(!sw||!txt||!btn||!sk)return;
+    if(sk.current){
+      sw.hidden=false;txt.textContent='Story-generation skills are up to date.';btn.hidden=true;
+      setTimeout(function(){sw.hidden=true;},1400);return;
+    }
+    sw.hidden=false;btn.hidden=false;btn.disabled=false;btn.textContent='Update skills';
+    txt.textContent=sk.installed
+      ? 'Story-generation skill is installed but does not match this app. Update it before generating so the agent sees the current story rules.'
+      : 'Story-generation skill was not found in ~/.agents, ~/.claude, or ~/.codex. Install it before generating so the agent can create the story reliably.';
+  }
+  function wireSkillUpdate(){
+    var btn=document.getElementById('skillUpdateBtn'),txt=document.getElementById('skillWarnText');if(!btn)return;
+    btn.onclick=function(){
+      btn.disabled=true;btn.textContent='Updating…';if(txt)txt.textContent='Installing bundled diffStory skills locally…';
+      fetch('/api/skills/update',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d&&d.skills)showSkillState(d.skills);else throw new Error('bad response');
+      }).catch(function(){btn.disabled=false;btn.textContent='Try again';if(txt)txt.textContent='Could not update skills. Run scripts/install-skills.sh from this repo, or re-run the diffStory installer.';});
+    };
+  }
+  wireSkillUpdate();
   if(agentSel){
     fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
       (d.agents||[]).forEach(function(a){agentSel.add(new Option(a,a));});
       if(!agentSel.options.length)agentSel.add(new Option('no agent found',''));
+      showSkillState(d.skills);
       fillModels();
     }).catch(function(){});
     agentSel.addEventListener('change',fillModels);
@@ -183,9 +213,10 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
     var agent=agentSel?agentSel.value:'';
     var msel=modelSel?modelSel.value:'';
     var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
+    var modeLabel=modeSel&&modeSel.value==='detailed'?'detailed audit':'guided review';
     var ttl=document.getElementById('genTitle');
-    if(ttl)ttl.textContent='Writing your guided review with '+(agent||'your agent')+(model?(' ('+model+')'):'')+'…';
-    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined};
+    if(ttl)ttl.textContent='Writing your '+modeLabel+' with '+(agent||'your agent')+(model?(' ('+model+')'):'')+'…';
+    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
     fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl?ctrl.signal:undefined})
       .then(function(r){
         if(!r.ok||!r.body){return r.json().then(function(j){body.textContent=(j&&j.error)||'Could not start.';},function(){body.textContent='Could not start.';});}
@@ -198,7 +229,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
             if(ev.type==='text'){clr();body.textContent+=ev.data||'';}
             else if(ev.type==='tool'){clr();body.textContent+=NL+(ev.data||'')+NL;}
             else if(ev.type==='error'){clr();body.textContent+=NL+(ev.data||'');}
-            else if(ev.type==='done'){if(ev.storyWritten){location.href='/';return;}}
+            else if(ev.type==='done'){if(ev.storyWritten){location.href='/review?story=story.json';return;}}
             body.scrollTop=body.scrollHeight;}
           return pump();
         });}

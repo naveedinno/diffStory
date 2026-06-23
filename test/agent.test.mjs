@@ -1,8 +1,9 @@
 // Unit tests for agent detection + command building (not the real spawn). Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-  onPath, storyPrompt, agentCommand, addressPrompt,
+  onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
   streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary,
 } from '../dist/agent.js';
 
@@ -21,8 +22,91 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('I added this parameter to method X'));
   assert.ok(p.includes('Voice contract'));
   assert.ok(p.includes('lively, specific, and a little fun'));
+  assert.ok(p.includes('top-level "summary" is the overview'));
+  assert.ok(p.includes('1-3 short informal sentences'));
+  assert.ok(p.includes('first person'));
+  assert.ok(p.includes('No long paragraphs'));
   assert.ok(p.includes('No corporate changelog voice'));
   assert.ok(p.includes('Run diffstory check'));
+});
+
+test('storyPrompt asks for a reviewer map and hard quality gates', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('private reviewer map'));
+  assert.ok(p.includes('falsifiable mental model'));
+  assert.ok(p.includes('Each step must answer a reviewer question'));
+  assert.ok(p.includes('coverage ledger'));
+  assert.ok(p.includes('Ranges are review windows, not coverage hacks'));
+  assert.ok(p.includes('Truth contract'));
+  assert.ok(p.includes('Do not claim tests pass unless you ran them'));
+});
+
+test('storyPrompt teaches explicit read-aloud focus targets', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Focus pointer contract'));
+  assert.ok(p.includes('"focus"'));
+  assert.ok(p.includes('"ranges"'));
+  assert.ok(p.includes('inside that step'));
+  assert.ok(p.includes('post-change line numbers'));
+  assert.ok(p.includes('one or two lines'));
+  assert.ok(p.includes('not the whole displayed section'));
+});
+
+test('storyPrompt supports a detailed correctness story mode', () => {
+  assert.equal(normalizeStoryMode('detailed'), 'detailed');
+  assert.equal(normalizeStoryMode('guided'), 'guided');
+  assert.equal(normalizeStoryMode('anything else'), 'guided');
+
+  const guided = storyPrompt('main');
+  assert.ok(guided.includes('set its "mode" field to "guided"'));
+  assert.ok(!guided.includes('Detailed correctness mode'));
+
+  const detailed = storyPrompt('main', undefined, 'detailed');
+  assert.ok(detailed.includes('git diff main --'));
+  assert.ok(detailed.includes('set its "mode" field to "detailed"'));
+  assert.ok(detailed.includes('Detailed correctness mode'));
+  assert.ok(detailed.includes('line-by-line'));
+  assert.ok(detailed.includes('all meaningful code paths'));
+  assert.ok(detailed.includes('3-7 short sentences'));
+  assert.ok(detailed.includes('split separate branches, guards, state writes, external calls, and error paths'));
+});
+
+test('bundled review-tour skill teaches reviewer-first story generation', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Make a reviewer map before JSON'));
+  assert.ok(skill.includes('falsifiable mental model'));
+  assert.ok(skill.includes('Hard quality gates'));
+  assert.ok(skill.includes('coverage ledger'));
+  assert.ok(skill.includes('Ranges are review windows, not coverage hacks'));
+  assert.ok(skill.includes('Truth audit'));
+  assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
+});
+
+test('bundled review-tour skill teaches explicit read-aloud focus targets', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Focus pointer contract'));
+  assert.ok(skill.includes('"focus"'));
+  assert.ok(skill.includes('"ranges"'));
+  assert.ok(skill.includes('inside that step'));
+  assert.ok(skill.includes('post-change line numbers'));
+  assert.ok(skill.includes('one or two lines'));
+  assert.ok(skill.includes('not the whole displayed section'));
+});
+
+test('bundled review-tour skill teaches guided and detailed story modes', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Story modes'));
+  assert.ok(skill.includes('Guided review mode'));
+  assert.ok(skill.includes('Detailed correctness mode'));
+  assert.ok(skill.includes('line-by-line'));
+  assert.ok(skill.includes('all meaningful code paths'));
+  assert.ok(skill.includes('"mode": "detailed"'));
+});
+
+test('storyPrompt records the head ref for fixed range stories', () => {
+  const p = storyPrompt('main', 'feature/liquidation');
+  assert.ok(p.includes('git diff main..feature/liquidation --'));
+  assert.ok(p.includes('set its "base" field to "main" and its "head" field to "feature/liquidation"'));
 });
 
 test('agentCommand builds headless invocations with a safe default model', () => {

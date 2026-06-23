@@ -5,6 +5,7 @@
 import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { APP_BRAND } from './config.js';
+import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
 import { highlight } from './highlight.js';
 import type {
@@ -51,6 +52,7 @@ export function renderPage(input: RenderInput): string {
 
   const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
   const railFiles = model.files.map((f, i) => railFileItem(f, i)).join('');
+  const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
   const stepPanels = model.steps
     .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
     .join('');
@@ -89,7 +91,7 @@ export function renderPage(input: RenderInput): string {
       'comment',
     )}</span>
     <button class="ds-addall" data-address-all${openCount ? '' : ' disabled'} title="Have your agent address every open comment and reply right here">Address all open</button>
-    <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no tour step explains">${
+    <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${
       uncoveredCount
         ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained ${plural(uncoveredCount, 'change')}`
         : `<span class="ds-check">✓</span> all changes explained`
@@ -104,25 +106,43 @@ export function renderPage(input: RenderInput): string {
           <div class="ds-settings-title">Read aloud</div>
           <div class="ds-voice-now" data-voice-status>Voice ready</div>
         </div>
-        <button class="ds-preview" data-preview-voice><span class="ds-preview-ico">▶</span> Preview</button>
+        <button class="ds-preview" data-preview-voice><span class="ds-preview-ico">▶</span><span data-preview-label>Preview</span></button>
       </div>
-      <div class="ds-voice-grid" aria-label="Voice style">
+      <div class="ds-engine-row" aria-label="Voice engine">
+        <button data-voice-engine="browser" class="is-active">Browser</button>
+        <button data-voice-engine="say">Mac local</button>
+        <button data-voice-engine="kokoro">Kokoro AI</button>
+      </div>
+      <div class="ds-voice-grid" data-browser-voices aria-label="Browser voice style">
         <button class="ds-voice-card is-active" data-voice-preset="story">
           <span class="ds-voice-badge">S</span>
-          <span><span class="ds-voice-name">Story <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Clean narrator for code walkthroughs.</span></span>
+          <span><span class="ds-voice-name">Story <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Best natural browser narrator for walkthroughs.</span></span>
         </button>
         <button class="ds-voice-card" data-voice-preset="flirty">
           <span class="ds-voice-badge">F</span>
-          <span><span class="ds-voice-name">Flirty <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Female, playful, warmer delivery.</span></span>
+          <span><span class="ds-voice-name">Warm <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Softer browser voice when available.</span></span>
         </button>
         <button class="ds-voice-card" data-voice-preset="bass">
           <span class="ds-voice-badge">M</span>
-          <span><span class="ds-voice-name">Bass <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Male preference with deeper pitch.</span></span>
+          <span><span class="ds-voice-name">Deep <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Lower browser voice when available.</span></span>
         </button>
         <button class="ds-voice-card" data-voice-preset="system">
           <span class="ds-voice-badge">SYS</span>
           <span><span class="ds-voice-name">System <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Browser default, fastest and plainest.</span></span>
         </button>
+      </div>
+      <div class="ds-voice-grid ds-say-voice-grid" data-say-voices aria-label="Mac local voice" hidden>
+        <button class="ds-voice-card is-active" data-say-voice="samantha">
+          <span class="ds-voice-badge">S</span>
+          <span><span class="ds-voice-name">Samantha <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">macOS local voice.</span></span>
+        </button>
+        <button class="ds-voice-card" data-say-voice="daniel">
+          <span class="ds-voice-badge">D</span>
+          <span><span class="ds-voice-name">Daniel <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">macOS local voice.</span></span>
+        </button>
+      </div>
+      <div class="ds-voice-grid ds-kokoro-voice-grid" data-kokoro-voices aria-label="Kokoro AI voice" hidden>
+        ${kokoroVoiceCards}
       </div>
       <div class="ds-settings-row">
         <span class="ds-settings-label">Speed</span>
@@ -161,7 +181,7 @@ export function renderPage(input: RenderInput): string {
   <aside class="ds-rail">
     <div class="ds-railpad">
       <div class="ds-viewtoggle" role="tablist">
-        <button class="ds-tab is-active" data-view="tour" role="tab">Story tour</button>
+        <button class="ds-tab is-active" data-view="tour" role="tab">Story</button>
         <button class="ds-tab" data-view="files" role="tab">All files</button>
       </div>
     </div>
@@ -212,7 +232,7 @@ export function renderPage(input: RenderInput): string {
             <span class="ds-stat-del">−${model.totalDel}</span>
             ${
               uncoveredCount
-                ? `<span class="ds-dot"></span><span class="ds-stat-untoured"><span class="ds-dot ds-dot-amber"></span>${uncoveredCount} untoured</span>`
+                ? `<span class="ds-dot"></span><span class="ds-stat-untoured"><span class="ds-dot ds-dot-amber"></span>${uncoveredCount} unexplained</span>`
                 : ''
             }
           </div>
@@ -237,6 +257,14 @@ ${trustDrawer(model.trust, stepIndexById)}
 }
 
 // ---- sidebar ----
+
+function voiceCard(kind: 'kokoro', id: string, label: string, description: string, active = false): string {
+  const badge = label.slice(0, 1).toUpperCase();
+  return `<button class="ds-voice-card${active ? ' is-active' : ''}" data-${kind}-voice="${esc(id)}">
+          <span class="ds-voice-badge">${esc(badge)}</span>
+          <span><span class="ds-voice-name">${esc(label)} <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">${esc(description)}</span></span>
+        </button>`;
+}
 
 // The Overview sits above the numbered steps as navigation index 0 — the calm
 // entry point that answers "what is this change?" before the walkthrough begins.
@@ -344,7 +372,7 @@ function railFileItem(f: FileView, i: number): string {
         }`
       : '<span class="ds-dim">·</span>';
   const flag = f.untoured
-    ? `<span class="ds-fileitem-flag" title="${f.untoured} untoured ${plural(f.untoured, 'change')}">▲</span>`
+    ? `<span class="ds-fileitem-flag" title="${f.untoured} unexplained ${plural(f.untoured, 'change')}">▲</span>`
     : '';
   return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
     f.file,
@@ -473,13 +501,22 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[]): string {
   const attrs = commentable
     ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
     : '';
+  const focusAttr = rowInVoiceFocus(row, s) ? ' data-step-focus="1"' : '';
   const cells = s.context || s.newFile
     ? singleCell(row)
     : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
   const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
-  const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}${plus}</div>`;
+  const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}${plus}</div>`;
   const thread = commentable ? threadFor(s.id, row.newNo!, comments) : '';
   return rowHtml + thread;
+}
+
+function rowInVoiceFocus(row: SbsRow, s: StepView): boolean {
+  if (row.newNo !== undefined) {
+    const n = row.newNo;
+    return s.focusRanges.some(([start, end]) => n >= start && n <= end);
+  }
+  return !s.focusExplicit && row.type === 'del' && s.kind === 'changed';
 }
 
 function cell(side: 'left' | 'right', row: SbsRow): string {
@@ -509,7 +546,7 @@ function cell(side: 'left' | 'right', row: SbsRow): string {
   let tint = '';
   if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
-  const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+  const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
   return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code">${
     highlight(row.content) || ' '
   }</span>${flag}</span>`;
@@ -521,7 +558,7 @@ function singleCell(row: SbsRow): string {
   const sign = add ? '+' : '';
   const signCls = add ? ' ds-sign-add' : '';
   const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
-  const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+  const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
   return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code">${
     highlight(row.content) || ' '
   }</span>${flag}</span>`;
@@ -585,10 +622,10 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
   const stepIdx = f.stepId !== undefined ? stepIndexById.get(f.stepId) : undefined;
   const stepChip =
     stepIdx !== undefined && f.stepOrder !== undefined
-      ? `<button class="ds-stepchip" data-goto-step="${stepIdx}" title="Open this file in the story tour">Step ${f.stepOrder}</button>`
+      ? `<button class="ds-stepchip" data-goto-step="${stepIdx}" title="Open this file in the story">Step ${f.stepOrder}</button>`
       : '';
   const untouredBadge = f.untoured
-    ? `<span class="ds-untoured-badge"><span class="ds-tri">▲</span>${f.untoured} untoured</span>`
+    ? `<span class="ds-untoured-badge"><span class="ds-tri">▲</span>${f.untoured} unexplained</span>`
     : '';
   const stat =
     f.add || f.del
@@ -634,7 +671,7 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
 
 function unifiedRow(row: UnifiedRow): string {
   const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
-  const flag = row.untoured ? '<span class="ds-untoured-tag">UNTOURED</span>' : '';
+  const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
   return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"><span class="ds-no">${
     row.no ?? ''
   }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${
@@ -656,7 +693,7 @@ function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): stri
       <div class="ds-drawer-head">
         <div>
           <div class="ds-drawer-title">Trust check</div>
-          <div class="ds-drawer-sub">Every line in the diff, accounted for against the tour.</div>
+          <div class="ds-drawer-sub">Every line in the diff, accounted for against the story.</div>
         </div>
         <button class="ds-drawer-x" data-trust-close title="Close">×</button>
       </div>
@@ -690,10 +727,10 @@ function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string
   return `<div class="ds-trust-card">
     <div class="ds-trust-card-head">
       <span class="ds-trust-card-path">${esc(u.file)}<span class="ds-dim">:${u.line}</span></span>
-      <span class="ds-untoured-tag">UNTOURED</span>
+      <span class="ds-untoured-tag">UNEXPLAINED</span>
     </div>
     <div class="ds-diffbody ds-diffbody-unified">${rows}</div>
-    <div class="ds-trust-card-note">This change is in the diff but no tour step walks through it — surfaced here so nothing slips in unexplained.</div>
+    <div class="ds-trust-card-note">This change is in the diff but no story step walks through it — surfaced here so nothing slips in unexplained.</div>
     <div class="ds-trust-card-actions">
       ${jump}
       <button class="ds-btn ds-btn-ghost" data-explain>Ask ${esc(APP_BRAND)} to explain</button>

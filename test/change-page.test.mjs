@@ -17,6 +17,13 @@ test('renderChangePage shows the change, the base label, and the Generate action
   assert.ok(html.includes('main (abc123)'));
   assert.ok(html.includes('Generate guided review'));
   assert.ok(html.toLowerCase().includes('nothing starts until you click'));
+  assert.ok(html.includes('id="storyMode"'), 'has a story mode picker');
+  assert.ok(html.includes('value="guided" selected'), 'defaults to guided mode');
+  assert.ok(html.includes('value="detailed"'), 'offers detailed correctness mode');
+  assert.ok(html.includes('mode:modeSel?modeSel.value:undefined'), 'sends the selected story mode');
+  assert.ok(html.includes('href="/change?scope=uncommitted"'), 'scope tabs stay on the change route');
+  assert.ok(html.includes("var u='/change?base='"), 'manual compare stays on the change route');
+  assert.ok(html.includes("location.href='/review?story=story.json'"), 'generation success opens the review route');
 });
 
 test('renderChangePage escapes file paths and shows an empty-change guard', () => {
@@ -46,4 +53,6 @@ test('renderChangePage shows a notice banner and the agent + model picker', () =
   const html = renderChangePage(withChanges, { repoName: 'demo', notice: 'steps must be a non-empty array' });
   assert.ok(html.includes('class="notice"') && html.includes('steps must be a non-empty array'), 'shows the notice');
   assert.ok(html.includes('id="agentSel"') && html.includes('id="modelSel"'), 'has the agent + model dropdowns');
+  assert.ok(html.includes('Update skills'), 'has skill update action');
+  assert.ok(html.includes('/api/skills/update'), 'calls the skill update endpoint');
 });

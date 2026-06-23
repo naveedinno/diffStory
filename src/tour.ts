@@ -1,12 +1,60 @@
 // Load and validate the story file (.diffstory/story.json). Validation is hand-rolled (no schema dep)
-// but thorough — a malformed tour should fail loudly with a useful message,
+// but thorough — a malformed story should fail loudly with a useful message,
 // not render a broken page.
 import { readFileSync } from 'node:fs';
-import type { Tour, TourStep, StepKind } from './types.js';
+import type { Tour, TourStep, StepKind, StoryMode } from './types.js';
 
 const KINDS: StepKind[] = ['changed', 'context', 'new-file'];
+const MODES: StoryMode[] = ['guided', 'detailed'];
 
 export class TourError extends Error {}
+
+function isLineNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0;
+}
+
+function validateLineRange(value: unknown, name: string, errors: string[]): [number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 2 || !isLineNumber(value[0]) || !isLineNumber(value[1])) {
+    errors.push(`${name} must be [startLine, endLine]`);
+    return undefined;
+  }
+  if (value[0] > value[1]) {
+    errors.push(`${name} must start before it ends`);
+    return undefined;
+  }
+  return [value[0], value[1]];
+}
+
+function validateFocus(
+  step: Record<string, unknown>,
+  stepRange: [number, number] | undefined,
+  where: string,
+  errors: string[],
+): void {
+  if (step.focus === undefined) return;
+  if (typeof step.focus !== 'object' || step.focus === null || Array.isArray(step.focus)) {
+    errors.push(`${where}.focus must be an object`);
+    return;
+  }
+  const focus = step.focus as Record<string, unknown>;
+  if (focus.label !== undefined && typeof focus.label !== 'string') {
+    errors.push(`${where}.focus.label must be a string`);
+  }
+  if (!Array.isArray(focus.ranges) || focus.ranges.length === 0) {
+    errors.push(`${where}.focus.ranges must be a non-empty array`);
+    return;
+  }
+  focus.ranges.forEach((range, j) => {
+    const focusRange = validateLineRange(range, `${where}.focus.ranges[${j}]`, errors);
+    if (
+      focusRange &&
+      stepRange &&
+      (focusRange[0] < stepRange[0] || focusRange[1] > stepRange[1])
+    ) {
+      errors.push(`${where}.focus.ranges[${j}] must be inside ${where}.range`);
+    }
+  });
+}
 
 export function loadTour(path: string): Tour {
   let raw: string;
@@ -23,17 +71,20 @@ export function loadTour(path: string): Tour {
   }
   const errors = validateTour(parsed);
   if (errors.length) {
-    throw new TourError(`${path} is not a valid tour:\n  - ${errors.join('\n  - ')}`);
+    throw new TourError(`${path} is not a valid story:\n  - ${errors.join('\n  - ')}`);
   }
   return parsed as Tour;
 }
 
 export function validateTour(obj: unknown): string[] {
   const errors: string[] = [];
-  if (typeof obj !== 'object' || obj === null) return ['tour must be a JSON object'];
+  if (typeof obj !== 'object' || obj === null) return ['story must be a JSON object'];
   const t = obj as Record<string, unknown>;
 
   if (t.version !== 1) errors.push('version must be 1');
+  if (t.mode !== undefined && !MODES.includes(t.mode as StoryMode)) {
+    errors.push(`mode must be one of ${MODES.join(', ')}`);
+  }
   if (typeof t.title !== 'string' || !t.title.trim()) errors.push('title is required');
   if (typeof t.summary !== 'string') errors.push('summary is required (use "" if none)');
   if (!Array.isArray(t.steps) || t.steps.length === 0) {
@@ -60,14 +111,8 @@ export function validateTour(obj: unknown): string[] {
     if (!KINDS.includes(step.kind as StepKind)) {
       errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
     }
-    if (
-      !Array.isArray(step.range) ||
-      step.range.length !== 2 ||
-      typeof step.range[0] !== 'number' ||
-      typeof step.range[1] !== 'number'
-    ) {
-      errors.push(`${where}.range must be [startLine, endLine]`);
-    }
+    const stepRange = validateLineRange(step.range, `${where}.range`, errors);
+    validateFocus(step, stepRange, where, errors);
   });
 
   // referential integrity for calls / returnsTo

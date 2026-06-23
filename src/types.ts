@@ -12,6 +12,19 @@ export type StepKind =
   | 'context' // unchanged code shown only so the change makes sense (e.g. the callee)
   | 'new-file'; // a brand-new file — render the region as added
 
+/** How much detail the authored story should carry. */
+export type StoryMode =
+  | 'guided' // concise review path: enough context to read the diff in the right order
+  | 'detailed'; // correctness audit: longer, code-path and line-level explanation
+
+/** Optional read-aloud pointer inside a step's wider review window. */
+export interface StepFocusTarget {
+  /** Inclusive post-change line ranges to glow while this step is being read aloud. */
+  ranges: Array<[number, number]>;
+  /** Optional short cue for future reader surfaces. */
+  label?: string;
+}
+
 /** One stop on the guided tour. */
 export interface TourStep {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
@@ -24,6 +37,8 @@ export interface TourStep {
   file: string;
   /** Inclusive line range in the *post-change* file, [start, end] (1-based). */
   range: [number, number];
+  /** Optional narrower post-change line range(s) to point at while reading aloud. */
+  focus?: StepFocusTarget;
   kind: StepKind;
   /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */
   why: string;
@@ -38,10 +53,14 @@ export interface TourStep {
 /** The whole reading plan the AI emits. */
 export interface Tour {
   version: 1;
+  /** Story depth requested at generation time; old stories default to guided. */
+  mode?: StoryMode;
   title: string;
   summary: string;
   /** Optional git ref to diff against; overrides auto-detection. */
   base?: string;
+  /** Optional head ref for fixed base..head stories. Omitted means working tree vs base. */
+  head?: string;
   steps: TourStep[];
 }
 

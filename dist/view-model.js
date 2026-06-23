@@ -52,11 +52,15 @@ export function buildReviewModel(repo, tour, files) {
 }
 function buildStep(repo, step, files, byId, total) {
     const { blocks, note } = stepBlocks(repo, step, files);
+    const focusExplicit = !!step.focus?.ranges.length;
     return {
         id: step.id,
         order: step.order,
         title: step.title,
         file: step.file,
+        range: step.range,
+        focusRanges: focusExplicit ? step.focus.ranges : [step.range],
+        focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
         newFile: step.kind === 'new-file',

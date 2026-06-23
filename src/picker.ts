@@ -115,6 +115,11 @@ body{
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
 h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
 .sub{color:var(--label2); font-size:15px; margin:14px 0 30px; max-width:48ch; line-height:1.45}
+.launchwarn{max-width:620px;margin:-12px 0 28px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:10px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
+.launchwarn[hidden]{display:none}
+.launchwarn span{flex:1;min-width:0}
+.skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
+.skillfix:hover{background:var(--blue-press)}.skillfix:disabled{opacity:.55;cursor:default}
 .section{font-size:13px; font-weight:600; color:var(--label3); margin:0 0 10px 2px}
 .stack>*+*{margin-top:8px}
 .card,.fsrow{font:inherit; color:inherit; cursor:pointer}
@@ -220,6 +225,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
     <div><h1>${esc(APP_BRAND)}</h1></div>
   </div>
   <p class="sub reveal d1">The agent that wrote the code walks you through its change — in reading order, not by filename. Open a repository to begin.</p>
+  <p class="launchwarn reveal d1" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
 
   <section class="reveal d2">
     <p class="section">Recent</p>
@@ -242,7 +248,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
 
   <section class="steps reveal d4" aria-label="How it works">
     <div class="step"><span class="step-n">1</span><p class="step-t">Make changes</p><p class="step-d">Let your agent edit code as usual.</p></div>
-    <div class="step"><span class="step-n">2</span><p class="step-t">Generate the tour</p><p class="step-d">diffStory has your agent write the reading order.</p></div>
+    <div class="step"><span class="step-n">2</span><p class="step-t">Generate the story</p><p class="step-d">diffStory has your agent write the reading order.</p></div>
     <div class="step"><span class="step-n">3</span><p class="step-t">Walk the diff</p><p class="step-d">Read in order, comment, and it fixes inline.</p></div>
   </section>
 </main>
@@ -267,11 +273,36 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
 <script>
 (function(){
   var msg=document.getElementById('msg');
+  function showSkillState(sk){
+    var sw=document.getElementById('skillWarn'),txt=document.getElementById('skillWarnText'),btn=document.getElementById('skillUpdateBtn');
+    if(!sw||!txt||!btn||!sk)return;
+    if(sk.current){
+      sw.hidden=false;txt.textContent='Story-generation skills are up to date.';btn.hidden=true;
+      setTimeout(function(){sw.hidden=true;},1400);return;
+    }
+    sw.hidden=false;btn.hidden=false;btn.disabled=false;btn.textContent='Update skills';
+    txt.textContent=sk.installed
+      ? 'Story-generation skill is installed but does not match this app. Update it before generating so the agent sees the current story rules.'
+      : 'Story-generation skill was not found in ~/.agents, ~/.claude, or ~/.codex. Install it before generating so the agent can create stories reliably.';
+  }
+  function wireSkillUpdate(){
+    var btn=document.getElementById('skillUpdateBtn'),txt=document.getElementById('skillWarnText');if(!btn)return;
+    btn.onclick=function(){
+      btn.disabled=true;btn.textContent='Updating…';if(txt)txt.textContent='Installing bundled diffStory skills locally…';
+      fetch('/api/skills/update',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d&&d.skills)showSkillState(d.skills);else throw new Error('bad response');
+      }).catch(function(){btn.disabled=false;btn.textContent='Try again';if(txt)txt.textContent='Could not update skills. Run scripts/install-skills.sh from this repo, or re-run the diffStory installer.';});
+    };
+  }
+  wireSkillUpdate();
+  fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
+    showSkillState(d.skills);
+  }).catch(function(){});
   function open(path){
     if(!path) return;
     msg.style.color=''; msg.textContent='Opening…';
     fetch('/api/repo/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
-      .then(function(r){ if(r.ok){ location.href='/'; return null; } return r.json().catch(function(){return {};}); })
+      .then(function(r){ if(r.ok){ location.href='/stories'; return null; } return r.json().catch(function(){return {};}); })
       .then(function(e){ if(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.error||'Could not open that path.'; } })
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }

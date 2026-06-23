@@ -1,5 +1,4 @@
-// Integration test: opening a repo with no tour lands on the "Your change" screen
-// (NOT an error page), and no agent is started. Run with: npm test
+// Integration test: opening a repo lands on story selection first. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -18,13 +17,38 @@ function repoWithChange() {
   return d;
 }
 
+function writeStory(repo, body = {}) {
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(
+    join(repo, '.diffstory', 'story.json'),
+    JSON.stringify({
+      version: 1,
+      title: 'Saved story',
+      summary: 'A saved story for this repo',
+      base: 'HEAD',
+      steps: [
+        {
+          id: 's1',
+          order: 1,
+          title: 'Entry point',
+          file: 'a.txt',
+          range: [2, 2],
+          kind: 'changed',
+          why: 'Start at the changed line.',
+        },
+      ],
+      ...body,
+    }),
+  );
+}
+
 async function boot() {
   const server = serve({ repo: null, port: 0, open: false });
   await once(server, 'listening');
   return { server, base: `http://localhost:${server.address().port}` };
 }
 
-test('opening a no-tour repo lands on the change screen, not an error', async () => {
+test('opening a repo lands on story selection before generating a new story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -34,10 +58,19 @@ test('opening a no-tour repo lands on the change screen, not an error', async ()
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const html = (await (await fetch(`${base}/`)).text());
-    assert.ok(html.includes('Generate guided review'), 'shows the Generate action');
-    assert.ok(html.includes('a.txt'), 'shows the changed file');
-    assert.ok(!html.includes("Couldn't build the review"), 'is not the error page');
+    const html = (await (await fetch(`${base}/stories`)).text());
+    assert.ok(html.includes('Choose a story'), 'shows story selection');
+    assert.ok(html.includes('New story'), 'offers a new story');
+    assert.ok(html.includes('href="/change"'), 'new story has its own route');
+    assert.ok(!html.includes('Generate guided review'), 'does not jump straight to generation');
+
+    const next = await (await fetch(`${base}/change`)).text();
+    assert.ok(next.includes('Generate guided review'), 'new story opens the Generate action');
+    assert.ok(next.includes('a.txt'), 'new story screen shows the changed file');
+
+    const again = await (await fetch(`${base}/stories`)).text();
+    assert.ok(again.includes('Choose a story'), 'explicit stories route still returns to the chooser');
+    assert.ok(!again.includes("Couldn't build the review"), 'is not the error page');
   } finally {
     server.close();
     process.env.HOME = realHome;
@@ -46,7 +79,39 @@ test('opening a no-tour repo lands on the change screen, not an error', async ()
   }
 });
 
-test('a malformed story shows the change screen with a notice, not the raw error page', async () => {
+test('opening a repo with a saved story lets the user select it', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  writeStory(repo);
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
+    });
+    const chooser = await (await fetch(`${base}/stories`)).text();
+    assert.ok(chooser.includes('Choose a story'), 'shows story selection');
+    assert.ok(chooser.includes('Saved story'), 'lists the saved story');
+    assert.ok(chooser.includes('Working tree vs HEAD'), 'explains the diff scope');
+    assert.ok(chooser.includes('git diff HEAD --'), 'shows the underlying diff command');
+    assert.ok(chooser.includes('href="/review?story=story.json"'), 'saved story has its own review route');
+
+    const review = await (await fetch(`${base}/review?story=story.json`)).text();
+    assert.ok(review.includes('Entry point'), 'opens the selected story');
+    assert.ok(!review.includes('Choose a story'), 'does not stay on the chooser');
+
+    const chooserAgain = await (await fetch(`${base}/stories`)).text();
+    assert.ok(chooserAgain.includes('Choose a story'), 'review route does not consume the chooser route');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('a malformed selected story shows the change screen with a notice, not the raw error page', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -58,10 +123,36 @@ test('a malformed story shows the change screen with a notice, not the raw error
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const html = await (await fetch(`${base}/`)).text();
+    const chooser = await (await fetch(`${base}/stories`)).text();
+    assert.ok(chooser.includes('story.json'), 'lists the bad story');
+    const html = await (await fetch(`${base}/review?story=story.json`)).text();
     assert.ok(html.includes('class="notice"'), 'shows a notice about the bad review');
     assert.ok(html.includes('Generate guided review'), 'offers regenerate');
     assert.ok(!html.includes("Couldn't build the review"), 'is not the raw error page');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('legacy story query routes still work for old bookmarks', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  writeStory(repo);
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
+    });
+    const change = await (await fetch(`${base}/?story=new`)).text();
+    assert.ok(change.includes('Generate guided review'), 'old new-story query opens the change screen');
+
+    const review = await (await fetch(`${base}/?story=story.json`)).text();
+    assert.ok(review.includes('Entry point'), 'old story query opens the selected story');
   } finally {
     server.close();
     process.env.HOME = realHome;

@@ -18,12 +18,14 @@
   },
   "files": [
     "dist",
+    "scripts/setup-kokoro.sh",
     "skills",
     "README.md"
   ],
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
     "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "setup:kokoro": "sh scripts/setup-kokoro.sh",
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",
     "test": "npm run build && node --test test/*.test.mjs",

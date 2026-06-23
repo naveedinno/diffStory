@@ -52,6 +52,11 @@ export interface StepView {
   order: number;
   title: string;
   file: string;
+  range: [number, number];
+  /** Narrower post-change line ranges that glow while this step is read aloud. */
+  focusRanges: Array<[number, number]>;
+  /** Whether focusRanges came from story JSON instead of the step range fallback. */
+  focusExplicit: boolean;
   kind: StepKind;
   kindLabel: string;
   newFile: boolean;
@@ -145,11 +150,15 @@ function buildStep(
   total: number,
 ): StepView {
   const { blocks, note } = stepBlocks(repo, step, files);
+  const focusExplicit = !!step.focus?.ranges.length;
   return {
     id: step.id,
     order: step.order,
     title: step.title,
     file: step.file,
+    range: step.range,
+    focusRanges: focusExplicit ? step.focus!.ranges : [step.range],
+    focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
     newFile: step.kind === 'new-file',

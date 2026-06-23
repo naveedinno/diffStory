@@ -1,5 +1,5 @@
 // Tiny HTTP server over Node built-ins. The page is re-rendered on every GET, so
-// refreshing reflects the current diff and tour with no watch process. The repo
+// refreshing reflects the current diff and story with no watch process. The repo
 // is held in a mutable Session, so the same server can boot empty (app/picker
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer } from 'node:http';
@@ -11,19 +11,24 @@ import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
+import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope } from './scope.js';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
 import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
-import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
+import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
 import { recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
+import { listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
+import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
@@ -71,25 +76,49 @@ function handle(req, res, session) {
         if (method === 'GET' && url.pathname === '/') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            // A built, VALID review uses the tour's own base. A missing OR malformed story
-            // falls through to the change screen (with a notice) — never the raw error page.
-            if (existsSync(resolveStoryPath(session.repo))) {
-                try {
-                    loadTour(resolveStoryPath(session.repo));
-                    applyScope(session, url.searchParams);
-                    return sendHtml(res, renderReview(session));
-                }
-                catch (e) {
-                    return sendHtml(res, changeScreen(session, url.searchParams, e.message));
-                }
+            // Back-compat for URLs emitted by older app builds.
+            if (url.searchParams.has('story')) {
+                return sendHtml(res, reviewScreen(session, url.searchParams));
             }
+            if (hasChangeQuery(url.searchParams)) {
+                session.chooseStory = false;
+                session.selectedStory = null;
+                return sendHtml(res, changeScreen(session, url.searchParams));
+            }
+            if (session.chooseStory && session.selectedStory === undefined) {
+                return sendHtml(res, storyChooser(session));
+            }
+            if (session.selectedStory === null) {
+                return sendHtml(res, changeScreen(session, url.searchParams));
+            }
+            return sendHtml(res, reviewScreen(session, url.searchParams));
+        }
+        if (method === 'GET' && url.pathname === '/stories') {
+            if (session.repo == null)
+                return sendHtml(res, pickerStub());
+            return sendHtml(res, storyChooser(session));
+        }
+        if (method === 'GET' && url.pathname === '/change') {
+            if (session.repo == null)
+                return sendHtml(res, pickerStub());
+            session.chooseStory = false;
+            session.selectedStory = null;
             return sendHtml(res, changeScreen(session, url.searchParams));
+        }
+        if (method === 'GET' && url.pathname === '/review') {
+            if (session.repo == null)
+                return sendHtml(res, pickerStub());
+            return sendHtml(res, reviewScreen(session, url.searchParams));
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
             return sendJson(res, 200, listRecentRepos());
         }
         if (method === 'GET' && url.pathname === '/api/agents') {
-            return sendJson(res, 200, { agents: availableAgents() });
+            return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(homedir()) });
+        }
+        if (method === 'POST' && url.pathname === '/api/skills/update') {
+            const updated = updateSkills(homedir());
+            return sendJson(res, 200, { ok: true, installed: updated.installed, skills: updated.status });
         }
         if (method === 'GET' && url.pathname === '/api/fs') {
             const p = url.searchParams.get('path');
@@ -153,6 +182,18 @@ function handle(req, res, session) {
         if (method === 'POST' && url.pathname === '/api/generate') {
             return readBody(req, (body) => runGenerate(res, session, body));
         }
+        if (method === 'POST' && url.pathname === '/api/tts/say') {
+            return readBody(req, (body) => runLocalSay(res, body));
+        }
+        if (method === 'GET' && url.pathname.startsWith('/api/tts/say/')) {
+            return sendLocalSayAudio(res, url.pathname.slice('/api/tts/say/'.length));
+        }
+        if (method === 'POST' && url.pathname === '/api/tts/kokoro') {
+            return readBody(req, (body) => runLocalKokoro(res, body));
+        }
+        if (method === 'GET' && url.pathname.startsWith('/api/tts/kokoro/')) {
+            return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length));
+        }
         if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
             if (!session.repo)
                 return noRepo(res);
@@ -191,6 +232,56 @@ function handle(req, res, session) {
 function pickerStub() {
     return renderPicker(listRecentRepos(), homedir(), Date.now());
 }
+function storyChooser(session) {
+    const repo = session.repo;
+    return renderStoryPicker({ repoName: basename(repo), stories: listStories(repo), now: Date.now() });
+}
+function hasChangeQuery(params) {
+    return params.has('scope') || params.has('base') || params.has('head');
+}
+function reviewScreen(session, params) {
+    const picked = applyStoryChoice(session, params);
+    if (session.selectedStory === null) {
+        return changeScreen(session, params);
+    }
+    // A built, VALID review uses the story's own base unless the URL explicitly
+    // supplies a scope override. A missing or malformed story falls back to the
+    // change screen with a notice, never the raw error page.
+    const storyFile = selectedStoryPath(session);
+    if (existsSync(storyFile)) {
+        try {
+            loadTour(storyFile);
+            applyScope(session, params);
+            return renderReview(session);
+        }
+        catch (e) {
+            return changeScreen(session, params, e.message);
+        }
+    }
+    if (picked) {
+        return changeScreen(session, params, 'That story could not be found.');
+    }
+    return changeScreen(session, params);
+}
+function applyStoryChoice(session, params) {
+    if (!session.repo || !params.has('story'))
+        return false;
+    const id = params.get('story') ?? '';
+    session.chooseStory = false;
+    session.base = undefined;
+    session.head = undefined;
+    if (id === 'new') {
+        session.selectedStory = null;
+        return true;
+    }
+    session.selectedStory = storyPathForId(session.repo, id);
+    return true;
+}
+function selectedStoryPath(session) {
+    if (!session.repo)
+        throw new Error('No repo is open.');
+    return session.selectedStory ?? resolveStoryPath(session.repo);
+}
 /** Apply a scope choice from the Your-change switcher (?scope=auto | ?base= | ?head=). */
 function applyScope(session, params) {
     if (params.get('scope') === 'auto') {
@@ -212,7 +303,7 @@ function changeScreen(session, params, notice) {
     session.head = scope.head;
     return renderChange(session, scope, notice);
 }
-/** The "Your change" screen for a repo that has no (valid) tour yet. */
+/** The "Your change" screen for a repo that has no selected valid story yet. */
 function renderChange(session, scope, notice) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
@@ -232,9 +323,9 @@ function loadReview(session) {
     if (!session.repo)
         throw new Error('No repo is open.');
     const repo = session.repo;
-    const tour = loadTour(resolveStoryPath(repo));
+    const tour = loadTour(selectedStoryPath(session));
     const base = resolveBase(repo, session.base ?? tour.base);
-    const files = parseUnifiedDiff(getDiff(repo, base, session.head));
+    const files = parseUnifiedDiff(getDiff(repo, base, session.head ?? tour.head));
     return { tour, base, files };
 }
 function renderReview(session) {
@@ -273,9 +364,9 @@ function currentDiff(session) {
         if (!session.repo)
             return '';
         const repo = session.repo;
-        const tour = loadTour(resolveStoryPath(repo));
+        const tour = loadTour(selectedStoryPath(session));
         const base = resolveBase(repo, session.base ?? tour.base);
-        return getDiff(repo, base, session.head);
+        return getDiff(repo, base, session.head ?? tour.head);
     }
     catch {
         return '';
@@ -338,7 +429,7 @@ function runAddress(res, session, body) {
         agentBusy = false;
     });
 }
-/** Drive the agent to write a tour for the current repo, streaming NDJSON like address. */
+/** Drive the agent to write a story for the current repo, streaming NDJSON like address. */
 function runGenerate(res, session, body) {
     let input = {};
     try {
@@ -356,6 +447,7 @@ function runGenerate(res, session, body) {
         ? input.agent
         : pre.agent;
     const model = input.model && input.model.trim() ? input.model.trim() : undefined;
+    const mode = normalizeStoryMode(input.mode);
     const repo = session.repo;
     session.base = input.base;
     session.head = input.head;
@@ -375,11 +467,15 @@ function runGenerate(res, session, body) {
             /* client disconnected */
         }
     };
-    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head), (e) => send(e), model, ac.signal)
+    streamAgent(agent, repo, storyPrompt(input.base ?? base, input.head, mode), (e) => send(e), model, ac.signal)
         .then(({ ok, output }) => {
         const storyWritten = existsSync(resolveStoryPath(repo));
         if (!ok && !storyWritten)
             send({ type: 'error', data: tailLines(output, 30) });
+        if (storyWritten) {
+            session.selectedStory = resolveStoryPath(repo);
+            session.chooseStory = false;
+        }
         send({ type: 'done', ok: ok && storyWritten, storyWritten });
     })
         .catch((err) => send({ type: 'error', data: String(err) }))
@@ -397,6 +493,108 @@ function readBody(req, done) {
     });
     req.on('end', () => done(data));
 }
+function runLocalSay(res, body) {
+    let input;
+    try {
+        input = JSON.parse(body || '{}');
+    }
+    catch {
+        return sendJson(res, 400, { error: 'invalid JSON' });
+    }
+    const abort = speechAbortForResponse(res);
+    synthesizeWithSay(homedir(), {
+        text: input.text ?? '',
+        voice: input.voice,
+        preset: input.preset,
+        rate: input.rate,
+    }, { signal: abort.signal })
+        .then((audio) => sendJson(res, 200, {
+        cached: audio.cached,
+        rate: audio.rate,
+        url: audio.url,
+        voice: audio.voice,
+    }))
+        .catch((err) => {
+        if (abort.signal.aborted || res.destroyed)
+            return;
+        sendJson(res, 400, { error: err.message });
+    });
+}
+function runLocalKokoro(res, body) {
+    let input;
+    try {
+        input = JSON.parse(body || '{}');
+    }
+    catch {
+        return sendJson(res, 400, { error: 'invalid JSON' });
+    }
+    const abort = speechAbortForResponse(res);
+    synthesizeWithKokoro(homedir(), {
+        text: input.text ?? '',
+        voice: input.voice,
+        rate: input.rate,
+    }, { signal: abort.signal })
+        .then((audio) => sendJson(res, 200, {
+        cached: audio.cached,
+        engine: 'kokoro',
+        rate: audio.rate,
+        url: audio.url,
+        voice: audio.voice,
+    }))
+        .catch((err) => {
+        if (abort.signal.aborted || res.destroyed)
+            return;
+        sendJson(res, 400, { error: err.message });
+    });
+}
+function speechAbortForResponse(res) {
+    const ctrl = new AbortController();
+    res.on('close', () => {
+        if (!res.writableEnded)
+            ctrl.abort();
+    });
+    return ctrl;
+}
+function sendLocalSayAudio(res, file) {
+    const id = file.endsWith('.m4a') ? file.slice(0, -4) : file;
+    if (!isLocalTtsId(id)) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+    }
+    const path = join(localTtsCacheDir(homedir()), `${id}.m4a`);
+    if (!existsSync(path)) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+    }
+    const stat = statSync(path);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'audio/mp4');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    createReadStream(path).pipe(res);
+}
+function sendLocalKokoroAudio(res, file) {
+    const id = file.endsWith('.wav') ? file.slice(0, -4) : file;
+    if (!isKokoroTtsId(id)) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+    }
+    const path = join(kokoroTtsCacheDir(homedir()), `${id}.wav`);
+    if (!existsSync(path)) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+    }
+    const stat = statSync(path);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    createReadStream(path).pipe(res);
+}
 function sendHtml(res, html, status = 200) {
     res.statusCode = status;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -412,7 +610,7 @@ function errorPage(message) {
 <style>body{background:#0e0f13;color:#e7e8ec;font:15px/1.6 system-ui;padding:60px;max-width:70ch;margin:auto}
 code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</style></head>
 <body><h1>Couldn't build the review</h1><pre><code>${escapeText(message)}</code></pre>
-<p>Fix the issue above and refresh. Most often the tour is missing or malformed — re-run <code>/review-tour</code>.</p>
+<p>Fix the issue above and refresh. Most often the story is missing or malformed — re-run <code>diffstory story</code>.</p>
 </body></html>`;
 }
 function escapeText(s) {

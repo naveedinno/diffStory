@@ -3,6 +3,9 @@
 // (onPath, storyPrompt, agentCommand) are unit-tested.
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
+export function normalizeStoryMode(mode) {
+    return mode === 'detailed' ? 'detailed' : 'guided';
+}
 /** Whether `cmd` resolves on PATH (POSIX `command -v`). */
 export function onPath(cmd) {
     return spawnSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'ignore' }).status === 0;
@@ -12,33 +15,90 @@ export function availableAgents() {
     return ['claude', 'codex'].filter(onPath);
 }
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
-export function storyPrompt(baseRef, headRef) {
+export function storyPrompt(baseRef, headRef, mode = 'guided') {
+    const storyMode = normalizeStoryMode(mode);
     const diff = headRef ? `git diff ${baseRef}..${headRef} --` : `git diff ${baseRef} --`;
+    const headField = headRef ? ` and its "head" field to "${headRef}"` : '';
+    const whyLength = storyMode === 'detailed' ? '3-7 short sentences' : '1-3 short sentences';
+    const modeContract = storyMode === 'detailed'
+        ? `Story mode contract:\n` +
+            `- Detailed correctness mode: write a longer audit story for a reviewer who wants to verify the code is exactly right.\n` +
+            `- Prefer more, smaller stops when a function contains separate decisions; split separate branches, guards, state writes, external calls, and error paths instead of hiding them in one broad paragraph.\n` +
+            `- Explain important ranges almost line-by-line: name the method, then describe what the first guard checks, what the next assignment or call prepares, what each branch accepts or rejects, and what state, return value, event, render, or side effect follows.\n` +
+            `- Cover all meaningful code paths: happy path, validation guards, failure cases, fallback behavior, persistence, cleanup, tests, and generated artifacts when they matter.\n` +
+            `- Use exact function, variable, parameter, event, and field names, but do not paste code blocks or duplicate the diff.\n` +
+            `- Detailed does not mean noisy: skip trivial syntax, imports, and mechanical plumbing unless they change correctness.\n\n`
+        : `Story mode contract:\n` +
+            `- Guided review mode: write the current concise review story, optimized for a human who will read the code after you orient them.\n` +
+            `- Keep steps grouped by review question and code flow; avoid line-by-line narration unless the line is a correctness hinge.\n\n`;
     return (`Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}.\n\n` +
-        `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}". The story is for a human ` +
+        `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}"${headField} and set its "mode" field to "${storyMode}". The story is for a human ` +
         `reviewer, not a changelog.\n\n` +
+        modeContract +
+        `Reviewer map contract:\n` +
+        `- Before writing JSON, build a private reviewer map. Do not include this map in the file.\n` +
+        `- Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +
+        `- Identify the behavior this change is really about, the first entry point to read, the control/data flow, ` +
+        `the invariants or risks to verify, and which tests/docs/generated files support each behavior.\n\n` +
         `Reading order contract:\n` +
         `- Start at the entry point a reviewer should inspect first.\n` +
         `- Follow runtime/control/data flow across files, then return to callers when useful.\n` +
         `- Group related edits into one stop; do not emit one step per file or one step per hunk.\n` +
         `- Put tests, snapshots, docs, and generated files after the behavior they verify or explain.\n\n` +
+        `Reviewer question contract:\n` +
+        `- Each step must answer a reviewer question.\n` +
+        `- Good questions: where does the behavior start; what invariant changed; what is passed, rejected, stored, ` +
+        `or rendered; what risk should the reviewer inspect; what proves this path works.\n` +
+        `- Titles should read like falsifiable review claims or risks, not file captions.\n\n` +
         `Writing contract:\n` +
+        `- The top-level "summary" is the overview: 1-3 short informal sentences that say what I did in general, ` +
+        `then how the steps walk it.\n` +
         `- Step titles should name the exact behavior or risk being reviewed.\n` +
         `- Each "why" is the story paragraph for that stop: explain what changed here, why the old flow was not enough, ` +
-        `and how this code lets the next caller/helper/path do its job.\n` +
+        `and how this code lets the next caller/helper/path do its job. Keep it to ${whyLength} in first person.\n` +
         `- Prefer causal chains like "I added this parameter to method X so method Y can pass Z, which lets H handle...".\n` +
         `- Include what to verify only inside that story, not as a detached checklist.\n` +
         `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
         `- Prefer specific protocol/product language from the code over generic narrative.\n\n` +
         `Voice contract:\n` +
-        `- Make the tour lively, specific, and a little fun, like a sharp teammate guiding review.\n` +
+        `- Make the story lively, specific, and a little fun, like a sharp teammate guiding review.\n` +
+        `- Keep it informal and to the point. No long paragraphs, no essay mode, no drama.\n` +
         `- Use active verbs, concrete nouns, and quick stakes: what could break, what now holds, what got simpler.\n` +
         `- No corporate changelog voice, no sleepy "This updates..." phrasing, and no bland summary captions.\n` +
         `- Keep the fun in the wording, not in fake confidence: correctness beats jokes every time.\n\n` +
         `Coverage contract:\n` +
+        `- Coverage is necessary, but not sufficient.\n` +
+        `- Before writing ${DATA_DIR}/story.json, build a private coverage ledger: file, changed hunk range, semantic ` +
+        `purpose, and planned step id.\n` +
         `- Cover every changed hunk with a changed/new-file step.\n` +
         `- Use context steps only for unchanged code that makes the review easier.\n` +
         `- Run diffstory check and adjust the story until the coverage gate is clean.\n\n` +
+        `Range contract:\n` +
+        `- Read the post-change file with line numbers before choosing ranges.\n` +
+        `- Ranges are review windows, not coverage hacks: use the smallest complete function/block/test/config region ` +
+        `that makes the change understandable.\n` +
+        `- Do not use whole-file or giant ranges unless the whole file is new and small, or the entire file is truly ` +
+        `the review unit.\n` +
+        `- For pure deletions, anchor the step at the post-change location where the deletion happened and include the ` +
+        `smallest surrounding code that explains the removed behavior.\n\n` +
+        `Focus pointer contract:\n` +
+        `- The rendered page highlights code while the story is read aloud. Use optional "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} when the spoken point is narrower than the review window.\n` +
+        `- "focus.ranges" must use post-change line numbers and stay inside that step's "range".\n` +
+        `- The focus can be one or two lines when that is what the sentence is talking about; point to the exact guard, call, assertion, state write, or branch, not the whole displayed section.\n` +
+        `- In guided mode, add focus only for the exact line or tiny block the reviewer should look at while listening.\n` +
+        `- In detailed mode, prefer narrow focus ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n` +
+        `- If the whole step range is the right thing to point at, omit "focus"; diffStory will highlight the step range automatically.\n\n` +
+        `Truth contract:\n` +
+        `- Only describe behavior you verified in the diff or current source lines you read.\n` +
+        `- Do not infer intent from branch names, filenames, or vibes.\n` +
+        `- Do not claim tests pass unless you ran them.\n` +
+        `- Do not claim a test covers behavior unless the assertion is visible in the story range or in code you read.\n` +
+        `- If you are uncertain, narrow the claim to what the code shows.\n\n` +
+        `Dry self-review before finishing:\n` +
+        `- Re-read the story as a skeptical reviewer.\n` +
+        `- Check that every title names behavior/risk, every why explains old flow -> local change -> next implication, ` +
+        `and calls/returnsTo reflect real control/data flow.\n` +
+        `- Remove vague filler and unsupported safety claims before saving.\n\n` +
         `Do not ask questions. Generate it directly.`);
 }
 /** Instruct the agent to address review comments via the address-review skill. */

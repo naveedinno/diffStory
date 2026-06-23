@@ -4,7 +4,7 @@
 
 ### Read AI-written code the way it was meant to be read.
 
-diffStory turns a sprawling, AI-authored change into a **guided tour**. The agent that wrote the
+diffStory turns a sprawling, AI-authored change into a **guided story**. The agent that wrote the
 code walks you through it in the order the logic actually flows — you comment right on the lines,
 and it fixes things on the spot. No more hunting through thirty alphabetised files.
 
@@ -55,6 +55,18 @@ needed.
 - 🗂️ **An all-files view** — a clean, file-by-file overview when you want the bird's-eye.
 - 🔒 **Local & dependency-free** — Node built-ins only; nothing installed at runtime, nothing phoned home.
 
+### Optional local neural voice
+
+The read-aloud popup can use Kokoro for better local speech. Run the setup script once:
+
+```bash
+npm run setup:kokoro
+```
+
+It installs `espeak-ng`, creates `~/.diffstory/kokoro-venv` with Python 3.12, and installs
+`kokoro` + `soundfile` there. diffStory auto-detects that venv; then choose **Kokoro AI** in
+the voice settings and press **Preview**.
+
 ## Install
 
 One command — no `npm -g`, no `sudo`. It clones diffStory to `~/.diffstory` and puts a launcher
@@ -90,8 +102,8 @@ git clone git@github.com:naveedinno/diffStory.git && cd diffStory
 | Command | What it does |
 | --- | --- |
 | `diffstory serve` | Open the guided review page (default command). |
-| `diffstory check` | Print coverage; **exits non-zero if a change isn't in the tour** — great for CI. |
-| `diffstory init` | Scaffold `.diffstory/` with a starter tour. |
+| `diffstory check` | Print coverage; **exits non-zero if a change isn't in the story** — great for CI. |
+| `diffstory init` | Scaffold `.diffstory/` with a starter story. |
 | `diffstory help` | Full usage and flags. |
 
 Flags: `--dir <path>` · `--base <ref>` · `--head <ref>` · `--port <n>` · `--no-open`.
@@ -104,29 +116,38 @@ commit/tag `--base v1.2.0` · between two refs `--base main --head feature` · a
 ---
 
 <details>
-<summary><b>The tour format</b> — what your agent writes</summary>
+<summary><b>The story format</b> — what your agent writes</summary>
 
 <br>
 
-`.diffstory/review-tour.json` is authored by the agent: **order and narrative only, never code.**
+`.diffstory/story.json` is authored by the agent: **order and narrative only, never code.**
+Generation has two story modes: **Guided review** keeps the current concise walkthrough, while
+**Detailed audit** writes a longer correctness-review story that walks important code paths and
+ranges line by line. Steps may also include optional `focus.ranges` to point the read-aloud
+highlight at a narrower line or block inside the displayed range.
 
 ```jsonc
 {
   "version": 1,
+  "mode": "guided",
   "title": "Add per-customer spending limit",
-  "summary": "Start at the API entry point, follow the limit check across files, then the test.",
+  "summary": "I added a spending-limit gate. Start at the API entry point, follow the check, then read the test.",
   "steps": [
     { "id": "s1", "order": 1, "title": "createOrder() now checks the limit", "file": "src/api.ts",
-      "range": [1, 16], "kind": "changed", "why": "Entry point — the new block rejects over-cap orders before placing them.", "calls": ["s2"] },
+      "range": [1, 16], "focus": { "ranges": [[4, 7]], "label": "limit guard" },
+      "kind": "changed", "why": "Start here - I reject over-cap orders before placement, so bad requests stop at the door.", "calls": ["s2"] },
     { "id": "s2", "order": 2, "title": "checkSpendingLimit()", "file": "src/limits.ts",
-      "range": [1, 11], "kind": "new-file", "why": "Reads the customer's spend and compares to the cap.", "returnsTo": "s1" }
+      "range": [1, 11], "kind": "new-file", "why": "I pulled the cap math into one helper so the entry point stays readable.", "returnsTo": "s1" }
   ]
 }
 ```
 
 `kind` is `changed` (show the real hunk), `new-file`, or `context` (unchanged code the reader needs
-— like a callee you didn't touch). `calls` / `returnsTo` render the cross-file jumps. Full schema
-in [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
+— like a callee you didn't touch). `focus.ranges` is optional and uses post-change line numbers
+inside `range`; it can be one or two lines when the narration is about a specific assertion,
+guard, or call, not the whole displayed section. Omit it when the whole step range should glow.
+`calls` / `returnsTo` render the cross-file jumps. Full schema in
+[`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
 
 </details>
 
@@ -168,7 +189,7 @@ the same as cloning any private repo. Add `.diffstory/` to each repo's `.gitigno
 <br>
 
 - **Reload after code edits.** Replies stream into the page live and patch inline; when the agent also edits code, the diff and story are server-rendered, so a one-click "Reload to see the new diff" refreshes them.
-- **Comment drift.** Comments anchor to a line number at comment-time; if code shifts and the tour isn't refreshed, a comment falls back to a note on its step. Resolve a batch, then re-review fresh.
+- **Comment drift.** Comments anchor to a line number at comment-time; if code shifts and the story isn't refreshed, a comment falls back to a note on its step. Resolve a batch, then re-review fresh.
 - **Syntax highlighting** is diff-coloring only in v1 (kept self-contained, no CDN).
 - Needs a git repo; reviews the working tree against a base.
 

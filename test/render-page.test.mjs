@@ -58,42 +58,242 @@ test('step narrative is labeled as story, not why-this-step', () => {
   assert.doesNotMatch(html, /Why this step/);
 });
 
-test('read aloud uses a voice dock with distinct preset cards', () => {
+test('read aloud keeps browser presets separate from two mac voices', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-voice-engine="browser"/);
+  assert.match(html, /data-voice-engine="say"/);
+  assert.match(html, /data-voice-engine="kokoro"/);
+  assert.match(html, /Mac local/);
+  assert.match(html, /Kokoro AI/);
+  assert.match(html, /data-browser-voices/);
+  assert.match(html, /data-say-voices/);
+  assert.match(html, /data-kokoro-voices/);
   assert.match(html, /data-voice-preset="story"/);
   assert.match(html, /data-voice-preset="flirty"/);
   assert.match(html, /data-voice-preset="bass"/);
   assert.match(html, /data-voice-preset="system"/);
-  assert.match(html, /Female, playful, warmer delivery\./);
-  assert.match(html, /Male preference with deeper pitch\./);
+  assert.equal((html.match(/<button class="ds-voice-card[^"]*" data-say-voice="/g) ?? []).length, 2);
+  assert.equal((html.match(/<button class="ds-voice-card[^"]*" data-kokoro-voice="/g) ?? []).length, 8);
+  assert.match(html, /data-say-voice="samantha"/);
+  assert.match(html, /data-say-voice="daniel"/);
+  assert.match(html, /data-kokoro-voice="af_heart"/);
+  assert.match(html, /data-kokoro-voice="af_bella"/);
+  assert.match(html, /data-kokoro-voice="af_nicole"/);
+  assert.match(html, /data-kokoro-voice="af_sarah"/);
+  assert.match(html, /data-kokoro-voice="am_adam"/);
+  assert.match(html, /data-kokoro-voice="am_onyx"/);
+  assert.match(html, /data-kokoro-voice="bf_emma"/);
+  assert.match(html, /data-kokoro-voice="bm_daniel"/);
+  assert.match(html, />Samantha /);
+  assert.match(html, />Daniel /);
+  assert.match(html, />Heart /);
+  assert.match(html, />Bella /);
+  assert.match(html, />Nicole /);
+  assert.match(html, />Sarah /);
+  assert.match(html, />Adam /);
+  assert.match(html, />Onyx /);
+  assert.match(html, />Emma /);
+  assert.doesNotMatch(html, /Mac local: Samantha/);
+  assert.doesNotMatch(html, /Mac local: Daniel/);
   assert.match(html, /\.ds-voice-grid/);
+  assert.match(html, /\.ds-voice-grid\[hidden\]\{display:none\}/);
+  assert.match(html, /\.ds-kokoro-voice-grid/);
   assert.match(html, /\.ds-voice-card\[data-voice-preset="flirty"\]/);
   assert.match(html, /\.ds-voice-card\[data-voice-preset="bass"\]/);
+  assert.match(html, /\.ds-voice-card\[data-say-voice="samantha"\]/);
+  assert.match(html, /\.ds-voice-card\[data-say-voice="daniel"\]/);
+  assert.match(html, /\.ds-voice-card\[data-kokoro-voice="af_heart"\]/);
 });
 
 test('read aloud presets have explicit voice preferences and samples', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /flirty:\{[^}]*rate:0\.88,pitch:1\.42,volume:1/s);
-  assert.match(html, /bass:\{[^}]*rate:0\.66,pitch:0\.48,volume:1/s);
-  assert.match(html, /prefer:\[\/ava\/,\/samantha\/,\/serena\/,\/victoria\/,\/karen\/,\/moira\/,\/tessa\/,\/zira\/,\/jenny\/,\/aria\/,\/female\/\]/);
-  assert.match(html, /prefer:\[\/alex\/,\/daniel\/,\/tom\/,\/david\/,\/mark\/,\/guy\/,\/brian\/,\/bruce\/,\/reed\/,\/fred\/,\/ralph\/,\/male\/\]/);
-  assert.match(html, /sample:'Flirty mode\./);
-  assert.match(html, /sample:'Bass mode\./);
+  assert.match(html, /flirty:\{[^}]*rate:0\.98,pitch:1\.04,volume:1/s);
+  assert.match(html, /bass:\{[^}]*rate:0\.95,pitch:0\.92,volume:1/s);
+  assert.match(html, /prefer:\[\/ava\/,\/samantha\/,\/allison\/,\/susan\/,\/serena\/,\/karen\/,\/moira\/,\/tessa\/,\/zira\/,\/jenny\/,\/aria\/\]/);
+  assert.match(html, /prefer:\[\/alex\/,\/daniel\/,\/tom\/,\/david\/,\/mark\/,\/guy\/,\/brian\/\]/);
+  assert.match(html, /sample:'Warm mode\./);
+  assert.match(html, /sample:'Deep mode\./);
   assert.match(html, /function pickVoice\(presetName\)/);
   assert.match(html, /voiceScore\(b,presetName\)-voiceScore\(a,presetName\)/);
 });
 
+test('mac local voice selection is direct and persisted separately', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /var SAY_VOICES=\{/);
+  assert.match(html, /function setSayVoice\(v,preview\)/);
+  assert.match(html, /localStorage\.setItem\('ds-say-voice',sayVoice\)/);
+  assert.match(html, /b=closest\(t,'\[data-say-voice\]'\);if\(b\)\{setSayVoice\(b\.getAttribute\('data-say-voice'\),true\);return;\}/);
+  assert.match(html, /function fetchGeneratedSpeech\(engine,text,voice,speechRate,signal\)/);
+  assert.match(html, /return speakGeneratedAudio\('say',text,opts\)/);
+  assert.match(html, /Mac local · '\+\(SAY_VOICES\[sayVoice\]\|\|SAY_VOICES\.samantha\)\.label/);
+});
+
+test('kokoro voice selection is a separate neural engine', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /var KOKORO_VOICES=\{/);
+  assert.match(html, /af_heart:\{label:'Heart'/);
+  assert.match(html, /af_bella:\{label:'Bella'/);
+  assert.match(html, /am_onyx:\{label:'Onyx'/);
+  assert.match(html, /bm_daniel:\{label:'Daniel'/);
+  assert.match(html, /function normalizeKokoroVoice\(v\)/);
+  assert.match(html, /return KOKORO_VOICES\[name\]\?name:\(aliases\[name\]\|\|'af_heart'\)/);
+  assert.match(html, /function setKokoroVoice\(v,preview\)/);
+  assert.match(html, /localStorage\.setItem\('ds-kokoro-voice',kokoroVoice\)/);
+  assert.match(html, /b=closest\(t,'\[data-kokoro-voice\]'\);if\(b\)\{setKokoroVoice\(b\.getAttribute\('data-kokoro-voice'\),true\);return;\}/);
+  assert.match(html, /function speakKokoroAudio\(text,opts\)/);
+  assert.match(html, /api=engine==='kokoro'\?'\/api\/tts\/kokoro':'\/api\/tts\/say'/);
+  assert.match(html, /return speakGeneratedAudio\('kokoro',text,opts\)/);
+  assert.match(html, /Kokoro AI · '\+\(KOKORO_VOICES\[kokoroVoice\]\|\|KOKORO_VOICES\.af_heart\)\.label/);
+});
+
+test('kokoro generated speech separates server failure from playback blocking', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /function readJsonOrError\(r,msg\)/);
+  assert.match(html, /throw new Error\(\(j&&j\.error\)\|\|msg\)/);
+  assert.match(html, /function handleLocalPlaybackBlocked\(a,btn,msg\)/);
+  assert.match(html, /Kokoro audio is ready\. Press Space to play it\./);
+  assert.match(html, /Kokoro failed: '\+err\.message/);
+  assert.doesNotMatch(html, /function handleLocalPlaybackBlocked\(a,btn,msg\)[\s\S]*voiceEngine='browser'[\s\S]*function playGeneratedAudio/);
+});
+
+test('read aloud avoids warped persona voices and falls back to natural voices', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /pitch:1\.4/);
+  assert.doesNotMatch(html, /pitch:0\.4/);
+  assert.doesNotMatch(html, /rate:0\.6/);
+  assert.match(html, /function bestNaturalVoice\(\)/);
+  assert.match(html, /return bestNaturalVoice\(\)/);
+});
+
 test('read aloud start stop and preview are controlled by one speech state', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /function speakLocalAudio\(text,opts\)/);
+  assert.match(html, /fetch\(api,\{method:'POST'/);
+  assert.match(html, /function setGeneratedSpeechLoading\(token,label,engine,voice,mode\)/);
+  assert.match(html, /function clearGeneratedSpeechLoading\(token\)/);
+  assert.match(html, /function abortGeneratedSpeech\(\)/);
+  assert.match(html, /speechAbort=ctrl/);
+  assert.match(html, /signal:ctrl\?ctrl\.signal:undefined/);
+  assert.match(html, /if\(isAbortError\(err\)\)return;/);
+  assert.match(html, /setGeneratedSpeechLoading\(token,opts\.preview\?'Generating preview':'Generating speech',engine,voice,opts\.preview\?'preview':'speech'\)/);
+  assert.match(html, /function setVoiceEngine\(engine\)/);
+  assert.match(html, /localStorage\.setItem\('ds-voice-engine',voiceEngine\)/);
+  assert.match(html, /browserGrid\.hidden=voiceEngine!=='browser'/);
+  assert.match(html, /sayGrid\.hidden=voiceEngine!=='say'/);
+  assert.match(html, /kokoroGrid\.hidden=voiceEngine!=='kokoro'/);
   assert.match(html, /function firstSpeakableStep\(\)/);
   assert.match(html, /function cancelSpeech\(\)/);
   assert.match(html, /activeUtterance=null/);
   assert.match(html, /function updateReadAloudButton\(\)/);
-  assert.match(html, /label\.textContent=readAloud\?'Stop':'Read aloud'/);
+  assert.match(html, /label\.textContent=speechLoadingLabel\|\|\(readAloud\?'Stop':'Read aloud'\)/);
   assert.match(html, /function restartReadAloud\(\)/);
   assert.match(html, /function speakVoicePreview\(\)/);
   assert.match(html, /readAloud=false;\n    try\{localStorage\.setItem\('ds-readaloud',''\);\}catch\(e\)\{\}/);
+  assert.match(html, /speak\(kokoroLocal\.sample,\{voice:kokoroVoice,rate:1,preview:true\}\)/);
   assert.match(html, /b=closest\(t,'\[data-preview-voice\]'\);if\(b\)\{speakVoicePreview\(\);return;\}/);
+});
+
+test('generated voice loading is visible in the controls while previews or steps render', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-readaloud\.is-loading/);
+  assert.match(html, /\.ds-preview\.is-loading/);
+  assert.match(html, /\.ds-voice-card\.is-loading/);
+  assert.match(html, /preview\.classList\.toggle\('is-loading',loading&&speechLoadingMode==='preview'\)/);
+  assert.match(html, /previewLabel\.textContent=loading&&speechLoadingMode==='preview'\?'Generating':'Preview'/);
+  assert.match(html, /b\.classList\.toggle\('is-loading',speechLoadingEngine==='kokoro'&&b\.getAttribute\('data-kokoro-voice'\)===speechLoadingVoice\)/);
+  assert.match(html, /b\.classList\.toggle\('is-loading',speechLoadingEngine==='say'&&b\.getAttribute\('data-say-voice'\)===speechLoadingVoice\)/);
+  assert.match(html, /if\(s\)s\.textContent=speechLoadingLabel\?speechLoadingLabel\+'…':describeVoice\(\)/);
+});
+
+test('generated voice prefetches the next step while the current step is active', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /prefetchedSpeech=\{\}/);
+  assert.match(html, /speechPrefetchAbort=null/);
+  assert.match(html, /function prefetchNextSpeech\(i\)/);
+  assert.match(html, /function prefetchGeneratedSpeech\(engine,text,voice,speechRate\)/);
+  assert.match(html, /function cachedGeneratedSpeech\(engine,text,voice,speechRate\)/);
+  assert.match(html, /speakStep\(i\);prefetchNextSpeech\(i\);/);
+  assert.match(html, /if\(cached\)\{playFetchedGeneratedAudio\(engine,text,opts,token,btn,null,cached\);/);
+});
+
+test('read aloud visually focuses the code rows for the step being spoken', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-step\.is-voice-active \.ds-diff/);
+  assert.match(html, /\.ds-row\.is-voice-focus/);
+  assert.match(html, /voiceFocusIndex=-1/);
+  assert.match(html, /function clearVoiceFocus\(\)/);
+  assert.match(html, /function setVoiceFocus\(stepIndex\)/);
+  assert.match(html, /focusRows\[0\]\.scrollIntoView/);
+  assert.match(html, /speak\(stepText\(p\),\{stepIndex:i\}\)/);
+  assert.match(html, /if\(opts\.stepIndex!=null\)setVoiceFocus\(opts\.stepIndex\)/);
+  assert.match(html, /if\(opts\.stepIndex!=null\)clearVoiceFocus\(\)/);
+  assert.match(html, /speak\(stepText\(pp\),\{stepIndex:sp-1\}\)/);
+});
+
+test('explicit story focus narrows which rows are highlighted during read aloud', () => {
+  const focusTour = {
+    version: 1,
+    title: 'Focused tour',
+    summary: 'Two changed lines, one spoken focus.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Changed block',
+        file: 'a.ts',
+        range: [1, 2],
+        focus: { ranges: [[2, 2]], label: 'second line' },
+        kind: 'changed',
+        why: 'Read the block, but point at the second line while speaking.',
+      },
+    ],
+  };
+  const focusFiles = [
+    {
+      oldPath: 'a.ts',
+      newPath: 'a.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 0,
+          newStart: 1,
+          newLines: 2,
+          lines: [
+            { type: 'add', content: 'first', newNo: 1 },
+            { type: 'add', content: 'second', newNo: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-line="2" data-step="s1" data-step-focus="1"/);
+  assert.doesNotMatch(html, /data-line="1" data-step="s1" data-step-focus="1"/);
+});
+
+test('space pauses and resumes voice without stealing focused controls', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /function isTextEntryTarget\(t\)/);
+  assert.match(html, /\^\(INPUT\|TEXTAREA\|SELECT\)\$/);
+  assert.match(html, /function isKeyboardControlTarget\(t\)/);
+  assert.match(html, /\^\(BUTTON\|A\)\$/);
+  assert.match(html, /function toggleVoicePause\(\)/);
+  assert.match(html, /localAudio\.paused/);
+  assert.match(html, /localAudio\.pause\(\)/);
+  assert.match(html, /if\(synth\.paused\)\{synth\.resume\(\);toast\('Voice resumed'\);/);
+  assert.match(html, /if\(synth\.speaking\|\|activeUtterance\)\{synth\.pause\(\);toast\('Voice paused'\);/);
+  assert.match(html, /if\(isTextEntryTarget\(e\.target\)\|\|isKeyboardControlTarget\(e\.target\)\)return;/);
+  assert.match(html, /if\(e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar'\)\{if\(toggleVoicePause\(\)\)e\.preventDefault\(\);return;\}/);
+});
+
+test('arrow keys navigate the story and keep read aloud moving even when controls are focused', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /function setActive\(i\)[\s\S]*speakStep\(i\);/);
+  assert.match(html, /var next=e\.key==='ArrowRight'\|\|e\.key==='j',prev=e\.key==='ArrowLeft'\|\|e\.key==='k';/);
+  assert.match(html, /if\(next\|\|prev\)\{[\s\S]*if\(isTextEntryTarget\(e\.target\)\)return;/);
+  assert.match(html, /if\(filesView&&!filesView\.hidden\)selectFile\(selectedFile\+\(next\?1:-1\)\);/);
+  assert.match(html, /else if\(tourView&&!tourView\.hidden\)setActive\(active\+\(next\?1:-1\)\);/);
 });
 
 test('read aloud preset switch migrates old modes and restarts active reading', () => {
@@ -102,6 +302,6 @@ test('read aloud preset switch migrates old modes and restarts active reading', 
   assert.match(html, /if\(p==='warm'\|\|p==='flirty'\)return 'flirty'/);
   assert.match(html, /if\(p==='precise'\|\|p==='reviewer'\|\|p==='bass'\)return 'bass'/);
   assert.match(html, /localStorage\.getItem\('ds-voice-preset'\)\|\|localStorage\.getItem\('ds-operator'\)/);
-  assert.match(html, /else if\(readAloud\)restartReadAloud\(\)/);
   assert.match(html, /if\(readAloud\)restartReadAloud\(\)/);
+  assert.match(html, /else if\(preview\)speakVoicePreview\(\)/);
 });

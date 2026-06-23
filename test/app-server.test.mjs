@@ -2,7 +2,7 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -39,6 +39,54 @@ test('app server drives picker → open → refs → recent → close', async ()
     const rootText = (await root.text()).toLowerCase();
     assert.ok(rootText.includes('pick a repo'));
     assert.ok(rootText.includes('open by path'));
+    assert.ok(rootText.includes('skillwarn'));
+    assert.ok(rootText.includes('update skills'));
+    assert.ok(rootText.includes('/api/skills/update'));
+    assert.ok(rootText.includes("location.href='/stories'"));
+
+    const agents = await (await fetch(`${base}/api/agents`)).json();
+    assert.ok(Array.isArray(agents.agents));
+    assert.equal(agents.skills.name, 'review-tour');
+    assert.equal(agents.skills.installed, false);
+    assert.equal(agents.skills.current, false);
+    assert.ok(agents.skills.message.includes('not installed'));
+
+    const updated = await fetch(`${base}/api/skills/update`, { method: 'POST' });
+    assert.equal(updated.status, 200);
+    const updatedBody = await updated.json();
+    assert.equal(updatedBody.skills.current, true);
+    assert.ok(existsSync(join(tmpHome, '.agents', 'skills', 'review-tour', 'SKILL.md')));
+    assert.ok(existsSync(join(tmpHome, '.codex', 'skills', 'address-review', 'SKILL.md')));
+
+    const agentsAfter = await (await fetch(`${base}/api/agents`)).json();
+    assert.equal(agentsAfter.skills.current, true);
+
+    if (process.platform === 'darwin' && existsSync('/usr/bin/say')) {
+      const tts = await fetch(`${base}/api/tts/say`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'diffStory local voice check', voice: 'daniel', rate: 1 }),
+      });
+      assert.equal(tts.status, 200);
+      const ttsBody = await tts.json();
+      assert.equal(ttsBody.voice, 'Daniel');
+      assert.match(ttsBody.url, /^\/api\/tts\/say\/[a-f0-9]{64}\.m4a$/);
+
+      const audio = await fetch(`${base}${ttsBody.url}`);
+      assert.equal(audio.status, 200);
+      assert.match(audio.headers.get('content-type') ?? '', /audio\/mp4/);
+      assert.ok((await audio.arrayBuffer()).byteLength > 0);
+    }
+
+    const badKokoro = await fetch(`${base}/api/tts/kokoro`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    });
+    assert.equal(badKokoro.status, 400);
+    assert.equal((await badKokoro.json()).error, 'invalid JSON');
+
+    assert.equal((await fetch(`${base}/api/tts/kokoro/not-a-real.wav`)).status, 404);
 
     // server-backed folder browser lists dirs and flags the repo itself
     const fs = await (await fetch(`${base}/api/fs?path=${encodeURIComponent(repo)}`)).json();
