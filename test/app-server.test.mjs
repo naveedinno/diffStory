@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { serve } from '../dist/server.js';
@@ -42,7 +42,8 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.ok(rootText.includes('skillwarn'));
     assert.ok(rootText.includes('update skills'));
     assert.ok(rootText.includes('/api/skills/update'));
-    assert.ok(rootText.includes("location.href='/stories'"));
+    assert.ok(rootText.includes('d.route'));
+    assert.ok(rootText.includes("'/repo/'+encodeuricomponent"));
 
     const agents = await (await fetch(`${base}/api/agents`)).json();
     assert.ok(Array.isArray(agents.agents));
@@ -105,6 +106,15 @@ test('app server drives picker → open → refs → recent → close', async ()
     const state = await opened.json();
     assert.equal(state.isGit, true);
     assert.equal(state.hasTour, false);
+    assert.equal(state.route, `/repo/${encodeURIComponent(basename(repo))}/stories`);
+
+    const stories = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/stories`);
+    assert.equal(stories.status, 200);
+    assert.equal(stories.url, `${base}/repo/${encodeURIComponent(basename(repo))}/stories`);
+
+    const legacyStories = await fetch(`${base}/stories`);
+    assert.equal(legacyStories.status, 200);
+    assert.equal(legacyStories.url, `${base}/repo/${encodeURIComponent(basename(repo))}/stories`);
 
     const refs = await (await fetch(`${base}/api/refs`)).json();
     assert.ok(Array.isArray(refs.branches));

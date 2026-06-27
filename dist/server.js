@@ -72,6 +72,27 @@ export function serve(opts) {
 function noRepo(res) {
     sendJson(res, 409, { error: 'No repo is open.' });
 }
+function repoRouteBase(repo) {
+    return `/repo/${encodeURIComponent(basename(repo))}`;
+}
+function repoRoute(repo, screen, search = '') {
+    return `${repoRouteBase(repo)}/${screen}${search}`;
+}
+function parseRepoRoute(pathname, repo) {
+    if (!repo)
+        return null;
+    const base = repoRouteBase(repo);
+    if (pathname === base || pathname === `${base}/`)
+        return 'stories';
+    if (!pathname.startsWith(`${base}/`))
+        return null;
+    const screen = pathname.slice(base.length + 1);
+    return screen === 'stories' || screen === 'change' || screen === 'review' ? screen : null;
+}
+function redirect(res, location) {
+    res.writeHead(302, { location });
+    res.end();
+}
 function handle(req, res, session) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
@@ -81,25 +102,37 @@ function handle(req, res, session) {
                 return sendHtml(res, pickerStub());
             // Back-compat for URLs emitted by older app builds.
             if (url.searchParams.has('story')) {
-                return sendHtml(res, reviewScreen(session, url.searchParams));
+                return redirect(res, url.searchParams.get('story') === 'new'
+                    ? repoRoute(session.repo, 'change')
+                    : repoRoute(session.repo, 'review', url.search));
             }
             if (hasChangeQuery(url.searchParams)) {
-                session.chooseStory = false;
-                session.selectedStory = null;
-                return sendHtml(res, changeScreen(session, url.searchParams));
+                return redirect(res, repoRoute(session.repo, 'change', url.search));
             }
             if (session.chooseStory && session.selectedStory === undefined) {
-                return sendHtml(res, storyChooser(session));
+                return redirect(res, repoRoute(session.repo, 'stories'));
             }
             if (session.selectedStory === null) {
-                return sendHtml(res, changeScreen(session, url.searchParams));
+                return redirect(res, repoRoute(session.repo, 'change', url.search));
             }
+            return redirect(res, repoRoute(session.repo, 'review', url.search));
+        }
+        const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
+        if (repoScreen === 'stories') {
+            return sendHtml(res, storyChooser(session));
+        }
+        if (repoScreen === 'change') {
+            session.chooseStory = false;
+            session.selectedStory = null;
+            return sendHtml(res, changeScreen(session, url.searchParams));
+        }
+        if (repoScreen === 'review') {
             return sendHtml(res, reviewScreen(session, url.searchParams));
         }
         if (method === 'GET' && url.pathname === '/stories') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            return sendHtml(res, storyChooser(session));
+            return redirect(res, repoRoute(session.repo, 'stories'));
         }
         if (method === 'GET' && url.pathname === '/repos') {
             closeSession(session);
@@ -108,14 +141,12 @@ function handle(req, res, session) {
         if (method === 'GET' && url.pathname === '/change') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            session.chooseStory = false;
-            session.selectedStory = null;
-            return sendHtml(res, changeScreen(session, url.searchParams));
+            return redirect(res, repoRoute(session.repo, 'change', url.search));
         }
         if (method === 'GET' && url.pathname === '/review') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub());
-            return sendHtml(res, reviewScreen(session, url.searchParams));
+            return redirect(res, repoRoute(session.repo, 'review', url.search));
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
             return sendJson(res, 200, listRecentRepos());
@@ -145,7 +176,7 @@ function handle(req, res, session) {
                 }
                 openSession(session, path);
                 recordRecent(homedir(), path, nowMs());
-                sendJson(res, 200, inspectRepo(path));
+                sendJson(res, 200, { ...inspectRepo(path), route: repoRoute(path, 'stories') });
             });
         }
         if (method === 'POST' && url.pathname === '/api/repo/close') {
@@ -241,7 +272,12 @@ function pickerStub() {
 }
 function storyChooser(session) {
     const repo = session.repo;
-    return renderStoryPicker({ repoName: basename(repo), stories: listStories(repo), now: Date.now() });
+    return renderStoryPicker({
+        repoName: basename(repo),
+        routeBase: repoRouteBase(repo),
+        stories: listStories(repo),
+        now: Date.now(),
+    });
 }
 function hasChangeQuery(params) {
     return params.has('scope') || params.has('base') || params.has('head');
@@ -315,6 +351,7 @@ function renderChange(session, scope, notice) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
         repoName: basename(repo),
+        routeBase: repoRouteBase(repo),
         base: session.base,
         head: session.head,
         scopeLabel: scope.label,
@@ -340,6 +377,7 @@ function renderReview(session) {
     const { tour, base, files } = loadReview(session);
     return renderPage({
         repo,
+        routeBase: repoRouteBase(repo),
         tour,
         files,
         baseLabel: describeBase(repo, base),

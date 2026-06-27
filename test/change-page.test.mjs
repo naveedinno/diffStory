@@ -21,9 +21,10 @@ test('renderChangePage shows the change, the base label, and the Generate action
   assert.ok(html.includes('value="guided" selected'), 'defaults to guided mode');
   assert.ok(html.includes('value="detailed"'), 'offers detailed correctness mode');
   assert.ok(html.includes('mode:modeSel?modeSel.value:undefined'), 'sends the selected story mode');
-  assert.ok(html.includes('href="/change?scope=uncommitted"'), 'scope tabs stay on the change route');
-  assert.ok(html.includes("var u='/change?base='"), 'manual compare stays on the change route');
-  assert.ok(html.includes("location.href='/review?story=story.json'"), 'generation success opens the review route');
+  const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo' });
+  assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
+  assert.ok(routed.includes("var u='/repo/demo/change?base='"), 'manual compare stays on the repo-named change route');
+  assert.ok(routed.includes("location.href='/repo/demo/review?story=story.json'"), 'generation success opens the repo-named review route');
 });
 
 test('renderChangePage escapes file paths and shows an empty-change guard', () => {

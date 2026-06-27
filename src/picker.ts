@@ -302,7 +302,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
     if(!path) return;
     msg.style.color=''; msg.textContent='Opening…';
     fetch('/api/repo/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
-      .then(function(r){ if(r.ok){ location.href='/stories'; return null; } return r.json().catch(function(){return {};}); })
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.ok){ location.href=d.route||('/repo/'+encodeURIComponent(path.replace(/[\\\/]+$/,'').split(/[\\\/]/).pop()||'repo')+'/stories'); return null; } return d; }); })
       .then(function(e){ if(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.error||'Could not open that path.'; } })
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }

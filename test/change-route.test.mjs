@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { serve } from '../dist/server.js';
@@ -55,6 +55,10 @@ async function bootRepo(repo) {
   return { server, base: `http://localhost:${server.address().port}` };
 }
 
+function repoRoute(repo) {
+  return `/repo/${encodeURIComponent(basename(repo))}`;
+}
+
 test('opening a repo lands on story selection before generating a new story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
@@ -65,17 +69,18 @@ test('opening a repo lands on story selection before generating a new story', as
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const html = (await (await fetch(`${base}/stories`)).text());
+    const route = repoRoute(repo);
+    const html = (await (await fetch(`${base}${route}/stories`)).text());
     assert.ok(html.includes('Choose a story'), 'shows story selection');
     assert.ok(html.includes('New story'), 'offers a new story');
-    assert.ok(html.includes('href="/change"'), 'new story has its own route');
+    assert.ok(html.includes(`href="${route}/change"`), 'new story has its own repo-named route');
     assert.ok(!html.includes('Generate guided review'), 'does not jump straight to generation');
 
-    const next = await (await fetch(`${base}/change`)).text();
+    const next = await (await fetch(`${base}${route}/change`)).text();
     assert.ok(next.includes('Generate guided review'), 'new story opens the Generate action');
     assert.ok(next.includes('a.txt'), 'new story screen shows the changed file');
 
-    const again = await (await fetch(`${base}/stories`)).text();
+    const again = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(again.includes('Choose a story'), 'explicit stories route still returns to the chooser');
     assert.ok(!again.includes("Couldn't build the review"), 'is not the error page');
   } finally {
@@ -97,7 +102,8 @@ test('starting with a repo lands on story selection before opening the primary s
     const html = await (await fetch(`${base}/`)).text();
     assert.ok(html.includes('Choose a story'), 'shows story selection');
     assert.ok(html.includes('Saved story'), 'lists the primary saved story');
-    assert.ok(html.includes('href="/review?story=story.json"'), 'primary story has its own review route');
+    const route = repoRoute(repo);
+    assert.ok(html.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
     assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
     assert.ok(!html.includes('data-diff'), 'does not jump straight into the review diff');
 
@@ -123,7 +129,8 @@ test('starting with a repo lists named stories even without a primary story', as
     const html = await (await fetch(`${base}/`)).text();
     assert.ok(html.includes('Choose a story'), 'shows story selection');
     assert.ok(html.includes('Named saved story'), 'lists the named saved story');
-    assert.ok(html.includes('href="/review?story=stories%2Fnative.json"'), 'named story has its own review route');
+    const route = repoRoute(repo);
+    assert.ok(html.includes(`href="${route}/review?story=stories%2Fnative.json"`), 'named story has its own repo-named review route');
     assert.ok(!html.includes('No saved stories found'), 'does not show the empty story state');
   } finally {
     server.close();
@@ -144,20 +151,21 @@ test('opening a repo with a saved story lets the user select it', async () => {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const chooser = await (await fetch(`${base}/stories`)).text();
+    const route = repoRoute(repo);
+    const chooser = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(chooser.includes('Choose a story'), 'shows story selection');
     assert.ok(chooser.includes('Saved story'), 'lists the saved story');
     assert.ok(chooser.includes('Working tree vs HEAD'), 'explains the diff scope');
     assert.ok(chooser.includes('git diff HEAD --'), 'shows the underlying diff command');
-    assert.ok(chooser.includes('href="/review?story=story.json"'), 'saved story has its own review route');
+    assert.ok(chooser.includes(`href="${route}/review?story=story.json"`), 'saved story has its own repo-named review route');
 
-    const review = await (await fetch(`${base}/review?story=story.json`)).text();
+    const review = await (await fetch(`${base}${route}/review?story=story.json`)).text();
     assert.ok(review.includes('Entry point'), 'opens the selected story');
     assert.ok(review.includes('data-close-story'), 'review page exposes a close-story affordance');
-    assert.ok(review.includes('href="/stories"'), 'close-story affordance returns to the chooser route');
+    assert.ok(review.includes(`href="${route}/stories"`), 'close-story affordance returns to the repo-named chooser route');
     assert.ok(!review.includes('Choose a story'), 'does not stay on the chooser');
 
-    const chooserAgain = await (await fetch(`${base}/stories`)).text();
+    const chooserAgain = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(chooserAgain.includes('Choose a story'), 'review route does not consume the chooser route');
   } finally {
     server.close();
@@ -179,9 +187,10 @@ test('a malformed selected story shows the change screen with a notice, not the 
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const chooser = await (await fetch(`${base}/stories`)).text();
+    const route = repoRoute(repo);
+    const chooser = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(chooser.includes('story.json'), 'lists the bad story');
-    const html = await (await fetch(`${base}/review?story=story.json`)).text();
+    const html = await (await fetch(`${base}${route}/review?story=story.json`)).text();
     assert.ok(html.includes('class="notice"'), 'shows a notice about the bad review');
     assert.ok(html.includes('Generate guided review'), 'offers regenerate');
     assert.ok(!html.includes("Couldn't build the review"), 'is not the raw error page');
@@ -204,10 +213,14 @@ test('legacy story query routes still work for old bookmarks', async () => {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
-    const change = await (await fetch(`${base}/?story=new`)).text();
+    const changeResponse = await fetch(`${base}/?story=new`);
+    assert.ok(changeResponse.url.endsWith(`${repoRoute(repo)}/change`), 'old new-story query redirects to the repo-named change route');
+    const change = await changeResponse.text();
     assert.ok(change.includes('Generate guided review'), 'old new-story query opens the change screen');
 
-    const review = await (await fetch(`${base}/?story=story.json`)).text();
+    const reviewResponse = await fetch(`${base}/?story=story.json`);
+    assert.ok(reviewResponse.url.endsWith(`${repoRoute(repo)}/review?story=story.json`), 'old story query redirects to the repo-named review route');
+    const review = await reviewResponse.text();
     assert.ok(review.includes('Entry point'), 'old story query opens the selected story');
   } finally {
     server.close();

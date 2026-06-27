@@ -26,6 +26,7 @@ export interface RenderInput {
   files: DiffFile[];
   baseLabel: string;
   comments: Comment[];
+  routeBase?: string;
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -42,6 +43,7 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
 
 export function renderPage(input: RenderInput): string {
   const { repo, tour, files, baseLabel, comments } = input;
+  const routeBase = input.routeBase ?? '';
   const model = buildReviewModel(repo, tour, files);
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
   // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
@@ -82,7 +84,7 @@ export function renderPage(input: RenderInput): string {
   <div class="ds-vsep"></div>
   <div class="ds-titlewrap">
     <div class="ds-titlebar">
-      <a class="ds-story-link" data-close-story href="/stories" title="Back to saved stories" aria-label="Back to saved stories">Stories</a>
+      <a class="ds-story-link" data-close-story href="${esc(routeBase)}/stories" title="Back to saved stories" aria-label="Back to saved stories">Stories</a>
       <span class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
         baseLabel,
       )}">${esc(baseLabel)}</span></span>

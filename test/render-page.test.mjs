@@ -59,8 +59,8 @@ test('step narrative is labeled as story, not why-this-step', () => {
 });
 
 test('review page can return to the story chooser', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-story-link" data-close-story href="\/stories"/);
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], routeBase: '/repo/demo' });
+  assert.match(html, /class="ds-story-link" data-close-story href="\/repo\/demo\/stories"/);
   assert.match(html, />Stories<\/a>/);
   assert.match(html, /\.ds-story-link\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);

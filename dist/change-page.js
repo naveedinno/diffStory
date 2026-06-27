@@ -13,6 +13,7 @@ function count(n, sign) {
 export function renderChangePage(sum, opts) {
     const label = opts.scopeLabel ?? sum.baseLabel;
     const active = opts.active ?? '';
+    const routeBase = opts.routeBase ?? '';
     const notice = opts.notice
         ? `<div class="notice"><b>That review couldn't be loaded.</b> ${esc(opts.notice)} Generate a fresh one below.</div>`
         : '';
@@ -97,9 +98,9 @@ ${progressPanelStyles()}
     <div class="scope">
       <span class="scur">Reviewing <b>${esc(label)}</b></span>
       <div class="sopts" role="group" aria-label="Review scope">
-        <a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="/change?scope=uncommitted">Uncommitted</a>
-        <a class="sopt${active === 'last' ? ' on' : ''}" href="/change?scope=last">Latest commit</a>
-        <a class="sopt${active === 'branch' ? ' on' : ''}" href="/change?scope=branch">Whole branch</a>
+        <a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=uncommitted">Uncommitted</a>
+        <a class="sopt${active === 'last' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=last">Latest commit</a>
+        <a class="sopt${active === 'branch' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=branch">Whole branch</a>
         <button class="sopt${active === 'ref' ? ' on' : ''}" id="cmpBtn" type="button">Compare…</button>
       </div>
     </div>
@@ -138,7 +139,7 @@ ${progressPanelStyles()}
   var go=document.getElementById('cmpGo');
   if(go)go.addEventListener('click',function(){
     var b=baseSel.value,h=headSel.value;if(!b)return;
-    var u='/change?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
+    var u='${esc(routeBase)}/change?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
   var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp'),modeSel=document.getElementById('storyMode');
   var MODELS={claude:[['Default (Sonnet)',''],['Opus','opus'],['Haiku','haiku'],['Other…','__other__']],codex:[['Default',''],['Other…','__other__']]};
@@ -194,7 +195,7 @@ ${progressPanelStyles()}
       onClose:function(){ root.hidden=true; gen.disabled=false; },
       onDone:function(status,result){
         gen.disabled=false;
-        if(status==='complete'&&result&&result.storyWritten){ location.href='/review?story=story.json'; }
+        if(status==='complete'&&result&&result.storyWritten){ location.href='${esc(routeBase)}/review?story=story.json'; }
       }
     });
     panel.start();

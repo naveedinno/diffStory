@@ -16,8 +16,8 @@ function relTime(then: number, now: number): string {
   return day === 1 ? 'yesterday' : `${day} days ago`;
 }
 
-function storyRow(s: StorySummary, now: number): string {
-  const href = `/review?story=${encodeURIComponent(s.id)}`;
+function storyRow(s: StorySummary, now: number, routeBase: string): string {
+  const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
   const mode = s.mode === 'detailed' ? 'Detailed audit' : 'Guided review';
   const meta = [
     mode,
@@ -38,9 +38,9 @@ function storyRow(s: StorySummary, now: number): string {
   );
 }
 
-export function renderStoryPicker(opts: { repoName: string; stories: StorySummary[]; now: number }): string {
+export function renderStoryPicker(opts: { repoName: string; routeBase: string; stories: StorySummary[]; now: number }): string {
   const stories = opts.stories.length
-    ? opts.stories.map((s) => storyRow(s, opts.now)).join('')
+    ? opts.stories.map((s) => storyRow(s, opts.now, opts.routeBase)).join('')
     : `<div class="empty">No saved stories found in <code>.diffstory/story.json</code> or <code>.diffstory/stories/</code>.</div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -83,9 +83,9 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
       <p class="sub">${esc(opts.repoName)} can have more than one saved review story. Open one, or start a new story from the current diff.</p>
     </div>
     <div class="actions">
-      <a class="action refresh" href="/stories">Refresh</a>
+      <a class="action refresh" href="${esc(opts.routeBase)}/stories">Refresh</a>
       <a class="action refresh" href="/repos">Switch repo</a>
-      <a class="action new" href="/change">New story</a>
+      <a class="action new" href="${esc(opts.routeBase)}/change">New story</a>
     </div>
   </div>
   <div class="card">${stories}</div>
