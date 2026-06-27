@@ -81,20 +81,22 @@ export function renderPage(input: RenderInput): string {
   </button>
   <div class="ds-vsep"></div>
   <div class="ds-titlewrap">
-    <div class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
-      baseLabel,
-    )}">${esc(baseLabel)}</span></div>
+    <div class="ds-titlebar">
+      <a class="ds-story-link" data-close-story href="/stories" title="Back to saved stories" aria-label="Back to saved stories">Stories</a>
+      <span class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
+        baseLabel,
+      )}">${esc(baseLabel)}</span></span>
+    </div>
     <div class="ds-title" title="${esc(tour.summary || tour.title)}">${esc(tour.title)}</div>
   </div>
   <div class="ds-status">
-    <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> open ${plural(
+    <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(
       openCount,
       'comment',
     )}</span>
-    <button class="ds-addall" data-address-all${openCount ? '' : ' disabled'} title="Have your agent address every open comment and reply right here">Address all open</button>
     <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${
       uncoveredCount
-        ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained ${plural(uncoveredCount, 'change')}`
+        ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained`
         : `<span class="ds-check">✓</span> all changes explained`
     }</button>
   </div>
@@ -157,12 +159,32 @@ export function renderPage(input: RenderInput): string {
   </div>
   <div class="ds-vsep"></div>
   <div class="ds-actions">
-    <button class="ds-btn ds-btn-ghost" data-verdict="request">Request changes</button>
-    <button class="ds-btn ds-btn-approve" data-verdict="approve"${approveReady ? '' : ' disabled'} title="${
-      approveReady
-        ? 'Everything is covered and there are no open comments'
-        : 'Resolve open comments and make sure every change is explained first'
-    }"><span class="ds-check">✓</span> Approve</button>
+    <div class="ds-review-menu-wrap">
+      <button class="ds-review-menu" data-review-menu aria-haspopup="menu" aria-expanded="false" title="Open review actions">
+        <span class="ds-review-menu-dot" aria-hidden="true"></span>
+        <span>Review actions</span>
+        <span class="ds-review-menu-caret" aria-hidden="true">⌄</span>
+      </button>
+      <div class="ds-review-menu-pop" data-review-menu-pop role="menu" hidden>
+        <div class="ds-review-menu-title">Review actions</div>
+        <button class="ds-review-option" data-address-all role="menuitem"${openCount ? '' : ' disabled'} title="Resend every open comment to your agent">
+          <span class="ds-review-option-title">Send open comments</span>
+          <span class="ds-review-option-desc">For older notes, or if an auto-send failed.</span>
+        </button>
+        <button class="ds-review-option" data-verdict="request" role="menuitem">
+          <span class="ds-review-option-title">Ask for fixes</span>
+          <span class="ds-review-option-desc">Use this when the change is not ready to merge.</span>
+        </button>
+        <button class="ds-review-option ds-review-option-approve" data-verdict="approve" role="menuitem"${approveReady ? '' : ' disabled'} title="${
+          approveReady
+            ? 'Everything is covered and there are no open comments'
+            : 'Resolve open comments and make sure every change is explained first'
+        }">
+          <span class="ds-review-option-title"><span class="ds-check">✓</span> Mark approved</span>
+          <span class="ds-review-option-desc">Available when comments are resolved and the story covers the diff.</span>
+        </button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -203,6 +225,7 @@ export function renderPage(input: RenderInput): string {
       </div>
     </div>
     ${trustRailCard(model.trust)}
+    <div class="ds-rail-resizer" data-sidebar-resizer role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0" title="Resize sidebar"></div>
   </aside>
 
   <main class="ds-main">
@@ -593,7 +616,7 @@ export function commentHtml(c: Comment): string {
       <div class="ds-comment-actions">
         ${
           c.status !== 'resolved'
-            ? '<button class="ds-ghost ds-send" data-send title="Ask your agent to answer or fix this — the reply appears right here">Ask agent</button>'
+            ? '<button class="ds-ghost ds-send" data-send title="Send this comment to your agent again">Send again</button>'
             : ''
         }
         <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>

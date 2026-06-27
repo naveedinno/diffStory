@@ -46,3 +46,19 @@ test('inspectRepo detects a git repo and a present tour', () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test('inspectRepo treats named stories as present stories', () => {
+  const d = gitRepo();
+  try {
+    let s = inspectRepo(d);
+    assert.equal(s.hasTour, false);
+
+    mkdirSync(join(d, '.diffstory', 'stories'), { recursive: true });
+    writeFileSync(join(d, '.diffstory', 'stories', 'agent-review.json'), '{}');
+
+    s = inspectRepo(d);
+    assert.equal(s.hasTour, true);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

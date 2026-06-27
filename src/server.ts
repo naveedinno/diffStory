@@ -23,7 +23,7 @@ import {
   setCommentStatus,
   type NewComment,
 } from './comments.js';
-import { resolveStoryPath, APP_NAME, APP_BRAND } from './config.js';
+import { resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
 import type { DiffFile, Tour } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, type Agent, type StreamResult } from './agent.js';
 import {
@@ -78,9 +78,11 @@ export function serve(opts: ServeOptions): Server {
       console.log(`\n  ${APP_BRAND} app ready → ${url}`);
       console.log(`  pick a repo to review (or open one you've used before).\n`);
     } else {
+      const storyCount = listStories(session.repo).length;
+      const storyLabel = `${storyCount} ${storyCount === 1 ? 'story' : 'stories'}`;
       console.log(`\n  ${APP_BRAND} review ready → ${url}`);
-      console.log(`  reviewing ${resolveStoryPath(session.repo)}`);
-      console.log(`  comments save as you go; click "Ask agent" or "Address all open" to get replies live.\n`);
+      console.log(`  reviewing ${storyLabel} in ${join(session.repo, DATA_DIR)}`);
+      console.log(`  comments send to the agent when submitted; Review actions can resend open comments.\n`);
     }
     console.log(`  Ctrl-C to stop.\n`);
     if (opts.open) openBrowser(url);
@@ -120,6 +122,10 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     if (method === 'GET' && url.pathname === '/stories') {
       if (session.repo == null) return sendHtml(res, pickerStub());
       return sendHtml(res, storyChooser(session));
+    }
+    if (method === 'GET' && url.pathname === '/repos') {
+      closeSession(session);
+      return sendHtml(res, pickerStub());
     }
     if (method === 'GET' && url.pathname === '/change') {
       if (session.repo == null) return sendHtml(res, pickerStub());

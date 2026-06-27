@@ -38,6 +38,7 @@ test('listStories discovers primary, legacy, and named stories', () => {
   writeStory(repo, 'story.json', 'Primary story');
   writeStory(repo, 'review-tour.json', 'Legacy story');
   writeStory(repo, 'stories/liquidation.json', 'Liquidation story');
+  writeStory(repo, 'stories/payments/monthly.json', 'Monthly story');
   writeFileSync(join(repo, '.diffstory', 'comments.json'), '[]');
 
   const stories = listStories(repo);
@@ -45,11 +46,13 @@ test('listStories discovers primary, legacy, and named stories', () => {
     'story.json',
     'review-tour.json',
     'stories/liquidation.json',
+    'stories/payments/monthly.json',
   ]);
   assert.deepEqual(stories.map((s) => s.title), [
     'Primary story',
     'Legacy story',
     'Liquidation story',
+    'Monthly story',
   ]);
   assert.equal(stories.every((s) => s.valid), true);
 
@@ -102,8 +105,10 @@ test('listStories includes invalid stories with an error and ignores comments', 
 test('storyPathForId only resolves known story ids', () => {
   const repo = tmp();
   writeStory(repo, 'stories/a.json', 'A');
+  writeStory(repo, 'stories/deeper/b.json', 'B');
 
   assert.equal(storyPathForId(repo, 'stories/a.json'), join(repo, '.diffstory', 'stories', 'a.json'));
+  assert.equal(storyPathForId(repo, 'stories/deeper/b.json'), join(repo, '.diffstory', 'stories', 'deeper', 'b.json'));
   assert.equal(storyPathForId(repo, '../a.json'), null);
   assert.equal(storyPathForId(repo, 'comments.json'), null);
 

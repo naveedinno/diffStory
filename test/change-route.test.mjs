@@ -17,10 +17,11 @@ function repoWithChange() {
   return d;
 }
 
-function writeStory(repo, body = {}) {
-  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+function writeStory(repo, body = {}, rel = 'story.json') {
+  const path = join(repo, '.diffstory', rel);
+  mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(
-    join(repo, '.diffstory', 'story.json'),
+    path,
     JSON.stringify({
       version: 1,
       title: 'Saved story',
@@ -44,6 +45,12 @@ function writeStory(repo, body = {}) {
 
 async function boot() {
   const server = serve({ repo: null, port: 0, open: false });
+  await once(server, 'listening');
+  return { server, base: `http://localhost:${server.address().port}` };
+}
+
+async function bootRepo(repo) {
+  const server = serve({ repo, port: 0, open: false });
   await once(server, 'listening');
   return { server, base: `http://localhost:${server.address().port}` };
 }
@@ -79,6 +86,53 @@ test('opening a repo lands on story selection before generating a new story', as
   }
 });
 
+test('starting with a repo lands on story selection before opening the primary story', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  writeStory(repo);
+  const { server, base } = await bootRepo(repo);
+  try {
+    const html = await (await fetch(`${base}/`)).text();
+    assert.ok(html.includes('Choose a story'), 'shows story selection');
+    assert.ok(html.includes('Saved story'), 'lists the primary saved story');
+    assert.ok(html.includes('href="/review?story=story.json"'), 'primary story has its own review route');
+    assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
+    assert.ok(!html.includes('data-diff'), 'does not jump straight into the review diff');
+
+    const picker = await (await fetch(`${base}/repos`)).text();
+    assert.ok(picker.includes('Open a repository'), 'switch repo returns to the app picker');
+    assert.ok(picker.includes('Open by path'), 'repo picker can open another folder');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('starting with a repo lists named stories even without a primary story', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  writeStory(repo, { title: 'Named saved story', summary: 'A named saved story for this repo' }, 'stories/native.json');
+  const { server, base } = await bootRepo(repo);
+  try {
+    const html = await (await fetch(`${base}/`)).text();
+    assert.ok(html.includes('Choose a story'), 'shows story selection');
+    assert.ok(html.includes('Named saved story'), 'lists the named saved story');
+    assert.ok(html.includes('href="/review?story=stories%2Fnative.json"'), 'named story has its own review route');
+    assert.ok(!html.includes('No saved stories found'), 'does not show the empty story state');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 test('opening a repo with a saved story lets the user select it', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
@@ -99,6 +153,8 @@ test('opening a repo with a saved story lets the user select it', async () => {
 
     const review = await (await fetch(`${base}/review?story=story.json`)).text();
     assert.ok(review.includes('Entry point'), 'opens the selected story');
+    assert.ok(review.includes('data-close-story'), 'review page exposes a close-story affordance');
+    assert.ok(review.includes('href="/stories"'), 'close-story affordance returns to the chooser route');
     assert.ok(!review.includes('Choose a story'), 'does not stay on the chooser');
 
     const chooserAgain = await (await fetch(`${base}/stories`)).text();

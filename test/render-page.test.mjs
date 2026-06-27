@@ -58,6 +58,58 @@ test('step narrative is labeled as story, not why-this-step', () => {
   assert.doesNotMatch(html, /Why this step/);
 });
 
+test('review page can return to the story chooser', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-story-link" data-close-story href="\/stories"/);
+  assert.match(html, />Stories<\/a>/);
+  assert.match(html, /\.ds-story-link\{/);
+  assert.doesNotMatch(html, /\.ds-close-story\{/);
+  assert.match(html, /@media \(max-width:720px\)\{:root\{--ds-rail-width:240px\}\.ds-top\{[^}]+\}\.ds-word,\.ds-vsep,\.ds-status,\.ds-settings-wrap,\.ds-actions\{display:none\}/);
+  assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);
+});
+
+test('toolbar consolidates final review actions into one clear menu', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-review-menu/);
+  assert.match(html, /data-review-menu-pop/);
+  assert.match(html, />Review actions</);
+  assert.match(html, />Send open comments</);
+  assert.match(html, />Ask for fixes</);
+  assert.match(html, /Mark approved/);
+  assert.doesNotMatch(html, />Request changes</);
+  assert.doesNotMatch(html, />Approve</);
+});
+
+test('submitting a comment sends it to the agent immediately', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /ta\.placeholder='Leave a comment on this line…'/);
+  assert.doesNotMatch(html, /then Ask agent/);
+  assert.match(html, /var submit=el\('button','ds-btn ds-btn-solid','Send'\)/);
+  assert.match(html, /threadAfter\(row\)\.appendChild\(buildComment\(c\)\);removeComposer\(box\);refreshCount\(\);sendToAgent\(\[c\.id\]\);/);
+});
+
+test('review sidebar can be grabbed, resized, and remembered', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-sidebar-resizer/);
+  assert.match(html, /role="separator" aria-orientation="vertical"/);
+  assert.match(html, /--ds-rail-width:316px/);
+  assert.match(html, /\.ds-rail\{[^}]*width:var\(--ds-rail-width,316px\)/s);
+  assert.match(html, /\.ds-rail-resizer\{[^}]*cursor:col-resize/s);
+  assert.match(html, /body\.ds-sidebar-resizing/);
+  assert.match(html, /function setSidebarWidth\(w,persist\)/);
+  assert.match(html, /function startSidebarResize\(e\)/);
+  assert.match(html, /localStorage\.setItem\('ds-sidebar-width',String\(Math\.round\(width\)\)\)/);
+  assert.match(html, /document\.addEventListener\('mousedown',startSidebarResize\)/);
+  assert.match(html, /document\.addEventListener\('mousemove',moveSidebarResize\)/);
+  assert.match(html, /document\.addEventListener\('mouseup',endSidebarResize\)/);
+});
+
+test('sidebar file warnings avoid the awkward amber rail', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /\.ds-fileitem\.is-untoured\{box-shadow/);
+  assert.match(html, /\.ds-fileitem-flag\{flex:none;color:var\(--amber\)/);
+});
+
 test('read aloud keeps browser presets separate from two mac voices', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-voice-engine="browser"/);

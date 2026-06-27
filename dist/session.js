@@ -3,7 +3,7 @@ export function createSession(init) {
         repo: init.repo,
         base: init.base,
         head: init.head,
-        chooseStory: init.repo === null,
+        chooseStory: true,
     };
 }
 /** Open a repo: set it and clear any prior base/head selection. */

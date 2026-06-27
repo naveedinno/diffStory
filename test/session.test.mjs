@@ -8,6 +8,7 @@ test('createSession carries the initial repo/base/head', () => {
   assert.equal(s.repo, '/r');
   assert.equal(s.base, 'main');
   assert.equal(s.head, 'feat');
+  assert.equal(s.chooseStory, true);
 });
 
 test('openSession sets the repo and resets base/head', () => {
@@ -16,6 +17,7 @@ test('openSession sets the repo and resets base/head', () => {
   assert.equal(s.repo, '/new');
   assert.equal(s.base, undefined);
   assert.equal(s.head, undefined);
+  assert.equal(s.chooseStory, true);
 });
 
 test('closeSession clears everything', () => {
@@ -23,4 +25,5 @@ test('closeSession clears everything', () => {
   closeSession(s);
   assert.equal(s.repo, null);
   assert.equal(s.base, undefined);
+  assert.equal(s.chooseStory, true);
 });

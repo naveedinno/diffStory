@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 import { DATA_DIR, LEGACY_STORY_FILENAME, STORY_FILENAME, dataDir } from './config.js';
 import { loadTour } from './tour.js';
 const NAMED_STORIES_DIR = 'stories';
@@ -18,13 +18,28 @@ export function listStories(repo) {
 export function storyPathForId(repo, id) {
     return listStories(repo).find((s) => s.id === id)?.path ?? null;
 }
+/** True when the repo has at least one primary, legacy, or named story file. */
+export function hasStories(repo) {
+    return listStories(repo).length > 0;
+}
 function namedStoryIds(repo) {
     const dir = join(dataDir(repo), NAMED_STORIES_DIR);
     if (!existsSync(dir))
         return [];
-    return readdirSync(dir, { withFileTypes: true })
-        .filter((e) => e.isFile() && e.name.endsWith('.json'))
-        .map((e) => join(NAMED_STORIES_DIR, e.name));
+    const ids = [];
+    const walk = (current) => {
+        for (const e of readdirSync(current, { withFileTypes: true })) {
+            const path = join(current, e.name);
+            if (e.isDirectory()) {
+                walk(path);
+            }
+            else if (e.isFile() && e.name.endsWith('.json')) {
+                ids.push(join(NAMED_STORIES_DIR, relative(dir, path)).split(sep).join('/'));
+            }
+        }
+    };
+    walk(dir);
+    return ids;
 }
 function storySummary(repo, id) {
     const path = join(repo, DATA_DIR, id);

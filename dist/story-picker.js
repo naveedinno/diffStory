@@ -37,7 +37,7 @@ function storyRow(s, now) {
 export function renderStoryPicker(opts) {
     const stories = opts.stories.length
         ? opts.stories.map((s) => storyRow(s, opts.now)).join('')
-        : `<div class="empty">No saved stories yet.</div>`;
+        : `<div class="empty">No saved stories found in <code>.diffstory/story.json</code> or <code>.diffstory/stories/</code>.</div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(APP_BRAND)} — stories</title>
@@ -49,8 +49,12 @@ export function renderStoryPicker(opts) {
 .top{display:flex;align-items:flex-start;gap:14px;justify-content:space-between;margin-bottom:20px}
 h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .sub{color:var(--l2);font-size:14px;margin:9px 0 0;line-height:1.45}
-.new{flex:none;height:38px;display:inline-flex;align-items:center;padding:0 17px;border-radius:10px;background:var(--blue);color:#fff;text-decoration:none;font-size:14px;font-weight:650;box-shadow:0 1px 2px rgba(0,40,120,.18)}
+.actions{flex:none;display:flex;gap:8px}
+.action{height:38px;display:inline-flex;align-items:center;padding:0 15px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:650;white-space:nowrap}
+.new{background:var(--blue);color:#fff;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .new:hover{background:var(--blue2)}
+.refresh{border:1px solid var(--hair);color:var(--label);background:var(--elev)}
+.refresh:hover{background:var(--fill)}
 .card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
 .story{display:flex;align-items:center;gap:14px;padding:14px 15px;border-bottom:.5px solid var(--sep);color:inherit;text-decoration:none}
 .story:last-child{border-bottom:none}.story:hover{background:var(--fill)}
@@ -62,9 +66,10 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .story-meta{font:11.5px/1.4 "SF Mono",ui-monospace,Menlo,monospace;color:var(--l3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .story-status{flex:none;font-size:12px;font-weight:650;color:var(--blue);padding:4px 9px;border-radius:999px;background:color-mix(in srgb,var(--blue) 12%,transparent)}
 .story.bad{background:var(--red-bg)}.story.bad .story-status,.story.bad .story-summary{color:var(--red)}
-.empty{padding:34px 16px;text-align:center;color:var(--l2);font-size:14px}
+.empty{padding:34px 16px;text-align:center;color:var(--l2);font-size:14px;line-height:1.5}
+.empty code,.foot code{font-family:"SF Mono",ui-monospace,Menlo,monospace;color:var(--label);font-size:.95em}
 .foot{margin-top:14px;color:var(--l3);font-size:12.5px;line-height:1.45}
-@media (max-width:560px){.top{flex-direction:column}.new{width:100%;justify-content:center}.story{align-items:flex-start}.story-status{margin-top:1px}}
+@media (max-width:560px){.top{flex-direction:column}.actions{width:100%}.action{flex:1;justify-content:center}.story{align-items:flex-start}.story-status{margin-top:1px}}
 </style></head>
 <body><main class="wrap">
   <div class="top">
@@ -72,9 +77,13 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
       <h1>Choose a story</h1>
       <p class="sub">${esc(opts.repoName)} can have more than one saved review story. Open one, or start a new story from the current diff.</p>
     </div>
-    <a class="new" href="/change">New story</a>
+    <div class="actions">
+      <a class="action refresh" href="/stories">Refresh</a>
+      <a class="action refresh" href="/repos">Switch repo</a>
+      <a class="action new" href="/change">New story</a>
+    </div>
   </div>
   <div class="card">${stories}</div>
-  <p class="foot">Stories live in <code>.diffstory/story.json</code> or <code>.diffstory/stories/*.json</code>.</p>
+  <p class="foot">Standard: <code>.diffstory/story.json</code> is the current review. Named saved reviews live under <code>.diffstory/stories/</code> as JSON files. Use Refresh after another agent writes a story while this page is open.</p>
 </main></body></html>`;
 }

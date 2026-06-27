@@ -14,7 +14,7 @@ export function createSession(init: { repo: string | null; base?: string; head?:
     repo: init.repo,
     base: init.base,
     head: init.head,
-    chooseStory: init.repo === null,
+    chooseStory: true,
   };
 }
 
