@@ -3,7 +3,7 @@
 // (onPath, storyPrompt, agentCommand) are unit-tested.
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
-import { fileEvent, commandEvent, activityEvent, toolEvent, textEvent, } from './progress.js';
+import { fileEvent, commandEvent, activityEvent, toolEvent, textEvent, planEvent, } from './progress.js';
 export function normalizeStoryMode(mode) {
     return mode === 'detailed' ? 'detailed' : 'guided';
 }
@@ -177,6 +177,18 @@ export function toolSummary(name, input) {
     const target = input?.file_path ?? input?.path ?? input?.pattern ?? '';
     return target ? `${name} ${target}` : name;
 }
+/** Normalize a TodoWrite `todos` array into the agent's plan checklist. */
+export function planItems(todos) {
+    if (!Array.isArray(todos))
+        return [];
+    return todos
+        .map((t) => {
+        const status = t?.status === 'in_progress' ? 'active' : t?.status === 'completed' ? 'done' : 'pending';
+        const raw = status === 'active' ? (t?.activeForm ?? t?.content) : t?.content;
+        return { text: String(raw ?? '').trim(), status };
+    })
+        .filter((i) => i.text);
+}
 /** Normalize one agent tool call into the most specific progress event. */
 export function classifyTool(name, input) {
     const file = input?.file_path ?? input?.path;
@@ -195,7 +207,7 @@ export function classifyTool(name, input) {
         case 'Glob':
             return activityEvent('search', toolSummary(name, input));
         case 'TodoWrite':
-            return activityEvent('plan', 'Updating the plan');
+            return planEvent(planItems(input?.todos));
         case 'WebFetch':
         case 'WebSearch':
             return activityEvent('web', toolSummary(name, input));

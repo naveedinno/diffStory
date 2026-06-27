@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
-  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool,
+  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -160,11 +160,46 @@ test('classifyTool maps tools to the most specific progress event', () => {
   assert.equal(bash.command, 'git diff --stat');
   assert.deepEqual(classifyTool('Grep', { pattern: 'foo' }),
     { type: 'activity', kind: 'search', label: 'Grep foo' });
-  assert.deepEqual(classifyTool('TodoWrite', {}),
-    { type: 'activity', kind: 'plan', label: 'Updating the plan' });
+  assert.deepEqual(
+    classifyTool('TodoWrite', {
+      todos: [
+        { content: 'Read the diff', activeForm: 'Reading the diff', status: 'completed' },
+        { content: 'Draft the story', activeForm: 'Drafting the story', status: 'in_progress' },
+        { content: 'Check coverage', activeForm: 'Checking coverage', status: 'pending' },
+      ],
+    }),
+    {
+      type: 'plan',
+      items: [
+        { text: 'Read the diff', status: 'done' },
+        { text: 'Drafting the story', status: 'active' },
+        { text: 'Check coverage', status: 'pending' },
+      ],
+    },
+  );
   const unknown = classifyTool('MysteryTool', { path: 'p' });
   assert.equal(unknown.type, 'tool');
   assert.equal(unknown.rawTool, 'MysteryTool');
+});
+
+test('planItems maps statuses, prefers activeForm for the active item, drops empties', () => {
+  assert.deepEqual(
+    planItems([{ content: 'a', activeForm: 'doing a', status: 'in_progress' }]),
+    [{ text: 'doing a', status: 'active' }],
+  );
+  // Non-active items use content even if activeForm is present.
+  assert.deepEqual(
+    planItems([{ content: 'a', activeForm: 'doing a', status: 'completed' }]),
+    [{ text: 'a', status: 'done' }],
+  );
+  // Unknown/missing status falls back to pending; missing activeForm falls back to content.
+  assert.deepEqual(
+    planItems([{ content: 'b', status: undefined }]),
+    [{ text: 'b', status: 'pending' }],
+  );
+  // Non-array input and empty-text items are dropped.
+  assert.deepEqual(planItems(undefined), []);
+  assert.deepEqual(planItems([{ content: '   ', status: 'pending' }]), []);
 });
 
 test('parseClaudeStreamLine yields text and classified tool events', () => {
