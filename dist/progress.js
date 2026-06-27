@@ -57,6 +57,9 @@ export function activityEvent(kind, label, detail) {
 export function toolEvent(label, rawTool, target) {
     return { type: 'tool', label, rawTool, ...(target ? { target } : {}) };
 }
+export function planEvent(items) {
+    return { type: 'plan', items };
+}
 export function textEvent(data) {
     return { type: 'text', data };
 }

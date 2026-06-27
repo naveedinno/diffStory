@@ -16,6 +16,9 @@ export type FileAction = 'read' | 'edit' | 'write';
 export type ActivityKind = 'narration' | 'search' | 'plan' | 'web' | 'task' | 'other';
 export type RunStatus = 'complete' | 'failed' | 'stopped';
 
+export type PlanStatus = 'pending' | 'active' | 'done';
+export interface PlanItem { text: string; status: PlanStatus }
+
 export interface RunContext {
   repoName: string;
   repoPath: string;
@@ -37,6 +40,7 @@ export type ProgressEvent =
   | { type: 'command'; label: string; command: string }
   | { type: 'activity'; kind: ActivityKind; label: string; detail?: string }
   | { type: 'tool'; label: string; rawTool: string; target?: string }
+  | { type: 'plan'; items: PlanItem[] }
   | { type: 'text'; data: string }
   | { type: 'warning'; stage?: string; label: string; detail?: string }
   | { type: 'error'; stage: ErrorStage; label: string; detail?: string };
@@ -102,6 +106,10 @@ export function activityEvent(kind: ActivityKind, label: string, detail?: string
 
 export function toolEvent(label: string, rawTool: string, target?: string): ProgressEvent {
   return { type: 'tool', label, rawTool, ...(target ? { target } : {}) };
+}
+
+export function planEvent(items: PlanItem[]): ProgressEvent {
+  return { type: 'plan', items };
 }
 
 export function textEvent(data: string): ProgressEvent {

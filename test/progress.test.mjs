@@ -5,7 +5,7 @@ import {
   PHASE_LABELS, phaseRank, observedPhase,
   runStarted, contextEvent, phaseEvent, fileEvent, commandEvent,
   activityEvent, toolEvent, textEvent, heartbeatEvent, warningEvent,
-  errorEvent, doneEvent,
+  errorEvent, doneEvent, planEvent,
 } from '../dist/progress.js';
 
 test('runStarted and contextEvent carry workflow + context fields', () => {
@@ -93,4 +93,22 @@ test('observedPhase proves reading on reads/searches and writing on target write
 
 test('phaseRank throws on a phase missing from PHASE_ORDER', () => {
   assert.throws(() => phaseRank('not_a_phase'), /unknown phase/);
+});
+
+test('planEvent carries the agent checklist verbatim', () => {
+  assert.deepEqual(
+    planEvent([
+      { text: 'Read the diff', status: 'done' },
+      { text: 'Drafting the story', status: 'active' },
+      { text: 'Check coverage', status: 'pending' },
+    ]),
+    {
+      type: 'plan',
+      items: [
+        { text: 'Read the diff', status: 'done' },
+        { text: 'Drafting the story', status: 'active' },
+        { text: 'Check coverage', status: 'pending' },
+      ],
+    },
+  );
 });
