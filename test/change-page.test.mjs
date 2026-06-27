@@ -63,7 +63,7 @@ test('change page embeds the shared progress panel and drives ProgressPanel', ()
     { hasChanges: true, baseLabel: 'main', files: [{ path: 'a.ts', added: 1, removed: 0 }] },
     { repoName: 'r', base: '', head: '', scopeLabel: 'Uncommitted', active: 'uncommitted' },
   );
-  assert.match(html, /ds-pp-timeline/);
+  assert.match(html, /ds-pp-plan/);
   assert.match(html, /function ProgressPanel/);
   assert.match(html, /new ProgressPanel|ProgressPanel\(/);
   assert.match(html, /run_done/);

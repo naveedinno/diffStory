@@ -1,9 +1,11 @@
 // One shared live-progress panel for every agent run, embedded by both the change
-// screen (inline variant) and the review screen (floating variant). Exports three
-// string builders: self-contained CSS, an HTML fragment, and a browser script that
-// defines a global `ProgressPanel`. The panel renders the app-owned progress events
-// from src/progress.ts: workflow title, agent/model, repo+scope, current phase,
-// elapsed/liveness, a timeline of meaningful events, and raw agent text (secondary).
+// screen (inline variant) and the review screen (floating variant). It renders the
+// agent's OWN plan (from TodoWrite) as the centerpiece: done items recede, the single
+// active item is lit and carries a live "what's happening now" line. A plain-language
+// lifecycle label (Preparing → Writing your review → Checking the result → Review ready)
+// and honest liveness sit in the header/footer. Raw agent output is captured but only
+// surfaced as a Details disclosure on failure. Exports three string builders: CSS, an
+// HTML fragment, and a browser script defining a global ProgressPanel + runProgress.
 
 /** Self-contained styles (own CSS custom properties so it looks identical on both screens). */
 export function progressPanelStyles(): string {
@@ -13,48 +15,57 @@ export function progressPanelStyles(): string {
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--pp-text);
   background:var(--pp-bg);border:.5px solid var(--pp-line);border-radius:14px;overflow:hidden;letter-spacing:-.01em}
 @media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e}}
-@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-text:#f2f2f7;--pp-muted:#a6a6ad;--pp-faint:#8a8a90;--pp-line:rgba(255,255,255,.12)}}
-.ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(70vh,560px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
-.ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(64vh,560px)}
-/* The variant rules set display:flex, which beats the [hidden] UA rule — re-assert hidden with higher specificity. */
+@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-muted:#a6a6ad;--pp-faint:#8a8a90}}
+.ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(72vh,580px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
+.ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(66vh,580px)}
 .ds-pp[data-variant][hidden]{display:none}
-.ds-pp-head{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:.5px solid var(--pp-line)}
+.ds-pp-head{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:.5px solid var(--pp-line)}
 .ds-pp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--pp-line);border-top-color:var(--pp-blue);animation:ds-pp-spin .7s linear infinite;flex:none}
 .ds-pp-spin[hidden]{display:none}
 @keyframes ds-pp-spin{to{transform:rotate(360deg)}}
-.ds-pp-title{font-size:13px;font-weight:650}
+.ds-pp-title{font-size:14px;font-weight:650}
 .ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:.5px solid var(--pp-line);border-radius:6px;padding:2px 7px}
 .ds-pp-agent:empty{display:none}
 .ds-pp-flex{flex:1}
 .ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:550;color:var(--pp-text);background:transparent;border:.5px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
 .ds-pp-stop[hidden],.ds-pp-close[hidden]{display:none}
-.ds-pp-sub{padding:7px 13px 0}
+.ds-pp-sub{padding:9px 14px 2px}
 .ds-pp-repo{font-size:11.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace}
 .ds-pp-repo:empty{display:none}
-.ds-pp-phase{display:flex;align-items:center;gap:8px;padding:9px 13px}
-.ds-pp-phase-dot{width:7px;height:7px;border-radius:50%;background:var(--pp-blue);flex:none}
-.ds-pp-phase-label{font-size:12.5px;font-weight:600}
-.ds-pp-meta{margin-left:auto;font-size:11px;color:var(--pp-faint);font-variant-numeric:tabular-nums}
-.ds-pp-timeline{list-style:none;margin:0;padding:2px 13px 8px;overflow:auto;flex:1;min-height:48px}
-.ds-pp-ev{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:11.5px;color:var(--pp-muted);line-height:1.45}
-.ds-pp-ic{flex:none;width:13px;text-align:center;color:var(--pp-faint);font-family:"SF Mono",ui-monospace,Menlo,monospace}
-.ds-pp-tx{word-break:break-word}
-.ds-pp-phase>.ds-pp-ic,.ds-pp-ev.ds-pp-phase .ds-pp-ic{color:var(--pp-blue)}
-.ds-pp-ev.ds-pp-phase .ds-pp-tx{color:var(--pp-text);font-weight:560}
-.ds-pp-ev.ds-pp-warning .ds-pp-ic,.ds-pp-ev.ds-pp-warning .ds-pp-tx{color:var(--pp-warn)}
-.ds-pp-ev.ds-pp-error .ds-pp-ic,.ds-pp-ev.ds-pp-error .ds-pp-tx{color:var(--pp-err)}
-.ds-pp-ev.ds-pp-file .ds-pp-tx,.ds-pp-ev.ds-pp-command .ds-pp-tx{font-family:"SF Mono",ui-monospace,Menlo,monospace}
-.ds-pp-rawwrap{border-top:.5px solid var(--pp-line)}
-.ds-pp-rawhd{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--pp-faint);padding:7px 13px 3px}
-.ds-pp-raw{margin:0;padding:0 13px 10px;max-height:120px;overflow:auto;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--pp-faint);white-space:pre-wrap;word-break:break-word}
-.ds-pp-rawwrap:has(.ds-pp-raw:empty){display:none}
-.ds-pp-foot{padding:10px 13px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px}
+.ds-pp-plan{list-style:none;margin:0;padding:6px 14px 4px;overflow:auto;flex:1;min-height:40px}
+.ds-pp-plan:empty{display:none}
+.ds-pp-step{display:flex;align-items:flex-start;gap:10px;padding:5px 0}
+.ds-pp-mark{flex:none;width:16px;height:16px;border-radius:50%;box-sizing:border-box;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.ds-pp-step.is-done .ds-pp-mark{background:var(--pp-ok);color:#0b2a14}
+.ds-pp-step.is-active .ds-pp-mark{border:2px solid var(--pp-blue)}
+.ds-pp-step.is-active .ds-pp-mark::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
+.ds-pp-step.is-pending .ds-pp-mark{border:1.5px solid rgba(255,255,255,.22)}
+.ds-pp-step-tx{font-size:13px;line-height:1.4}
+.ds-pp-step.is-done .ds-pp-step-tx{color:var(--pp-faint)}
+.ds-pp-step.is-active .ds-pp-step-tx{color:var(--pp-text);font-weight:560}
+.ds-pp-step.is-pending .ds-pp-step-tx{color:var(--pp-muted)}
+.ds-pp-step-now{display:block;font-size:11.5px;color:var(--pp-faint);font-family:"SF Mono",ui-monospace,Menlo,monospace;margin-top:2px;word-break:break-word}
+.ds-pp-step-now:empty{display:none}
+.ds-pp-now{padding:8px 14px;font-size:12.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace;word-break:break-word;overflow:auto;flex:1;min-height:24px}
+.ds-pp-now[hidden]{display:none}
+.ds-pp-live{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:11.5px;color:var(--pp-faint);font-variant-numeric:tabular-nums}
+.ds-pp-live[hidden]{display:none}
+.ds-pp-live-dot{width:6px;height:6px;border-radius:50%;background:var(--pp-ok);flex:none;animation:ds-pp-pulse 1.6s ease-in-out infinite}
+.ds-pp-live.is-error .ds-pp-live-dot{background:var(--pp-err);animation:none}
+.ds-pp-live.is-done .ds-pp-live-dot{animation:none}
+.ds-pp-live-count{margin-left:auto}
+@keyframes ds-pp-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ds-pp-details{border-top:.5px solid var(--pp-line);padding:8px 14px 10px}
+.ds-pp-details[hidden]{display:none}
+.ds-pp-details>summary{font-size:10.5px;color:var(--pp-faint);cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
+.ds-pp-raw{margin:6px 0 0;max-height:160px;overflow:auto;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--pp-faint);white-space:pre-wrap;word-break:break-word}
+.ds-pp-foot{padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px}
 .ds-pp-foot[hidden]{display:none}
 .ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--pp-blue);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
 `;
 }
 
-/** The panel markup fragment; `variant` only sets the outer positioning class. */
+/** The panel markup fragment; \`variant\` only sets the outer positioning class. */
 export function progressPanelMarkup(variant: 'inline' | 'floating'): string {
   return `<div class="ds-pp" data-variant="${variant}" hidden aria-live="polite">
   <div class="ds-pp-head">
@@ -66,13 +77,10 @@ export function progressPanelMarkup(variant: 'inline' | 'floating'): string {
     <button class="ds-pp-close" data-pp-close hidden>Close</button>
   </div>
   <div class="ds-pp-sub"><span class="ds-pp-repo"></span></div>
-  <div class="ds-pp-phase">
-    <span class="ds-pp-phase-dot" aria-hidden="true"></span>
-    <span class="ds-pp-phase-label">Starting…</span>
-    <span class="ds-pp-meta"></span>
-  </div>
-  <ol class="ds-pp-timeline"></ol>
-  <div class="ds-pp-rawwrap"><div class="ds-pp-rawhd">Raw agent output</div><pre class="ds-pp-raw"></pre></div>
+  <ol class="ds-pp-plan"></ol>
+  <div class="ds-pp-now" hidden></div>
+  <div class="ds-pp-live" hidden><span class="ds-pp-live-dot" aria-hidden="true"></span><span class="ds-pp-live-tx">Starting…</span><span class="ds-pp-live-count"></span></div>
+  <details class="ds-pp-details" hidden><summary>Details</summary><pre class="ds-pp-raw"></pre></details>
   <div class="ds-pp-foot" hidden></div>
 </div>`;
 }
@@ -85,30 +93,47 @@ function ProgressPanel(root, opts){
   var NL = String.fromCharCode(10);
   function q(sel){ return root.querySelector(sel); }
   var els = {
-    title:q('.ds-pp-title'), agent:q('.ds-pp-agent'), repo:q('.ds-pp-repo'),
-    spin:q('.ds-pp-spin'), phaseLabel:q('.ds-pp-phase-label'), meta:q('.ds-pp-meta'),
-    timeline:q('.ds-pp-timeline'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
+    title:q('.ds-pp-title'), agent:q('.ds-pp-agent'), repo:q('.ds-pp-repo'), spin:q('.ds-pp-spin'),
+    plan:q('.ds-pp-plan'), now:q('.ds-pp-now'), live:q('.ds-pp-live'),
+    liveTx:q('.ds-pp-live-tx'), liveCount:q('.ds-pp-live-count'),
+    details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
     stop:q('[data-pp-stop]'), close:q('[data-pp-close]')
   };
-  var ICON={phase:'◆',file:'→',command:'$',activity:'•',tool:'•',warning:'!',error:'✕'};
-  var WF={guided_review:'Generating guided review',detailed_audit:'Generating detailed audit',address:'Addressing comments'};
+  var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review',address:'Addressing comments'};
+  var DONE={guided_review:'Review ready',detailed_audit:'Review ready',address:'Comments addressed'};
+  var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working';
   var t0=0, timer=null;
   function elapsed(){ var s=Math.round((Date.now()-t0)/1000); return s<60?(s+'s'):(Math.floor(s/60)+'m '+(s%60)+'s'); }
-  function setMeta(quietMs){
-    if(!els.meta)return;
+  function setLive(state, quietMs){
+    if(!els.liveTx)return;
     var q2=(typeof quietMs==='number')?Math.round(quietMs/1000):0;
-    els.meta.textContent='Elapsed '+elapsed()+(q2>=8?(' · quiet '+q2+'s'):'');
+    els.liveTx.textContent=(state||'Working')+' · '+elapsed()+(q2>=8?(' · quiet '+q2+'s'):'');
   }
-  function tick(){ setMeta(0); }
-  function add(kind,text){
-    if(!els.timeline||!text)return;
-    var li=document.createElement('li'); li.className='ds-pp-ev ds-pp-'+kind;
-    var ic=document.createElement('span'); ic.className='ds-pp-ic'; ic.textContent=ICON[kind]||'•';
-    var tx=document.createElement('span'); tx.className='ds-pp-tx'; tx.textContent=text;
-    li.appendChild(ic); li.appendChild(tx); els.timeline.appendChild(li);
-    els.timeline.scrollTop=els.timeline.scrollHeight;
+  function tick(){ setLive(curState,0); }
+  function clip(s,n){ s=String(s||'').replace(/\\s+/g,' ').trim(); return s.length>n?s.slice(0,n)+'…':s; }
+  function firstLine(s){ s=String(s||''); var i=s.indexOf(NL); return i>=0?s.slice(0,i):s; }
+  function setCurrent(text){
+    var t=clip(text,120); if(!t)return;
+    if(activeNow){ activeNow.textContent=t; if(els.now)els.now.hidden=true; }
+    else if(els.now){ els.now.textContent=t; els.now.hidden=false; }
   }
-  function appendRaw(s){ if(!els.raw||!s)return; els.raw.textContent+=s; els.raw.scrollTop=els.raw.scrollHeight; }
+  function renderPlan(items){
+    if(!els.plan||!items||!items.length)return;
+    hasPlan=true; planTotal=items.length; planDone=0; activeNow=null;
+    els.plan.textContent=''; if(els.now)els.now.hidden=true;
+    for(var i=0;i<items.length;i++){
+      var it=items[i]||{}; var st=it.status||'pending';
+      var li=document.createElement('li'); li.className='ds-pp-step is-'+st;
+      var mk=document.createElement('span'); mk.className='ds-pp-mark';
+      if(st==='done'){ mk.textContent='✓'; planDone++; }
+      var tx=document.createElement('span'); tx.className='ds-pp-step-tx'; tx.textContent=it.text||'';
+      li.appendChild(mk); li.appendChild(tx);
+      if(st==='active'){ var now=document.createElement('span'); now.className='ds-pp-step-now'; tx.appendChild(now); activeNow=now; }
+      els.plan.appendChild(li);
+    }
+    els.plan.scrollTop=els.plan.scrollHeight;
+    if(els.liveCount)els.liveCount.textContent=planDone+' of '+planTotal+' done';
+  }
   function agentChip(agent,model){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; return model?(a+' · '+model):a; }
   function repoLine(ev){
     var p=ev.repoName||'';
@@ -118,36 +143,47 @@ function ProgressPanel(root, opts){
   }
   function start(){
     root.hidden=false; t0=Date.now();
+    workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working';
     if(els.spin)els.spin.hidden=false;
     if(els.stop)els.stop.hidden=false;
     if(els.close)els.close.hidden=true;
-    if(els.foot){els.foot.hidden=true; els.foot.textContent='';}
-    if(els.timeline)els.timeline.textContent='';
+    if(els.title)els.title.textContent='Preparing…';
+    if(els.plan)els.plan.textContent='';
+    if(els.now){els.now.textContent='';els.now.hidden=true;}
     if(els.raw)els.raw.textContent='';
-    if(timer)clearInterval(timer); timer=setInterval(tick,1000); tick();
+    if(els.details)els.details.hidden=true;
+    if(els.foot){els.foot.hidden=true; els.foot.textContent='';}
+    if(els.live){els.live.hidden=false; els.live.className='ds-pp-live';}
+    if(els.liveCount)els.liveCount.textContent='';
+    if(timer)clearInterval(timer); timer=setInterval(tick,1000); setLive('Preparing',0);
   }
   function stopTimer(){ if(timer){clearInterval(timer);timer=null;} }
   function handle(ev){
     if(!ev||!ev.type)return;
     switch(ev.type){
-      case 'run_started': if(els.title)els.title.textContent=ev.label||WF[ev.workflow]||'Working…'; break;
+      case 'run_started':
+        workflow=ev.workflow||'';
+        if(els.title)els.title.textContent=WORK[workflow]||ev.label||'Working…';
+        curState='Working'; setLive('Working',0); break;
       case 'context':
         if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model);
-        if(els.repo)els.repo.textContent=repoLine(ev);
-        break;
+        if(els.repo)els.repo.textContent=repoLine(ev); break;
       case 'phase':
-        var plbl=ev.label||ev.phase;
-        if(els.phaseLabel)els.phaseLabel.textContent=plbl;
-        if(ev.phase!=='agent_running') add('phase', ev.detail?(plbl+' — '+ev.detail):plbl);
-        break;
-      case 'file': add('file', ev.label); break;
-      case 'command': add('command', ev.label); break;
-      case 'activity': if(ev.kind==='narration'){ appendRaw((ev.label||'')+NL); } else { add('activity', ev.label); } break;
-      case 'tool': add('tool', ev.label); break;
-      case 'text': appendRaw(ev.data||''); break;
-      case 'heartbeat': setMeta(ev.quietMs); break;
-      case 'warning': add('warning', ev.label+(ev.detail?(' — '+ev.detail):'')); break;
-      case 'error': add('error', ev.label+(ev.detail?(' — '+ev.detail):'')); break;
+        if(ev.phase==='validating_output'||ev.phase==='applying_results'){
+          if(els.title)els.title.textContent='Checking the result…';
+          curState='Checking'; setLive('Checking',0);
+        } break;
+      case 'plan': renderPlan(ev.items); break;
+      case 'file': setCurrent(ev.label); break;
+      case 'command': setCurrent(ev.label); break;
+      case 'activity': setCurrent(ev.label); break;
+      case 'tool': setCurrent(ev.label); break;
+      case 'text':
+        if(els.raw){ els.raw.textContent+=ev.data||''; els.raw.scrollTop=els.raw.scrollHeight; }
+        if(!hasPlan){ var ln=clip(firstLine(ev.data),120); if(ln)setCurrent(ln); } break;
+      case 'heartbeat': setLive(curState, ev.quietMs); break;
+      case 'warning': if(els.raw)els.raw.textContent+='[warn] '+(ev.label||'')+NL; break;
+      case 'error': if(els.raw)els.raw.textContent+='[error] '+(ev.label||'')+(ev.detail?(' — '+ev.detail):'')+NL; break;
       case 'run_done': finish(ev.status, ev.result||{}); break;
     }
   }
@@ -156,7 +192,14 @@ function ProgressPanel(root, opts){
     if(els.spin)els.spin.hidden=true;
     if(els.stop)els.stop.hidden=true;
     if(els.close)els.close.hidden=false;
-    if(els.phaseLabel)els.phaseLabel.textContent=(status==='complete')?'Done':(status==='stopped')?'Stopped':'Failed';
+    var ok=(status==='complete');
+    if(els.title)els.title.textContent=ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':"Couldn't finish";
+    if(els.now)els.now.hidden=true;
+    if(els.live){
+      els.live.className='ds-pp-live '+(ok?'is-done':'is-error');
+      if(els.liveTx)els.liveTx.textContent=(ok?'Done':(status==='stopped')?'Stopped':'Failed')+' · '+elapsed();
+    }
+    if(!ok && els.details && els.raw && els.raw.textContent.trim()) els.details.hidden=false;
     if(opts.onDone)opts.onDone(status, result||{});
   }
   function blocked(err){
@@ -165,14 +208,14 @@ function ProgressPanel(root, opts){
     if(els.stop)els.stop.hidden=true;
     if(els.close)els.close.hidden=false;
     if(els.title)els.title.textContent='Cannot start';
-    if(els.phaseLabel)els.phaseLabel.textContent=(err&&err.label)||'Blocked';
-    if(els.foot){els.foot.hidden=false; els.foot.textContent=(err&&err.detail)||(err&&err.label)||'Blocked.';}
+    if(els.live){ els.live.hidden=false; els.live.className='ds-pp-live is-error';
+      if(els.liveTx)els.liveTx.textContent=(err&&err.label)||'Blocked'; if(els.liveCount)els.liveCount.textContent=''; }
+    if(els.foot){ els.foot.hidden=false; els.foot.textContent=(err&&err.detail)||(err&&err.label)||'Blocked.'; }
   }
   if(els.stop)els.stop.addEventListener('click',function(){ if(opts.onStop)opts.onStop(); });
-  if(els.close)els.close.addEventListener('click',function(){
-    if(opts.onClose)opts.onClose(); else root.hidden=true;
-  });
+  if(els.close)els.close.addEventListener('click',function(){ if(opts.onClose)opts.onClose(); else root.hidden=true; });
   return { root:root, els:els, start:start, handle:handle, finish:finish, blocked:blocked,
+           /* callers inject a .ds-pp-reload button via showFoot */
            showFoot:function(node){ if(els.foot){els.foot.hidden=false; els.foot.textContent=''; els.foot.appendChild(node);} } };
 }
 

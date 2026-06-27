@@ -360,7 +360,7 @@ test('read aloud preset switch migrates old modes and restarts active reading', 
 
 test('review page embeds the shared progress panel and ProgressPanel script', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /ds-pp-timeline/);
+  assert.match(html, /ds-pp-plan/);
   assert.match(html, /function ProgressPanel/);
   assert.match(html, /run_done/);
   assert.match(html, /data-pp-stop/);
