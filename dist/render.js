@@ -435,7 +435,7 @@ function sbsRow(row, s, comments, blockIndex) {
         : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
     const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
     const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}${plus}</div>`;
-    const thread = commentable ? threadFor(s.id, row.newNo, comments) : '';
+    const thread = commentable ? threadFor(s.file, row.newNo, comments) : '';
     return rowHtml + thread;
 }
 function rowVoiceFocusIndex(row, s, blockIndex) {
@@ -488,8 +488,8 @@ function singleCell(row) {
     const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
     return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code">${highlight(row.content) || ' '}</span>${flag}</span>`;
 }
-function threadFor(stepId, line, comments) {
-    const here = comments.filter((c) => c.step === stepId && c.line === line);
+function threadFor(file, line, comments) {
+    const here = comments.filter((c) => c.file === file && c.line === line);
     if (!here.length)
         return '';
     return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
@@ -549,7 +549,7 @@ function filePanel(f, i, stepIndexById) {
     const unified = f.hunks.length
         ? f.hunks
             .map((hunk, hi) => (hi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-            hunk.map(unifiedRow).join(''))
+            hunk.map((r) => unifiedRow(r, f.file)).join(''))
             .join('')
         : '<div class="ds-diffnote">No diff to show.</div>';
     // The All-files pane is a master/detail viewer: one file at a time (driven by
@@ -574,10 +574,13 @@ function filePanel(f, i, stepIndexById) {
     </div>
   </section>`;
 }
-function unifiedRow(row) {
+function unifiedRow(row, file) {
     const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
     const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"><span class="ds-no">${row.no ?? ''}</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${highlight(row.content) || ' '}</span>${flag}</div>`;
+    const commentable = row.type !== 'del' && row.no !== undefined;
+    const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.no}"` : '';
+    const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
+    return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${row.no ?? ''}</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${highlight(row.content) || ' '}</span>${flag}${plus}</div>`;
 }
 // ---- trust drawer ----
 function trustDrawer(trust, stepIndexById) {
@@ -609,7 +612,7 @@ function trustDrawer(trust, stepIndexById) {
 }
 function trustCard(u, stepIndexById) {
     const rows = u.rows.length
-        ? u.rows.map(unifiedRow).join('')
+        ? u.rows.map((r) => unifiedRow(r, u.file)).join('')
         : `<div class="ds-diffnote">${esc(u.file)}:${u.line}</div>`;
     const stepIdx = u.stepId !== undefined ? stepIndexById.get(u.stepId) : undefined;
     const jump = stepIdx !== undefined
@@ -640,12 +643,15 @@ export function renderFullFile(rows, opts) {
     <span class="ds-diffhead-divider"></span>
     <span class="ds-diffhead-side"><span class="ds-diffhead-label${opts.newFile ? ' ds-green' : ''}">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
   </div>`;
-    const body = rows.map((r) => fullRow(r)).join('');
+    const body = rows.map((r) => fullRow(r, opts.file)).join('');
     return `${head}<div class="ds-diffbody">${body}</div>`;
 }
-function fullRow(row) {
+function fullRow(row, file) {
     const cells = `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
-    return `<div class="ds-row ds-row-${row.type}">${cells}</div>`;
+    const commentable = row.newNo !== undefined;
+    const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.newNo}"` : '';
+    const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
+    return `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}${plus}</div>`;
 }
 // ---- shared bits ----
 const BRAND_MARK = `<svg class="ds-mark" width="13" height="20" viewBox="0 0 13 20" aria-hidden="true">

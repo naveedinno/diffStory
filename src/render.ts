@@ -525,7 +525,7 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: numbe
     : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
   const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
   const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}${plus}</div>`;
-  const thread = commentable ? threadFor(s.id, row.newNo!, comments) : '';
+  const thread = commentable ? threadFor(s.file, row.newNo!, comments) : '';
   return rowHtml + thread;
 }
 
@@ -583,8 +583,8 @@ function singleCell(row: SbsRow): string {
   }</span>${flag}</span>`;
 }
 
-function threadFor(stepId: string, line: number, comments: Comment[]): string {
-  const here = comments.filter((c) => c.step === stepId && c.line === line);
+function threadFor(file: string, line: number, comments: Comment[]): string {
+  const here = comments.filter((c) => c.file === file && c.line === line);
   if (!here.length) return '';
   return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
 }
@@ -657,7 +657,7 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
         .map(
           (hunk, hi) =>
             (hi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-            hunk.map(unifiedRow).join(''),
+            hunk.map((r) => unifiedRow(r, f.file)).join(''),
         )
         .join('')
     : '<div class="ds-diffnote">No diff to show.</div>';
@@ -688,14 +688,17 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
   </section>`;
 }
 
-function unifiedRow(row: UnifiedRow): string {
+function unifiedRow(row: UnifiedRow, file: string): string {
   const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
   const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-  return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"><span class="ds-no">${
+  const commentable = row.type !== 'del' && row.no !== undefined;
+  const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.no}"` : '';
+  const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
+  return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${
     row.no ?? ''
   }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code">${
     highlight(row.content) || ' '
-  }</span>${flag}</div>`;
+  }</span>${flag}${plus}</div>`;
 }
 
 // ---- trust drawer ----
@@ -736,7 +739,7 @@ function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): stri
 
 function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string {
   const rows = u.rows.length
-    ? u.rows.map(unifiedRow).join('')
+    ? u.rows.map((r) => unifiedRow(r, u.file)).join('')
     : `<div class="ds-diffnote">${esc(u.file)}:${u.line}</div>`;
   const stepIdx = u.stepId !== undefined ? stepIndexById.get(u.stepId) : undefined;
   const jump =
@@ -774,13 +777,16 @@ export function renderFullFile(rows: SbsRow[], opts: { file: string; newFile: bo
       opts.newFile ? ' ds-green' : ''
     }">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
   </div>`;
-  const body = rows.map((r) => fullRow(r)).join('');
+  const body = rows.map((r) => fullRow(r, opts.file)).join('');
   return `${head}<div class="ds-diffbody">${body}</div>`;
 }
 
-function fullRow(row: SbsRow): string {
+function fullRow(row: SbsRow, file: string): string {
   const cells = `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
-  return `<div class="ds-row ds-row-${row.type}">${cells}</div>`;
+  const commentable = row.newNo !== undefined;
+  const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.newNo}"` : '';
+  const plus = commentable ? '<button class="ds-addcomment" title="Comment on this line">+</button>' : '';
+  return `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}${plus}</div>`;
 }
 
 // ---- shared bits ----
