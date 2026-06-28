@@ -1339,6 +1339,7 @@ export const PAGE_JS = `
     var approve=$('[data-verdict="approve"]'),pill=$('.ds-trustpill'),clean=pill&&pill.classList.contains('is-clean');
     if(approve)approve.disabled=!(openN===0&&clean);
     var aa=$('[data-address-all]');if(aa&&!agentBusy)aa.disabled=openN===0;
+    var cc=$('[data-copy-comments]');if(cc)cc.disabled=openN===0;
   }
   function verdict(kind){
     var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
@@ -1350,6 +1351,38 @@ export const PAGE_JS = `
     if(!toastEl)return;toastEl.textContent=msg;toastEl.hidden=false;
     requestAnimationFrame(function(){toastEl.classList.add('is-show');});
     clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.classList.remove('is-show');setTimeout(function(){toastEl.hidden=true;},220);},4200);
+  }
+  function commentsToText(list){
+    var out=['Please address these review comments from my code review (diffStory). Each is anchored to a file:line in the diff. This is a comparison between a target side and the current code — read both sides of the change before fixing or answering; do not assume a symbol is missing just because it is absent from one side.',''];
+    list.forEach(function(c,i){
+      var label=(FLAVOR[c.type]&&FLAVOR[c.type].label)||c.type;
+      out.push((i+1)+'. ['+label+'] '+c.file+':'+c.line);
+      out.push('   '+String(c.body||'').replace(/\\n/g,'\\n   '));
+      out.push('');
+    });
+    return out.join('\\n').replace(/\\s+$/,'');
+  }
+  function writeClipboard(text,onOk){
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(onOk,function(){legacyCopy(text,onOk);});
+    }else{legacyCopy(text,onOk);}
+  }
+  function legacyCopy(text,onOk){
+    try{
+      var ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');
+      ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);
+      ta.select();var ok=document.execCommand('copy');document.body.removeChild(ta);
+      if(ok)onOk();else toast('Could not copy — select the comments manually.');
+    }catch(e){toast('Could not copy — select the comments manually.');}
+  }
+  function copyComments(){
+    fetch(API).then(function(r){return r.json();}).then(function(list){
+      var open=(Array.isArray(list)?list:[]).filter(function(c){return c.status==='open';});
+      if(!open.length){toast('No open comments to copy.');return;}
+      writeClipboard(commentsToText(open),function(){
+        toast('Copied '+open.length+' '+(open.length===1?'comment':'comments')+' — paste them to your agent.');
+      });
+    }).catch(function(){toast('Could not read comments to copy.');});
   }
 
   function onClick(e){
@@ -1374,6 +1407,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-send]');if(b){if(b.disabled)return;var cm=closest(b,'.ds-comment');if(cm)sendToAgent([cm.getAttribute('data-comment-id')]);return;}
     b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;setReviewMenu(false);sendToAgent('all');return;}
+    b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments();return;}
     b=closest(t,'[data-mode]');if(b){setMode(b);return;}
     b=closest(t,'[data-trust-open]');if(b){openDrawer();return;}
     b=closest(t,'[data-trust-close]');if(b){closeDrawer();return;}

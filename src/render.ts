@@ -173,6 +173,10 @@ export function renderPage(input: RenderInput): string {
           <span class="ds-review-option-title">Send open comments</span>
           <span class="ds-review-option-desc">For older notes, or if an auto-send failed.</span>
         </button>
+        <button class="ds-review-option" data-copy-comments role="menuitem"${openCount ? '' : ' disabled'} title="Copy open comments as text to paste into your own agent chat">
+          <span class="ds-review-option-title">Copy comments</span>
+          <span class="ds-review-option-desc">Grab the open comments as text to paste into any agent chat yourself.</span>
+        </button>
         <button class="ds-review-option" data-verdict="request" role="menuitem">
           <span class="ds-review-option-title">Ask for fixes</span>
           <span class="ds-review-option-desc">Use this when the change is not ready to merge.</span>
