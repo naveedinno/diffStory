@@ -1339,7 +1339,8 @@ export const PAGE_JS = `
     var approve=$('[data-verdict="approve"]'),pill=$('.ds-trustpill'),clean=pill&&pill.classList.contains('is-clean');
     if(approve)approve.disabled=!(openN===0&&clean);
     var aa=$('[data-address-all]');if(aa&&!agentBusy)aa.disabled=openN===0;
-    var cc=$('[data-copy-comments]');if(cc)cc.disabled=openN===0;
+    var co=$('[data-copy-comments="open"]');if(co)co.disabled=openN===0;
+    var ca=$('[data-copy-comments="all"]');if(ca)ca.disabled=$all('.ds-comment').length===0;
   }
   function verdict(kind){
     var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
@@ -1352,12 +1353,15 @@ export const PAGE_JS = `
     requestAnimationFrame(function(){toastEl.classList.add('is-show');});
     clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.classList.remove('is-show');setTimeout(function(){toastEl.hidden=true;},220);},4200);
   }
-  function commentsToText(list){
+  function commentsToText(list,withThread){
     var out=['Please address these review comments from my code review (diffStory). Each is anchored to a file:line in the diff. This is a comparison between a target side and the current code — read both sides of the change before fixing or answering; do not assume a symbol is missing just because it is absent from one side.',''];
     list.forEach(function(c,i){
       var label=(FLAVOR[c.type]&&FLAVOR[c.type].label)||c.type;
-      out.push((i+1)+'. ['+label+'] '+c.file+':'+c.line);
+      var head=(i+1)+'. ['+label+'] '+c.file+':'+c.line;
+      if(withThread)head+='  ('+(STATUS[c.status]||c.status)+')';
+      out.push(head);
       out.push('   '+String(c.body||'').replace(/\\n/g,'\\n   '));
+      if(withThread&&c.reply)out.push('   '+BRAND+' reply: '+String(c.reply).replace(/\\n/g,'\\n   '));
       out.push('');
     });
     return out.join('\\n').replace(/\\s+$/,'');
@@ -1375,12 +1379,14 @@ export const PAGE_JS = `
       if(ok)onOk();else toast('Could not copy — select the comments manually.');
     }catch(e){toast('Could not copy — select the comments manually.');}
   }
-  function copyComments(){
+  function copyComments(mode){
+    var all=mode==='all';
     fetch(API).then(function(r){return r.json();}).then(function(list){
-      var open=(Array.isArray(list)?list:[]).filter(function(c){return c.status==='open';});
-      if(!open.length){toast('No open comments to copy.');return;}
-      writeClipboard(commentsToText(open),function(){
-        toast('Copied '+open.length+' '+(open.length===1?'comment':'comments')+' — paste them to your agent.');
+      var arr=Array.isArray(list)?list:[];
+      var pick=all?arr:arr.filter(function(c){return c.status==='open';});
+      if(!pick.length){toast(all?'No comments to copy yet.':'No open comments to copy.');return;}
+      writeClipboard(commentsToText(pick,all),function(){
+        toast('Copied '+pick.length+' '+(pick.length===1?'comment':'comments')+(all?' (full thread)':'')+' — paste them to your agent.');
       });
     }).catch(function(){toast('Could not read comments to copy.');});
   }
@@ -1407,7 +1413,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-send]');if(b){if(b.disabled)return;var cm=closest(b,'.ds-comment');if(cm)sendToAgent([cm.getAttribute('data-comment-id')]);return;}
     b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;setReviewMenu(false);sendToAgent('all');return;}
-    b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments();return;}
+    b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments(b.getAttribute('data-copy-comments'));return;}
     b=closest(t,'[data-mode]');if(b){setMode(b);return;}
     b=closest(t,'[data-trust-open]');if(b){openDrawer();return;}
     b=closest(t,'[data-trust-close]');if(b){closeDrawer();return;}
