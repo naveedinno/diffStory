@@ -390,7 +390,7 @@ function diffInner(s, comments) {
     const head = diffHead(s);
     const body = s.blocks
         .map((block, bi) => (bi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-        block.map((row) => sbsRow(row, s, comments)).join(''))
+        block.map((row) => sbsRow(row, s, comments, bi)).join(''))
         .join('');
     const note = s.note && s.blocks.some((b) => b.length)
         ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
@@ -423,12 +423,13 @@ function diffHead(s) {
     </span>
   </div>`;
 }
-function sbsRow(row, s, comments) {
+function sbsRow(row, s, comments, blockIndex) {
     const commentable = !!row.comment && row.newNo !== undefined;
     const attrs = commentable
         ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
         : '';
-    const focusAttr = rowInVoiceFocus(row, s) ? ' data-step-focus="1"' : '';
+    const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
+    const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
     const cells = s.context || s.newFile
         ? singleCell(row)
         : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
@@ -437,12 +438,13 @@ function sbsRow(row, s, comments) {
     const thread = commentable ? threadFor(s.id, row.newNo, comments) : '';
     return rowHtml + thread;
 }
-function rowInVoiceFocus(row, s) {
+function rowVoiceFocusIndex(row, s, blockIndex) {
     if (row.newNo !== undefined) {
         const n = row.newNo;
-        return s.focusRanges.some(([start, end]) => n >= start && n <= end);
+        const idx = s.focusRanges.findIndex(([start, end]) => n >= start && n <= end);
+        return idx >= 0 ? (s.focusExplicit ? idx : blockIndex) : null;
     }
-    return !s.focusExplicit && row.type === 'del' && s.kind === 'changed';
+    return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
 }
 function cell(side, row) {
     const add = row.type === 'add';

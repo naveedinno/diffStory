@@ -5,7 +5,19 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranches, listRecentCommits, currentBranch } from './git.js';
+import {
+  isGitRepo,
+  resolveBase,
+  getDiff,
+  describeBase,
+  readWholeFile,
+  listBranches,
+  listRecentCommits,
+  currentBranch,
+  isDirty,
+  hasParentCommit,
+  emptyTree,
+} from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
@@ -389,12 +401,27 @@ interface ReviewData {
   files: DiffFile[];
 }
 
+function reviewDiff(repo: string, session: Session, tour: Tour): { base: string; head?: string; diff: string } {
+  const sessionHasScope = session.base !== undefined || session.head !== undefined;
+  let base = resolveBase(repo, session.base ?? tour.base);
+  let head = session.head ?? tour.head;
+  let diff = getDiff(repo, base, head);
+
+  if (!sessionHasScope && tour.base === 'HEAD' && head === undefined && diff.trim() === '' && !isDirty(repo)) {
+    base = hasParentCommit(repo) ? 'HEAD~1' : emptyTree(repo);
+    head = 'HEAD';
+    diff = getDiff(repo, base, head);
+  }
+
+  return { base, head, diff };
+}
+
 function loadReview(session: Session): ReviewData {
   if (!session.repo) throw new Error('No repo is open.');
   const repo = session.repo;
   const tour = loadTour(selectedStoryPath(session));
-  const base = resolveBase(repo, session.base ?? tour.base);
-  const files = parseUnifiedDiff(getDiff(repo, base, session.head ?? tour.head));
+  const { base, diff } = reviewDiff(repo, session, tour);
+  const files = parseUnifiedDiff(diff);
   return { tour, base, files };
 }
 
@@ -436,8 +463,7 @@ function currentDiff(session: Session): string {
     if (!session.repo) return '';
     const repo = session.repo;
     const tour = loadTour(selectedStoryPath(session));
-    const base = resolveBase(repo, session.base ?? tour.base);
-    return getDiff(repo, base, session.head ?? tour.head);
+    return reviewDiff(repo, session, tour).diff;
   } catch {
     return '';
   }

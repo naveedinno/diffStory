@@ -472,7 +472,7 @@ function diffInner(s: StepView, comments: Comment[]): string {
     .map(
       (block, bi) =>
         (bi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-        block.map((row) => sbsRow(row, s, comments)).join(''),
+        block.map((row) => sbsRow(row, s, comments, bi)).join(''),
     )
     .join('');
   const note =
@@ -513,12 +513,13 @@ function diffHead(s: StepView): string {
   </div>`;
 }
 
-function sbsRow(row: SbsRow, s: StepView, comments: Comment[]): string {
+function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: number): string {
   const commentable = !!row.comment && row.newNo !== undefined;
   const attrs = commentable
     ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
     : '';
-  const focusAttr = rowInVoiceFocus(row, s) ? ' data-step-focus="1"' : '';
+  const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
+  const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
   const cells = s.context || s.newFile
     ? singleCell(row)
     : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row)}`;
@@ -528,12 +529,13 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[]): string {
   return rowHtml + thread;
 }
 
-function rowInVoiceFocus(row: SbsRow, s: StepView): boolean {
+function rowVoiceFocusIndex(row: SbsRow, s: StepView, blockIndex: number): number | null {
   if (row.newNo !== undefined) {
     const n = row.newNo;
-    return s.focusRanges.some(([start, end]) => n >= start && n <= end);
+    const idx = s.focusRanges.findIndex(([start, end]) => n >= start && n <= end);
+    return idx >= 0 ? (s.focusExplicit ? idx : blockIndex) : null;
   }
-  return !s.focusExplicit && row.type === 'del' && s.kind === 'changed';
+  return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
 }
 
 function cell(side: 'left' | 'right', row: SbsRow): string {

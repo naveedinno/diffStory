@@ -17,6 +17,17 @@ function repoWithChange() {
   return d;
 }
 
+function repoWithCommittedHeadStory() {
+  const d = mkdtempSync(join(tmpdir(), 'ds-cr-'));
+  const g = (a) => execFileSync('git', a, { cwd: d });
+  g(['init', '-q']); g(['config', 'user.email', 't@e.st']); g(['config', 'user.name', 'T']);
+  writeFileSync(join(d, 'a.txt'), 'one\n'); g(['add', '.']); g(['commit', '-qm', 'init']);
+  writeFileSync(join(d, 'a.txt'), 'one\ntwo\n');
+  writeStory(d);
+  g(['add', '.']); g(['commit', '-qm', 'save story and change']);
+  return d;
+}
+
 function writeStory(repo, body = {}, rel = 'story.json') {
   const path = join(repo, '.diffstory', rel);
   mkdirSync(join(path, '..'), { recursive: true });
@@ -132,6 +143,25 @@ test('starting with a repo lists named stories even without a primary story', as
     const route = repoRoute(repo);
     assert.ok(html.includes(`href="${route}/review?story=stories%2Fnative.json"`), 'named story has its own repo-named review route');
     assert.ok(!html.includes('No saved stories found'), 'does not show the empty story state');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('a committed story generated against HEAD still opens the committed diff', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithCommittedHeadStory();
+  const { server, base } = await bootRepo(repo);
+  try {
+    const review = await (await fetch(`${base}${repoRoute(repo)}/review?story=story.json`)).text();
+    assert.ok(review.includes('Entry point'), 'opens the selected story');
+    assert.ok(review.includes('ds-row-add'), 'shows the committed added line');
+    assert.ok(!review.includes('no diff for this range'), 'does not fall back to current-file context');
   } finally {
     server.close();
     process.env.HOME = realHome;

@@ -58,6 +58,24 @@ test('step narrative is labeled as story, not why-this-step', () => {
   assert.doesNotMatch(html, /Why this step/);
 });
 
+test('story text cannot take over the diff viewport when read aloud is off', () => {
+  const longTour = {
+    ...tour,
+    steps: [
+      {
+        ...tour.steps[0],
+        why: Array(18)
+          .fill('I changed this path to explain the behavior, but the real diff still needs to stay visible.')
+          .join(' '),
+      },
+    ],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: longTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-why\{[^}]*max-height:min\(24vh,190px\)[^}]*overflow-y:auto/s);
+  assert.match(html, /\.ds-diffscroll\{[^}]*min-height:180px/s);
+  assert.match(html, /@media \(max-height:760px\)\{\.ds-why\{max-height:120px\}\.ds-diffscroll\{min-height:160px\}\}/);
+});
+
 test('review page can return to the story chooser', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], routeBase: '/repo/demo' });
   assert.match(html, /class="ds-story-link" data-close-story href="\/repo\/demo\/stories"/);
@@ -274,12 +292,16 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /\.ds-row\.is-voice-focus/);
   assert.match(html, /voiceFocusIndex=-1/);
   assert.match(html, /function clearVoiceFocus\(\)/);
-  assert.match(html, /function setVoiceFocus\(stepIndex\)/);
+  assert.match(html, /function setVoiceFocus\(stepIndex,focusGroup\)/);
+  assert.match(html, /function startVoiceFocusSequence\(stepIndex,text\)/);
+  assert.match(html, /function updateVoiceFocusForChar\(stepIndex,charIndex,text\)/);
+  assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
   assert.match(html, /focusRows\[0\]\.scrollIntoView/);
   assert.match(html, /speak\(stepText\(p\),\{stepIndex:i\}\)/);
-  assert.match(html, /if\(opts\.stepIndex!=null\)setVoiceFocus\(opts\.stepIndex\)/);
+  assert.match(html, /if\(opts\.stepIndex!=null\)startVoiceFocusSequence\(opts\.stepIndex,text\)/);
+  assert.match(html, /u\.onboundary=function\(e\)/);
   assert.match(html, /if\(opts\.stepIndex!=null\)clearVoiceFocus\(\)/);
-  assert.match(html, /speak\(stepText\(pp\),\{stepIndex:sp-1\}\)/);
+  assert.match(html, /speak\(stepText\(pp\),\{stepIndex:sp\}\)/);
 });
 
 test('explicit story focus narrows which rows are highlighted during read aloud', () => {
@@ -320,8 +342,99 @@ test('explicit story focus narrows which rows are highlighted during read aloud'
     },
   ];
   const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-line="2" data-step="s1" data-step-focus="1"/);
-  assert.doesNotMatch(html, /data-line="1" data-step="s1" data-step-focus="1"/);
+  assert.match(html, /data-line="2" data-step="s1" data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="1" data-step="s1" data-step-focus=/);
+});
+
+test('multiple story focus ranges are rendered as separate read-aloud groups', () => {
+  const focusTour = {
+    version: 1,
+    title: 'Focused tour',
+    summary: 'Three changed lines, two spoken focus groups.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Changed block',
+        file: 'a.ts',
+        range: [1, 3],
+        focus: { ranges: [[1, 1], [3, 3]], label: 'first and third lines' },
+        kind: 'changed',
+        why: 'First read the setup line. Then move to the result line.',
+      },
+    ],
+  };
+  const focusFiles = [
+    {
+      oldPath: 'a.ts',
+      newPath: 'a.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 0,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            { type: 'add', content: 'first', newNo: 1 },
+            { type: 'add', content: 'middle', newNo: 2 },
+            { type: 'add', content: 'third', newNo: 3 },
+          ],
+        },
+      ],
+    },
+  ];
+  const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-line="1" data-step="s1" data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="2" data-step="s1" data-step-focus=/);
+  assert.match(html, /data-line="3" data-step="s1" data-step-focus="1"/);
+  assert.ok(html.includes('data-step-focus="\'+g+\'"]'));
+  assert.match(html, /voiceFocusTimers\.push\(setTimeout\(function\(\)\{applyVoiceFocusGroup\(stepIndex,group\);\}/);
+});
+
+test('steps without explicit focus use rendered hunks as read-aloud groups', () => {
+  const hunkTour = {
+    version: 1,
+    title: 'Hunk tour',
+    summary: 'One step spans two hunks.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Two blocks',
+        file: 'a.ts',
+        range: [1, 12],
+        kind: 'changed',
+        why: 'First read the top block. Then read the lower block.',
+      },
+    ],
+  };
+  const hunkFiles = [
+    {
+      oldPath: 'a.ts',
+      newPath: 'a.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 0,
+          newStart: 1,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'top', newNo: 1 }],
+        },
+        {
+          oldStart: 10,
+          oldLines: 0,
+          newStart: 10,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'bottom', newNo: 10 }],
+        },
+      ],
+    },
+  ];
+  const html = renderPage({ repo: process.cwd(), tour: hunkTour, files: hunkFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-line="1" data-step="s1" data-step-focus="0"/);
+  assert.match(html, /data-line="10" data-step="s1" data-step-focus="1"/);
 });
 
 test('space pauses and resumes voice without stealing focused controls', () => {

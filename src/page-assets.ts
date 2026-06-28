@@ -330,13 +330,14 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step-title{font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3}
 .ds-step-file{font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;min-width:0}
 .ds-step-file:hover{color:var(--accent-blue);text-decoration:underline}
-.ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:rgba(10,132,255,0.07);border:1px solid rgba(10,132,255,0.2);flex:none}
+.ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:rgba(10,132,255,0.07);border:1px solid rgba(10,132,255,0.2);flex:none;max-height:min(24vh,190px);overflow-y:auto}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ds-why-ico{width:15px;height:15px;border-radius:4px;background:rgba(10,132,255,0.2);display:flex;align-items:center;justify-content:center;position:relative}
 .ds-why-ico::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent-blue)}
 .ds-why-label{font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent-blue);font-weight:600}
 .ds-why-text{margin:0;font-size:14px;line-height:1.58;color:var(--text);text-wrap:pretty}
-.ds-diffscroll{flex:1;overflow-y:auto;padding:18px 30px 26px}
+.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;padding:18px 30px 26px}
+@media (max-height:760px){.ds-why{max-height:120px}.ds-diffscroll{min-height:160px}}
 
 /* ---- diff ---- */
 .ds-diff{border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
@@ -563,7 +564,7 @@ export const PAGE_JS = `
   var BRAND='diffStory';
   var FLAVOR={change:{label:'Change request',ico:'◆'},question:{label:'Question',ico:'?'},nit:{label:'Nit',ico:'○'}};
   var STATUS={open:'Open',addressed:'Addressed',resolved:'Resolved'};
-  var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,speechTimer,voiceFocusIndex=-1;
+  var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,speechTimer,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[];
   var filePanels=[],fileItems=[],selectedFile=-1,sidebarResizing=false,readAloud=false,rate=1.05,voicePreset='story',voiceEngine='browser',sayVoice='samantha',kokoroVoice='af_heart',voices=[],activeUtterance=null,localAudio=null,localAudioToken=0,speechAbort=null,speechLoadingLabel='',speechLoadingMode='',speechLoadingEngine='',speechLoadingVoice='',prefetchedSpeech={},speechPrefetchAbort=null,speechPrefetchKey='';
   var VOICE_PRESETS={
     story:{
@@ -694,25 +695,76 @@ export const PAGE_JS = `
   }
 
   function clearVoiceFocus(){
+    voiceFocusTimers.forEach(function(t){clearTimeout(t);});
+    voiceFocusTimers=[];
     voiceFocusIndex=-1;
+    voiceFocusGroup=-1;
     $all('.ds-step.is-voice-active').forEach(function(p){p.classList.remove('is-voice-active');});
     $all('.ds-row.is-voice-focus').forEach(function(r){r.classList.remove('is-voice-focus');});
   }
-  function setVoiceFocus(stepIndex){
-    clearVoiceFocus();
+  function voiceFocusGroups(panel){
+    var seen={};
+    $all('[data-step-focus]',panel).forEach(function(r){
+      var n=parseInt(r.getAttribute('data-step-focus')||'0',10);
+      if(!isNaN(n))seen[n]=true;
+    });
+    return Object.keys(seen).map(function(k){return parseInt(k,10);}).sort(function(a,b){return a-b;});
+  }
+  function estimatedSpeechDurationMs(text){
+    var words=(text||'').split(/\\s+/).filter(Boolean).length;
+    return Math.max(2400,Math.round(words/Math.max(80,155*rate)*60000));
+  }
+  function activeVoiceFocusRows(panel,group){
+    var groups=voiceFocusGroups(panel);
+    if(groups.length){
+      var g=groups.indexOf(group)>=0?group:groups[0];
+      return $all('[data-step-focus="'+g+'"]',panel);
+    }
+    var rows=$all('.ds-row-add,.ds-row-del',panel);
+    return rows.length?rows:$all('.ds-row',panel);
+  }
+  function applyVoiceFocusGroup(stepIndex,group){
     if(stepIndex==null||stepIndex<0)return;
     var panel=stepPanels&&stepPanels[stepIndex];if(!panel)return;
+    if(voiceFocusIndex===stepIndex&&voiceFocusGroup>group)return;
+    $all('.ds-row.is-voice-focus',panel).forEach(function(r){r.classList.remove('is-voice-focus');});
     voiceFocusIndex=stepIndex;
+    voiceFocusGroup=group;
     panel.classList.add('is-voice-active');
-    var focusRows=$all('[data-step-focus]',panel);
-    if(!focusRows.length)focusRows=$all('.ds-row-add,.ds-row-del',panel);
-    if(!focusRows.length)focusRows=$all('.ds-row',panel);
+    var focusRows=activeVoiceFocusRows(panel,group);
     focusRows.forEach(function(r){r.classList.add('is-voice-focus');});
     if(focusRows[0]&&focusRows[0].scrollIntoView){
       setTimeout(function(){
         try{focusRows[0].scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});}
         catch(e){try{focusRows[0].scrollIntoView(false);}catch(ignore){}}
       },120);
+    }
+  }
+  function setVoiceFocus(stepIndex,focusGroup){
+    clearVoiceFocus();
+    applyVoiceFocusGroup(stepIndex,focusGroup||0);
+  }
+  function focusGroupForChar(stepIndex,charIndex,text){
+    var panel=stepPanels&&stepPanels[stepIndex];if(!panel)return 0;
+    var count=Math.max(1,voiceFocusGroups(panel).length);
+    var ratio=Math.max(0,Math.min(0.999,(charIndex||0)/Math.max(1,(text||'').length)));
+    return Math.min(count-1,Math.floor(ratio*count));
+  }
+  function updateVoiceFocusForChar(stepIndex,charIndex,text){
+    applyVoiceFocusGroup(stepIndex,focusGroupForChar(stepIndex,charIndex,text));
+  }
+  function startVoiceFocusSequence(stepIndex,text){
+    clearVoiceFocus();
+    if(stepIndex==null||stepIndex<0)return;
+    var panel=stepPanels&&stepPanels[stepIndex];if(!panel)return;
+    var count=Math.max(1,voiceFocusGroups(panel).length);
+    applyVoiceFocusGroup(stepIndex,0);
+    if(count<=1)return;
+    var each=Math.max(900,estimatedSpeechDurationMs(text)/count);
+    for(var i=1;i<count;i++){
+      (function(group){
+        voiceFocusTimers.push(setTimeout(function(){applyVoiceFocusGroup(stepIndex,group);},Math.round(each*group)));
+      })(i);
     }
   }
 
@@ -732,7 +784,8 @@ export const PAGE_JS = `
     u.volume=preset.volume;
     var v=preset===VOICE_PRESETS.system?null:pickVoice(opts.preset||voicePreset);if(v)u.voice=v;
     var btn=$('[data-readaloud]');
-    u.onstart=function(){activeUtterance=u;if(opts.stepIndex!=null)setVoiceFocus(opts.stepIndex);if(btn)btn.classList.add('is-speaking');updateReadAloudButton();};
+    u.onstart=function(){activeUtterance=u;if(opts.stepIndex!=null)startVoiceFocusSequence(opts.stepIndex,text);if(btn)btn.classList.add('is-speaking');updateReadAloudButton();};
+    u.onboundary=function(e){if(opts.stepIndex!=null&&e&&typeof e.charIndex==='number')updateVoiceFocusForChar(opts.stepIndex,e.charIndex,text);};
     u.onend=function(){if(activeUtterance===u)activeUtterance=null;if(opts.stepIndex!=null)clearVoiceFocus();if(btn)btn.classList.remove('is-speaking');updateReadAloudButton();};
     u.onerror=function(){if(activeUtterance===u)activeUtterance=null;if(opts.stepIndex!=null)clearVoiceFocus();if(btn)btn.classList.remove('is-speaking');updateReadAloudButton();};
     try{
@@ -1032,7 +1085,7 @@ export const PAGE_JS = `
     if(localAudio){try{localAudio.pause();localAudio.currentTime=0;}catch(e){}}
     localAudioToken++;
     var token=localAudioToken,btn=$('[data-readaloud]');
-    if(opts.stepIndex!=null)setVoiceFocus(opts.stepIndex);else clearVoiceFocus();
+    if(opts.stepIndex!=null)startVoiceFocusSequence(opts.stepIndex,text);else clearVoiceFocus();
     var voice=engine==='kokoro'?(opts.voice||kokoroVoice):(opts.voice||sayVoice);
     var speechRate=opts.rate||rate;
     var cached=!opts.preview&&cachedGeneratedSpeech(engine,text,voice,speechRate);
@@ -1292,7 +1345,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-kokoro-voice]');if(b){setKokoroVoice(b.getAttribute('data-kokoro-voice'),true);return;}
     b=closest(t,'[data-voice-preset]');if(b){setVoicePreset(b.getAttribute('data-voice-preset'),true);return;}
     b=closest(t,'[data-preview-voice]');if(b){speakVoicePreview();return;}
-    b=closest(t,'[data-playstep]');if(b){var pp=closest(t,'.ds-step');if(pp){var sp=parseInt(pp.getAttribute('data-step-panel')||'0',10);speak(stepText(pp),{stepIndex:sp-1});}return;}
+    b=closest(t,'[data-playstep]');if(b){var pp=closest(t,'.ds-step');if(pp){var sp=parseInt(pp.getAttribute('data-step-panel')||'0',10);speak(stepText(pp),{stepIndex:sp});}return;}
     b=closest(t,'[data-readaloud]');if(b){toggleReadAloud();return;}
     b=closest(t,'.ds-fileitem');if(b){setView('files');selectFile(Number(b.getAttribute('data-file-index')));return;}
     b=closest(t,'.ds-addcomment');if(b){var row=closest(t,'.ds-row');if(row)openComposer(row);return;}
