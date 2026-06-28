@@ -1244,10 +1244,7 @@ export const PAGE_JS = `
     var target=cur==='resolved'?(hasReply?'addressed':'open'):'resolved';
     fetch(API+'/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:target})})
       .then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(c){
-        wrap.setAttribute('data-status',c.status);wrap.className='ds-comment status-'+c.status;
-        var sb=$('.ds-statusbadge',wrap);if(sb){sb.textContent='';sb.appendChild(el('span','ds-dot'));sb.appendChild(document.createTextNode(STATUS[c.status]||'Open'));}
-        var rb=$('[data-resolve]',wrap);if(rb)rb.textContent=c.status==='resolved'?'Reopen':'Resolve';
-        refreshCount();
+        patchComment(c);refreshCount();
       }).catch(function(){});
   }
   function deleteComment(wrap){

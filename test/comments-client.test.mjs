@@ -22,3 +22,7 @@ test('refreshComments caches the list and re-syncs threads', () => {
 test('a freshly loaded full file gets its threads mounted', () => {
   assert.match(PAGE_JS, /mountThreads\(fullInner\)/);
 });
+
+test('resolving a comment updates all cross-surfaced copies via patchComment', () => {
+  assert.match(PAGE_JS, /patchComment\(c\);refreshCount\(\)/);
+});
