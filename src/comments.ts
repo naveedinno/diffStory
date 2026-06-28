@@ -26,7 +26,7 @@ function saveComments(repo: string, comments: Comment[]): void {
 }
 
 export interface NewComment {
-  step: string;
+  step?: string;
   file: string;
   line: number;
   type: string;
@@ -39,12 +39,10 @@ export function addComment(repo: string, input: NewComment): Comment {
     throw new Error('comment body is required');
   }
   if (typeof input.file !== 'string' || !input.file) throw new Error('comment file is required');
-  if (typeof input.step !== 'string' || !input.step) throw new Error('comment step is required');
   const type = TYPES.includes(input.type as CommentType) ? (input.type as CommentType) : 'change';
 
   const comment: Comment = {
     id: nextId(),
-    step: input.step,
     file: input.file,
     line: Number.isFinite(input.line) ? Math.trunc(input.line) : 0,
     type,
@@ -52,6 +50,7 @@ export function addComment(repo: string, input: NewComment): Comment {
     status: 'open',
     createdAt: new Date().toISOString(),
   };
+  if (typeof input.step === 'string' && input.step) comment.step = input.step;
 
   const comments = loadComments(repo);
   comments.push(comment);

@@ -70,8 +70,8 @@ export type CommentStatus = 'open' | 'addressed' | 'resolved';
 /** A reviewer comment anchored to a line, persisted for the agent to consume. */
 export interface Comment {
   id: string;
-  /** Step the comment was left on (anchors it even if line numbers drift). */
-  step: string;
+  /** Optional Story-view placement hint; absent for comments left in the All-files view. A comment is anchored by (file, line). */
+  step?: string;
   file: string;
   /** Line number in the post-change file, as shown at comment time. */
   line: number;

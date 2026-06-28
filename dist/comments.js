@@ -29,12 +29,9 @@ export function addComment(repo, input) {
     }
     if (typeof input.file !== 'string' || !input.file)
         throw new Error('comment file is required');
-    if (typeof input.step !== 'string' || !input.step)
-        throw new Error('comment step is required');
     const type = TYPES.includes(input.type) ? input.type : 'change';
     const comment = {
         id: nextId(),
-        step: input.step,
         file: input.file,
         line: Number.isFinite(input.line) ? Math.trunc(input.line) : 0,
         type,
@@ -42,6 +39,8 @@ export function addComment(repo, input) {
         status: 'open',
         createdAt: new Date().toISOString(),
     };
+    if (typeof input.step === 'string' && input.step)
+        comment.step = input.step;
     const comments = loadComments(repo);
     comments.push(comment);
     saveComments(repo, comments);
