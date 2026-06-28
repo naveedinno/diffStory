@@ -138,6 +138,28 @@ test('addressPrompt handles the all-open case', () => {
   assert.ok(p.includes('address-review'));
 });
 
+test('addressPrompt grounds answers in both sides when a base ref is given', () => {
+  const p = addressPrompt(['c_a'], 'origin/main');
+  assert.ok(p.includes('origin/main'));               // names the target side
+  assert.ok(p.includes('git show origin/main:'));     // tells it how to read the other side
+  assert.ok(p.includes('git diff origin/main --'));   // and how to see the change itself
+  assert.ok(p.includes('working tree'));              // current side stays the working tree
+});
+
+test('addressPrompt grounds on base..head when both refs are committed', () => {
+  const p = addressPrompt(['c_a'], 'origin/main', 'feature/x');
+  assert.ok(p.includes('git show origin/main:'));        // target side
+  assert.ok(p.includes('git show feature/x:'));          // current side is a ref, not the tree
+  assert.ok(p.includes('git diff origin/main..feature/x --'));
+  assert.ok(!p.includes('working tree'));                // not the working-tree variant
+});
+
+test('addressPrompt stays single-sided when no base ref is known', () => {
+  const p = addressPrompt(['c_a']);
+  assert.ok(!p.includes('Two-sided grounding contract'));
+  assert.ok(!p.includes('git show'));
+});
+
 test('streamCommand uses stream-json for claude and exec for codex', () => {
   assert.deepEqual(streamCommand('claude', 'GO'), [
     'claude',

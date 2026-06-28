@@ -116,17 +116,41 @@ export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = '
   );
 }
 
-/** Instruct the agent to address review comments via the address-review skill. */
-export function addressPrompt(target: string[] | 'all'): string {
+/**
+ * Instruct the agent to address review comments via the address-review skill.
+ *
+ * `base` is the diff's target ref (the "other side" of the change). `head` is the
+ * current side: when set, the review compares two committed refs (`base..head`) and
+ * the agent must read both via git; when omitted, the current side is the live
+ * working tree (`base..working tree`). Either way the prompt forces the agent to
+ * ground every answer in BOTH sides instead of the single tree it has checked out —
+ * without this it reads only the current code and can wrongly claim a changed symbol
+ * "doesn't exist".
+ */
+export function addressPrompt(target: string[] | 'all', base?: string, head?: string): string {
   const scope =
     target === 'all'
       ? 'every comment whose status is "open"'
       : `the comments with these ids: ${target.join(', ')}`;
+  // The "current" side is a committed ref (head) or the live working tree.
+  const curName = head ? `"${head}" (the current side)` : 'the current working tree (this side)';
+  const curRead = head
+    ? `read the current side with "git show ${head}:<file>"`
+    : 'read the working-tree version directly';
+  const diffCmd = head ? `git diff ${base}..${head} -- <file>` : `git diff ${base} -- <file>`;
+  const grounding = base
+    ? `Two-sided grounding contract — this review IS a diff; never answer from one side:\n` +
+      `- The change under review is "${base}" (the target side) compared against ${curName}. A comment can be about something added, removed, or moved between the two.\n` +
+      `- Before you reply to any comment, inspect BOTH sides of its file: ${curRead}, and read the target side with "git show ${base}:<file>". Run "${diffCmd}" to see exactly what the change did at that line.\n` +
+      `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
+      `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
+    : '';
   return (
     `Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
+    grounding +
     `Act by type for each one:\n` +
     `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
-    `- question → read the code at its file:line, then answer concretely in "reply".\n` +
+    `- question → read both sides of the code at its file:line, then answer concretely in "reply".\n` +
     `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n` +
     `For every comment you handle: set "status" to "addressed" and write a specific "reply" — name the ` +
     `function or file you changed, or give your answer. Preserve every other field and never delete a comment.\n\n` +

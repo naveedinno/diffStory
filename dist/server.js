@@ -536,11 +536,24 @@ function runAddress(res, session, body) {
         ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
         : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
     const before = currentDiff(session);
+    // The diff's two sides, resolved exactly as the review page rendered them, so the
+    // agent grounds its answers in both — not just the tree it has checked out. `head`
+    // is set only for two-ref comparisons; otherwise the current side is the working
+    // tree. Falls back to single-sided if no story.
+    let base;
+    let head;
+    try {
+        const tour = loadTour(selectedStoryPath(session));
+        ({ base, head } = reviewDiff(repo, session, tour));
+    }
+    catch {
+        /* no story/tour yet — addressPrompt degrades to its prior single-sided form */
+    }
     runWorkflow(res, repo, {
         workflow: 'address',
         title,
         agent,
-        prompt: addressPrompt(target),
+        prompt: addressPrompt(target, base, head),
         context: {
             repoName: basename(repo), repoPath: repo, workflow: 'address',
             agent, targetCount,
