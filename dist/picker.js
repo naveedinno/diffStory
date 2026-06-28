@@ -4,6 +4,7 @@
 // file dialog, so the "Choose a folder" control drives a server-backed directory
 // browser (GET /api/fs) instead. Self-contained; every server value is escaped.
 import { APP_BRAND } from './config.js';
+import { BRAND_HEAD_LINKS, brandMarkSvg } from './brand.js';
 function esc(s) {
     return s
         .replace(/&/g, '&amp;')
@@ -34,7 +35,7 @@ function relativeTime(then, now) {
 const ICON_FOLDER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.2h7A1.5 1.5 0 0 1 19 9.7v7.8A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/></svg>';
 const ICON_BRANCH = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M18 9.2c0 4.2-3.4 4.8-6 5.4"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
-const ICON_MARK = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h9l5 5v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1z"/><path d="M13.5 4.5V10H19"/><path d="M7.5 14h6M7.5 17h4"/></svg>';
+const ICON_MARK = brandMarkSvg('appmark', 34, 34);
 function statusPill(r) {
     // Tour status is an internal concept and confused users — don't surface it here.
     // Only flag a recent whose folder is gone / no longer a git repo.
@@ -65,6 +66,7 @@ export function renderPicker(recents, home, now) {
         : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Choose a folder below to start your first guided review.</p></div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 :root{
@@ -91,9 +93,10 @@ body{
 .wrap{max-width:680px; margin:0 auto; padding:56px 24px 72px}
 .head{display:flex; align-items:center; gap:15px; margin-bottom:6px}
 .appicon{width:54px; height:54px; border-radius:14px; flex:none;
-  background:linear-gradient(160deg,#3aa0ff,#007aff 64%,#0060df);
+  background:#007aff;
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
+.appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
 h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
 .sub{color:var(--label2); font-size:15px; margin:14px 0 30px; max-width:48ch; line-height:1.45}
 .launchwarn{max-width:620px;margin:-12px 0 28px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:10px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}

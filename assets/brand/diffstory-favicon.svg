@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>
+    :root{--path:#007aff;--node:#1d1d1f;--mid:#64d2ff}
+    @media (prefers-color-scheme:dark){:root{--path:#0a84ff;--node:#f5f5f7;--mid:#64d2ff}}
+  </style>
+  <path d="M6.6 5.4h8.7c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6H8.8c-2.1 0-3.8 1.7-3.8 3.8s1.7 3.8 3.8 3.8h8.6" fill="none" stroke="var(--path)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="6.6" cy="5.4" r="2.35" fill="var(--node)"/>
+  <circle cx="15.3" cy="12.6" r="2.35" fill="var(--mid)"/>
+  <circle cx="17.4" cy="20.2" r="2.35" fill="var(--node)"/>
+</svg>

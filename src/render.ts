@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
+import { BRAND_HEAD_LINKS, brandMarkSvg, brandStoryMarkSvg } from './brand.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
 import { highlight } from './highlight.js';
@@ -27,6 +28,8 @@ export interface RenderInput {
   baseLabel: string;
   comments: Comment[];
   routeBase?: string;
+  /** Repo display name for the breadcrumb. Falls back to the routeBase tail. */
+  repoName?: string;
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -44,6 +47,13 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
 export function renderPage(input: RenderInput): string {
   const { repo, tour, files, baseLabel, comments } = input;
   const routeBase = input.routeBase ?? '';
+  const repoName = input.repoName ?? (() => {
+    try {
+      return decodeURIComponent(routeBase.split('/').filter(Boolean).pop() ?? 'repo');
+    } catch {
+      return 'repo';
+    }
+  })();
   const model = buildReviewModel(repo, tour, files);
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
   // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
@@ -69,23 +79,29 @@ export function renderPage(input: RenderInput): string {
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(tour.title)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
 <body>
 <header class="ds-top">
-  <div class="ds-brand" title="${esc(APP_BRAND)} — the agent tells the story of its change">
+  <a class="ds-brand" href="/repos" title="Home — your repositories" aria-label="Home — your repositories">
     ${BRAND_MARK}
     <span class="ds-word"><span class="ds-word-a">diff</span><span class="ds-word-b">Story</span></span>
-  </div>
+  </a>
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
   </button>
   <div class="ds-vsep"></div>
+  <a class="ds-back" data-close-story href="${esc(routeBase)}/stories" title="Close this story — back to ${esc(
+    repoName,
+  )}'s saved stories" aria-label="Close story, back to saved stories">
+    <span class="ds-back-ico" aria-hidden="true">‹</span> Stories
+  </a>
   <div class="ds-titlewrap">
     <div class="ds-titlebar">
-      <a class="ds-story-link" data-close-story href="${esc(routeBase)}/stories" title="Back to saved stories" aria-label="Back to saved stories">Stories</a>
-      <span class="ds-kicker">Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
+      <a class="ds-crumb-repo" href="${esc(routeBase)}/stories" title="${esc(repoName)} — saved stories">${esc(repoName)}</a>
+      <span class="ds-kicker"><span class="ds-dim">·</span> Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
         baseLabel,
       )}">${esc(baseLabel)}</span></span>
     </div>
@@ -799,16 +815,10 @@ function fullRow(row: SbsRow, file: string): string {
 
 // ---- shared bits ----
 
-const BRAND_MARK = `<svg class="ds-mark" width="13" height="20" viewBox="0 0 13 20" aria-hidden="true">
-    <line x1="6.5" y1="3.5" x2="6.5" y2="16.5" stroke="#3f444c" stroke-width="2" stroke-linecap="round"></line>
-    <circle cx="6.5" cy="4.5" r="3.6" fill="#5a606b"></circle>
-    <circle cx="6.5" cy="10" r="3.6" fill="#828a96"></circle>
-    <circle cx="6.5" cy="15.5" r="3.6" fill="oklch(0.7 0.13 235)"></circle>
-  </svg>`;
+const BRAND_MARK = brandMarkSvg('ds-mark', 24, 24);
 
-// The brand mark in miniature, in currentColor so it tints with state: a spine of
-// three points — the whole story at a glance. Marks the Overview, in rail and panel.
-const STORY_MARK = `<svg class="ds-storymark" width="11" height="15" viewBox="0 0 11 15" aria-hidden="true"><line x1="5.5" y1="2.6" x2="5.5" y2="12.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"></line><circle cx="5.5" cy="2.6" r="1.9" fill="currentColor"></circle><circle cx="5.5" cy="7.5" r="1.9" fill="currentColor"></circle><circle cx="5.5" cy="12.4" r="1.9" fill="currentColor"></circle></svg>`;
+// The brand mark in miniature, in currentColor so it tints with state.
+const STORY_MARK = brandStoryMarkSvg('ds-storymark', 18, 18);
 
 function splitPath(p: string): [string, string] {
   const i = p.lastIndexOf('/');

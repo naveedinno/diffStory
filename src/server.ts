@@ -431,6 +431,7 @@ function renderReview(session: Session): string {
   return renderPage({
     repo,
     routeBase: repoRouteBase(repo),
+    repoName: basename(repo),
     tour,
     files,
     baseLabel: describeBase(repo, base),

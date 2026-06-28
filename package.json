@@ -18,6 +18,7 @@
   },
   "files": [
     "dist",
+    "assets/brand",
     "scripts/setup-kokoro.sh",
     "skills",
     "README.md"

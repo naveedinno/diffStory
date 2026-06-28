@@ -16,6 +16,12 @@ export interface StorySummary {
   updatedAt: number;
   valid: boolean;
   error?: string;
+  /** Number of steps in the reading order (0 when the story is invalid). */
+  steps: number;
+  /** Distinct files the steps touch (0 when invalid). */
+  files: number;
+  /** True for the repo's live review (story.json / legacy), shown with a "Current" badge. */
+  current: boolean;
 }
 
 export interface StoryScope {
@@ -70,6 +76,7 @@ function storySummary(repo: string, id: string): StorySummary | null {
   const path = join(repo, DATA_DIR, id);
   if (!existsSync(path)) return null;
   const updatedAt = statSync(path).mtimeMs;
+  const current = id === STORY_FILENAME || id === LEGACY_STORY_FILENAME;
   try {
     const story = loadTour(path);
     return {
@@ -83,6 +90,9 @@ function storySummary(repo: string, id: string): StorySummary | null {
       scope: storyScope(story.base, story.head),
       updatedAt,
       valid: true,
+      steps: story.steps.length,
+      files: new Set(story.steps.map((s) => s.file)).size,
+      current,
     };
   } catch (e) {
     return {
@@ -99,6 +109,9 @@ function storySummary(repo: string, id: string): StorySummary | null {
       updatedAt,
       valid: false,
       error: (e as Error).message,
+      steps: 0,
+      files: 0,
+      current,
     };
   }
 }

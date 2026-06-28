@@ -78,9 +78,9 @@ test('story text cannot take over the diff viewport when read aloud is off', () 
 
 test('review page can return to the story chooser', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], routeBase: '/repo/demo' });
-  assert.match(html, /class="ds-story-link" data-close-story href="\/repo\/demo\/stories"/);
-  assert.match(html, />Stories<\/a>/);
-  assert.match(html, /\.ds-story-link\{/);
+  assert.match(html, /class="ds-back" data-close-story href="\/repo\/demo\/stories"/);
+  assert.match(html, /Stories\s*<\/a>/);
+  assert.match(html, /\.ds-back\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);
   assert.match(html, /@media \(max-width:720px\)\{:root\{--ds-rail-width:240px\}\.ds-top\{[^}]+\}\.ds-word,\.ds-vsep,\.ds-status,\.ds-settings-wrap,\.ds-actions\{display:none\}/);
   assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);

@@ -46,6 +46,7 @@ function storySummary(repo, id) {
     if (!existsSync(path))
         return null;
     const updatedAt = statSync(path).mtimeMs;
+    const current = id === STORY_FILENAME || id === LEGACY_STORY_FILENAME;
     try {
         const story = loadTour(path);
         return {
@@ -59,6 +60,9 @@ function storySummary(repo, id) {
             scope: storyScope(story.base, story.head),
             updatedAt,
             valid: true,
+            steps: story.steps.length,
+            files: new Set(story.steps.map((s) => s.file)).size,
+            current,
         };
     }
     catch (e) {
@@ -76,6 +80,9 @@ function storySummary(repo, id) {
             updatedAt,
             valid: false,
             error: e.message,
+            steps: 0,
+            files: 0,
+            current,
         };
     }
 }
