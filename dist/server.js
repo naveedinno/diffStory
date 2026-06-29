@@ -235,6 +235,12 @@ function handle(req, res, session) {
                 commits: listRecentCommits(session.repo, 80, '--all'),
             });
         }
+        if (method === 'GET' && url.pathname === '/api/commits') {
+            if (!session.repo)
+                return noRepo(res);
+            const ref = url.searchParams.get('ref')?.trim() || 'HEAD';
+            return sendJson(res, 200, { ref, commits: listRecentCommits(session.repo, 80, ref) });
+        }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
             return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
         }

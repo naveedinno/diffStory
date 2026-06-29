@@ -164,7 +164,10 @@ export function renderChangePage(
     `<span class="sopt-k">Current branch</span><span class="sopt-t">Merge-base -> HEAD</span>` +
     `</a>` +
     `<button class="sopt" data-open-panel="range" type="button">` +
-    `<span class="sopt-k">Branch commits</span><span class="sopt-t">Two commits on this branch</span>` +
+    `<span class="sopt-k">Branch commits</span><span class="sopt-t">Two commits on one branch</span>` +
+    `</button>` +
+    `<button class="sopt" data-open-panel="cross" type="button">` +
+    `<span class="sopt-k">Cross-branch commits</span><span class="sopt-t">Commit from each branch</span>` +
     `</button>` +
     `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button">` +
     `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Branches, heads, commits</span>` +
@@ -220,14 +223,14 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .metric span{white-space:nowrap}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
 .card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
-.scope-card{grid-column:1;padding:16px}
+.scope-card{grid-column:1;padding:16px;overflow:visible}
 .scope{display:flex;flex-direction:column;gap:14px;font-size:13px;color:var(--l2)}
 .scope-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .scur{display:flex;flex-direction:column;gap:4px}
 .scur span{font-size:12px;color:var(--l3);font-weight:650;text-transform:uppercase;letter-spacing:.06em}
 .scur b{color:var(--label);font-size:20px;line-height:1.15;font-weight:720;letter-spacing:-.02em}
 .scope-command{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--l3);background:var(--subbg);border:.5px solid var(--sep);border-radius:999px;padding:6px 10px;white-space:nowrap}
-.sopts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;max-width:100%}
+.sopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:100%}
 .sopt{position:relative;display:flex;flex-direction:column;gap:5px;min-height:78px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:.5px solid var(--sep);cursor:pointer;padding:13px 13px 12px;border-radius:12px;text-decoration:none;white-space:normal}
 .sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
 .sopt:hover{color:var(--label);border-color:var(--hair);background:var(--fill)}
@@ -239,12 +242,23 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .refpanel{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:end;gap:10px;margin-top:12px;padding:13px;border:.5px solid var(--sep);border-radius:12px;background:var(--subbg)}
 .refpanel[hidden]{display:none}
 .refpanel[data-panel="commit"]{grid-template-columns:minmax(220px,1fr) auto;align-items:end}
-.refrow{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);min-width:0}
+.refpanel[data-panel="range"]{grid-template-columns:minmax(150px,.7fr) minmax(0,1fr) auto minmax(0,1fr) auto}
+.refpanel[data-panel="cross"]{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto}
+.refside{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;min-width:0}
+.refrow{position:relative;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);min-width:0}
 .refrow span{font-weight:620;color:var(--l2)}
 .refhint{grid-column:1 / -1;margin:0;color:var(--l3);font-size:12px;line-height:1.4}
 .refpanel input{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:34px;padding:0 11px;min-width:0;width:100%}
 .refpanel input:hover{border-color:var(--l3)}
 .refpanel input:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
+.refpicker{position:fixed;z-index:50;max-height:260px;overflow:auto;padding:6px;background:var(--elev);border:.5px solid var(--hair);border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.24),0 2px 8px rgba(0,0,0,.08)}
+.refpicker[hidden]{display:none}
+.refpick-row{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:8px 10px;border:none;border-radius:7px;background:transparent;color:var(--label);font:inherit;text-align:left;cursor:pointer}
+.refpick-row:hover,.refpick-row.is-active{background:var(--fill)}
+.refpick-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12.5px;font-weight:650}
+.refpick-kind{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--l3);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.refpick-meta{grid-column:1;color:var(--l2);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.refpick-empty{padding:9px 10px;color:var(--l3);font-size:12px}
 .cmparrow{color:var(--l3);display:inline-flex;align-self:center;padding-bottom:8px}
 .cmpgo{font:inherit;font-size:13px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:8px;height:34px;padding:0 16px;cursor:pointer;white-space:nowrap}
 .cmpgo:hover{background:var(--blue2)}
@@ -303,9 +317,9 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
 .skillfix:hover{background:var(--blue2)}.skillfix:disabled{opacity:.55;cursor:default}
 .progress-host{grid-column:1 / -1}
-@media (max-width:1080px){.sopts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.refpanel[data-panel="range"],.refpanel[data-panel="cross"]{grid-template-columns:1fr}.refside{grid-template-columns:1fr 1fr}.refpanel[data-panel="range"] .cmparrow,.refpanel[data-panel="cross"] .cmparrow{display:none}}
 @media (max-width:980px){.layout{grid-template-columns:1fr}.scope-card,.file-card,.launch{grid-column:1}.launch{grid-row:auto;position:static}.genctl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen{margin-top:14px}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
-@media (max-width:700px){.refpanel{grid-template-columns:1fr}.cmparrow{display:none}}
+@media (max-width:700px){.refpanel{grid-template-columns:1fr}.refside{grid-template-columns:1fr}.cmparrow{display:none}}
 @media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.cmpgo{width:100%;max-width:none}.genctl{grid-template-columns:1fr}.launch{border-radius:14px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}}
 ${progressPanelStyles()}
 </style></head>
@@ -335,26 +349,39 @@ ${nav}
         ${scopeControls}
       </div>
       <div class="refpanel" data-panel="commit" id="commitPanel"${active === 'commit' ? '' : ' hidden'}>
-        <label class="refrow"><span>Commit</span><input id="commitRef" list="commitOptions" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Commit</span><input id="commitRef" data-picker="commit" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
         <button class="cmpgo" id="commitGo" type="button">Review commit</button>
         <p class="refhint">Shows that commit against its first parent; root commits are shown against the empty tree.</p>
       </div>
       <div class="refpanel" data-panel="range" id="rangePanel" hidden>
-        <label class="refrow"><span>Older commit</span><input id="rangeBase" list="commitOptions" placeholder="base commit" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Branch</span><input id="rangeBranch" data-picker="branch" placeholder="branch" value="HEAD" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Older commit</span><input id="rangeBase" data-picker="branch-commit" data-branch-input="rangeBranch" placeholder="base commit" autocomplete="off" spellcheck="false"></label>
         <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="refrow"><span>Newer commit</span><input id="rangeHead" list="commitOptions" placeholder="HEAD or newer commit" value="HEAD" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Newer commit</span><input id="rangeHead" data-picker="branch-commit" data-branch-input="rangeBranch" placeholder="newer commit" value="HEAD" autocomplete="off" spellcheck="false"></label>
         <button class="cmpgo" id="rangeGo" type="button">Compare commits</button>
-        <p class="refhint">Use this for two commits on the current branch; paste SHAs directly if they are not in the recent list.</p>
+        <p class="refhint">Use this for two commits from the same branch. Pick a branch first, then pick older and newer commits from that branch.</p>
+      </div>
+      <div class="refpanel" data-panel="cross" id="crossPanel" hidden>
+        <div class="refside">
+          <label class="refrow"><span>From branch</span><input id="crossBaseBranch" data-picker="branch" placeholder="branch" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>From commit</span><input id="crossBaseCommit" data-picker="branch-commit" data-branch-input="crossBaseBranch" placeholder="commit on branch" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <span class="cmparrow" aria-hidden="true">→</span>
+        <div class="refside">
+          <label class="refrow"><span>To branch</span><input id="crossHeadBranch" data-picker="branch" placeholder="branch" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>To commit</span><input id="crossHeadCommit" data-picker="branch-commit" data-branch-input="crossHeadBranch" placeholder="commit on branch" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <button class="cmpgo" id="crossGo" type="button">Compare commits</button>
+        <p class="refhint">Use this for two commits that live on two different branches. The diff uses the selected commit SHAs directly.</p>
       </div>
       <div class="refpanel" data-panel="compare" id="comparePanel"${active === 'compare' ? '' : ' hidden'}>
-        <label class="refrow"><span>From</span><input id="cmpBase" list="refOptions" placeholder="branch, tag, or commit" value="${esc(opts.base ?? '')}" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>From</span><input id="cmpBase" data-picker="ref" placeholder="branch, tag, or commit" value="${esc(opts.base ?? '')}" autocomplete="off" spellcheck="false"></label>
         <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="refrow"><span>To</span><input id="cmpHead" list="refOptions" placeholder="branch head, commit, or blank for working tree" value="${esc(opts.head ?? '')}" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>To</span><input id="cmpHead" data-picker="ref" placeholder="branch head, commit, or blank for working tree" value="${esc(opts.head ?? '')}" autocomplete="off" spellcheck="false"></label>
         <button class="cmpgo" id="cmpGo" type="button">Compare refs</button>
         <p class="refhint">Use this for branch head vs branch head, branch head vs a commit, or commits from different branches.</p>
       </div>
-      <datalist id="commitOptions"></datalist>
-      <datalist id="refOptions"></datalist>
+      <div class="refpicker" id="refPicker" role="listbox" hidden></div>
     </section>
     ${launch}
     <section class="card file-card" aria-label="Files in scope">
@@ -366,8 +393,9 @@ ${nav}
 <script>${progressPanelScript()}</script>
 <script>
 (function(){
-  var loaded=false,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
-  var commitList=document.getElementById('commitOptions'),refList=document.getElementById('refOptions');
+  var loaded=false,loadingRefs=false,refsPromise=null,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
+  var refData={current:'HEAD',branches:[],commits:[],branchCommits:{}};
+  var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[];
   function showPanel(name){
     panels.forEach(function(p){p.hidden=p.getAttribute('data-panel')!==name;});
     [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('on');});
@@ -377,28 +405,144 @@ ${nav}
   [].slice.call(document.querySelectorAll('[data-open-panel]')).forEach(function(btn){
     btn.addEventListener('click',function(){showPanel(btn.getAttribute('data-open-panel'));});
   });
-  function addOpt(list,value,label){
-    if(!list||!value)return;
-    var o=document.createElement('option');o.value=value;if(label)o.label=label;list.appendChild(o);
+  function option(value,label,meta,kind){return {value:value,label:label||value,meta:meta||'',kind:kind||''};}
+  function branchOptions(){
+    return (refData.branches||[]).map(function(b){
+      return option(b.name,b.name,b.kind==='remote'?'remote branch':'local branch',b.kind==='remote'?'remote':'branch');
+    });
+  }
+  function commitOptions(list){
+    return (list||refData.commits||[]).map(function(c){
+      return option(c.sha,c.sha,c.subject||c.refs||'commit','commit');
+    });
+  }
+  function refOptions(){
+    return [option('HEAD','HEAD','current HEAD','head')].concat(branchOptions(),commitOptions());
   }
   function fillRefs(d){
-    addOpt(refList,'HEAD','current HEAD');
-    addOpt(commitList,'HEAD','current HEAD');
-    (d.branches||[]).forEach(function(raw){
-      var b=typeof raw==='string'?{name:raw,kind:'branch'}:raw;
-      addOpt(refList,b.name,(b.kind==='remote'?'remote branch':'local branch'));
-    });
-    (d.commits||[]).forEach(function(c){
-      var label=(c.subject||'commit')+(c.refs?(' · '+c.refs):'');
-      addOpt(commitList,c.sha,label);
-      addOpt(refList,c.sha,label);
-    });
+    refData.current=d.current||'HEAD';
+    refData.branches=(d.branches||[]).map(function(raw){return typeof raw==='string'?{name:raw,kind:'branch'}:raw;});
+    refData.commits=d.commits||[];
+    var rb=document.getElementById('rangeBranch');
+    if(rb&&rb.value==='HEAD'&&refData.current)rb.value=refData.current;
   }
   function ensureRefs(){
-    if(loaded)return;loaded=true;
-    fetch('/api/refs').then(function(r){return r.json();}).then(fillRefs).catch(function(){loaded=false;});
+    if(loaded)return Promise.resolve();
+    if(refsPromise)return refsPromise;
+    loadingRefs=true;
+    refsPromise=fetch('/api/refs').then(function(r){return r.json();}).then(function(d){fillRefs(d);loaded=true;loadingRefs=false;refsPromise=null;}).catch(function(){loaded=false;loadingRefs=false;refsPromise=null;});
+    return refsPromise;
   }
   if(panels.some(function(p){return !p.hidden;}))ensureRefs();
+  function branchFor(input){
+    var id=input.getAttribute('data-branch-input');
+    var b=id?document.getElementById(id):null;
+    return b&&b.value.trim()?b.value.trim():'HEAD';
+  }
+  function fetchBranchCommits(ref){
+    if(refData.branchCommits[ref])return Promise.resolve(refData.branchCommits[ref]);
+    return fetch('/api/commits?ref='+encodeURIComponent(ref)).then(function(r){return r.json();}).then(function(d){
+      refData.branchCommits[ref]=d.commits||[];
+      return refData.branchCommits[ref];
+    });
+  }
+  function sourceOptions(input){
+    var kind=input.getAttribute('data-picker');
+    if(!loaded)return [option('', 'Loading refs…', 'reading local git refs', '')];
+    if(kind==='branch')return branchOptions();
+    if(kind==='commit')return [option('HEAD','HEAD','current HEAD','head')].concat(commitOptions());
+    if(kind==='branch-commit'){
+      var ref=branchFor(input);
+      if(!refData.branchCommits[ref]){
+        fetchBranchCommits(ref).then(function(){if(activeInput===input)renderPicker();}).catch(function(){refData.branchCommits[ref]=[];if(activeInput===input)renderPicker();});
+        return [option('', 'Loading commits…', ref, '')];
+      }
+      return [option(ref,ref,'branch head','head')].concat(commitOptions(refData.branchCommits[ref]));
+    }
+    return refOptions();
+  }
+  function filteredOptions(input){
+    var q=(input.value||'').trim().toLowerCase();
+    return sourceOptions(input).filter(function(o){
+      if(!o.value)return true;
+      if(!q)return true;
+      return (o.value+' '+o.label+' '+o.meta+' '+o.kind).toLowerCase().indexOf(q)>=0;
+    }).slice(0,48);
+  }
+  function placePicker(){
+    if(!picker||!activeInput||picker.hidden)return;
+    var r=activeInput.getBoundingClientRect();
+    var w=Math.min(Math.max(260,Math.round(r.width)),Math.max(220,window.innerWidth-24));
+    var left=Math.min(Math.max(12,Math.round(r.left)),Math.max(12,window.innerWidth-w-12));
+    var maxH=Math.max(140,Math.min(260,window.innerHeight-24));
+    picker.style.maxHeight=maxH+'px';
+    var h=Math.min(picker.offsetHeight||maxH,maxH);
+    var top=r.bottom+7;
+    if(top+h>window.innerHeight-12){
+      top=r.top-7-h;
+      if(top<12)top=Math.max(12,window.innerHeight-h-12);
+    }
+    picker.style.left=left+'px';
+    picker.style.top=Math.round(top)+'px';
+    picker.style.width=w+'px';
+  }
+  function renderPicker(){
+    if(!picker||!activeInput)return;
+    activeRows=filteredOptions(activeInput);
+    picker.replaceChildren();
+    if(!activeRows.length){
+      var empty=document.createElement('div');empty.className='refpick-empty';empty.textContent='No matching refs';picker.appendChild(empty);
+    }else{
+      activeRows.forEach(function(o,i){
+        var row=document.createElement('button');row.type='button';row.className='refpick-row'+(i===0?' is-active':'');row.setAttribute('data-value',o.value);
+        var main=document.createElement('span');main.className='refpick-main';main.textContent=o.label;
+        var meta=document.createElement('span');meta.className='refpick-meta';meta.textContent=o.meta;
+        var kind=document.createElement('span');kind.className='refpick-kind';kind.textContent=o.kind;
+        row.appendChild(main);row.appendChild(meta);row.appendChild(kind);
+        row.addEventListener('mousedown',function(ev){ev.preventDefault();chooseRef(o.value);});
+        picker.appendChild(row);
+      });
+    }
+    picker.hidden=false;placePicker();
+  }
+  function openPicker(input){
+    activeInput=input;
+    ensureRefs().then(renderPicker);
+  }
+  function closePicker(){
+    if(picker)picker.hidden=true;
+    activeInput=null;activeRows=[];
+  }
+  function chooseRef(value){
+    if(!activeInput||!value)return;
+    activeInput.value=value;
+    activeInput.dispatchEvent(new Event('change',{bubbles:true}));
+    closePicker();
+  }
+  [].slice.call(document.querySelectorAll('[data-picker]')).forEach(function(input){
+    input.addEventListener('focus',function(){openPicker(input);});
+    input.addEventListener('input',function(){openPicker(input);});
+    input.addEventListener('keydown',function(ev){
+      if(ev.key==='Escape'){closePicker();return;}
+      if(ev.key==='Enter'&&activeInput===input&&activeRows[0]&&activeRows[0].value){ev.preventDefault();chooseRef(activeRows[0].value);}
+    });
+  });
+  [['rangeBranch','rangeBase','rangeHead'],['crossBaseBranch','crossBaseCommit'],['crossHeadBranch','crossHeadCommit']].forEach(function(ids){
+    var branch=document.getElementById(ids[0]);
+    if(!branch)return;
+    branch.addEventListener('change',function(){
+      ids.slice(1).forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+      var ref=branch.value.trim();if(ref)fetchBranchCommits(ref).catch(function(){});
+    });
+  });
+  document.addEventListener('mousedown',function(ev){
+    if(!picker||picker.hidden)return;
+    if(ev.target===picker||picker.contains(ev.target))return;
+    if(activeInput&&ev.target===activeInput)return;
+    closePicker();
+  });
+  window.addEventListener('resize',placePicker);
+  window.addEventListener('scroll',placePicker,true);
   function navTo(url){location.href=url;}
   var commitGo=document.getElementById('commitGo'),commitRef=document.getElementById('commitRef');
   if(commitGo)commitGo.addEventListener('click',function(){
@@ -408,6 +552,11 @@ ${nav}
   var rangeGo=document.getElementById('rangeGo'),rangeBase=document.getElementById('rangeBase'),rangeHead=document.getElementById('rangeHead');
   if(rangeGo)rangeGo.addEventListener('click',function(){
     var b=rangeBase.value.trim(),h=(rangeHead.value.trim()||'HEAD');if(!b)return;
+    navTo('${esc(routeBase)}/change?base='+encodeURIComponent(b)+'&head='+encodeURIComponent(h));
+  });
+  var crossGo=document.getElementById('crossGo'),crossBase=document.getElementById('crossBaseCommit'),crossHead=document.getElementById('crossHeadCommit');
+  if(crossGo)crossGo.addEventListener('click',function(){
+    var b=crossBase.value.trim(),h=crossHead.value.trim();if(!b||!h)return;
     navTo('${esc(routeBase)}/change?base='+encodeURIComponent(b)+'&head='+encodeURIComponent(h));
   });
   var cmpGo=document.getElementById('cmpGo');

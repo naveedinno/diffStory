@@ -22,9 +22,14 @@ test('renderChangePage shows the change, the base label, and the Generate action
   assert.ok(html.includes('value="detailed"'), 'offers detailed correctness mode');
   assert.ok(html.includes('mode:modeSel?modeSel.value:undefined'), 'sends the selected story mode');
   assert.ok(html.includes('Single commit'), 'offers a single-commit scope');
+  assert.ok(html.includes('Cross-branch commits'), 'offers commits from two different branches as a first-class scope');
   assert.ok(html.includes('Compare any refs'), 'offers arbitrary ref comparison');
   assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
+  assert.ok(html.includes('id="crossBaseBranch"') && html.includes('id="crossHeadCommit"'), 'has branch + commit controls for both sides');
   assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has from/to compare inputs');
+  assert.ok(html.includes('data-picker="branch"'), 'uses the custom branch picker');
+  assert.ok(html.includes('data-picker="ref"'), 'uses the custom ref picker');
+  assert.ok(!html.includes('<datalist'), 'does not rely on the native datalist menu');
   const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo' });
   assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
@@ -53,6 +58,7 @@ test('renderChangePage shows the human scope label and highlights the active seg
   assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
   assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
+  assert.ok(html.includes('data-panel="cross"'), 'has a dedicated cross-branch commit panel');
   assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
 });
 

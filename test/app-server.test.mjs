@@ -119,6 +119,11 @@ test('app server drives picker → open → refs → recent → close', async ()
     const refs = await (await fetch(`${base}/api/refs`)).json();
     assert.ok(Array.isArray(refs.branches));
     assert.ok(Array.isArray(refs.commits));
+    assert.ok(refs.branches.every((b) => typeof b === 'object' && typeof b.name === 'string'), 'branches include picker metadata');
+
+    const scopedCommits = await (await fetch(`${base}/api/commits?ref=${encodeURIComponent('HEAD')}`)).json();
+    assert.ok(Array.isArray(scopedCommits.commits), 'can fetch commits for a specific ref');
+    assert.ok(scopedCommits.commits.length >= 1, 'returns the current HEAD commit');
 
     const recent = await (await fetch(`${base}/api/repos/recent`)).json();
     assert.ok(recent.some((r) => r.path === repo));
