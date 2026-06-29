@@ -9,8 +9,11 @@ test('client defines thread mounting and a comment cache', () => {
   assert.match(PAGE_JS, /var allComments\s*=/);
 });
 
-test('the + handler accepts All-files unified rows', () => {
-  assert.match(PAGE_JS, /closest\(t,'\.ds-row,\.ds-urow'\)/);
+test('the context menu opens the composer from selected review text', () => {
+  assert.match(PAGE_JS, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
+  assert.match(PAGE_JS, /function currentSelectionContext\(/);
+  assert.match(PAGE_JS, /data-selection-action/);
+  assert.doesNotMatch(PAGE_JS, /ds-addcomment/);
 });
 
 test('refreshComments caches the list and re-syncs threads', () => {

@@ -5,8 +5,9 @@
 ### Read AI-written code the way it was meant to be read.
 
 diffStory turns a sprawling, AI-authored change into a **guided story**. The agent that wrote the
-code walks you through it in the order the logic actually flows — you comment right on the lines,
-and it fixes things on the spot. No more hunting through thirty alphabetised files.
+code walks you through it in the order the logic actually flows — you select the exact text you
+care about, right-click, and it fixes things on the spot. No more hunting through thirty
+alphabetised files.
 
 `MIT` · zero runtime dependencies · 100% local · works with **Claude Code** & **Codex**
 
@@ -37,7 +38,7 @@ Then use it for real, in any repo after making changes:
 
 ```text
 1.  diffstory story                →  your agent writes .diffstory/story.json, then the review opens
-2.  Read in order, comment on lines
+2.  Read in order, select text, right-click to comment
 3.  Hit "Ask agent" on the page    →  it answers and fixes inline, live ✅
 ```
 
@@ -189,7 +190,7 @@ the same as cloning any private repo. Add `.diffstory/` to each repo's `.gitigno
 <br>
 
 - **Reload after code edits.** Replies stream into the page live and patch inline; when the agent also edits code, the diff and story are server-rendered, so a one-click "Reload to see the new diff" refreshes them.
-- **Comment drift.** Comments anchor to a line number at comment-time; if code shifts and the story isn't refreshed, a comment falls back to a note on its step. Resolve a batch, then re-review fresh.
+- **Comment drift.** Comments anchor to selected text plus its current file/range; if code shifts and the story isn't refreshed, the saved range can get stale. Resolve a batch, then re-review fresh.
 - **Syntax highlighting** is diff-coloring only in v1 (kept self-contained, no CDN).
 - Needs a git repo; reviews the working tree against a base.
 

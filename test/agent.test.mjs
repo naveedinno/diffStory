@@ -129,6 +129,8 @@ test('addressPrompt targets specific ids via the address-review skill', () => {
   assert.ok(p.includes('address-review'));
   assert.ok(p.includes('c_a, c_b'));
   assert.ok(p.includes('.diffstory/comments.json'));
+  assert.ok(p.includes('selected text'));
+  assert.ok(!p.includes('file:line'));
   assert.ok(p.includes('Do not ask questions'));
 });
 

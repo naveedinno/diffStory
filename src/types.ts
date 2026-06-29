@@ -67,14 +67,28 @@ export interface Tour {
 export type CommentType = 'change' | 'question' | 'nit';
 export type CommentStatus = 'open' | 'addressed' | 'resolved';
 
-/** A reviewer comment anchored to a line, persisted for the agent to consume. */
+/** The selected current-side code text a reviewer anchored a comment to. */
+export interface CommentSelection {
+  /** Inclusive post-change line range covered by the selected text. */
+  startLine: number;
+  endLine: number;
+  /** Best-effort 1-based column offsets inside the first and last selected lines. */
+  startColumn?: number;
+  endColumn?: number;
+}
+
+/** A reviewer comment anchored to selected text, persisted for the agent to consume. */
 export interface Comment {
   id: string;
-  /** Optional Story-view placement hint; absent for comments left in the All-files view. A comment is anchored by (file, line). */
+  /** Optional Story-view placement hint; absent for comments left in the All-files view. */
   step?: string;
   file: string;
-  /** Line number in the post-change file, as shown at comment time. */
+  /** First post-change line for placement and backward compatibility. */
   line: number;
+  /** Reviewer-selected code/text snippet. Absent on legacy line-anchored comments. */
+  selectedText?: string;
+  /** Selected post-change line range and optional columns. */
+  selection?: CommentSelection;
   type: CommentType;
   body: string;
   status: CommentStatus;

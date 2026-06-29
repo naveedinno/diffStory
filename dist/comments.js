@@ -41,6 +41,12 @@ export function addComment(repo, input) {
     };
     if (typeof input.step === 'string' && input.step)
         comment.step = input.step;
+    const selectedText = cleanSelectedText(input.selectedText);
+    if (selectedText)
+        comment.selectedText = selectedText;
+    const selection = cleanSelection(input.selection);
+    if (selection)
+        comment.selection = selection;
     const comments = loadComments(repo);
     comments.push(comment);
     saveComments(repo, comments);
@@ -73,4 +79,36 @@ export function setCommentStatus(repo, id, status) {
 }
 function nextId() {
     return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function cleanSelectedText(value) {
+    if (typeof value !== 'string')
+        return undefined;
+    const text = value.replace(/\r\n?/g, '\n').trim();
+    return text ? text : undefined;
+}
+function positiveInt(value) {
+    if (!Number.isFinite(value))
+        return undefined;
+    const n = Math.trunc(value);
+    return n > 0 ? n : undefined;
+}
+function cleanSelection(value) {
+    if (!value || typeof value !== 'object')
+        return undefined;
+    const raw = value;
+    const startLine = positiveInt(raw.startLine);
+    const endLine = positiveInt(raw.endLine);
+    if (!startLine || !endLine)
+        return undefined;
+    const selection = {
+        startLine: Math.min(startLine, endLine),
+        endLine: Math.max(startLine, endLine),
+    };
+    const startColumn = positiveInt(raw.startColumn);
+    const endColumn = positiveInt(raw.endColumn);
+    if (startColumn)
+        selection.startColumn = startColumn;
+    if (endColumn)
+        selection.endColumn = endColumn;
+    return selection;
 }

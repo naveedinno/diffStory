@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { commentsPath } from './config.js';
-import type { Comment, CommentStatus, CommentType } from './types.js';
+import type { Comment, CommentSelection, CommentStatus, CommentType } from './types.js';
 
 const TYPES: CommentType[] = ['change', 'question', 'nit'];
 const STATUSES: CommentStatus[] = ['open', 'addressed', 'resolved'];
@@ -29,6 +29,8 @@ export interface NewComment {
   step?: string;
   file: string;
   line: number;
+  selectedText?: string;
+  selection?: Partial<CommentSelection>;
   type: string;
   body: string;
 }
@@ -51,6 +53,10 @@ export function addComment(repo: string, input: NewComment): Comment {
     createdAt: new Date().toISOString(),
   };
   if (typeof input.step === 'string' && input.step) comment.step = input.step;
+  const selectedText = cleanSelectedText(input.selectedText);
+  if (selectedText) comment.selectedText = selectedText;
+  const selection = cleanSelection(input.selection);
+  if (selection) comment.selection = selection;
 
   const comments = loadComments(repo);
   comments.push(comment);
@@ -85,4 +91,33 @@ export function setCommentStatus(repo: string, id: string, status: string): Comm
 
 function nextId(): string {
   return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function cleanSelectedText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\r\n?/g, '\n').trim();
+  return text ? text : undefined;
+}
+
+function positiveInt(value: unknown): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const n = Math.trunc(value as number);
+  return n > 0 ? n : undefined;
+}
+
+function cleanSelection(value: unknown): CommentSelection | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Partial<CommentSelection>;
+  const startLine = positiveInt(raw.startLine);
+  const endLine = positiveInt(raw.endLine);
+  if (!startLine || !endLine) return undefined;
+  const selection: CommentSelection = {
+    startLine: Math.min(startLine, endLine),
+    endLine: Math.max(startLine, endLine),
+  };
+  const startColumn = positiveInt(raw.startColumn);
+  const endColumn = positiveInt(raw.endColumn);
+  if (startColumn) selection.startColumn = startColumn;
+  if (endColumn) selection.endColumn = endColumn;
+  return selection;
 }

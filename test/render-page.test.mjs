@@ -100,7 +100,14 @@ test('toolbar consolidates final review actions into one clear menu', () => {
 
 test('submitting a comment sends it to the agent immediately', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /ta\.placeholder='Leave a comment on this line…'/);
+  assert.match(html, /data-selection-menu/);
+  assert.match(html, />Ask<\/button>/);
+  assert.match(html, />Ask for change<\/button>/);
+  assert.match(html, />Nit<\/button>/);
+  assert.match(html, /ta\.placeholder='Comment on the selected text…'/);
+  assert.match(html, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
+  assert.doesNotMatch(html, /Leave a comment on this line/);
+  assert.doesNotMatch(html, /ds-addcomment/);
   assert.doesNotMatch(html, /then Ask agent/);
   assert.match(html, /var submit=el\('button','ds-btn ds-btn-solid','Send'\)/);
   assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);refreshCount\(\);sendToAgent\(\[c\.id\]\);/);

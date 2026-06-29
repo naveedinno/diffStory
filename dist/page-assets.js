@@ -350,9 +350,6 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:rgba(208,188,255,0.16);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-difftoolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
-.ds-commenthint{font-size:11px;color:var(--accent-blue);display:flex;align-items:center;gap:6px;white-space:nowrap;margin-left:auto;margin-right:12px}
-.ds-commenthint b{color:var(--accent-blue)}
-.ds-commenthint-ico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:13px;line-height:1}
 .ds-modetoggle{display:flex;gap:2px;padding:2px;border-radius:6px;background:var(--gutter-hi);border:1px solid var(--diff-rule)}
 .ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:6px;border:none;cursor:pointer;background:transparent;color:var(--muted)}
 .ds-modetoggle button.is-active{background:var(--accent-soft);color:var(--accent-text)}
@@ -397,10 +394,6 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .ds-code-add{color:var(--add-text)}
 .ds-code-del{color:var(--del-text)}
 .ds-untoured-tag{flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
-.ds-addcomment{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:6px;border:none;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;background:var(--accent);color:var(--on-accent);font-size:15px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,0.35);z-index:3;
-  opacity:0;pointer-events:none;transition:opacity .12s,transform .12s}
-.ds-row:hover .ds-addcomment{opacity:1;pointer-events:auto;transform:translateY(-50%) scale(1.05)}
 .ds-urow{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,0.025);min-height:23px}
 .ds-urow.ds-row-add{background:rgba(18,150,111,0.12);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-urow.ds-row-del{background:rgba(224,68,94,0.12);box-shadow:inset 3px 0 0 var(--del-rail)}
@@ -439,6 +432,9 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .flavor-question .ds-flavor-label{color:var(--accent-text)}
 .flavor-nit .ds-flavor-label{color:var(--amber-text)}
 .ds-comment-author{font-size:12px;color:var(--text);font-weight:500}
+.ds-comment-selection{padding:10px 13px;border-bottom:1px solid var(--line-soft);background:var(--panel3);display:grid;gap:5px}
+.ds-comment-selection span{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--dim2);font-weight:700}
+.ds-comment-selection code{font-family:var(--mono);font-size:12px;line-height:1.45;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-statusbadge{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:6px}
 .status-open .ds-statusbadge{color:var(--amber);background:rgba(255,159,10,0.12)}
 .status-open .ds-statusbadge .ds-dot{background:var(--amber)}
@@ -462,6 +458,8 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 .ds-ghost:hover{background:var(--fill-2)}
 .ds-composer{padding:12px 16px 14px 50px;background:var(--panel2);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);
   font-family:var(--sans);animation:dsIn .15s ease}
+.ds-composer-selection{margin:0 0 10px;padding:10px 11px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel3);font-family:var(--mono);
+  font-size:12px;line-height:1.45;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-composer-tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .ds-composer-tab{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer;
   border:1px solid var(--line);background:transparent;color:var(--muted)}
@@ -556,6 +554,10 @@ body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
   background:var(--material);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border:1px solid var(--line);color:var(--text);font-size:13px;line-height:1.45;
   padding:12px 16px;border-radius:11px;box-shadow:var(--shadow);opacity:0;transition:opacity .2s,transform .2s;z-index:80;pointer-events:none}
 .ds-toast.is-show{opacity:1;transform:translateX(-50%) translateY(0)}
+.ds-selection-menu{position:fixed;z-index:90;min-width:168px;padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--material);box-shadow:var(--shadow)}
+.ds-selection-menu[hidden]{display:none}
+.ds-selection-menu button{width:100%;display:block;border:none;border-radius:7px;background:transparent;color:var(--text);font-size:13px;font-weight:700;text-align:left;padding:8px 10px;cursor:pointer}
+.ds-selection-menu button:hover{background:var(--fill-2)}
 .ds-green{color:var(--add)}
 `;
 // No backticks and no ${} below — safe to embed in a template literal.
@@ -567,7 +569,7 @@ export const PAGE_JS = `
   var BRAND='diffStory';
   var FLAVOR={change:{label:'Change request',ico:'◆'},question:{label:'Question',ico:'?'},nit:{label:'Nit',ico:'○'}};
   var STATUS={open:'Open',addressed:'Addressed',resolved:'Resolved'};
-  var tourView,filesView,drawer,toastEl,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,speechTimer,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[];
+  var tourView,filesView,drawer,toastEl,selectionMenu,selectionContext=null,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,speechTimer,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[];
   var filePanels=[],fileItems=[],selectedFile=-1,sidebarResizing=false,readAloud=false,rate=1.05,voicePreset='story',voiceEngine='browser',sayVoice='samantha',kokoroVoice='af_heart',voices=[],activeUtterance=null,localAudio=null,localAudioToken=0,speechAbort=null,speechLoadingLabel='',speechLoadingMode='',speechLoadingEngine='',speechLoadingVoice='',prefetchedSpeech={},speechPrefetchAbort=null,speechPrefetchKey='';
   var VOICE_PRESETS={
     story:{
@@ -644,6 +646,104 @@ export const PAGE_JS = `
     pop.hidden=!open;
     btn.classList.toggle('is-open',open);
     btn.setAttribute('aria-expanded',open?'true':'false');
+  }
+  function nodeElement(n){return n&&n.nodeType===1?n:(n&&n.parentElement?n.parentElement:null);}
+  function codeForNode(n){var e=nodeElement(n);return e?closest(e,'[data-comment-code]'):null;}
+  function selectedTextInCode(range,code){
+    try{
+      var r=document.createRange();
+      r.selectNodeContents(code);
+      if(code.contains(range.startContainer))r.setStart(range.startContainer,range.startOffset);
+      if(code.contains(range.endContainer))r.setEnd(range.endContainer,range.endOffset);
+      return r.toString();
+    }catch(e){return '';}
+  }
+  function selectedOffsetInCode(code,text){
+    var full=code&&code.textContent?code.textContent:'';
+    var idx=full.indexOf(text);
+    if(idx<0)return {};
+    return {start:idx+1,end:idx+text.length};
+  }
+  function currentSelectionContext(){
+    var sel=window.getSelection&&window.getSelection();
+    if(!sel||sel.rangeCount===0||sel.isCollapsed)return null;
+    var range=sel.getRangeAt(0);
+    var startCode=codeForNode(range.startContainer),endCode=codeForNode(range.endContainer);
+    if(!startCode||!endCode)return null;
+    var codes=$all('[data-comment-code]').filter(function(code){
+      try{return range.intersectsNode(code);}catch(e){return false;}
+    });
+    if(!codes.length)return null;
+    var file='',rows=[],segments=[];
+    for(var i=0;i<codes.length;i++){
+      var code=codes[i],row=closest(code,'[data-file][data-line]');
+      if(!row)return null;
+      var f=row.getAttribute('data-file')||'';
+      if(!f)return null;
+      if(file&&f!==file)return null;
+      file=f;
+      var piece=selectedTextInCode(range,code);
+      if(piece)segments.push(piece);
+      rows.push(row);
+    }
+    var selectedText=segments.join('\\n').trim();
+    if(!selectedText)return null;
+    var firstRow=rows[0],lastRow=rows[rows.length-1];
+    var startLine=parseInt(firstRow.getAttribute('data-line')||'0',10);
+    var endLine=parseInt(lastRow.getAttribute('data-line')||'0',10);
+    if(!startLine||!endLine)return null;
+    var firstText=selectedTextInCode(range,codes[0]);
+    var lastText=selectedTextInCode(range,codes[codes.length-1]);
+    var firstOffset=selectedOffsetInCode(codes[0],firstText);
+    var lastOffset=selectedOffsetInCode(codes[codes.length-1],lastText);
+    return {
+      anchorRow:lastRow,
+      file:file,
+      line:startLine,
+      step:firstRow.getAttribute('data-step')||'',
+      selectedText:selectedText,
+      selection:{startLine:startLine,endLine:endLine,startColumn:firstOffset.start,endColumn:lastOffset.end}
+    };
+  }
+  function ensureSelectionMenu(){
+    if(selectionMenu)return selectionMenu;
+    selectionMenu=$('[data-selection-menu]')||el('div','ds-selection-menu');
+    selectionMenu.setAttribute('data-selection-menu','');
+    selectionMenu.setAttribute('role','menu');
+    if(!selectionMenu.children.length){
+      [
+        ['question','Ask'],
+        ['change','Ask for change'],
+        ['nit','Nit']
+      ].forEach(function(item){
+        var b=el('button','',item[1]);
+        b.setAttribute('type','button');
+        b.setAttribute('role','menuitem');
+        b.setAttribute('data-selection-action',item[0]);
+        selectionMenu.appendChild(b);
+      });
+    }
+    selectionMenu.hidden=true;
+    if(!selectionMenu.parentNode)document.body.appendChild(selectionMenu);
+    return selectionMenu;
+  }
+  function closeSelectionMenu(){
+    if(selectionMenu)selectionMenu.hidden=true;
+  }
+  function openSelectionMenu(e){
+    if(!codeForNode(e.target))return;
+    var ctx=currentSelectionContext();
+    if(!ctx)return;
+    e.preventDefault();
+    selectionContext=ctx;
+    var menu=ensureSelectionMenu();
+    menu.hidden=false;
+    var x=e.clientX,y=e.clientY;
+    var w=menu.offsetWidth||168,h=menu.offsetHeight||120;
+    var vw=window.innerWidth||document.documentElement.clientWidth||0;
+    var vh=window.innerHeight||document.documentElement.clientHeight||0;
+    menu.style.left=Math.max(8,Math.min(x,vw-w-8))+'px';
+    menu.style.top=Math.max(8,Math.min(y,vh-h-8))+'px';
   }
   function sidebarBounds(){
     var vw=window.innerWidth||document.documentElement.clientWidth||0;
@@ -1201,6 +1301,12 @@ export const PAGE_JS = `
     head.appendChild(el('span','ds-flex'));
     var sb=el('span','ds-statusbadge');sb.appendChild(el('span','ds-dot'));sb.appendChild(document.createTextNode(STATUS[c.status]||'Open'));head.appendChild(sb);
     card.appendChild(head);
+    if(c.selectedText){
+      var picked=el('div','ds-comment-selection');
+      picked.appendChild(el('span','', 'Selected'));
+      picked.appendChild(el('code','',c.selectedText));
+      card.appendChild(picked);
+    }
     card.appendChild(el('div','ds-comment-body',c.body));
     var actions=el('div','ds-comment-actions');
     if(c.status!=='resolved'){var snd=el('button','ds-ghost ds-send','Send again');snd.setAttribute('data-send','');actions.appendChild(snd);}
@@ -1208,25 +1314,28 @@ export const PAGE_JS = `
     var db=el('button','ds-ghost ds-del','Delete');db.setAttribute('data-delete','');actions.appendChild(db);
     card.appendChild(actions);wrap.appendChild(card);return wrap;
   }
-  function buildComposer(row){
-    var file=row.getAttribute('data-file'),line=row.getAttribute('data-line'),step=row.getAttribute('data-step');
-    var box=el('div','ds-composer'),state={flavor:'change'};
+  function buildComposer(row,flavor,ctx){
+    ctx=ctx||{};
+    var file=ctx.file||row.getAttribute('data-file'),line=ctx.line||row.getAttribute('data-line'),step=ctx.step||row.getAttribute('data-step');
+    var selectedText=ctx.selectedText||'';
+    var box=el('div','ds-composer'),state={flavor:flavor||'change'};
     var tabs=el('div','ds-composer-tabs');
     ['change','question','nit'].forEach(function(v){
-      var f=FLAVOR[v],b=el('button','ds-composer-tab'+(v==='change'?' is-active':''));
+      var f=FLAVOR[v],b=el('button','ds-composer-tab'+(v===state.flavor?' is-active':''));
       b.setAttribute('data-flavor',v);
       b.appendChild(el('span','ds-flavor-ico',f.ico));
       b.appendChild(document.createTextNode(f.label));
       b.onclick=function(){state.flavor=v;$all('.ds-composer-tab',tabs).forEach(function(x){x.classList.remove('is-active');});b.classList.add('is-active');};
       tabs.appendChild(b);
     });
-    var ta=el('textarea','ds-composer-ta');ta.placeholder='Leave a comment on this line…';ta.rows=3;
+    if(selectedText)box.appendChild(el('div','ds-composer-selection',selectedText));
+    var ta=el('textarea','ds-composer-ta');ta.placeholder='Comment on the selected text…';ta.rows=3;
     var bar=el('div','ds-composer-actions');
     var cancel=el('button','ds-ghost','Cancel');cancel.onclick=function(){removeComposer(box);};
     var submit=el('button','ds-btn ds-btn-solid','Send');
     submit.onclick=function(){
       var body=ta.value.trim();if(!body)return;submit.disabled=true;
-      fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file,line:Number(line),step:step,type:state.flavor,body:body})})
+      fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file,line:Number(line),step:step,type:state.flavor,body:body,selectedText:selectedText,selection:ctx.selection})})
         .then(function(r){return r.json();}).then(function(c){
           if(!c||!c.id){submit.disabled=false;return;}
           allComments.push(c);removeComposer(box);syncThreads();refreshCount();sendToAgent([c.id]);
@@ -1236,9 +1345,9 @@ export const PAGE_JS = `
     box.appendChild(tabs);box.appendChild(ta);box.appendChild(bar);return box;
   }
   function removeComposer(box){var b=box||$('.ds-composer');if(b&&b.parentNode)b.parentNode.removeChild(b);}
-  function openComposer(row){
+  function openComposer(row,flavor,ctx){
     removeComposer();if(!row.getAttribute('data-line'))return;
-    var box=buildComposer(row),anchor=row,th=row.nextElementSibling;
+    var box=buildComposer(row,flavor,ctx),anchor=row,th=row.nextElementSibling;
     if(th&&th.classList&&th.classList.contains('ds-thread'))anchor=th;
     anchor.parentNode.insertBefore(box,anchor.nextSibling);
     var ta=$('.ds-composer-ta',box);if(ta)ta.focus();
@@ -1349,7 +1458,7 @@ export const PAGE_JS = `
     var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
     if(kind==='approve'){toast('Looks clean — every change is explained and there are no open comments. ✓');return;}
     if(openN>0)toast(openN+' open '+(openN===1?'comment':'comments')+' already '+(openN===1?'has':'have')+' a path to the agent. Use Send open comments only if something needs resending.');
-    else toast('No open comments yet. Leave a line comment; it sends to the agent when you submit it.');
+    else toast('No open comments yet. Select text in the review, then right-click to comment.');
   }
   function toast(msg){
     if(!toastEl)return;toastEl.textContent=msg;toastEl.hidden=false;
@@ -1357,12 +1466,14 @@ export const PAGE_JS = `
     clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.classList.remove('is-show');setTimeout(function(){toastEl.hidden=true;},220);},4200);
   }
   function commentsToText(list,withThread){
-    var out=['Please address these review comments from my code review (diffStory). Each is anchored to a file:line in the diff. This is a comparison between a target side and the current code — read both sides of the change before fixing or answering; do not assume a symbol is missing just because it is absent from one side.',''];
+    var out=['Please address these review comments from my code review (diffStory). Each is anchored to selected text in the diff. This is a comparison between a target side and the current code — read both sides of the change before fixing or answering; do not assume a symbol is missing just because it is absent from one side.',''];
     list.forEach(function(c,i){
       var label=(FLAVOR[c.type]&&FLAVOR[c.type].label)||c.type;
-      var head=(i+1)+'. ['+label+'] '+c.file+':'+c.line;
+      var sel=c.selection||{},start=sel.startLine||c.line,end=sel.endLine||start;
+      var head=(i+1)+'. ['+label+'] '+c.file+':'+start+(end&&end!==start?'-'+end:'');
       if(withThread)head+='  ('+(STATUS[c.status]||c.status)+')';
       out.push(head);
+      if(c.selectedText)out.push('   Selected: '+String(c.selectedText).replace(/\\n/g,'\\n   '));
       out.push('   '+String(c.body||'').replace(/\\n/g,'\\n   '));
       if(withThread&&c.reply)out.push('   '+BRAND+' reply: '+String(c.reply).replace(/\\n/g,'\\n   '));
       out.push('');
@@ -1398,6 +1509,8 @@ export const PAGE_JS = `
     var t=e.target,b;
     var sp=$('#ds-settings');if(sp&&!sp.hidden&&!closest(t,'.ds-settings-wrap'))sp.hidden=true;
     var rp=$('[data-review-menu-pop]');if(rp&&!rp.hidden&&!closest(t,'.ds-review-menu-wrap'))setReviewMenu(false);
+    b=closest(t,'[data-selection-action]');if(b){var ctx=selectionContext;closeSelectionMenu();if(ctx)openComposer(ctx.anchorRow,b.getAttribute('data-selection-action'),ctx);return;}
+    if(selectionMenu&&!selectionMenu.hidden&&!closest(t,'[data-selection-menu]'))closeSelectionMenu();
     b=closest(t,'[data-sidebar-toggle]');if(b){setSidebarCollapsed(!document.body.classList.contains('ds-rail-collapsed'));return;}
     b=closest(t,'[data-view]');if(b){setView(b.getAttribute('data-view'));return;}
     b=closest(t,'[data-settings]');if(b){if(sp)sp.hidden=!sp.hidden;return;}
@@ -1411,7 +1524,6 @@ export const PAGE_JS = `
     b=closest(t,'[data-playstep]');if(b){var pp=closest(t,'.ds-step');if(pp){var sp=parseInt(pp.getAttribute('data-step-panel')||'0',10);speak(stepText(pp),{stepIndex:sp});}return;}
     b=closest(t,'[data-readaloud]');if(b){toggleReadAloud();return;}
     b=closest(t,'.ds-fileitem');if(b){setView('files');selectFile(Number(b.getAttribute('data-file-index')));return;}
-    b=closest(t,'.ds-addcomment');if(b){var row=closest(t,'.ds-row,.ds-urow');if(row)openComposer(row);return;}
     b=closest(t,'[data-resolve]');if(b){resolveComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-send]');if(b){if(b.disabled)return;var cm=closest(b,'.ds-comment');if(cm)sendToAgent([cm.getAttribute('data-comment-id')]);return;}
@@ -1429,7 +1541,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-next]');if(b){if(!b.disabled)setActive(active+1);return;}
   }
   function onKey(e){
-    if(e.key==='Escape'){setReviewMenu(false);closeDrawer();removeComposer();return;}
+    if(e.key==='Escape'){setReviewMenu(false);closeSelectionMenu();closeDrawer();removeComposer();return;}
     var railHandle=closest(e.target,'[data-sidebar-resizer]');
     if(railHandle&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
       setSidebarCollapsed(false);
@@ -1491,10 +1603,11 @@ export const PAGE_JS = `
     try{localStorage.setItem('ds-split',(document.documentElement.style.getPropertyValue('--ds-split')||'').trim());}catch(e){}
   }
   function init(){
-    tourView=$('#ds-view-tour');filesView=$('#ds-view-files');drawer=$('#ds-trust-drawer');toastEl=$('#ds-toast');
+    tourView=$('#ds-view-tour');filesView=$('#ds-view-files');drawer=$('#ds-trust-drawer');toastEl=$('#ds-toast');selectionMenu=$('[data-selection-menu]');
     stepPanels=$all('.ds-step');stepCards=$all('.ds-stepcard');total=stepPanels.length||1;
     filePanels=$all('.ds-filepanel');fileItems=$all('.ds-fileitem');
     document.addEventListener('click',onClick);
+    document.addEventListener('contextmenu',openSelectionMenu);
     document.addEventListener('keydown',onKey);
     document.addEventListener('mousedown',startSidebarResize);
     document.addEventListener('mousemove',moveSidebarResize);

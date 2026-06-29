@@ -30,6 +30,24 @@ test('addComment keeps step when provided (Story annotation)', () => {
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });
 
+test('addComment persists selected text and selected line range', () => {
+  const repo = tmpRepo();
+  try {
+    const c = addComment(repo, {
+      step: 's1',
+      file: 'a.ts',
+      line: 7,
+      type: 'question',
+      body: 'why this branch?',
+      selectedText: 'if (needsRetry) {',
+      selection: { startLine: 7, endLine: 8, startColumn: 5, endColumn: 18 },
+    });
+    assert.equal(c.selectedText, 'if (needsRetry) {');
+    assert.deepEqual(c.selection, { startLine: 7, endLine: 8, startColumn: 5, endColumn: 18 });
+    assert.deepEqual(loadComments(repo)[0].selection, c.selection);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
 test('addComment ignores an empty step string', () => {
   const repo = tmpRepo();
   try {

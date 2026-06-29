@@ -141,7 +141,7 @@ export function addressPrompt(target: string[] | 'all', base?: string, head?: st
   const grounding = base
     ? `Two-sided grounding contract — this review IS a diff; never answer from one side:\n` +
       `- The change under review is "${base}" (the target side) compared against ${curName}. A comment can be about something added, removed, or moved between the two.\n` +
-      `- Before you reply to any comment, inspect BOTH sides of its file: ${curRead}, and read the target side with "git show ${base}:<file>". Run "${diffCmd}" to see exactly what the change did at that line.\n` +
+      `- Before you reply to any comment, inspect BOTH sides of its selected text location: ${curRead}, and read the target side with "git show ${base}:<file>". Run "${diffCmd}" to see exactly what changed around that selected snippet.\n` +
       `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
       `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
     : '';
@@ -150,7 +150,7 @@ export function addressPrompt(target: string[] | 'all', base?: string, head?: st
     grounding +
     `Act by type for each one:\n` +
     `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
-    `- question → read both sides of the code at its file:line, then answer concretely in "reply".\n` +
+    `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
     `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n` +
     `For every comment you handle: set "status" to "addressed" and write a specific "reply" — name the ` +
     `function or file you changed, or give your answer. Preserve every other field and never delete a comment.\n\n` +
