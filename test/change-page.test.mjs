@@ -1,6 +1,7 @@
 // Unit tests for the "Your change" screen renderer. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { renderChangePage } from '../dist/change-page.js';
 
 const withChanges = {
@@ -60,6 +61,100 @@ test('renderChangePage shows the human scope label and highlights the active seg
   assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
   assert.ok(html.includes('data-panel="cross"'), 'has a dedicated cross-branch commit panel');
   assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
+  assert.ok(html.includes('.refpanel,.refpanel[data-panel="commit"]{grid-template-columns:1fr}'), 'commit picker stacks on mobile');
+});
+
+test('commit picker shows commits when the current value is HEAD', async () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs };
+      this.children = [];
+      this.listeners = {};
+      this.hidden = !!attrs.hidden;
+      this.style = {};
+      this.value = attrs.value ?? '';
+      this.textContent = '';
+      this.className = '';
+      this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    }
+    setAttribute(name, value) {
+      this.attrs[name] = String(value);
+    }
+    addEventListener(name, fn) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    replaceChildren(...children) {
+      this.children = children;
+    }
+    contains(target) {
+      return target === this || this.children.includes(target);
+    }
+    getBoundingClientRect() {
+      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
+    }
+    get offsetHeight() {
+      return 140;
+    }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'commit', head: 'HEAD' });
+  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((script) => script.includes('function filteredOptions'));
+  assert.ok(pickerScript, 'has the embedded ref picker script');
+
+  const picker = new FakeEl({ id: 'refPicker', hidden: true });
+  const commitInput = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD' });
+  const commitPanel = new FakeEl({ 'data-panel': 'commit' });
+  const elements = { refPicker: picker, commitRef: commitInput };
+  const documentListeners = {};
+  const context = {
+    console,
+    Event: class Event {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    fetch: async () => ({
+      json: async () => ({
+        current: 'main',
+        branches: [],
+        commits: [
+          { sha: 'abc1234', subject: 'First commit' },
+          { sha: 'def5678', subject: 'Second commit' },
+        ],
+      }),
+    }),
+    location: { href: '' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === '[data-panel]') return [commitPanel];
+        if (selector === '[data-picker]') return [commitInput];
+        return [];
+      },
+      createElement: () => new FakeEl(),
+      addEventListener: (name, fn) => {
+        (documentListeners[name] ||= []).push(fn);
+      },
+    },
+  };
+
+  vm.runInNewContext(pickerScript, context);
+  commitInput.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const values = picker.children.map((row) => row.attrs['data-value']);
+  assert.deepEqual(values.slice(0, 3), ['HEAD', 'abc1234', 'def5678']);
 });
 
 test('renderChangePage shows a notice banner and the agent + model picker', () => {

@@ -232,14 +232,14 @@ function handle(req, res, session) {
             return sendJson(res, 200, {
                 current: currentBranch(session.repo),
                 branches: listBranchRefs(session.repo),
-                commits: listRecentCommits(session.repo, 80, '--all'),
+                commits: listRecentCommits(session.repo, 0, '--all'),
             });
         }
         if (method === 'GET' && url.pathname === '/api/commits') {
             if (!session.repo)
                 return noRepo(res);
             const ref = url.searchParams.get('ref')?.trim() || 'HEAD';
-            return sendJson(res, 200, { ref, commits: listRecentCommits(session.repo, 80, ref) });
+            return sendJson(res, 200, { ref, commits: listRecentCommits(session.repo, 0, ref) });
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
             return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));

@@ -125,12 +125,13 @@ export function listBranchRefs(repo: string): BranchRef[] {
     .filter((b): b is BranchRef => !!b);
 }
 
-/** Recent commits as {sha, subject}, newest first. For the picker. */
+/** Commits as {sha, subject}, newest first. For the picker. Pass n <= 0 for all. */
 export function listRecentCommits(repo: string, n = 15, ref?: string): CommitRef[] {
   const args = ['log'];
   if (ref === '--all') args.push('--all');
   else if (ref) args.push(ref);
-  args.push(`-${n}`, '--no-merges', '--pretty=format:%h%x09%s%x09%D');
+  if (n > 0) args.push(`-${n}`);
+  args.push('--no-merges', '--pretty=format:%h%x09%s%x09%D');
   const out = tryGit(repo, args);
   if (!out) return [];
   return out

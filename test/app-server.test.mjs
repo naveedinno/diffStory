@@ -20,6 +20,14 @@ function gitRepo() {
   return d;
 }
 
+function addCommits(repo, count) {
+  for (let i = 1; i <= count; i++) {
+    writeFileSync(join(repo, 'README.md'), `# hi\n${i}\n`);
+    execFileSync('git', ['add', '.'], { cwd: repo });
+    execFileSync('git', ['commit', '-qm', `change ${i}`], { cwd: repo });
+  }
+}
+
 async function boot() {
   const server = serve({ repo: null, port: 0, open: false });
   await once(server, 'listening');
@@ -32,6 +40,7 @@ test('app server drives picker → open → refs → recent → close', async ()
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
   const repo = gitRepo();
+  addCommits(repo, 82);
   const { server, base } = await boot();
   try {
     const root = await fetch(`${base}/`);
@@ -119,11 +128,12 @@ test('app server drives picker → open → refs → recent → close', async ()
     const refs = await (await fetch(`${base}/api/refs`)).json();
     assert.ok(Array.isArray(refs.branches));
     assert.ok(Array.isArray(refs.commits));
+    assert.ok(refs.commits.length > 80, 'ref picker exposes every commit, not only a capped recent list');
     assert.ok(refs.branches.every((b) => typeof b === 'object' && typeof b.name === 'string'), 'branches include picker metadata');
 
     const scopedCommits = await (await fetch(`${base}/api/commits?ref=${encodeURIComponent('HEAD')}`)).json();
     assert.ok(Array.isArray(scopedCommits.commits), 'can fetch commits for a specific ref');
-    assert.ok(scopedCommits.commits.length >= 1, 'returns the current HEAD commit');
+    assert.ok(scopedCommits.commits.length > 80, 'returns every commit reachable from the selected ref');
 
     const recent = await (await fetch(`${base}/api/repos/recent`)).json();
     assert.ok(recent.some((r) => r.path === repo));

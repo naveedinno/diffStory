@@ -286,7 +286,7 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .progress-host{grid-column:1 / -1}
 @media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.refpanel[data-panel="range"],.refpanel[data-panel="cross"]{grid-template-columns:1fr}.refside{grid-template-columns:1fr 1fr}.refpanel[data-panel="range"] .cmparrow,.refpanel[data-panel="cross"] .cmparrow{display:none}}
 @media (max-width:980px){.layout{grid-template-columns:1fr}.scope-card,.file-card,.launch{grid-column:1}.launch{grid-row:auto;position:static}.genctl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen{margin-top:14px}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
-@media (max-width:700px){.refpanel{grid-template-columns:1fr}.refside{grid-template-columns:1fr}.cmparrow{display:none}}
+@media (max-width:700px){.refpanel,.refpanel[data-panel="commit"]{grid-template-columns:1fr}.refside{grid-template-columns:1fr}.cmparrow{display:none}}
 @media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.cmpgo{width:100%;max-width:none}.genctl{grid-template-columns:1fr}.launch{border-radius:14px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}}
 ${progressPanelStyles()}
 </style></head>
@@ -362,7 +362,7 @@ ${nav}
 (function(){
   var loaded=false,loadingRefs=false,refsPromise=null,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
   var refData={current:'HEAD',branches:[],commits:[],branchCommits:{}};
-  var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[];
+  var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[],refQueries=new WeakMap();
   function showPanel(name){
     panels.forEach(function(p){p.hidden=p.getAttribute('data-panel')!==name;});
     [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('on');});
@@ -429,12 +429,12 @@ ${nav}
     return refOptions();
   }
   function filteredOptions(input){
-    var q=(input.value||'').trim().toLowerCase();
+    var q=(refQueries.get(input)||'').trim().toLowerCase();
     return sourceOptions(input).filter(function(o){
       if(!o.value)return true;
       if(!q)return true;
       return (o.value+' '+o.label+' '+o.meta+' '+o.kind).toLowerCase().indexOf(q)>=0;
-    }).slice(0,48);
+    });
   }
   function placePicker(){
     if(!picker||!activeInput||picker.hidden)return;
@@ -472,8 +472,9 @@ ${nav}
     }
     picker.hidden=false;placePicker();
   }
-  function openPicker(input){
+  function openPicker(input,query){
     activeInput=input;
+    if(query!==undefined)refQueries.set(input,query);
     ensureRefs().then(renderPicker);
   }
   function closePicker(){
@@ -482,13 +483,14 @@ ${nav}
   }
   function chooseRef(value){
     if(!activeInput||!value)return;
+    refQueries.set(activeInput,'');
     activeInput.value=value;
     activeInput.dispatchEvent(new Event('change',{bubbles:true}));
     closePicker();
   }
   [].slice.call(document.querySelectorAll('[data-picker]')).forEach(function(input){
-    input.addEventListener('focus',function(){openPicker(input);});
-    input.addEventListener('input',function(){openPicker(input);});
+    input.addEventListener('focus',function(){openPicker(input,'');});
+    input.addEventListener('input',function(){openPicker(input,input.value);});
     input.addEventListener('keydown',function(ev){
       if(ev.key==='Escape'){closePicker();return;}
       if(ev.key==='Enter'&&activeInput===input&&activeRows[0]&&activeRows[0].value){ev.preventDefault();chooseRef(activeRows[0].value);}
@@ -498,7 +500,7 @@ ${nav}
     var branch=document.getElementById(ids[0]);
     if(!branch)return;
     branch.addEventListener('change',function(){
-      ids.slice(1).forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+      ids.slice(1).forEach(function(id){var el=document.getElementById(id);if(el){el.value='';refQueries.set(el,'');}});
       var ref=branch.value.trim();if(ref)fetchBranchCommits(ref).catch(function(){});
     });
   });
