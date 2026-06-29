@@ -109,7 +109,7 @@ export interface ReviewModel {
   totalDel: number;
 }
 
-export function buildReviewModel(repo: string, tour: Tour, files: DiffFile[]): ReviewModel {
+export function buildReviewModel(repo: string, tour: Tour, files: DiffFile[], headRef?: string): ReviewModel {
   const steps = orderedSteps(tour);
   const byId = new Map(steps.map((s) => [s.id, s]));
   const coverage = computeCoverage(tour, files);
@@ -126,8 +126,8 @@ export function buildReviewModel(repo: string, tour: Tour, files: DiffFile[]): R
   const stepByFile = new Map<string, TourStep>();
   for (const s of steps) if (!stepByFile.has(s.file)) stepByFile.set(s.file, s);
 
-  const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length));
-  const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile);
+  const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
+  const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
   const trust = buildTrust(files, coverage.uncovered, stepByFile);
 
   return {
@@ -148,8 +148,9 @@ function buildStep(
   files: DiffFile[],
   byId: Map<string, TourStep>,
   total: number,
+  headRef?: string,
 ): StepView {
-  const { blocks, note } = stepBlocks(repo, step, files);
+  const { blocks, note } = stepBlocks(repo, step, files, headRef);
   const focusExplicit = !!step.focus?.ranges.length;
   return {
     id: step.id,
@@ -174,6 +175,7 @@ function stepBlocks(
   repo: string,
   step: TourStep,
   files: DiffFile[],
+  headRef?: string,
 ): { blocks: SbsRow[][]; note?: string } {
   const [start, end] = step.range;
   const file = files.find((f) => f.newPath === step.file);
@@ -187,7 +189,7 @@ function stepBlocks(
         note: overlap.length ? undefined : 'tour range did not match a hunk — showing all changes in this file',
       };
     }
-    const r = readFileRange(repo, step.file, start, end);
+    const r = readFileRange(repo, step.file, start, end, headRef);
     if (!r) return { blocks: [], note: `file not found: ${step.file}` };
     return {
       blocks: [r.lines.map((c, i) => ctxRow(c, r.startLine + i))],
@@ -196,7 +198,7 @@ function stepBlocks(
   }
 
   // context | new-file: read straight from the working tree.
-  const r = readFileRange(repo, step.file, start, end);
+  const r = readFileRange(repo, step.file, start, end, headRef);
   if (!r) return { blocks: [], note: `file not found: ${step.file}` };
   if (step.kind === 'new-file') {
     return { blocks: [r.lines.map((c, i) => ({ type: 'add' as const, newNo: r.startLine + i, content: c, comment: true }))] };
@@ -210,6 +212,7 @@ function buildFiles(
   files: DiffFile[],
   stepByFile: Map<string, TourStep>,
   uncoveredByFile: Map<string, Array<[number, number]>>,
+  headRef?: string,
 ): FileView[] {
   const views: FileView[] = [];
   const seen = new Set<string>();
@@ -240,7 +243,7 @@ function buildFiles(
   for (const step of steps) {
     if (step.kind !== 'context' || seen.has(step.file)) continue;
     seen.add(step.file);
-    const r = readFileRange(repo, step.file, step.range[0], step.range[1]);
+    const r = readFileRange(repo, step.file, step.range[0], step.range[1], headRef);
     const rows = r ? r.lines.map((c, i) => ({ type: 'ctx' as const, no: r.startLine + i, content: c })) : [];
     views.push({
       file: step.file,

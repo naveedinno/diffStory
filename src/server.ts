@@ -3,7 +3,7 @@
 // is held in a mutable Session, so the same server can boot empty (app/picker
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
 import {
   isGitRepo,
@@ -11,12 +11,13 @@ import {
   getDiff,
   describeBase,
   readWholeFile,
-  listBranches,
+  listBranchRefs,
   listRecentCommits,
   currentBranch,
   isDirty,
   hasParentCommit,
   emptyTree,
+  resolveCommit,
 } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
@@ -26,7 +27,7 @@ import { renderChangePage } from './change-page.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope, type Scope } from './scope.js';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import {
   loadComments,
@@ -35,7 +36,7 @@ import {
   setCommentStatus,
   type NewComment,
 } from './comments.js';
-import { resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
+import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
 import type { DiffFile, Tour } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, type Agent, type StreamResult } from './agent.js';
 import {
@@ -50,7 +51,9 @@ import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
 import { deleteStory, listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
 
@@ -257,8 +260,8 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
       if (!session.repo) return noRepo(res);
       return sendJson(res, 200, {
         current: currentBranch(session.repo),
-        branches: listBranches(session.repo),
-        commits: listRecentCommits(session.repo),
+        branches: listBranchRefs(session.repo),
+        commits: listRecentCommits(session.repo, 80, '--all'),
       });
     }
     if (method === 'GET' && url.pathname === '/api/fullfile') {
@@ -343,7 +346,7 @@ function storyChooser(session: Session): string {
 }
 
 function hasChangeQuery(params: URLSearchParams): boolean {
-  return params.has('scope') || params.has('base') || params.has('head');
+  return params.has('scope') || params.has('base') || params.has('head') || params.has('commit');
 }
 
 function reviewScreen(session: Session, params: URLSearchParams): string {
@@ -390,17 +393,18 @@ function selectedStoryPath(session: Session): string {
   return session.selectedStory ?? resolveStoryPath(session.repo);
 }
 
-/** Apply a scope choice from the Your-change switcher (?scope=auto | ?base= | ?head=). */
+/** Apply a scope choice from the Your-change switcher (?scope=... | ?base= | ?head=). */
 function applyScope(session: Session, params: URLSearchParams): void {
   if (params.get('scope') === 'auto') {
     session.base = undefined;
     session.head = undefined;
     return;
   }
-  const base = params.get('base');
-  const head = params.get('head');
-  if (base) session.base = base;
-  if (head) session.head = head;
+  if (hasChangeQuery(params)) {
+    const scope = resolveScope(session.repo as string, params);
+    session.base = scope.base;
+    session.head = scope.head;
+  }
 }
 
 /** Resolve scope from the request, stash it on the session, and render the change screen. */
@@ -433,6 +437,7 @@ function listRecentRepos() {
 interface ReviewData {
   tour: Tour;
   base: string;
+  head?: string;
   files: DiffFile[];
 }
 
@@ -455,14 +460,14 @@ function loadReview(session: Session): ReviewData {
   if (!session.repo) throw new Error('No repo is open.');
   const repo = session.repo;
   const tour = loadTour(selectedStoryPath(session));
-  const { base, diff } = reviewDiff(repo, session, tour);
+  const { base, head, diff } = reviewDiff(repo, session, tour);
   const files = parseUnifiedDiff(diff);
-  return { tour, base, files };
+  return { tour, base, head, files };
 }
 
 function renderReview(session: Session): string {
   const repo = session.repo as string;
-  const { tour, base, files } = loadReview(session);
+  const { tour, base, head, files } = loadReview(session);
   return renderPage({
     repo,
     routeBase: repoRouteBase(repo),
@@ -470,6 +475,7 @@ function renderReview(session: Session): string {
     tour,
     files,
     baseLabel: describeBase(repo, base),
+    headRef: head,
     comments: loadComments(repo),
   });
 }
@@ -479,13 +485,13 @@ function renderFullFileResponse(session: Session, file: string): string {
   if (!session.repo) return `<div class="ds-diffnote">No repo is open.</div>`;
   if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
   const repo = session.repo;
-  const { tour, files } = loadReview(session);
+  const { tour, head, files } = loadReview(session);
 
   const allowed = new Set<string>([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
   if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
 
   const df = files.find((f) => f.newPath === file);
-  const newLines = readWholeFile(repo, file) ?? [];
+  const newLines = readWholeFile(repo, file, head) ?? [];
   const ranges = computeCoverage(tour, files)
     .uncovered.filter((u) => u.file === file)
     .map((u) => u.range);
@@ -525,6 +531,8 @@ interface WorkflowSpec {
   isTargetWrite: (ev: ProgressEvent) => boolean;
   /** After the agent exits, compute terminal status + result + any error/warning events. */
   finish: (r: StreamResult) => { status: RunStatus; result: Record<string, unknown>; events: ProgressEvent[] };
+  /** Optional cleanup for temp checkouts created only for this workflow. */
+  cleanup?: () => void;
 }
 
 /**
@@ -605,9 +613,64 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     })
     .finally(() => {
       clearInterval(heart);
+      spec.cleanup?.();
       res.end();
       agentBusy = false;
     });
+}
+
+interface AddressRepoContext {
+  runRepo: string;
+  historical: boolean;
+  cleanup?: () => void;
+}
+
+function addressRepoContext(repo: string, head?: string): AddressRepoContext {
+  if (!head) return { runRepo: repo, historical: false };
+  const resolvedHead = resolveCommit(repo, head);
+  const currentHead = resolveCommit(repo, 'HEAD');
+  if (resolvedHead && currentHead && resolvedHead === currentHead && !isDirty(repo)) {
+    return { runRepo: repo, historical: false };
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), 'diffstory-address-'));
+  execFileSync('git', ['worktree', 'add', '--detach', '--quiet', dir, head], {
+    cwd: repo,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  copyDiffstoryData(repo, dir);
+
+  return {
+    runRepo: dir,
+    historical: true,
+    cleanup: () => {
+      copyCommentsBack(dir, repo);
+      try {
+        execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: repo, stdio: 'ignore' });
+      } catch {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
+function copyDiffstoryData(fromRepo: string, toRepo: string): void {
+  const from = join(fromRepo, DATA_DIR);
+  if (!existsSync(from)) return;
+  cpSync(from, join(toRepo, DATA_DIR), { recursive: true, force: true });
+}
+
+function copyCommentsBack(fromRepo: string, toRepo: string): void {
+  const from = commentsPath(fromRepo);
+  if (!existsSync(from)) return;
+  const to = commentsPath(toRepo);
+  mkdirSync(dirname(to), { recursive: true });
+  cpSync(from, to, { force: true });
+}
+
+function stableDiffRef(repo: string, ref: string | undefined): string | undefined {
+  if (!ref) return undefined;
+  return resolveCommit(repo, ref) ?? ref;
 }
 
 /** Drive the user's agent to address review comments, streaming progress NDJSON. */
@@ -652,11 +715,20 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   } catch {
     /* no story/tour yet — addressPrompt degrades to its prior single-sided form */
   }
-  runWorkflow(res, repo, {
+  let addressCtx: AddressRepoContext;
+  try {
+    addressCtx = addressRepoContext(repo, head);
+  } catch (e) {
+    return sendJson(res, 500, errorEvent('preflight', 'Could not prepare historical checkout', (e as Error).message));
+  }
+  runWorkflow(res, addressCtx.runRepo, {
     workflow: 'address',
     title,
     agent,
-    prompt: addressPrompt(target, base, head),
+    prompt: addressPrompt(target, base, head, {
+      historicalCheckout: addressCtx.historical,
+      originalRepo: addressCtx.historical ? repo : undefined,
+    }),
     context: {
       repoName: basename(repo), repoPath: repo, workflow: 'address',
       agent, targetCount,
@@ -673,11 +745,12 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
       } else if (!r.ok) {
         events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
         status = 'failed';
-      } else if (!codeChanged) {
+      } else if (!codeChanged && !addressCtx.historical) {
         events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
       }
       return { status, result: { codeChanged }, events };
     },
+    cleanup: addressCtx.cleanup,
   });
 }
 
@@ -702,9 +775,11 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   const workflow: Workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
   const repo = session.repo as string;
 
-  session.base = input.base;
-  session.head = input.head;
   const base = resolveBase(repo, input.base);
+  const promptBase = stableDiffRef(repo, base) ?? base;
+  const promptHead = stableDiffRef(repo, input.head);
+  session.base = promptBase;
+  session.head = promptHead;
   const storyPath = resolveStoryPath(repo);
 
   runWorkflow(res, repo, {
@@ -712,11 +787,11 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     title: workflow === 'detailed_audit' ? 'Generating detailed audit' : 'Generating guided review',
     agent,
     model,
-    prompt: storyPrompt(input.base ?? base, input.head, mode),
+    prompt: storyPrompt(promptBase, promptHead, mode),
     context: {
       repoName: basename(repo), repoPath: repo, workflow, agent, model,
-      base: describeBase(repo, base),
-      head: input.head ?? 'working tree',
+      base: describeBase(repo, promptBase),
+      head: promptHead ?? 'working tree',
     },
     // For generate, the output is the story file.
     isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),

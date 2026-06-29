@@ -3,9 +3,9 @@
 // is held in a mutable Session, so the same server can boot empty (app/picker
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranches, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, } from './git.js';
+import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
@@ -14,10 +14,10 @@ import { renderChangePage } from './change-page.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope } from './scope.js';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
-import { resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
+import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
@@ -27,7 +27,9 @@ import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
 import { deleteStory, listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
@@ -229,8 +231,8 @@ function handle(req, res, session) {
                 return noRepo(res);
             return sendJson(res, 200, {
                 current: currentBranch(session.repo),
-                branches: listBranches(session.repo),
-                commits: listRecentCommits(session.repo),
+                branches: listBranchRefs(session.repo),
+                commits: listRecentCommits(session.repo, 80, '--all'),
             });
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
@@ -321,7 +323,7 @@ function storyChooser(session) {
     });
 }
 function hasChangeQuery(params) {
-    return params.has('scope') || params.has('base') || params.has('head');
+    return params.has('scope') || params.has('base') || params.has('head') || params.has('commit');
 }
 function reviewScreen(session, params) {
     const picked = applyStoryChoice(session, params);
@@ -366,19 +368,18 @@ function selectedStoryPath(session) {
         throw new Error('No repo is open.');
     return session.selectedStory ?? resolveStoryPath(session.repo);
 }
-/** Apply a scope choice from the Your-change switcher (?scope=auto | ?base= | ?head=). */
+/** Apply a scope choice from the Your-change switcher (?scope=... | ?base= | ?head=). */
 function applyScope(session, params) {
     if (params.get('scope') === 'auto') {
         session.base = undefined;
         session.head = undefined;
         return;
     }
-    const base = params.get('base');
-    const head = params.get('head');
-    if (base)
-        session.base = base;
-    if (head)
-        session.head = head;
+    if (hasChangeQuery(params)) {
+        const scope = resolveScope(session.repo, params);
+        session.base = scope.base;
+        session.head = scope.head;
+    }
 }
 /** Resolve scope from the request, stash it on the session, and render the change screen. */
 function changeScreen(session, params, notice) {
@@ -421,13 +422,13 @@ function loadReview(session) {
         throw new Error('No repo is open.');
     const repo = session.repo;
     const tour = loadTour(selectedStoryPath(session));
-    const { base, diff } = reviewDiff(repo, session, tour);
+    const { base, head, diff } = reviewDiff(repo, session, tour);
     const files = parseUnifiedDiff(diff);
-    return { tour, base, files };
+    return { tour, base, head, files };
 }
 function renderReview(session) {
     const repo = session.repo;
-    const { tour, base, files } = loadReview(session);
+    const { tour, base, head, files } = loadReview(session);
     return renderPage({
         repo,
         routeBase: repoRouteBase(repo),
@@ -435,6 +436,7 @@ function renderReview(session) {
         tour,
         files,
         baseLabel: describeBase(repo, base),
+        headRef: head,
         comments: loadComments(repo),
     });
 }
@@ -445,12 +447,12 @@ function renderFullFileResponse(session, file) {
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
     const repo = session.repo;
-    const { tour, files } = loadReview(session);
+    const { tour, head, files } = loadReview(session);
     const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     const df = files.find((f) => f.newPath === file);
-    const newLines = readWholeFile(repo, file) ?? [];
+    const newLines = readWholeFile(repo, file, head) ?? [];
     const ranges = computeCoverage(tour, files)
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
@@ -546,9 +548,57 @@ function runWorkflow(res, repo, spec) {
     })
         .finally(() => {
         clearInterval(heart);
+        spec.cleanup?.();
         res.end();
         agentBusy = false;
     });
+}
+function addressRepoContext(repo, head) {
+    if (!head)
+        return { runRepo: repo, historical: false };
+    const resolvedHead = resolveCommit(repo, head);
+    const currentHead = resolveCommit(repo, 'HEAD');
+    if (resolvedHead && currentHead && resolvedHead === currentHead && !isDirty(repo)) {
+        return { runRepo: repo, historical: false };
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'diffstory-address-'));
+    execFileSync('git', ['worktree', 'add', '--detach', '--quiet', dir, head], {
+        cwd: repo,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    copyDiffstoryData(repo, dir);
+    return {
+        runRepo: dir,
+        historical: true,
+        cleanup: () => {
+            copyCommentsBack(dir, repo);
+            try {
+                execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: repo, stdio: 'ignore' });
+            }
+            catch {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        },
+    };
+}
+function copyDiffstoryData(fromRepo, toRepo) {
+    const from = join(fromRepo, DATA_DIR);
+    if (!existsSync(from))
+        return;
+    cpSync(from, join(toRepo, DATA_DIR), { recursive: true, force: true });
+}
+function copyCommentsBack(fromRepo, toRepo) {
+    const from = commentsPath(fromRepo);
+    if (!existsSync(from))
+        return;
+    const to = commentsPath(toRepo);
+    mkdirSync(dirname(to), { recursive: true });
+    cpSync(from, to, { force: true });
+}
+function stableDiffRef(repo, ref) {
+    if (!ref)
+        return undefined;
+    return resolveCommit(repo, ref) ?? ref;
 }
 /** Drive the user's agent to address review comments, streaming progress NDJSON. */
 function runAddress(res, session, body) {
@@ -591,11 +641,21 @@ function runAddress(res, session, body) {
     catch {
         /* no story/tour yet — addressPrompt degrades to its prior single-sided form */
     }
-    runWorkflow(res, repo, {
+    let addressCtx;
+    try {
+        addressCtx = addressRepoContext(repo, head);
+    }
+    catch (e) {
+        return sendJson(res, 500, errorEvent('preflight', 'Could not prepare historical checkout', e.message));
+    }
+    runWorkflow(res, addressCtx.runRepo, {
         workflow: 'address',
         title,
         agent,
-        prompt: addressPrompt(target, base, head),
+        prompt: addressPrompt(target, base, head, {
+            historicalCheckout: addressCtx.historical,
+            originalRepo: addressCtx.historical ? repo : undefined,
+        }),
         context: {
             repoName: basename(repo), repoPath: repo, workflow: 'address',
             agent, targetCount,
@@ -614,11 +674,12 @@ function runAddress(res, session, body) {
                 events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
                 status = 'failed';
             }
-            else if (!codeChanged) {
+            else if (!codeChanged && !addressCtx.historical) {
                 events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
             }
             return { status, result: { codeChanged }, events };
         },
+        cleanup: addressCtx.cleanup,
     });
 }
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
@@ -641,20 +702,22 @@ function runGenerate(res, session, body) {
     const mode = normalizeStoryMode(input.mode);
     const workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
     const repo = session.repo;
-    session.base = input.base;
-    session.head = input.head;
     const base = resolveBase(repo, input.base);
+    const promptBase = stableDiffRef(repo, base) ?? base;
+    const promptHead = stableDiffRef(repo, input.head);
+    session.base = promptBase;
+    session.head = promptHead;
     const storyPath = resolveStoryPath(repo);
     runWorkflow(res, repo, {
         workflow,
         title: workflow === 'detailed_audit' ? 'Generating detailed audit' : 'Generating guided review',
         agent,
         model,
-        prompt: storyPrompt(input.base ?? base, input.head, mode),
+        prompt: storyPrompt(promptBase, promptHead, mode),
         context: {
             repoName: basename(repo), repoPath: repo, workflow, agent, model,
-            base: describeBase(repo, base),
-            head: input.head ?? 'working tree',
+            base: describeBase(repo, promptBase),
+            head: promptHead ?? 'working tree',
         },
         // For generate, the output is the story file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),

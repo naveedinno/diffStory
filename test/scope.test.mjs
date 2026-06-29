@@ -33,20 +33,53 @@ test('auto: clean tree → latest commit', () => {
   const d = repo();
   try {
     const s = resolveScope(d, Q(''));
-    assert.equal(s.active, 'last');
-    assert.equal(s.base, 'HEAD~1');
+    assert.equal(s.active, 'commit');
+    assert.equal(s.base, 'HEAD^');
     assert.equal(s.head, 'HEAD');
     assert.equal(s.label, 'Latest commit');
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
-test('explicit presets and a compare-ref override the default', () => {
+test('explicit presets and compare refs override the default', () => {
   const d = repo();
   try {
     assert.equal(resolveScope(d, Q('scope=uncommitted')).active, 'uncommitted');
-    assert.equal(resolveScope(d, Q('scope=branch')).active, 'branch');
-    const r = resolveScope(d, Q('base=HEAD~1'));
-    assert.equal(r.active, 'ref');
+    const branch = resolveScope(d, Q('scope=branch'));
+    assert.equal(branch.active, 'branch');
+    assert.equal(branch.head, 'HEAD');
+    const r = resolveScope(d, Q('base=HEAD~1&head=HEAD'));
+    assert.equal(r.active, 'compare');
     assert.equal(r.base, 'HEAD~1');
+    assert.equal(r.head, 'HEAD');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('single commit scope compares the selected commit with its first parent', () => {
+  const d = repo();
+  try {
+    const s = resolveScope(d, Q('scope=commit&commit=HEAD'));
+    assert.equal(s.active, 'commit');
+    assert.equal(s.base, 'HEAD^');
+    assert.equal(s.head, 'HEAD');
+    assert.match(s.label, /Latest commit|Commit/);
+
+    const legacy = resolveScope(d, Q('scope=last'));
+    assert.equal(legacy.active, 'commit');
+    assert.equal(legacy.base, 'HEAD^');
+    assert.equal(legacy.head, 'HEAD');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('single commit scope uses the empty tree for a root commit', () => {
+  const d = mkdtempSync(join(tmpdir(), 'ds-scope-root-'));
+  const g = (a) => execFileSync('git', a, { cwd: d });
+  g(['init', '-q']); g(['config', 'user.email', 't@e.st']); g(['config', 'user.name', 'T']);
+  writeFileSync(join(d, 'a.txt'), 'root\n'); g(['add', '.']); g(['commit', '-qm', 'root']);
+  try {
+    const s = resolveScope(d, Q('scope=commit&commit=HEAD'));
+    assert.equal(s.active, 'commit');
+    assert.notEqual(s.base, 'HEAD^');
+    assert.match(s.base, /^[0-9a-f]{40}$/);
+    assert.equal(s.head, 'HEAD');
   } finally { rmSync(d, { recursive: true, force: true }); }
 });

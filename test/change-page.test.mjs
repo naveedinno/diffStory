@@ -21,9 +21,14 @@ test('renderChangePage shows the change, the base label, and the Generate action
   assert.ok(html.includes('value="guided" selected'), 'defaults to guided mode');
   assert.ok(html.includes('value="detailed"'), 'offers detailed correctness mode');
   assert.ok(html.includes('mode:modeSel?modeSel.value:undefined'), 'sends the selected story mode');
+  assert.ok(html.includes('Single commit'), 'offers a single-commit scope');
+  assert.ok(html.includes('Compare any refs'), 'offers arbitrary ref comparison');
+  assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
+  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has from/to compare inputs');
   const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo' });
   assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
-  assert.ok(routed.includes("var u='/repo/demo/change?base='"), 'manual compare stays on the repo-named change route');
+  assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
+  assert.ok(routed.includes("'/repo/demo/change?base='"), 'manual compare stays on the repo-named change route');
   assert.ok(routed.includes("location.href='/repo/demo/review?story=story.json'"), 'generation success opens the repo-named review route');
 });
 
@@ -47,7 +52,8 @@ test('renderChangePage shows the human scope label and highlights the active seg
   const html = renderChangePage(withChanges, { repoName: 'demo', scopeLabel: 'Uncommitted changes', active: 'uncommitted' });
   assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
-  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has base + head compare pickers');
+  assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
+  assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
 });
 
 test('renderChangePage shows a notice banner and the agent + model picker', () => {

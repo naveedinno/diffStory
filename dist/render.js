@@ -22,7 +22,7 @@ const STATUS_LABEL = {
     resolved: 'Resolved',
 };
 export function renderPage(input) {
-    const { repo, tour, files, baseLabel, comments } = input;
+    const { repo, tour, files, baseLabel, comments, headRef } = input;
     const routeBase = input.routeBase ?? '';
     const repoName = input.repoName ?? (() => {
         try {
@@ -32,7 +32,7 @@ export function renderPage(input) {
             return 'repo';
         }
     })();
-    const model = buildReviewModel(repo, tour, files);
+    const model = buildReviewModel(repo, tour, files, headRef);
     // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
     // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
     const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));

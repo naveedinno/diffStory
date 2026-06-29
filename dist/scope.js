@@ -1,23 +1,39 @@
 // Resolve the review scope for the "Your change" screen. The default is "what I just
 // did": uncommitted changes if the working tree is dirty, otherwise the latest commit.
-// Explicit presets (?scope=) and a compare-ref (?base=) override the default. Produces
-// the base/head to diff plus a human label and which preset is active, for the UI.
-import { resolveBase, describeBase, isDirty, hasParentCommit, emptyTree } from './git.js';
+// Explicit modes can pin a single commit, the committed current branch, or any
+// base/head pair. Produces the exact base/head to diff plus a human label and active
+// mode for the UI.
+import { resolveBase, describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, } from './git.js';
 export function resolveScope(repo, params) {
     const ref = params.get('base');
     if (ref) {
         const head = params.get('head') || undefined;
         // A base→head compare reads cleaner with the refs the user picked than name-rev.
-        return { base: ref, head, label: head ? `${ref} → ${head}` : describeBase(repo, ref), active: 'ref' };
+        return {
+            base: ref,
+            head,
+            label: head ? `${ref} → ${head}` : `${describeBase(repo, ref)} → working tree`,
+            active: 'compare',
+        };
     }
     const sel = params.get('scope'); // 'uncommitted' | 'last' | 'branch' | null (auto)
     if (sel === 'branch') {
-        return { base: resolveBase(repo), head: undefined, label: 'Everything on this branch', active: 'branch' };
+        return { base: resolveBase(repo), head: 'HEAD', label: 'Current branch', active: 'branch' };
     }
+    if (sel === 'commit' || sel === 'last')
+        return commitScope(repo, params.get('commit') || 'HEAD');
     if (sel === 'uncommitted' || (sel == null && isDirty(repo))) {
         return { base: 'HEAD', head: undefined, label: 'Uncommitted changes', active: 'uncommitted' };
     }
-    // 'last' explicitly, or auto + clean tree → the latest commit (whole first commit if no parent).
-    const base = hasParentCommit(repo) ? 'HEAD~1' : emptyTree(repo);
-    return { base, head: 'HEAD', label: 'Latest commit', active: 'last' };
+    // auto + clean tree → the latest commit (whole first commit if no parent).
+    return commitScope(repo, 'HEAD');
+}
+function commitScope(repo, requested) {
+    const commit = isCommitRef(repo, requested) ? requested : 'HEAD';
+    return {
+        base: commitParentBase(repo, commit),
+        head: commit,
+        label: commit === 'HEAD' ? 'Latest commit' : `Commit ${describeCommit(repo, commit)}`,
+        active: 'commit',
+    };
 }

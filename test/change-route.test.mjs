@@ -28,6 +28,44 @@ function repoWithCommittedHeadStory() {
   return d;
 }
 
+function repoWithHistoricalHeadStoryAndMovedWorkingTree() {
+  const d = mkdtempSync(join(tmpdir(), 'ds-cr-'));
+  const g = (a) => execFileSync('git', a, { cwd: d });
+  g(['init', '-q']); g(['config', 'user.email', 't@e.st']); g(['config', 'user.name', 'T']);
+  writeFileSync(join(d, 'a.txt'), 'base-one\n');
+  g(['add', '.']); g(['commit', '-qm', 'base']);
+  writeFileSync(join(d, 'a.txt'), 'head-one\nhead-two\n');
+  g(['add', '.']); g(['commit', '-qm', 'head story target']);
+  writeStory(d, {
+    title: 'Historical story',
+    summary: 'A story against an old head.',
+    base: 'HEAD~1',
+    head: 'HEAD',
+    steps: [
+      {
+        id: 'context',
+        order: 1,
+        title: 'Context from the reviewed head',
+        file: 'a.txt',
+        range: [1, 1],
+        kind: 'context',
+        why: 'This line should come from the committed head side, not the live tree.',
+      },
+      {
+        id: 'changed',
+        order: 2,
+        title: 'Changed line',
+        file: 'a.txt',
+        range: [2, 2],
+        kind: 'changed',
+        why: 'This is the added line in the historical head.',
+      },
+    ],
+  });
+  writeFileSync(join(d, 'a.txt'), 'live-one\nlive-two\n'); // current working tree moved on
+  return d;
+}
+
 function writeStory(repo, body = {}, rel = 'story.json') {
   const path = join(repo, '.diffstory', rel);
   mkdirSync(join(path, '..'), { recursive: true });
@@ -162,6 +200,30 @@ test('a committed story generated against HEAD still opens the committed diff', 
     assert.ok(review.includes('Entry point'), 'opens the selected story');
     assert.ok(review.includes('ds-row-add'), 'shows the committed added line');
     assert.ok(!review.includes('no diff for this range'), 'does not fall back to current-file context');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('a historical committed story reads context and full-file content from its head ref', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithHistoricalHeadStoryAndMovedWorkingTree();
+  const { server, base } = await bootRepo(repo);
+  try {
+    const route = repoRoute(repo);
+    const review = await (await fetch(`${base}${route}/review?story=story.json`)).text();
+    assert.ok(review.includes('Historical story'), 'opens the selected story');
+    assert.ok(review.includes('head-one'), 'context step reads the story head side');
+    assert.ok(!review.includes('live-one'), 'context step does not read the live working tree');
+
+    const full = await (await fetch(`${base}/api/fullfile?file=a.txt`)).text();
+    assert.ok(full.includes('head-two'), 'full-file view reads the story head side');
+    assert.ok(!full.includes('live-two'), 'full-file view does not read the live working tree');
   } finally {
     server.close();
     process.env.HOME = realHome;

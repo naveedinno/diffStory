@@ -127,14 +127,17 @@ export function renderChangePage(sum, opts) {
         `<a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=uncommitted">` +
         `<span class="sopt-k">Uncommitted</span><span class="sopt-t">Working tree vs HEAD</span>` +
         `</a>` +
-        `<a class="sopt${active === 'last' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=last">` +
-        `<span class="sopt-k">Latest commit</span><span class="sopt-t">HEAD~1 -> HEAD</span>` +
-        `</a>` +
+        `<button class="sopt${active === 'commit' ? ' on' : ''}" data-open-panel="commit" type="button">` +
+        `<span class="sopt-k">Single commit</span><span class="sopt-t">Parent -> selected commit</span>` +
+        `</button>` +
         `<a class="sopt${active === 'branch' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=branch">` +
-        `<span class="sopt-k">Whole branch</span><span class="sopt-t">Branch vs base</span>` +
+        `<span class="sopt-k">Current branch</span><span class="sopt-t">Merge-base -> HEAD</span>` +
         `</a>` +
-        `<button class="sopt${active === 'ref' ? ' on' : ''}" id="cmpBtn" type="button">` +
-        `<span class="sopt-k">Compare refs</span><span class="sopt-t">Pick base and head</span>` +
+        `<button class="sopt" data-open-panel="range" type="button">` +
+        `<span class="sopt-k">Branch commits</span><span class="sopt-t">Two commits on this branch</span>` +
+        `</button>` +
+        `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button">` +
+        `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Branches, heads, commits</span>` +
         `</button>` +
         `</div>`;
     const launch = sum.hasChanges
@@ -191,7 +194,7 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .scur span{font-size:12px;color:var(--l3);font-weight:650;text-transform:uppercase;letter-spacing:.06em}
 .scur b{color:var(--label);font-size:20px;line-height:1.15;font-weight:720;letter-spacing:-.02em}
 .scope-command{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--l3);background:var(--subbg);border:.5px solid var(--sep);border-radius:999px;padding:6px 10px;white-space:nowrap}
-.sopts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;max-width:100%}
+.sopts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;max-width:100%}
 .sopt{position:relative;display:flex;flex-direction:column;gap:5px;min-height:78px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:.5px solid var(--sep);cursor:pointer;padding:13px 13px 12px;border-radius:12px;text-decoration:none;white-space:normal}
 .sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
 .sopt:hover{color:var(--label);border-color:var(--hair);background:var(--fill)}
@@ -200,14 +203,17 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .sopt-k{font-size:13px;font-weight:700;color:var(--label);line-height:1.2}
 .sopt-t{font-size:11.5px;line-height:1.3;color:var(--l2)}
 .sopt.on .sopt-t{color:var(--l2)}
-.cmppanel{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;padding:13px;border:.5px solid var(--sep);border-radius:12px;background:var(--subbg)}
-.cmppanel[hidden]{display:none}
-.cmprow{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--l2)}
-.cmppanel select{appearance:none;-webkit-appearance:none;font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:32px;padding:0 30px 0 11px;min-width:172px;max-width:232px;cursor:pointer;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
-.cmppanel select:hover{border-color:var(--l3)}
-.cmppanel select:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
-.cmparrow{color:var(--l3);display:inline-flex}
-.cmpgo{font:inherit;font-size:13px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:8px;height:32px;padding:0 16px;cursor:pointer}
+.refpanel{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:end;gap:10px;margin-top:12px;padding:13px;border:.5px solid var(--sep);border-radius:12px;background:var(--subbg)}
+.refpanel[hidden]{display:none}
+.refpanel[data-panel="commit"]{grid-template-columns:minmax(220px,1fr) auto;align-items:end}
+.refrow{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);min-width:0}
+.refrow span{font-weight:620;color:var(--l2)}
+.refhint{grid-column:1 / -1;margin:0;color:var(--l3);font-size:12px;line-height:1.4}
+.refpanel input{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:.5px solid var(--hair);border-radius:8px;height:34px;padding:0 11px;min-width:0;width:100%}
+.refpanel input:hover{border-color:var(--l3)}
+.refpanel input:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
+.cmparrow{color:var(--l3);display:inline-flex;align-self:center;padding-bottom:8px}
+.cmpgo{font:inherit;font-size:13px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:8px;height:34px;padding:0 16px;cursor:pointer;white-space:nowrap}
 .cmpgo:hover{background:var(--blue2)}
 .file-card{grid-column:1;min-width:0}
 .fsum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-bottom:.5px solid var(--sep);background:var(--subbg);font-size:13px;color:var(--l2)}
@@ -264,8 +270,10 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
 .skillfix:hover{background:var(--blue2)}.skillfix:disabled{opacity:.55;cursor:default}
 .progress-host{grid-column:1 / -1}
+@media (max-width:1080px){.sopts{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:980px){.layout{grid-template-columns:1fr}.scope-card,.file-card,.launch{grid-column:1}.launch{grid-row:auto;position:static}.genctl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen{margin-top:14px}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
-@media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.cmppanel{align-items:stretch}.cmprow,.cmppanel select,.cmpgo{width:100%;max-width:none}.cmparrow{display:none}.genctl{grid-template-columns:1fr}.launch{border-radius:14px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}}
+@media (max-width:700px){.refpanel{grid-template-columns:1fr}.cmparrow{display:none}}
+@media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.cmpgo{width:100%;max-width:none}.genctl{grid-template-columns:1fr}.launch{border-radius:14px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}}
 ${progressPanelStyles()}
 </style></head>
 <body>
@@ -293,12 +301,27 @@ ${nav}
         </div>
         ${scopeControls}
       </div>
-      <div class="cmppanel" id="cmppanel" hidden>
-        <label class="cmprow">Base <select id="cmpBase"></select></label>
-        <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="cmprow">Head <select id="cmpHead"></select></label>
-        <button class="cmpgo" id="cmpGo" type="button">Compare</button>
+      <div class="refpanel" data-panel="commit" id="commitPanel"${active === 'commit' ? '' : ' hidden'}>
+        <label class="refrow"><span>Commit</span><input id="commitRef" list="commitOptions" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
+        <button class="cmpgo" id="commitGo" type="button">Review commit</button>
+        <p class="refhint">Shows that commit against its first parent; root commits are shown against the empty tree.</p>
       </div>
+      <div class="refpanel" data-panel="range" id="rangePanel" hidden>
+        <label class="refrow"><span>Older commit</span><input id="rangeBase" list="commitOptions" placeholder="base commit" autocomplete="off" spellcheck="false"></label>
+        <span class="cmparrow" aria-hidden="true">→</span>
+        <label class="refrow"><span>Newer commit</span><input id="rangeHead" list="commitOptions" placeholder="HEAD or newer commit" value="HEAD" autocomplete="off" spellcheck="false"></label>
+        <button class="cmpgo" id="rangeGo" type="button">Compare commits</button>
+        <p class="refhint">Use this for two commits on the current branch; paste SHAs directly if they are not in the recent list.</p>
+      </div>
+      <div class="refpanel" data-panel="compare" id="comparePanel"${active === 'compare' ? '' : ' hidden'}>
+        <label class="refrow"><span>From</span><input id="cmpBase" list="refOptions" placeholder="branch, tag, or commit" value="${esc(opts.base ?? '')}" autocomplete="off" spellcheck="false"></label>
+        <span class="cmparrow" aria-hidden="true">→</span>
+        <label class="refrow"><span>To</span><input id="cmpHead" list="refOptions" placeholder="branch head, commit, or blank for working tree" value="${esc(opts.head ?? '')}" autocomplete="off" spellcheck="false"></label>
+        <button class="cmpgo" id="cmpGo" type="button">Compare refs</button>
+        <p class="refhint">Use this for branch head vs branch head, branch head vs a commit, or commits from different branches.</p>
+      </div>
+      <datalist id="commitOptions"></datalist>
+      <datalist id="refOptions"></datalist>
     </section>
     ${launch}
     <section class="card file-card" aria-label="Files in scope">
@@ -310,27 +333,54 @@ ${nav}
 <script>${progressPanelScript()}</script>
 <script>
 (function(){
-  var cmp=document.getElementById('cmpBtn'),panel=document.getElementById('cmppanel'),
-      baseSel=document.getElementById('cmpBase'),headSel=document.getElementById('cmpHead'),loaded=false;
-  function group(sel,lbl){var g=document.createElement('optgroup');g.label=lbl;sel.appendChild(g);return g;}
-  function fillRefs(d){
-    baseSel.add(new Option('Choose a base…',''));
-    headSel.add(new Option('Working tree (uncommitted)',''));
-    headSel.add(new Option('Latest commit (HEAD)','HEAD'));
-    var bb=group(baseSel,'Branches'),hb=group(headSel,'Branches');
-    (d.branches||[]).forEach(function(b){bb.appendChild(new Option(b,b));hb.appendChild(new Option(b,b));});
-    var bc=group(baseSel,'Recent commits'),hc=group(headSel,'Recent commits');
-    (d.commits||[]).forEach(function(c){var t=c.sha+(c.subject?(' — '+c.subject):'');bc.appendChild(new Option(t,c.sha));hc.appendChild(new Option(t,c.sha));});
+  var loaded=false,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
+  var commitList=document.getElementById('commitOptions'),refList=document.getElementById('refOptions');
+  function showPanel(name){
+    panels.forEach(function(p){p.hidden=p.getAttribute('data-panel')!==name;});
+    [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('on');});
+    var btn=document.querySelector('[data-open-panel="'+name+'"]');if(btn)btn.classList.add('on');
+    ensureRefs();
   }
-  if(cmp)cmp.addEventListener('click',function(){
-    if(!panel.hidden){panel.hidden=true;return;}
-    panel.hidden=false;
+  [].slice.call(document.querySelectorAll('[data-open-panel]')).forEach(function(btn){
+    btn.addEventListener('click',function(){showPanel(btn.getAttribute('data-open-panel'));});
+  });
+  function addOpt(list,value,label){
+    if(!list||!value)return;
+    var o=document.createElement('option');o.value=value;if(label)o.label=label;list.appendChild(o);
+  }
+  function fillRefs(d){
+    addOpt(refList,'HEAD','current HEAD');
+    addOpt(commitList,'HEAD','current HEAD');
+    (d.branches||[]).forEach(function(raw){
+      var b=typeof raw==='string'?{name:raw,kind:'branch'}:raw;
+      addOpt(refList,b.name,(b.kind==='remote'?'remote branch':'local branch'));
+    });
+    (d.commits||[]).forEach(function(c){
+      var label=(c.subject||'commit')+(c.refs?(' · '+c.refs):'');
+      addOpt(commitList,c.sha,label);
+      addOpt(refList,c.sha,label);
+    });
+  }
+  function ensureRefs(){
     if(loaded)return;loaded=true;
     fetch('/api/refs').then(function(r){return r.json();}).then(fillRefs).catch(function(){loaded=false;});
+  }
+  if(panels.some(function(p){return !p.hidden;}))ensureRefs();
+  function navTo(url){location.href=url;}
+  var commitGo=document.getElementById('commitGo'),commitRef=document.getElementById('commitRef');
+  if(commitGo)commitGo.addEventListener('click',function(){
+    var c=(commitRef.value||'HEAD').trim();
+    navTo('${esc(routeBase)}/change?scope=commit&commit='+encodeURIComponent(c));
   });
-  var go=document.getElementById('cmpGo');
-  if(go)go.addEventListener('click',function(){
-    var b=baseSel.value,h=headSel.value;if(!b)return;
+  var rangeGo=document.getElementById('rangeGo'),rangeBase=document.getElementById('rangeBase'),rangeHead=document.getElementById('rangeHead');
+  if(rangeGo)rangeGo.addEventListener('click',function(){
+    var b=rangeBase.value.trim(),h=(rangeHead.value.trim()||'HEAD');if(!b)return;
+    navTo('${esc(routeBase)}/change?base='+encodeURIComponent(b)+'&head='+encodeURIComponent(h));
+  });
+  var cmpGo=document.getElementById('cmpGo');
+  if(cmpGo)cmpGo.addEventListener('click',function(){
+    var baseSel=document.getElementById('cmpBase'),headSel=document.getElementById('cmpHead');
+    var b=baseSel.value.trim(),h=headSel.value.trim();if(!b)return;
     var u='${esc(routeBase)}/change?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
   });
   var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp'),modeSel=document.getElementById('storyMode');

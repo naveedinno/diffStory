@@ -156,6 +156,17 @@ test('addressPrompt grounds on base..head when both refs are committed', () => {
   assert.ok(!p.includes('working tree'));                // not the working-tree variant
 });
 
+test('addressPrompt can describe a historical temporary checkout', () => {
+  const p = addressPrompt(['c_a'], 'abc123', 'def456', {
+    historicalCheckout: true,
+    originalRepo: '/repo/live',
+  });
+  assert.ok(p.includes('temporary checkout of "def456"'));
+  assert.ok(p.includes('/repo/live'));
+  assert.ok(p.includes('Do not edit source files in this historical checkout'));
+  assert.ok(p.includes('answer in "reply"'));
+});
+
 test('addressPrompt stays single-sided when no base ref is known', () => {
   const p = addressPrompt(['c_a']);
   assert.ok(!p.includes('Two-sided grounding contract'));

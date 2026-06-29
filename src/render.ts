@@ -26,6 +26,8 @@ export interface RenderInput {
   tour: Tour;
   files: DiffFile[];
   baseLabel: string;
+  /** Ref for the post-change side. Omitted means the live working tree. */
+  headRef?: string;
   comments: Comment[];
   routeBase?: string;
   /** Repo display name for the breadcrumb. Falls back to the routeBase tail. */
@@ -45,7 +47,7 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
 };
 
 export function renderPage(input: RenderInput): string {
-  const { repo, tour, files, baseLabel, comments } = input;
+  const { repo, tour, files, baseLabel, comments, headRef } = input;
   const routeBase = input.routeBase ?? '';
   const repoName = input.repoName ?? (() => {
     try {
@@ -54,7 +56,7 @@ export function renderPage(input: RenderInput): string {
       return 'repo';
     }
   })();
-  const model = buildReviewModel(repo, tour, files);
+  const model = buildReviewModel(repo, tour, files, headRef);
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
   // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
   const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));

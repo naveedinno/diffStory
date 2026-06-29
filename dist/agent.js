@@ -102,18 +102,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided') {
         `- Remove vague filler and unsupported safety claims before saving.\n\n` +
         `Do not ask questions. Generate it directly.`);
 }
-/**
- * Instruct the agent to address review comments via the address-review skill.
- *
- * `base` is the diff's target ref (the "other side" of the change). `head` is the
- * current side: when set, the review compares two committed refs (`base..head`) and
- * the agent must read both via git; when omitted, the current side is the live
- * working tree (`base..working tree`). Either way the prompt forces the agent to
- * ground every answer in BOTH sides instead of the single tree it has checked out —
- * without this it reads only the current code and can wrongly claim a changed symbol
- * "doesn't exist".
- */
-export function addressPrompt(target, base, head) {
+export function addressPrompt(target, base, head, opts = {}) {
     const scope = target === 'all'
         ? 'every comment whose status is "open"'
         : `the comments with these ids: ${target.join(', ')}`;
@@ -130,12 +119,26 @@ export function addressPrompt(target, base, head) {
             `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
             `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
         : '';
+    const historical = opts.historicalCheckout && head
+        ? `Historical checkout contract:\n` +
+            `- You are running in a temporary checkout of "${head}" so code reads match the story's post-change side, even if the live repository has moved on.\n` +
+            (opts.originalRepo ? `- The live repository is ${opts.originalRepo}; use it only as identity context, not as the code state under review.\n` : '') +
+            `- Do not edit source files in this historical checkout. For change or nit requests, answer in "reply" with the exact file/function and change you recommend instead of modifying the live branch.\n` +
+            `- For questions, answer from this checkout plus the explicit base/head diff above.\n\n`
+        : '';
+    const actionRules = opts.historicalCheckout
+        ? `Act by type for each one:\n` +
+            `- change → do not edit source files; answer concretely in "reply" with the exact change you would make on the live branch.\n` +
+            `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
+            `- nit → answer with the small adjustment in "reply"; do not edit source files in the temporary checkout.\n\n`
+        : `Act by type for each one:\n` +
+            `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
+            `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
+            `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n`;
     return (`Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
         grounding +
-        `Act by type for each one:\n` +
-        `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
-        `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
-        `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n` +
+        historical +
+        actionRules +
         `For every comment you handle: set "status" to "addressed" and write a specific "reply" — name the ` +
         `function or file you changed, or give your answer. Preserve every other field and never delete a comment.\n\n` +
         `If your edits moved code, re-run the diffStory review-tour skill so ${DATA_DIR}/story.json line ranges ` +

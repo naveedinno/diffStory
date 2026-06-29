@@ -81,9 +81,13 @@ export function getDiff(repo, base, head) {
 }
 /** Branch names (local + remote), most-recently-committed first. For the picker. */
 export function listBranches(repo) {
+    return listBranchRefs(repo).map((b) => b.name);
+}
+/** Branch refs with enough metadata for the picker to avoid flattening everything together. */
+export function listBranchRefs(repo) {
     const out = tryGit(repo, [
         'for-each-ref',
-        '--format=%(refname:short)',
+        '--format=%(refname)%09%(refname:short)',
         '--sort=-committerdate',
         'refs/heads',
         'refs/remotes',
@@ -92,22 +96,36 @@ export function listBranches(repo) {
         return [];
     return out
         .split('\n')
-        .map((s) => s.trim())
-        .filter((b) => b && b !== 'origin/HEAD');
+        .map((s) => {
+        const [full, short] = s.split('\t');
+        const name = (short ?? '').trim();
+        if (!full || !name || name.endsWith('/HEAD'))
+            return null;
+        if (full.startsWith('refs/remotes/')) {
+            const remote = name.includes('/') ? name.slice(0, name.indexOf('/')) : undefined;
+            return { name, kind: 'remote', remote };
+        }
+        return { name, kind: 'local' };
+    })
+        .filter((b) => !!b);
 }
 /** Recent commits as {sha, subject}, newest first. For the picker. */
-export function listRecentCommits(repo, n = 15) {
-    const out = tryGit(repo, ['log', `-${n}`, '--no-merges', '--pretty=format:%h%x09%s']);
+export function listRecentCommits(repo, n = 15, ref) {
+    const args = ['log'];
+    if (ref === '--all')
+        args.push('--all');
+    else if (ref)
+        args.push(ref);
+    args.push(`-${n}`, '--no-merges', '--pretty=format:%h%x09%s%x09%D');
+    const out = tryGit(repo, args);
     if (!out)
         return [];
     return out
         .split('\n')
         .filter(Boolean)
         .map((line) => {
-        const tab = line.indexOf('\t');
-        return tab < 0
-            ? { sha: line, subject: '' }
-            : { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+        const [sha, subject = '', refs = ''] = line.split('\t');
+        return { sha, subject, refs };
     });
 }
 /** Current branch name, or null when detached. */
@@ -122,6 +140,25 @@ export function describeBase(repo, base) {
     if (name && name !== 'undefined')
         return `${name} (${short ?? base})`;
     return short ?? base;
+}
+/** True when `ref` resolves to a commit object. */
+export function isCommitRef(repo, ref) {
+    return tryGit(repo, ['rev-parse', '--verify', `${ref}^{commit}`]) !== null;
+}
+/** Resolve a commit-ish ref to its full object id, or null if it is not a commit. */
+export function resolveCommit(repo, ref) {
+    return tryGit(repo, ['rev-parse', '--verify', `${ref}^{commit}`])?.trim() ?? null;
+}
+/** First-parent base for a single commit diff; root commits diff against the empty tree. */
+export function commitParentBase(repo, commit) {
+    if (tryGit(repo, ['rev-parse', '--verify', `${commit}^`]) !== null)
+        return `${commit}^`;
+    return emptyTree(repo);
+}
+/** Short commit label for controls and headings. */
+export function describeCommit(repo, commit) {
+    const out = tryGit(repo, ['show', '-s', '--format=%h %s', commit])?.trim();
+    return out || commit;
 }
 /** True when the working tree has uncommitted changes (staged or unstaged, incl. untracked). */
 export function isDirty(repo) {
@@ -162,11 +199,11 @@ export function numstat(repo, base, head) {
  * Read an inclusive 1-based line range from a file in the working tree.
  * Returns the lines (without trailing newlines) or null if the file is gone.
  */
-export function readFileRange(repo, file, start, end) {
-    const abs = join(repo, file);
-    if (!existsSync(abs))
+export function readFileRange(repo, file, start, end, ref) {
+    const text = readFileText(repo, file, ref);
+    if (text == null)
         return null;
-    const all = readFileSync(abs, 'utf8').split('\n');
+    const all = text.split('\n');
     const from = Math.max(1, start);
     const to = Math.min(all.length, Math.max(from, end));
     return { lines: all.slice(from - 1, to), startLine: from };
@@ -176,15 +213,23 @@ export function readFileRange(repo, file, start, end) {
  * newlines). Returns null if the file is gone. Used to reconstruct the
  * complete-file ("Full file") view.
  */
-export function readWholeFile(repo, file) {
-    const abs = join(repo, file);
-    if (!existsSync(abs))
+export function readWholeFile(repo, file, ref) {
+    const text = readFileText(repo, file, ref);
+    if (text == null)
         return null;
-    const text = readFileSync(abs, 'utf8');
     const lines = text.split('\n');
     // Drop a single trailing empty element from a final newline so the line count
     // matches the file's real line count.
     if (lines.length > 1 && lines[lines.length - 1] === '')
         lines.pop();
     return lines;
+}
+function readFileText(repo, file, ref) {
+    if (ref) {
+        return tryGit(repo, ['show', `${ref}:${file}`]);
+    }
+    const abs = join(repo, file);
+    if (!existsSync(abs))
+        return null;
+    return readFileSync(abs, 'utf8');
 }
