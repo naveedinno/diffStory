@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { basename, join, relative, sep } from 'node:path';
 import { DATA_DIR, LEGACY_STORY_FILENAME, STORY_FILENAME, dataDir } from './config.js';
 import { loadTour } from './tour.js';
@@ -17,6 +17,14 @@ export function listStories(repo) {
 /** Resolve a story id from listStories() back to a real path, or null if it is not known. */
 export function storyPathForId(repo, id) {
     return listStories(repo).find((s) => s.id === id)?.path ?? null;
+}
+/** Delete a known story file by id. Unknown ids are ignored so callers cannot escape `.diffstory`. */
+export function deleteStory(repo, id) {
+    const path = storyPathForId(repo, id);
+    if (!path)
+        return false;
+    unlinkSync(path);
+    return true;
 }
 /** True when the repo has at least one primary, legacy, or named story file. */
 export function hasStories(repo) {

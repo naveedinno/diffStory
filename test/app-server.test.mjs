@@ -126,6 +126,22 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal((await fetch(`${base}/api/repo/close`, { method: 'POST' })).status, 200);
     assert.equal((await fetch(`${base}/api/refs`)).status, 409);
 
+    const picker = await (await fetch(`${base}/repos`)).text();
+    assert.ok(picker.includes('data-remove-repo'), 'repo picker exposes a remove action for recents');
+
+    const removed = await fetch(`${base}/api/repos/recent`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    assert.equal(removed.status, 200);
+    const removedBody = await removed.json();
+    assert.equal(removedBody.ok, true);
+    assert.equal(removedBody.removed, true);
+
+    const recentAfterRemove = await (await fetch(`${base}/api/repos/recent`)).json();
+    assert.ok(!recentAfterRemove.some((r) => r.path === repo));
+
     // opening a non-git path is rejected
     const bad = await fetch(`${base}/api/repo/open`, {
       method: 'POST',

@@ -35,6 +35,8 @@ function relativeTime(then, now) {
 const ICON_FOLDER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.2h7A1.5 1.5 0 0 1 19 9.7v7.8A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/></svg>';
 const ICON_BRANCH = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M18 9.2c0 4.2-3.4 4.8-6 5.4"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+const ICON_PLUS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>';
 const ICON_MARK = brandMarkSvg('appmark', 34, 34);
 function statusPill(r) {
     // Tour status is an internal concept and confused users — don't surface it here.
@@ -50,7 +52,8 @@ function recentCard(r, home, now) {
     if (r.isGit && r.changedFiles > 0)
         meta.push(`<span class="meta">${r.changedFiles} changed file${r.changedFiles === 1 ? '' : 's'}</span>`);
     meta.push(`<span class="meta">${esc(relativeTime(r.lastOpened, now))}</span>`);
-    return (`<button class="card${r.isGit ? '' : ' card-missing'}" data-open="${esc(r.path)}" type="button">` +
+    return (`<div class="repo-row${r.isGit ? '' : ' repo-row-missing'}">` +
+        `<button class="repo-card" data-open="${esc(r.path)}" type="button">` +
         `<span class="tile">${ICON_FOLDER}</span>` +
         `<span class="card-body">` +
         `<span class="card-top"><span class="name">${esc(r.name)}</span>${statusPill(r)}</span>` +
@@ -58,7 +61,9 @@ function recentCard(r, home, now) {
         `<span class="card-meta">${meta.join('<span class="dot">·</span>')}</span>` +
         `</span>` +
         `<span class="chev" aria-hidden="true">${ICON_CHEVRON}</span>` +
-        `</button>`);
+        `</button>` +
+        `<button class="remove-btn" data-remove-repo="${esc(r.path)}" type="button" title="Remove from recent repositories" aria-label="Remove ${esc(r.name)} from recent repositories">${ICON_TRASH}</button>` +
+        `</div>`);
 }
 export function renderPicker(recents, home, now) {
     const list = recents.length
@@ -70,53 +75,62 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 :root{
-  --bg:#f5f5f7; --bg-elev:#ffffff; --label:#1d1d1f; --label2:#6e6e73; --label3:#8e8e93;
-  --sep:rgba(0,0,0,.08); --hairline:rgba(0,0,0,.10); --hover:rgba(0,0,0,.04);
-  --blue:#007aff; --blue-press:#0067d6; --green-bg:#e3f7ea; --green-fg:#1d7d3f;
-  --neutral-bg:rgba(120,120,128,.14); --neutral-fg:#6e6e73; --red-bg:#fde8e7; --red-fg:#c4271f;
-  --tile:rgba(0,122,255,.10); --tile-fg:#007aff; --scrim:rgba(0,0,0,.32); --sheet:#ffffff;
+  --bg:#f4f5f7; --bg-rail:#e9ebef; --bg-elev:#ffffff; --label:#17181c; --label2:#61656f; --label3:#8a8f9b;
+  --sep:rgba(20,24,32,.09); --hairline:rgba(20,24,32,.12); --hover:rgba(0,0,0,.045);
+  --blue:#007aff; --blue-press:#0067d6; --green-bg:#e2f6e9; --green-fg:#16783a;
+  --neutral-bg:rgba(95,99,109,.12); --neutral-fg:#656a75; --red-bg:#fde9e7; --red-fg:#bd2a22;
+  --tile:rgba(0,122,255,.10); --tile-fg:#007aff; --scrim:rgba(0,0,0,.36); --sheet:#ffffff;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#1c1c1e; --bg-elev:#2c2c2e; --label:#f5f5f7; --label2:#aeaeb2; --label3:#8e8e93;
-  --sep:rgba(255,255,255,.10); --hairline:rgba(255,255,255,.12); --hover:rgba(255,255,255,.06);
-  --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(48,209,88,.16); --green-fg:#30d158;
-  --neutral-bg:rgba(120,120,128,.24); --neutral-fg:#aeaeb2; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
-  --tile:rgba(10,132,255,.18); --tile-fg:#0a84ff; --scrim:rgba(0,0,0,.5); --sheet:#2c2c2e;
+  --bg:#17181b; --bg-rail:#202226; --bg-elev:#24262b; --label:#f5f6f8; --label2:#b3b7c0; --label3:#858b97;
+  --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
+  --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(53,199,89,.16); --green-fg:#35c759;
+  --neutral-bg:rgba(127,132,145,.22); --neutral-fg:#aeb4bf; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
+  --tile:rgba(10,132,255,.18); --tile-fg:#0a84ff; --scrim:rgba(0,0,0,.55); --sheet:#25272c;
 }}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{
   background:var(--bg); color:var(--label); min-height:100vh;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:-.01em;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:0;
 }
-.wrap{max-width:680px; margin:0 auto; padding:56px 24px 72px}
-.head{display:flex; align-items:center; gap:15px; margin-bottom:6px}
+.wrap{width:min(1080px,100%); margin:0 auto; padding:44px 24px 64px; display:grid; grid-template-columns:minmax(250px,320px) minmax(0,1fr); gap:34px; align-items:start}
+.hero{position:sticky; top:28px; min-height:calc(100vh - 88px); display:flex; flex-direction:column; justify-content:space-between; gap:34px}
+.head{display:flex; align-items:center; gap:14px; margin-bottom:14px}
 .appicon{width:54px; height:54px; border-radius:14px; flex:none;
   background:#007aff;
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
 .appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
 h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
-.sub{color:var(--label2); font-size:15px; margin:14px 0 30px; max-width:48ch; line-height:1.45}
-.launchwarn{max-width:620px;margin:-12px 0 28px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:10px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
+.sub{color:var(--label2); font-size:15px; margin:0; max-width:31ch; line-height:1.5}
+.manager{min-width:0}
+.launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
 .launchwarn[hidden]{display:none}
 .launchwarn span{flex:1;min-width:0}
 .skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
 .skillfix:hover{background:var(--blue-press)}.skillfix:disabled{opacity:.55;cursor:default}
-.section{font-size:13px; font-weight:600; color:var(--label3); margin:0 0 10px 2px}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:2px 0 14px}
+.section{font-size:12px;font-weight:700;color:var(--label3);margin:0 0 5px;text-transform:uppercase;letter-spacing:.08em}
+h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018em}
+.add-btn{height:36px;padding:0 13px;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:8px;background:var(--blue);color:#fff;font:inherit;font-size:13px;font-weight:650;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18)}
+.add-btn:hover{background:var(--blue-press)}
 .stack>*+*{margin-top:8px}
-.card,.fsrow{font:inherit; color:inherit; cursor:pointer}
-.card{width:100%; display:flex; align-items:center; gap:13px; text-align:left;
-  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:14px; padding:13px 14px;
+.repo-card,.fsrow{font:inherit; color:inherit; cursor:pointer}
+.repo-row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:8px;align-items:stretch}
+.repo-card{width:100%; display:flex; align-items:center; gap:13px; text-align:left;
+  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; padding:13px 14px;
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:transform .14s ease, background .14s ease, box-shadow .14s ease;}
-.card:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
-.card:active{transform:scale(.992)}
-.card:focus-visible,.chooser:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 38%,transparent)}
-.card-missing{opacity:.62}
-.tile{width:38px; height:38px; border-radius:10px; flex:none; background:var(--tile); color:var(--tile-fg);
+.repo-card:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.repo-card:active{transform:scale(.992)}
+.repo-card:focus-visible,.chooser:focus-visible,.add-btn:focus-visible,.remove-btn:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 38%,transparent)}
+.repo-row-missing{opacity:.68}
+.remove-btn{width:38px;border:.5px solid var(--hairline);border-radius:8px;background:var(--bg-elev);color:var(--label3);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.remove-btn:hover{background:var(--red-bg);color:var(--red-fg)}
+.tile{width:38px; height:38px; border-radius:8px; flex:none; background:var(--tile); color:var(--tile-fg);
   display:flex; align-items:center; justify-content:center}
-.card-missing .tile{background:var(--neutral-bg); color:var(--neutral-fg)}
+.repo-row-missing .tile{background:var(--neutral-bg); color:var(--neutral-fg)}
 .card-body{flex:1; min-width:0; display:flex; flex-direction:column; gap:3px}
 .card-top{display:flex; align-items:center; gap:8px}
 .name{font-size:15px; font-weight:590; letter-spacing:-.012em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -131,48 +145,49 @@ h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-
 .pill-ready{background:var(--green-bg); color:var(--green-fg)}
 .pill-none{background:var(--neutral-bg); color:var(--neutral-fg)}
 .pill-missing{background:var(--red-bg); color:var(--red-fg)}
-.empty{text-align:center; padding:34px 16px; border:.5px dashed var(--hairline); border-radius:14px; color:var(--label2)}
-.empty-mark{display:inline-flex; width:46px; height:46px; border-radius:12px; align-items:center; justify-content:center;
+.empty{text-align:center; padding:30px 16px; border:.5px dashed var(--hairline); border-radius:8px; color:var(--label2)}
+.empty-mark{display:inline-flex; width:44px; height:44px; border-radius:8px; align-items:center; justify-content:center;
   background:var(--neutral-bg); color:var(--label3); margin-bottom:10px}
 .empty-title{font-size:15px; font-weight:600; color:var(--label); margin:0 0 2px}
 .empty-sub{font-size:13px; margin:0}
-.open{margin-top:30px}
-.chooser{width:100%; display:flex; align-items:center; gap:13px; text-align:left; margin-top:10px;
-  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:14px; padding:14px;
-  box-shadow:0 1px 2px rgba(0,0,0,.04); transition:background .14s ease, box-shadow .14s ease}
+.open{margin-top:18px;padding-top:18px;border-top:.5px solid var(--sep)}
+.quick-open{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.chooser{width:100%; display:flex; align-items:center; gap:11px; text-align:left; margin-top:10px;
+  background:transparent; border:.5px solid var(--hairline); border-radius:8px; padding:11px 12px;
+  transition:background .14s ease, box-shadow .14s ease}
 .chooser:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
 .chooser .tile{background:var(--tile); color:var(--tile-fg)}
 .chooser .ctext{flex:1}
-.chooser .ct1{font-size:15px; font-weight:590; color:var(--label)}
-.chooser .ct2{font-size:12.5px; color:var(--label2); margin-top:1px}
+.chooser .ct1{display:block;font-size:13.5px; font-weight:650; color:var(--label)}
+.chooser .ct2{display:block;font-size:12.5px; color:var(--label2); margin-top:1px}
 .orpaste{display:flex; gap:10px; align-items:center; margin-top:12px}
-input[type=text]{flex:1; height:34px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
-  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:9px; outline:none;
+input[type=text]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
+  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; outline:none;
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .14s ease, border-color .14s ease;}
 input[type=text]::placeholder{color:var(--label3)}
 input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
 .btn{height:36px; padding:0 16px; font:inherit; font-size:13.5px; font-weight:590; color:#fff; cursor:pointer;
-  background:var(--blue); border:none; border-radius:9px; letter-spacing:-.01em;
+  background:var(--blue); border:none; border-radius:8px; letter-spacing:0;
   box-shadow:0 1px 2px rgba(0,40,120,.18); transition:background .14s ease, transform .1s ease}
 .btn:hover{background:var(--blue-press)}
 .btn:active{transform:scale(.97)}
 .btn:disabled{opacity:.4; cursor:default; box-shadow:none}
 .btn:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 40%,transparent)}
 .ghost{height:36px; padding:0 16px; font:inherit; font-size:13.5px; font-weight:550; color:var(--label);
-  background:transparent; border:.5px solid var(--hairline); border-radius:9px; cursor:pointer}
+  background:transparent; border:.5px solid var(--hairline); border-radius:8px; cursor:pointer}
 .ghost:hover{background:var(--hover)}
 .msg{min-height:18px; margin:10px 2px 0; font-size:13px; color:var(--red-fg)}
-.steps{display:flex; gap:18px; margin-top:34px; padding-top:22px; border-top:.5px solid var(--sep)}
-.step{flex:1}
+.steps{display:grid; gap:14px; padding-top:20px; border-top:.5px solid var(--sep)}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
 .step-n{display:inline-flex; width:20px; height:20px; border-radius:50%; align-items:center; justify-content:center;
-  background:var(--neutral-bg); color:var(--label2); font-size:11px; font-weight:700; margin-bottom:7px}
+  background:var(--neutral-bg); color:var(--label2); font-size:11px; font-weight:700; margin-top:1px}
 .step-t{font-size:13px; font-weight:600; margin:0 0 2px}
 .step-d{font-size:12px; color:var(--label2); margin:0; line-height:1.4}
 .scrim{position:fixed; inset:0; background:var(--scrim); display:none; align-items:center; justify-content:center;
   padding:20px; z-index:50}
 .scrim.show{display:flex}
-.sheet{width:100%; max-width:540px; max-height:74vh; display:flex; flex-direction:column; overflow:hidden;
-  background:var(--sheet); border:.5px solid var(--hairline); border-radius:16px; box-shadow:0 24px 70px rgba(0,0,0,.34)}
+.sheet{width:100%; max-width:560px; max-height:76vh; display:flex; flex-direction:column; overflow:hidden;
+  background:var(--sheet); border:.5px solid var(--hairline); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.34)}
 .sheet-head{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:.5px solid var(--sep)}
 .sheet-title{font-size:15px; font-weight:640; flex:1}
 .iconbtn{width:28px; height:28px; border-radius:8px; border:none; background:var(--neutral-bg); color:var(--label2);
@@ -185,7 +200,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
 .crumb.cur{color:var(--label); font-weight:590; cursor:default}
 .crumb-sep{color:var(--label3); opacity:.6}
 .fslist{overflow-y:auto; padding:6px; flex:1; min-height:120px}
-.fsrow{width:100%; display:flex; align-items:center; gap:11px; padding:9px 10px; border-radius:9px; background:none; border:none}
+.fsrow{width:100%; display:flex; align-items:center; gap:11px; padding:9px 10px; border-radius:8px; background:none; border:none}
 .fsrow:hover{background:var(--hover)}
 .fsrow .fi{color:var(--blue); display:flex; flex:none}
 .fsrow .fn{flex:1; min-width:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left}
@@ -200,40 +215,52 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
   .d1{animation-delay:.02s}.d2{animation-delay:.09s}.d3{animation-delay:.16s}.d4{animation-delay:.23s}
   @keyframes up{to{opacity:1; transform:none}}
 }
-@media (max-width:560px){.steps{flex-direction:column; gap:14px}}
+@media (max-width:760px){
+  .wrap{display:block;padding:28px 16px 54px}
+  .hero{position:static;min-height:0;margin-bottom:28px}
+  .sub{max-width:44ch}
+  .quick-open{grid-template-columns:1fr}
+  .add-btn span{display:none}
+}
 </style></head>
 <body>
 <main class="wrap">
-  <div class="head reveal d1">
-    <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
-    <div><h1>${esc(APP_BRAND)}</h1></div>
-  </div>
-  <p class="sub reveal d1">The agent that wrote the code walks you through its change — in reading order, not by filename. Open a repository to begin.</p>
-  <p class="launchwarn reveal d1" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
+  <section class="hero reveal d1">
+    <div>
+      <div class="head">
+        <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
+        <div><h1>${esc(APP_BRAND)}</h1></div>
+      </div>
+      <p class="sub">Open a repo, generate a short story, then review the actual diff in the order the change wants to be read.</p>
+    </div>
 
-  <section class="reveal d2">
-    <p class="section">Recent</p>
-    <div class="stack" id="recent">${list}</div>
+    <section class="steps" aria-label="How it works">
+      <div class="step"><span class="step-n">1</span><span><p class="step-t">Make changes</p><p class="step-d">Let your agent edit code as usual.</p></span></div>
+      <div class="step"><span class="step-n">2</span><span><p class="step-t">Generate the story</p><p class="step-d">Save a guided reading order for the current diff.</p></span></div>
+      <div class="step"><span class="step-n">3</span><span><p class="step-t">Walk the diff</p><p class="step-d">Read, comment, and send fixes back inline.</p></span></div>
+    </section>
   </section>
 
-  <section class="open reveal d3">
-    <p class="section">Open a repository</p>
+  <section class="manager reveal d2">
+    <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
+    <div class="section-head">
+      <div><p class="section">Repositories</p><h2>Choose your workspace</h2></div>
+      <button class="add-btn" id="quickAddBtn" type="button">${ICON_PLUS}<span>Add repo</span></button>
+    </div>
+    <div class="stack" id="recent">${list}</div>
+
+    <div class="open">
+      <div class="quick-open">
+        <input type="text" id="path" placeholder="Paste a repository path" autocomplete="off" spellcheck="false" aria-label="Open by path" />
+        <button class="btn" id="openBtn" type="button">Open</button>
+      </div>
     <button class="chooser" id="chooseBtn" type="button">
       <span class="tile" aria-hidden="true">${ICON_FOLDER}</span>
-      <span class="ctext"><span class="ct1">Choose a folder…</span><span class="ct2">Browse your machine and pick a git repo</span></span>
+      <span class="ctext"><span class="ct1">Browse folders</span><span class="ct2">Pick a local git repository from your machine</span></span>
       <span class="chev" aria-hidden="true">${ICON_CHEVRON}</span>
     </button>
-    <div class="orpaste">
-      <input type="text" id="path" placeholder="…or paste a path" autocomplete="off" spellcheck="false" aria-label="Open by path" />
-      <button class="btn" id="openBtn" type="button">Open</button>
+      <p class="msg" id="msg" role="status"></p>
     </div>
-    <p class="msg" id="msg" role="status"></p>
-  </section>
-
-  <section class="steps reveal d4" aria-label="How it works">
-    <div class="step"><span class="step-n">1</span><p class="step-t">Make changes</p><p class="step-d">Let your agent edit code as usual.</p></div>
-    <div class="step"><span class="step-n">2</span><p class="step-t">Generate the story</p><p class="step-d">diffStory has your agent write the reading order.</p></div>
-    <div class="step"><span class="step-n">3</span><p class="step-t">Walk the diff</p><p class="step-d">Read in order, comment, and it fixes inline.</p></div>
   </section>
 </main>
 
@@ -261,8 +288,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
     var sw=document.getElementById('skillWarn'),txt=document.getElementById('skillWarnText'),btn=document.getElementById('skillUpdateBtn');
     if(!sw||!txt||!btn||!sk)return;
     if(sk.current){
-      sw.hidden=false;txt.textContent='Story-generation skills are up to date.';btn.hidden=true;
-      setTimeout(function(){sw.hidden=true;},1400);return;
+      sw.hidden=true;btn.hidden=true;return;
     }
     sw.hidden=false;btn.hidden=false;btn.disabled=false;btn.textContent='Update skills';
     txt.textContent=sk.installed
@@ -290,7 +316,22 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
       .then(function(e){ if(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.error||'Could not open that path.'; } })
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }
+  function emptyRecent(){
+    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Add a local git repo to start your first guided review.</p></div>';
+  }
+  function removeRecent(path,row){
+    fetch('/api/repos/recent',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(d){if(!r.ok)throw new Error(d.error||'Could not remove repository.');return d;});})
+      .then(function(){
+        if(row&&row.parentNode)row.parentNode.removeChild(row);
+        if(!document.querySelector('#recent .repo-row'))document.getElementById('recent').innerHTML=emptyRecent();
+        msg.style.color='var(--label2)'; msg.textContent='Removed from recent repositories.';
+      })
+      .catch(function(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.message||'Could not remove repository.'; });
+  }
   document.getElementById('recent').addEventListener('click',function(e){
+    var rb=e.target.closest('button[data-remove-repo]');
+    if(rb){ e.preventDefault(); e.stopPropagation(); removeRecent(rb.getAttribute('data-remove-repo'),rb.closest('.repo-row')); return; }
     var b=e.target.closest('button[data-open]'); if(b) open(b.getAttribute('data-open'));
   });
   var input=document.getElementById('path');
@@ -341,6 +382,7 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
   }
   function openModal(){ scrim.classList.add('show'); browse(null); }
   function closeModal(){ scrim.classList.remove('show'); }
+  document.getElementById('quickAddBtn').addEventListener('click',openModal);
   document.getElementById('chooseBtn').addEventListener('click',openModal);
   document.getElementById('fsClose').addEventListener('click',closeModal);
   scrim.addEventListener('click',function(e){ if(e.target===scrim) closeModal(); });

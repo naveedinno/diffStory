@@ -46,9 +46,9 @@ import {
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession, type Session } from './session.js';
 import { inspectRepo } from './repo-state.js';
-import { recordRecent, loadRecents } from './recents.js';
+import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
-import { listStories, storyPathForId } from './stories.js';
+import { deleteStory, listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
@@ -187,6 +187,20 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     if (method === 'GET' && url.pathname === '/api/repos/recent') {
       return sendJson(res, 200, listRecentRepos());
     }
+    if (method === 'DELETE' && url.pathname === '/api/repos/recent') {
+      return readBody(req, (body) => {
+        let path = '';
+        try {
+          path = String((JSON.parse(body || '{}') as { path?: string }).path ?? '');
+        } catch {
+          return sendJson(res, 400, { error: 'invalid JSON' });
+        }
+        if (!path) return sendJson(res, 400, { error: 'Missing repository path.' });
+        const removed = loadRecents(homedir()).some((e) => e.path === path);
+        forgetRecent(homedir(), path);
+        return sendJson(res, 200, { ok: true, removed, recents: listRecentRepos() });
+      });
+    }
     if (method === 'GET' && url.pathname === '/api/agents') {
       return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(homedir()) });
     }
@@ -217,6 +231,27 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     if (method === 'POST' && url.pathname === '/api/repo/close') {
       closeSession(session);
       return sendJson(res, 200, { ok: true });
+    }
+    if (method === 'DELETE' && url.pathname === '/api/stories') {
+      if (!session.repo) return noRepo(res);
+      const repo = session.repo;
+      return readBody(req, (body) => {
+        let id = '';
+        try {
+          id = String((JSON.parse(body || '{}') as { id?: string }).id ?? '');
+        } catch {
+          return sendJson(res, 400, { error: 'invalid JSON' });
+        }
+        if (!id) return sendJson(res, 400, { error: 'Missing story id.' });
+        const path = storyPathForId(repo, id);
+        if (!path) return sendJson(res, 404, { error: 'No such story.' });
+        deleteStory(repo, id);
+        if (session.selectedStory === path) {
+          session.selectedStory = undefined;
+          session.chooseStory = true;
+        }
+        return sendJson(res, 200, { ok: true, removed: true, stories: listStories(repo) });
+      });
     }
     if (method === 'GET' && url.pathname === '/api/refs') {
       if (!session.repo) return noRepo(res);

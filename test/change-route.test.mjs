@@ -185,6 +185,7 @@ test('opening a repo with a saved story lets the user select it', async () => {
     const chooser = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(chooser.includes('+ New story'), 'shows story selection');
     assert.ok(chooser.includes('Saved story'), 'lists the saved story');
+    assert.ok(chooser.includes('data-delete-story'), 'shows a story remove action');
     assert.ok(chooser.includes('Working tree vs HEAD'), 'explains the diff scope');
     assert.ok(chooser.includes('git diff HEAD --'), 'shows the underlying diff command');
     assert.ok(chooser.includes(`href="${route}/review?story=story.json"`), 'saved story has its own repo-named review route');
@@ -197,6 +198,39 @@ test('opening a repo with a saved story lets the user select it', async () => {
 
     const chooserAgain = await (await fetch(`${base}${route}/stories`)).text();
     assert.ok(chooserAgain.includes('+ New story'), 'review route does not consume the chooser route');
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('story picker can remove a saved story', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = repoWithChange();
+  writeStory(repo);
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
+    });
+    const route = repoRoute(repo);
+    const removed = await fetch(`${base}/api/stories`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'story.json' }),
+    });
+    assert.equal(removed.status, 200);
+    const body = await removed.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.removed, true);
+
+    const chooser = await (await fetch(`${base}${route}/stories`)).text();
+    assert.ok(chooser.includes('No stories yet'), 'returns to the empty story state');
+    assert.ok(!chooser.includes('Saved story'), 'deleted story no longer appears');
   } finally {
     server.close();
     process.env.HOME = realHome;

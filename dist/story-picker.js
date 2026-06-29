@@ -22,6 +22,7 @@ function plural(n, word) {
 }
 const MARK = brandStoryMarkSvg('empty-storymark', 30, 30);
 const CHEV = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
+const TRASH = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>`;
 function storyRow(s, now, routeBase) {
     const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
     const mode = s.mode === 'detailed' ? 'Detailed audit' : 'Guided review';
@@ -39,14 +40,17 @@ function storyRow(s, now, routeBase) {
         .map((m, i) => (i === 0 ? m : `<span class="mdot">·</span>${m}`))
         .join('');
     const summary = esc(s.valid ? s.summary || 'No summary yet.' : s.error || 'This story file could not be read.');
-    return (`<a class="row${s.valid ? '' : ' row-bad'}" href="${href}">` +
+    return (`<div class="story-row${s.valid ? '' : ' row-bad'}">` +
+        `<a class="row-main" href="${href}">` +
         `<span class="row-body">` +
         `<span class="row-head"><span class="row-title">${esc(s.title || s.id)}</span>${badges}</span>` +
         `<span class="row-sum">${summary}</span>` +
         `<span class="row-meta">${metaHtml}</span>` +
         `</span>` +
         `<span class="row-chev" aria-hidden="true">${CHEV}</span>` +
-        `</a>`);
+        `</a>` +
+        `<button class="row-del" data-delete-story="${esc(s.id)}" data-story-title="${esc(s.title || s.id)}" type="button" title="Remove story" aria-label="Remove ${esc(s.title || s.id)}">${TRASH}</button>` +
+        `</div>`);
 }
 export function renderStoryPicker(opts) {
     const rb = opts.routeBase;
@@ -61,11 +65,22 @@ export function renderStoryPicker(opts) {
             `<a class="nv-pri" href="${esc(rb)}/change">+ New story</a>`,
     });
     const body = hasStories
-        ? `<div class="head">
-         <h1>Stories</h1>
-         <p class="sub">Saved walkthroughs for <b>${esc(opts.repoName)}</b>. Open one to review, or start a new story from the current diff.</p>
+        ? `<div class="layout">
+       <aside class="side">
+         <p class="kicker">Story library</p>
+         <h1>${esc(opts.repoName)}</h1>
+         <p class="sub">Open a saved walkthrough, refresh after an agent writes a new one, or remove old story files you no longer need.</p>
+         <a class="side-cta" href="${esc(rb)}/change">+ New story</a>
+       </aside>
+       <section class="stories-panel">
+         <div class="head">
+           <div><p class="kicker">Saved stories</p><h2>${opts.stories.length} ${opts.stories.length === 1 ? 'story' : 'stories'}</h2></div>
+           <a class="panel-action" href="${esc(rb)}/change">+ New story</a>
+         </div>
+         <div class="card" id="storyList">${list}</div>
+       </section>
        </div>
-       <div class="card">${list}</div>`
+       `
         : `<div class="empty">
          <span class="empty-mark">${MARK}</span>
          <h1 class="empty-title">No stories yet</h1>
@@ -78,20 +93,29 @@ export function renderStoryPicker(opts) {
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(opts.repoName)} stories</title>
 <style>
-:root{--bg:#f5f5f7;--elev:#fff;--label:#1d1d1f;--l2:#6e6e73;--l3:#8e8e93;--hair:rgba(0,0,0,.1);--sep:rgba(0,0,0,.07);--blue:#007aff;--blue2:#0067d6;--red-bg:#fde8e7;--red:#c4271f;--fill:rgba(0,0,0,.04);--chip:rgba(120,120,128,.12)}
-@media (prefers-color-scheme:dark){:root{--bg:#1c1c1e;--elev:#2c2c2e;--label:#f5f5f7;--l2:#aeaeb2;--l3:#8e8e93;--hair:rgba(255,255,255,.12);--sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--red-bg:rgba(255,69,58,.18);--red:#ff6961;--fill:rgba(255,255,255,.05);--chip:rgba(120,120,128,.24)}}
+:root{--bg:#f4f5f7;--elev:#fff;--label:#17181c;--l2:#61656f;--l3:#8a8f9b;--hair:rgba(20,24,32,.12);--sep:rgba(20,24,32,.08);--blue:#007aff;--blue2:#0067d6;--red-bg:#fde9e7;--red:#bd2a22;--fill:rgba(0,0,0,.045);--chip:rgba(94,99,112,.12)}
+@media (prefers-color-scheme:dark){:root{--bg:#17181b;--elev:#24262b;--label:#f5f6f8;--l2:#b3b7c0;--l3:#858b97;--hair:rgba(255,255,255,.13);--sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--red-bg:rgba(255,69,58,.18);--red:#ff6961;--fill:rgba(255,255,255,.06);--chip:rgba(127,132,145,.22)}}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
-.wrap{max-width:760px;margin:0 auto;padding:28px 24px 80px}
-.head{margin:0 0 18px}
-h1{font-size:26px;font-weight:700;letter-spacing:-.022em;margin:0}
-.sub{color:var(--l2);font-size:14px;margin:7px 0 0;line-height:1.45;max-width:62ch}
+body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:0}
+.wrap{width:min(1080px,100%);margin:0 auto;padding:36px 24px 80px}
+.layout{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);gap:34px;align-items:start}
+.side{position:sticky;top:76px;min-height:calc(100vh - 128px);display:flex;flex-direction:column;align-items:flex-start}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 14px}
+.kicker{font-size:12px;font-weight:740;color:var(--l3);margin:0 0 6px;text-transform:uppercase;letter-spacing:.08em}
+h1{font-size:28px;font-weight:740;letter-spacing:-.02em;margin:0}
+h2{font-size:24px;line-height:1.1;font-weight:720;letter-spacing:-.018em;margin:0}
+.sub{color:var(--l2);font-size:14px;margin:12px 0 20px;line-height:1.48;max-width:32ch}
 .sub b{color:var(--label);font-weight:600}
-.card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
-.row{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:.5px solid var(--sep);color:inherit;text-decoration:none;transition:background .12s ease}
-.row:last-child{border-bottom:none}.row:hover{background:var(--fill)}
-.row:focus-visible{outline:none;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--blue) 55%,transparent)}
+.side-cta,.panel-action{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:8px;font-size:13.5px;font-weight:650;text-decoration:none;color:#fff;background:var(--blue)}
+.side-cta:hover,.panel-action:hover{background:var(--blue2)}
+.panel-action{display:none}
+.stories-panel{min-width:0}
+.card{display:grid;gap:8px}
+.story-row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:8px;align-items:stretch}
+.row-main{display:flex;align-items:center;gap:14px;padding:14px 14px;border:.5px solid var(--hair);border-radius:8px;background:var(--elev);color:inherit;text-decoration:none;transition:background .12s ease,box-shadow .12s ease}
+.row-main:hover{background:linear-gradient(0deg,var(--fill),var(--fill)),var(--elev);box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.row-main:focus-visible,.row-del:focus-visible,.side-cta:focus-visible,.panel-action:focus-visible{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
 .row-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .row-head{display:flex;align-items:center;gap:8px;min-width:0}
 .row-title{font-size:15.5px;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -104,19 +128,37 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.022em;margin:0}
 .chip{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--label);background:var(--chip);padding:2px 7px;border-radius:6px;letter-spacing:0}
 .chip-bad{color:var(--red);background:var(--red-bg)}
 .row-chev{flex:none;color:var(--l3);display:flex;opacity:.5}
-.row:hover .row-chev{opacity:.8}
+.row-main:hover .row-chev{opacity:.8}
 .row-bad .row-sum{color:var(--red)}
+.row-del{width:38px;border:.5px solid var(--hair);border-radius:8px;background:var(--elev);color:var(--l3);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.row-del:hover{background:var(--red-bg);color:var(--red)}
 .empty{margin:8vh auto 0;max-width:440px;text-align:center;padding:0 16px}
-.empty-mark{display:inline-flex;width:66px;height:66px;align-items:center;justify-content:center;border-radius:18px;background:var(--elev);border:.5px solid var(--hair);box-shadow:0 1px 2px rgba(0,0,0,.05);color:var(--blue);margin-bottom:20px}
+.empty-mark{display:inline-flex;width:66px;height:66px;align-items:center;justify-content:center;border-radius:14px;background:var(--elev);border:.5px solid var(--hair);box-shadow:0 1px 2px rgba(0,0,0,.05);color:var(--blue);margin-bottom:20px}
 .empty-title{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .empty-sub{color:var(--l2);font-size:14.5px;line-height:1.5;margin:10px 0 24px}
 .empty-sub b{color:var(--label);font-weight:600}
-.empty-cta{display:inline-flex;align-items:center;height:44px;padding:0 22px;border-radius:11px;font-size:15px;font-weight:600;color:#fff;background:var(--blue);text-decoration:none;box-shadow:0 1px 2px rgba(0,40,120,.18)}
+.empty-cta{display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:8px;font-size:15px;font-weight:600;color:#fff;background:var(--blue);text-decoration:none;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .empty-cta:hover{background:var(--blue2)}
-@media (max-width:560px){.wrap{padding:20px 16px 64px}.row-meta{font-size:12px}}
+@media (max-width:760px){.wrap{padding:24px 16px 64px}.layout{display:block}.side{position:static;min-height:0;margin-bottom:26px}.side-cta{display:none}.panel-action{display:inline-flex}.row-meta{font-size:12px}}
 </style></head>
 <body>
 ${nav}
 <main class="wrap">${body}</main>
+<script>
+(function(){
+  var list=document.getElementById('storyList');if(!list)return;
+  list.addEventListener('click',function(e){
+    var btn=e.target.closest('button[data-delete-story]');if(!btn)return;
+    e.preventDefault();e.stopPropagation();
+    var id=btn.getAttribute('data-delete-story'),title=btn.getAttribute('data-story-title')||id;
+    if(!id||!confirm('Remove "'+title+'" from this repo?'))return;
+    btn.disabled=true;
+    fetch('/api/stories',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({id:id})})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(d){if(!r.ok)throw new Error(d.error||'Could not remove story.');return d;});})
+      .then(function(){var row=btn.closest('.story-row');if(row&&row.parentNode)row.parentNode.removeChild(row);if(!list.querySelector('.story-row'))location.reload();})
+      .catch(function(err){btn.disabled=false;alert(err.message||'Could not remove story.');});
+  });
+})();
+</script>
 </body></html>`;
 }

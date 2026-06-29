@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { addRecent, loadRecents, recordRecent } from '../dist/recents.js';
+import { addRecent, forgetRecent, loadRecents, recordRecent, removeRecent } from '../dist/recents.js';
 
 test('addRecent moves an existing path to the front and dedupes', () => {
   const list = [
@@ -35,6 +35,19 @@ test('loadRecents returns [] for a missing or corrupt file', () => {
   }
 });
 
+test('removeRecent drops only the matching path', () => {
+  const list = [
+    { path: '/a', lastOpened: 1 },
+    { path: '/b', lastOpened: 2 },
+    { path: '/c', lastOpened: 3 },
+  ];
+  assert.deepEqual(removeRecent(list, '/b'), [
+    { path: '/a', lastOpened: 1 },
+    { path: '/c', lastOpened: 3 },
+  ]);
+  assert.deepEqual(removeRecent(list, '/missing'), list);
+});
+
 test('recordRecent round-trips through a temp home', () => {
   const home = mkdtempSync(join(tmpdir(), 'ds-rec-'));
   try {
@@ -43,6 +56,21 @@ test('recordRecent round-trips through a temp home', () => {
     const list = loadRecents(home);
     assert.equal(list[0].path, '/y');
     assert.equal(list[1].path, '/x');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('forgetRecent persists a removed repository', () => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-rec-'));
+  try {
+    recordRecent(home, '/x', 5);
+    recordRecent(home, '/y', 6);
+
+    const next = forgetRecent(home, '/x');
+
+    assert.deepEqual(next, [{ path: '/y', lastOpened: 6 }]);
+    assert.deepEqual(loadRecents(home), [{ path: '/y', lastOpened: 6 }]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

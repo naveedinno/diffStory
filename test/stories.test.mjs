@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { listStories, storyPathForId } from '../dist/stories.js';
+import { deleteStory, listStories, storyPathForId } from '../dist/stories.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-stories-'));
 
@@ -111,6 +111,21 @@ test('storyPathForId only resolves known story ids', () => {
   assert.equal(storyPathForId(repo, 'stories/deeper/b.json'), join(repo, '.diffstory', 'stories', 'deeper', 'b.json'));
   assert.equal(storyPathForId(repo, '../a.json'), null);
   assert.equal(storyPathForId(repo, 'comments.json'), null);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('deleteStory removes only known story files', () => {
+  const repo = tmp();
+  writeStory(repo, 'story.json', 'Primary');
+  writeStory(repo, 'stories/deeper/b.json', 'Nested');
+  writeFileSync(join(repo, '.diffstory', 'comments.json'), '[]');
+
+  assert.equal(deleteStory(repo, 'stories/deeper/b.json'), true);
+  assert.equal(storyPathForId(repo, 'stories/deeper/b.json'), null);
+  assert.equal(deleteStory(repo, '../comments.json'), false);
+  assert.equal(deleteStory(repo, 'comments.json'), false);
+  assert.deepEqual(listStories(repo).map((s) => s.id), ['story.json']);
 
   rmSync(repo, { recursive: true, force: true });
 });

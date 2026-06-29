@@ -14,6 +14,10 @@ export function addRecent(list, path, now, cap = DEFAULT_CAP) {
     const rest = list.filter((e) => e.path !== path);
     return [{ path, lastOpened: now }, ...rest].slice(0, cap);
 }
+/** Pure: remove one path from the recent repositories list. */
+export function removeRecent(list, path) {
+    return list.filter((e) => e.path !== path);
+}
 /** Read the recents list; tolerate a missing or corrupt file by returning []. */
 export function loadRecents(home) {
     const file = recentsFile(home);
@@ -36,6 +40,12 @@ export function saveRecents(home, list) {
 /** Load, push `path` to the front, persist, and return the new list. */
 export function recordRecent(home, path, now) {
     const next = addRecent(loadRecents(home), path, now);
+    saveRecents(home, next);
+    return next;
+}
+/** Load, remove `path`, persist, and return the new list. */
+export function forgetRecent(home, path) {
+    const next = removeRecent(loadRecents(home), path);
     saveRecents(home, next);
     return next;
 }
