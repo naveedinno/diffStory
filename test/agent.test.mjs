@@ -30,6 +30,17 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('Run diffstory check'));
 });
 
+test('storyPrompt requires an intent to flow to implementation story arc', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Narrative arc contract'));
+  assert.ok(p.includes('We wanted to enable'));
+  assert.ok(p.includes('designed the flow'));
+  assert.ok(p.includes('To implement that flow, I first'));
+  assert.ok(p.includes('then wired'));
+  assert.ok(p.includes('intent -> flow -> implementation'));
+  assert.ok(p.includes('not a list of touched files'));
+});
+
 test('storyPrompt asks for a reviewer map and hard quality gates', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('private reviewer map'));
@@ -87,6 +98,16 @@ test('bundled review-tour skill teaches reviewer-first story generation', () => 
   assert.ok(skill.includes('Ranges are review windows, not coverage hacks'));
   assert.ok(skill.includes('Truth audit'));
   assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
+});
+
+test('bundled review-tour skill requires the narrative story arc', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Narrative arc'));
+  assert.ok(skill.includes('We wanted to enable'));
+  assert.ok(skill.includes('designed the flow'));
+  assert.ok(skill.includes('To implement that flow, I first'));
+  assert.ok(skill.includes('intent -> flow -> implementation'));
+  assert.ok(skill.includes('not a list of touched files'));
 });
 
 test('bundled review-tour skill makes deleted-file steps use the changed kind', () => {

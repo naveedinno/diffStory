@@ -95,6 +95,20 @@ Identify:
 Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.
 The story should help them distrust the right places.
 
+### 2.5. Narrative arc
+
+Write the story as intent -> flow -> implementation, not a list of touched files.
+
+- Start from the goal the diff actually supports: "We wanted to enable
+  <actor> to <capability>." If the change is not user-facing, name the real
+  actor from the code, such as reviewer, operator, keeper, service, or system.
+- Then explain the product or runtime shape: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P."
+- Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs."
+- Each step should continue that arc. Explain why this stop exists in the
+  designed flow and what it unlocks next.
+- Do not invent user intent. If the diff only proves a technical refactor, make
+  the goal technical and keep it grounded.
+
 ### 3. Plan the reading path
 
 Make a scratch plan with one row per intended stop:
@@ -181,9 +195,10 @@ Each `why` should answer a reviewer question. In guided mode, use 1-3 short
 first-person sentences. In detailed correctness mode, 3-7 short sentences are
 fine when needed to walk the range line by line:
 
-1. Where this stop sits in the runtime/control/data flow.
+1. Where this stop sits in the designed runtime/control/data flow.
 2. What the old path failed to handle, preserve, reject, or prove.
-3. The exact invariant, edge case, or review question the human should verify.
+3. What this local change unlocks for the next caller, helper, path, or proof.
+4. The exact invariant, edge case, or review question the human should verify.
 
 Good shape:
 
@@ -242,7 +257,7 @@ anchor the range at the post-change deletion location.
 
 ### Reviewability audit
 
-- The summary is the review map: what changed, how to read it, and the one or two places where the reviewer should slow down.
+- The summary is the review map: why we wanted the change, what flow was designed, how to read the implementation, and the one or two places where the reviewer should slow down.
 - The first step should start at the most useful entry point.
 - Every title should name behavior, risk, contract, or invariant, not a file operation.
 - Every `why` should connect previous context, local change, and next implication.
@@ -256,7 +271,7 @@ anchor the range at the post-change deletion location.
   "version": 1,
   "mode": "guided",
   "title": "<short title for the whole change>",
-  "summary": "<1-3 short sentences: what changed + how to walk the story + where to slow down>",
+  "summary": "<1-3 short sentences: what we wanted to enable + the designed flow + how to walk the implementation + where to slow down>",
   "base": "main",
   "head": "feature-branch",
   "steps": [

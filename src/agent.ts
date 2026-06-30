@@ -53,6 +53,13 @@ export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = '
     `- Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +
     `- Identify the behavior this change is really about, the first entry point to read, the control/data flow, ` +
     `the invariants or risks to verify, and which tests/docs/generated files support each behavior.\n\n` +
+    `Narrative arc contract:\n` +
+    `- Write it like an actual story: intent -> flow -> implementation, not a list of touched files.\n` +
+    `- Start the summary from the goal the diff supports: "We wanted to enable <actor> to <capability>". If this is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system.\n` +
+    `- Then explain the product or runtime shape: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P".\n` +
+    `- Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
+    `- Each step should continue that arc. Explain why this stop exists in the designed flow and what it unlocks next.\n` +
+    `- Do not invent user intent. If the diff only proves a technical refactor, make the goal technical and keep it grounded.\n\n` +
     `Reading order contract:\n` +
     `- Start at the entry point a reviewer should inspect first.\n` +
     `- Follow runtime/control/data flow across files, then return to callers when useful.\n` +
@@ -64,11 +71,11 @@ export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = '
     `or rendered; what risk should the reviewer inspect; what proves this path works.\n` +
     `- Titles should read like falsifiable review claims or risks, not file captions.\n\n` +
     `Writing contract:\n` +
-    `- The top-level "summary" is the overview: 1-3 short informal sentences that say what I did in general, ` +
-    `then how the steps walk it.\n` +
+    `- The top-level "summary" is the overview: 1-3 short informal sentences that say what we wanted to enable, ` +
+    `what flow I designed for that, and how the steps walk the implementation.\n` +
     `- Step titles should name the exact behavior or risk being reviewed.\n` +
     `- Each "why" is the story paragraph for that stop: explain what changed here, why the old flow was not enough, ` +
-    `and how this code lets the next caller/helper/path do its job. Keep it to ${whyLength} in first person.\n` +
+    `how this code fits the designed flow, and what the next caller/helper/path can now do. Keep it to ${whyLength} in first person.\n` +
     `- Prefer causal chains like "I added this parameter to method X so method Y can pass Z, which lets H handle...".\n` +
     `- Include what to verify only inside that story, not as a detached checklist.\n` +
     `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
