@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>diffStory Logo Directions</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --canvas: #f5f5f7;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: rgba(0, 0, 0, 0.12);
+      --panel: rgba(255, 255, 255, 0.72);
+      --dark: #1c1c1e;
+      --blue: #007aff;
+      --blue-dark: #0a84ff;
+      --cyan: #64d2ff;
+      --orange: #ff9f0a;
+      --green: #30d158;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      margin: 0;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 48px 22px 64px;
+    }
+
+    .intro {
+      display: grid;
+      gap: 12px;
+      margin: 0 0 34px;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 58px);
+      line-height: 0.98;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .intro p {
+      max-width: 770px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.55;
+    }
+
+    .rule {
+      height: 1px;
+      background: var(--line);
+      margin: 0 0 30px;
+    }
+
+    .directions {
+      display: grid;
+      gap: 24px;
+    }
+
+    .direction {
+      display: grid;
+      gap: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .direction-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .direction-title {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    h2 {
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: #0057d9;
+      background: rgba(0, 122, 255, 0.12);
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .direction-copy {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 780px;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .swatch {
+      min-width: 0;
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .swatch.light {
+      --swatch-ink: #1d1d1f;
+      --swatch-muted: #6e6e73;
+      --mark-ink: #1d1d1f;
+      --mark-accent: #007aff;
+      --mark-secondary: #64d2ff;
+      background: #f5f5f7;
+      color: var(--swatch-ink);
+    }
+
+    .swatch.dark {
+      --swatch-ink: #f5f5f7;
+      --swatch-muted: #aeaeb2;
+      --mark-ink: #f5f5f7;
+      --mark-accent: #0a84ff;
+      --mark-secondary: #64d2ff;
+      background: #1c1c1e;
+      color: var(--swatch-ink);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .swatch-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin: 0 0 14px;
+      color: var(--swatch-muted);
+      font-size: 12px;
+      font-weight: 620;
+      text-transform: uppercase;
+    }
+
+    .samples {
+      display: grid;
+      grid-template-columns: auto auto auto minmax(210px, 1fr);
+      gap: 18px;
+      align-items: center;
+    }
+
+    .sample {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+      min-width: 42px;
+    }
+
+    .sample.inline {
+      justify-items: start;
+      min-width: 0;
+    }
+
+    .sample-label {
+      color: var(--swatch-muted);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .mark {
+      display: block;
+      overflow: visible;
+      flex: none;
+    }
+
+    .mono-mark {
+      color: currentColor;
+    }
+
+    .color-mark {
+      --mark-ink: var(--swatch-ink);
+      --mark-accent: #007aff;
+      --mark-secondary: #64d2ff;
+    }
+
+    .dark .color-mark {
+      --mark-accent: #0a84ff;
+      --mark-secondary: #64d2ff;
+    }
+
+    .app-tile {
+      width: 80px;
+      height: 80px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.24),
+        0 12px 28px rgba(0, 0, 0, 0.18);
+    }
+
+    .tile-thread {
+      background: #007aff;
+    }
+
+    .tile-split {
+      background: #1d1d1f;
+    }
+
+    .tile-spread {
+      background: #e8f2ff;
+    }
+
+    .app-tile .color-mark {
+      --mark-ink: #ffffff;
+      --mark-accent: #ffffff;
+      --mark-secondary: rgba(255, 255, 255, 0.78);
+    }
+
+    .tile-split .color-mark {
+      --mark-ink: #ffffff;
+      --mark-accent: #0a84ff;
+      --mark-secondary: #64d2ff;
+    }
+
+    .tile-spread .color-mark {
+      --mark-ink: #1d1d1f;
+      --mark-accent: #007aff;
+      --mark-secondary: #64d2ff;
+    }
+
+    .lockup {
+      display: inline-flex;
+      gap: 9px;
+      align-items: center;
+      min-width: 0;
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: rgba(128, 128, 128, 0.08);
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: baseline;
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 690;
+      color: var(--swatch-ink);
+      white-space: nowrap;
+    }
+
+    .wordmark .story {
+      color: color-mix(in srgb, var(--swatch-ink) 72%, var(--mark-accent));
+      font-weight: 710;
+    }
+
+    .note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 920px) {
+      .swatches {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        padding: 32px 14px 48px;
+      }
+
+      .direction {
+        padding: 16px;
+      }
+
+      .direction-head {
+        grid-template-columns: 1fr;
+      }
+
+      .samples {
+        grid-template-columns: repeat(3, auto);
+      }
+
+      .sample.inline {
+        grid-column: 1 / -1;
+        margin-top: 2px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="thread-mono" viewBox="0 0 24 24">
+        <path d="M6.6 5.4h8.7c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6H8.8c-2.1 0-3.8 1.7-3.8 3.8s1.7 3.8 3.8 3.8h8.6" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="6.6" cy="5.4" r="2.35" fill="currentColor"/>
+        <circle cx="15.3" cy="12.6" r="2.35" fill="currentColor"/>
+        <circle cx="17.4" cy="20.2" r="2.35" fill="currentColor"/>
+      </symbol>
+
+      <symbol id="thread-color" viewBox="0 0 24 24">
+        <path d="M6.6 5.4h8.7c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6H8.8c-2.1 0-3.8 1.7-3.8 3.8s1.7 3.8 3.8 3.8h8.6" fill="none" stroke="var(--mark-accent)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="6.6" cy="5.4" r="2.35" fill="var(--mark-ink)"/>
+        <circle cx="15.3" cy="12.6" r="2.35" fill="var(--mark-secondary)"/>
+        <circle cx="17.4" cy="20.2" r="2.35" fill="var(--mark-ink)"/>
+      </symbol>
+
+      <symbol id="split-mono" viewBox="0 0 24 24">
+        <path d="M6.2 4.6h5.9c4.3 0 7.4 3.1 7.4 7.4s-3.1 7.4-7.4 7.4H6.2V4.6Z" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linejoin="round"/>
+        <path d="M10.3 9.1h5.3M10.3 14.9h4.5" fill="none" stroke="currentColor" stroke-width="2.55" stroke-linecap="round"/>
+      </symbol>
+
+      <symbol id="split-color" viewBox="0 0 24 24">
+        <path d="M6.2 4.6h5.9c4.3 0 7.4 3.1 7.4 7.4s-3.1 7.4-7.4 7.4H6.2V4.6Z" fill="none" stroke="var(--mark-ink)" stroke-width="2.75" stroke-linejoin="round"/>
+        <path d="M10.3 9.1h5.3M10.3 14.9h4.5" fill="none" stroke="var(--mark-accent)" stroke-width="2.55" stroke-linecap="round"/>
+      </symbol>
+
+      <symbol id="spread-mono" viewBox="0 0 24 24">
+        <path d="M9 4.7H4.7v14.6H9M15 4.7h4.3v14.6H15" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7.6 8.2h2.7M7.6 12h2.7M7.6 15.8h2.7M13.7 8.2h2.7M13.7 12h2.7M13.7 15.8h2.7" fill="none" stroke="currentColor" stroke-width="1.95" stroke-linecap="round"/>
+        <circle cx="12" cy="4.8" r="1.05" fill="currentColor"/>
+        <circle cx="12" cy="8.4" r="1.05" fill="currentColor"/>
+        <circle cx="12" cy="12" r="1.05" fill="currentColor"/>
+        <circle cx="12" cy="15.6" r="1.05" fill="currentColor"/>
+        <circle cx="12" cy="19.2" r="1.05" fill="currentColor"/>
+      </symbol>
+
+      <symbol id="spread-color" viewBox="0 0 24 24">
+        <path d="M9 4.7H4.7v14.6H9M15 4.7h4.3v14.6H15" fill="none" stroke="var(--mark-ink)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7.6 8.2h2.7M7.6 12h2.7M7.6 15.8h2.7M13.7 8.2h2.7M13.7 12h2.7M13.7 15.8h2.7" fill="none" stroke="var(--mark-ink)" stroke-width="1.95" stroke-linecap="round"/>
+        <circle cx="12" cy="4.8" r="1.05" fill="var(--mark-accent)"/>
+        <circle cx="12" cy="8.4" r="1.05" fill="var(--mark-accent)"/>
+        <circle cx="12" cy="12" r="1.05" fill="var(--mark-secondary)"/>
+        <circle cx="12" cy="15.6" r="1.05" fill="var(--mark-accent)"/>
+        <circle cx="12" cy="19.2" r="1.05" fill="var(--mark-accent)"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <main class="page">
+    <header class="intro">
+      <h1>diffStory logo directions</h1>
+      <p>Three simple SVG marks built for the same real surface area: 16px favicon, macOS-style app tile, and a small top-nav lockup. Each direction includes a monochrome currentColor mark and a solid-color version for light and dark contexts.</p>
+    </header>
+
+    <div class="rule"></div>
+
+    <section class="directions" aria-label="Logo directions">
+      <article class="direction">
+        <div class="direction-head">
+          <div>
+            <div class="direction-title">
+              <h2>01. Thread Path</h2>
+              <span class="tag">selected</span>
+            </div>
+            <p class="direction-copy">A calm reading route through a change: three stable points connected by one continuous path. This is the clearest fit for diffStory because it makes the guided reading order feel native, friendly, and precise.</p>
+          </div>
+        </div>
+
+        <div class="swatches">
+          <div class="swatch light">
+            <div class="swatch-label"><span>Light #f5f5f7</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#thread-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#thread-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-thread">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#thread-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#thread-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="swatch dark">
+            <div class="swatch-label"><span>Dark #1c1c1e</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#thread-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#thread-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-thread">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#thread-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#thread-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction">
+        <div class="direction-head">
+          <div>
+            <div class="direction-title">
+              <h2>02. Split d</h2>
+            </div>
+            <p class="direction-copy">A compact lowercase-d container with two quiet diff rows inside. It is the most ownable candidate: product-name memory, diff structure, and favicon legibility all collapse into one simple silhouette.</p>
+          </div>
+        </div>
+
+        <div class="swatches">
+          <div class="swatch light">
+            <div class="swatch-label"><span>Light #f5f5f7</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#split-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#split-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-split">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#split-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#split-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="swatch dark">
+            <div class="swatch-label"><span>Dark #1c1c1e</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#split-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#split-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-split">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#split-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#split-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction">
+        <div class="direction-head">
+          <div>
+            <div class="direction-title">
+              <h2>03. Review Spread</h2>
+            </div>
+            <p class="direction-copy">A reference-informed review spread: two diff columns held by quiet brackets, with the story order running down the center spine. It keeps the code-review signal explicit while staying geometric enough for small sizes.</p>
+          </div>
+        </div>
+
+        <div class="swatches">
+          <div class="swatch light">
+            <div class="swatch-label"><span>Light #f5f5f7</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#spread-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#spread-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-spread">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#spread-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#spread-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="swatch dark">
+            <div class="swatch-label"><span>Dark #1c1c1e</span><span>mono + color</span></div>
+            <div class="samples">
+              <div class="sample">
+                <svg class="mark mono-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#spread-mono"></use></svg>
+                <span class="sample-label">16 mono</span>
+              </div>
+              <div class="sample">
+                <svg class="mark color-mark" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><use href="#spread-color"></use></svg>
+                <span class="sample-label">32 color</span>
+              </div>
+              <div class="sample">
+                <div class="app-tile tile-spread">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="52" height="52" aria-hidden="true"><use href="#spread-color"></use></svg>
+                </div>
+                <span class="sample-label">app tile</span>
+              </div>
+              <div class="sample inline">
+                <div class="lockup">
+                  <svg class="mark color-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#spread-color"></use></svg>
+                  <span class="wordmark"><span>diff</span><span class="story">Story</span></span>
+                </div>
+                <span class="sample-label">inline wordmark</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <p class="note">All marks are inline SVG only, with no external assets, no raster images, no web fonts, no scripts, and no gradients. The monochrome symbols use a single currentColor; color versions use solid Apple-system-friendly colors.</p>
+  </main>
+</body>
+</html>
