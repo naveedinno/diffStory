@@ -406,8 +406,14 @@ ${nav}
   }
   function commitOptions(list){
     return (list||refData.commits||[]).map(function(c){
-      return option(c.sha,c.sha,c.subject||c.refs||'commit','commit');
+      return option(c.sha,c.sha,commitMeta(c),'commit');
     });
+  }
+  function commitMeta(c){
+    var subject=c.subject||c.refs||'commit';
+    var when=c.committedAtLabel||c.committedAt||'';
+    var rel=c.committedAtRelative||'';
+    return [when,rel,subject].filter(Boolean).join(' · ');
   }
   function refOptions(){
     return [option('HEAD','HEAD','current HEAD','head')].concat(branchOptions(),commitOptions());

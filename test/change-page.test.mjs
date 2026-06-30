@@ -127,8 +127,8 @@ test('commit picker shows commits when the current value is HEAD', async () => {
         current: 'main',
         branches: [],
         commits: [
-          { sha: 'abc1234', subject: 'First commit' },
-          { sha: 'def5678', subject: 'Second commit' },
+          { sha: 'abc1234', subject: 'First commit', committedAtLabel: '2026-06-30 14:34', committedAtRelative: '2h ago' },
+          { sha: 'def5678', subject: 'Second commit', committedAtLabel: '2026-06-29 09:12', committedAtRelative: '1d ago' },
         ],
       }),
     }),
@@ -155,6 +155,9 @@ test('commit picker shows commits when the current value is HEAD', async () => {
 
   const values = picker.children.map((row) => row.attrs['data-value']);
   assert.deepEqual(values.slice(0, 3), ['HEAD', 'abc1234', 'def5678']);
+  const metas = picker.children.map((row) => row.children[1].textContent);
+  assert.equal(metas[1], '2026-06-30 14:34 · 2h ago · First commit');
+  assert.equal(metas[2], '2026-06-29 09:12 · 1d ago · Second commit');
 });
 
 test('renderChangePage shows a notice banner and the agent + model picker', () => {

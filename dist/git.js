@@ -131,7 +131,7 @@ export function listBranchRefs(repo) {
     })
         .filter((b) => !!b);
 }
-/** Commits as {sha, subject}, newest first. For the picker. Pass n <= 0 for all. */
+/** Commits as {sha, subject, committedAt}, newest first. For the picker. Pass n <= 0 for all. */
 export function listRecentCommits(repo, n = 15, ref) {
     const args = ['log'];
     if (ref === '--all')
@@ -140,7 +140,7 @@ export function listRecentCommits(repo, n = 15, ref) {
         args.push(ref);
     if (n > 0)
         args.push(`-${n}`);
-    args.push('--no-merges', '--pretty=format:%h%x09%s%x09%D');
+    args.push('--no-merges', '--pretty=format:%h%x09%cI%x09%s%x09%D');
     const out = tryGit(repo, args);
     if (!out)
         return [];
@@ -148,9 +148,46 @@ export function listRecentCommits(repo, n = 15, ref) {
         .split('\n')
         .filter(Boolean)
         .map((line) => {
-        const [sha, subject = '', refs = ''] = line.split('\t');
-        return { sha, subject, refs };
+        const [sha, committedAt = '', subject = '', refs = ''] = line.split('\t');
+        return {
+            sha,
+            committedAt,
+            committedAtLabel: commitTimeLabel(committedAt),
+            committedAtRelative: relativeCommitTime(committedAt),
+            subject,
+            refs,
+        };
     });
+}
+function commitTimeLabel(iso) {
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}` : '';
+}
+function relativeCommitTime(iso, now = Date.now()) {
+    const then = Date.parse(iso);
+    if (!Number.isFinite(then))
+        return '';
+    const seconds = Math.max(0, Math.floor((now - then) / 1000));
+    if (seconds < 45)
+        return 'just now';
+    if (seconds < 90)
+        return '1m ago';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60)
+        return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24)
+        return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7)
+        return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5)
+        return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12)
+        return `${months}mo ago`;
+    return `${Math.floor(days / 365)}y ago`;
 }
 /** Current branch name, or null when detached. */
 export function currentBranch(repo) {

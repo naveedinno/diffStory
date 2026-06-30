@@ -130,10 +130,15 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.ok(Array.isArray(refs.commits));
     assert.ok(refs.commits.length > 80, 'ref picker exposes every commit, not only a capped recent list');
     assert.ok(refs.branches.every((b) => typeof b === 'object' && typeof b.name === 'string'), 'branches include picker metadata');
+    assert.match(refs.commits[0].committedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/, 'commits expose ISO commit time');
+    assert.match(refs.commits[0].committedAtLabel, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'commits expose compact picker time');
+    assert.match(refs.commits[0].committedAtRelative, /^(just now|\d+[mhdw] ago|\d+mo ago|\d+y ago)$/, 'commits expose relative picker time');
 
     const scopedCommits = await (await fetch(`${base}/api/commits?ref=${encodeURIComponent('HEAD')}`)).json();
     assert.ok(Array.isArray(scopedCommits.commits), 'can fetch commits for a specific ref');
     assert.ok(scopedCommits.commits.length > 80, 'returns every commit reachable from the selected ref');
+    assert.match(scopedCommits.commits[0].committedAtLabel, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    assert.match(scopedCommits.commits[0].committedAtRelative, /^(just now|\d+[mhdw] ago|\d+mo ago|\d+y ago)$/);
 
     const recent = await (await fetch(`${base}/api/repos/recent`)).json();
     assert.ok(recent.some((r) => r.path === repo));
