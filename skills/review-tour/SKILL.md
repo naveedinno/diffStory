@@ -19,6 +19,8 @@ not hide behind a changelog.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
 - Set `base` to the ref you diffed against. Set `head` only for fixed `base..head` stories.
 - Every changed hunk must be claimed by a `changed` or `new-file` step.
+- Never use "deleted" as a step kind. For deleted files, use kind "changed"
+  and anchor the range at the post-change deletion location.
 - `range` uses post-change, 1-based inclusive line numbers.
 - Optional `focus.ranges` uses post-change, 1-based inclusive line numbers inside that step's `range`.
 - `context` is only for unchanged code that helps the reviewer understand a changed path.
@@ -218,6 +220,8 @@ Before writing `.diffstory/story.json`, build a private coverage ledger from the
 exact diff: file, changed hunk range, semantic purpose, and planned step id.
 Every changed hunk must appear in the ledger and must be claimed by a
 `changed` or `new-file` step. Context steps never count as coverage.
+Never use "deleted" as a step kind. For deleted files, use kind "changed" and
+anchor the range at the post-change deletion location.
 
 ### Range audit
 

@@ -41,6 +41,13 @@ test('storyPrompt asks for a reviewer map and hard quality gates', () => {
   assert.ok(p.includes('Do not claim tests pass unless you ran them'));
 });
 
+test('storyPrompt makes deleted-file steps use the changed kind', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Never use "deleted" as a step kind'));
+  assert.ok(p.includes('For deleted files, use kind "changed"'));
+  assert.ok(p.includes('anchor the range at the post-change deletion location'));
+});
+
 test('storyPrompt teaches explicit read-aloud focus targets', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('Focus pointer contract'));
@@ -80,6 +87,13 @@ test('bundled review-tour skill teaches reviewer-first story generation', () => 
   assert.ok(skill.includes('Ranges are review windows, not coverage hacks'));
   assert.ok(skill.includes('Truth audit'));
   assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
+});
+
+test('bundled review-tour skill makes deleted-file steps use the changed kind', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Never use "deleted" as a step kind'));
+  assert.ok(skill.includes('For deleted files, use kind "changed"'));
+  assert.ok(skill.includes('anchor the range at the post-change deletion location'));
 });
 
 test('bundled review-tour skill teaches explicit read-aloud focus targets', () => {

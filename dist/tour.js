@@ -59,11 +59,26 @@ export function loadTour(path) {
     catch (e) {
         throw new TourError(`${path} is not valid JSON: ${e.message}`);
     }
+    canonicalizeStepKindAliases(parsed);
     const errors = validateTour(parsed);
     if (errors.length) {
         throw new TourError(`${path} is not a valid story:\n  - ${errors.join('\n  - ')}`);
     }
     return parsed;
+}
+function canonicalizeStepKindAliases(obj) {
+    if (typeof obj !== 'object' || obj === null)
+        return;
+    const steps = obj.steps;
+    if (!Array.isArray(steps))
+        return;
+    for (const s of steps) {
+        if (typeof s !== 'object' || s === null)
+            continue;
+        const step = s;
+        if (step.kind === 'deleted')
+            step.kind = 'changed';
+    }
 }
 export function validateTour(obj) {
     const errors = [];

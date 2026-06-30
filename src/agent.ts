@@ -84,6 +84,7 @@ export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = '
     `- Before writing ${DATA_DIR}/story.json, build a private coverage ledger: file, changed hunk range, semantic ` +
     `purpose, and planned step id.\n` +
     `- Cover every changed hunk with a changed/new-file step.\n` +
+    `- Never use "deleted" as a step kind. For deleted files, use kind "changed" and anchor the range at the post-change deletion location that "diffstory check" reports.\n` +
     `- Use context steps only for unchanged code that makes the review easier.\n` +
     `- Run diffstory check and adjust the story until the coverage gate is clean.\n\n` +
     `Range contract:\n` +

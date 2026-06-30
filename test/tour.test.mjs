@@ -1,7 +1,10 @@
 // Unit tests for tour validation. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateTour } from '../dist/tour.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadTour, validateTour } from '../dist/tour.js';
 
 test('a well-formed tour has no errors', () => {
   const errs = validateTour({
@@ -12,6 +15,25 @@ test('a well-formed tour has no errors', () => {
     steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
   });
   assert.deepEqual(errs, []);
+});
+
+test('loadTour canonicalizes deleted step kind to changed', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-tour-'));
+  const path = join(repo, 'story.json');
+  writeFileSync(
+    path,
+    JSON.stringify({
+      version: 1,
+      title: 'T',
+      summary: '',
+      steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'deleted', why: 'w' }],
+    }),
+  );
+
+  const tour = loadTour(path);
+  assert.equal(tour.steps[0].kind, 'changed');
+
+  rmSync(repo, { recursive: true, force: true });
 });
 
 test('accepts an optional narrow read-aloud focus target inside the step range', () => {

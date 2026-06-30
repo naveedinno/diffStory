@@ -484,6 +484,37 @@ function tailLines(s, n) {
 function nowMs() {
     return Date.now();
 }
+export function finishStoryGeneration(r, storyPath, session) {
+    const storyWritten = existsSync(storyPath);
+    const events = [];
+    let status = 'complete';
+    if (storyWritten) {
+        try {
+            loadTour(storyPath);
+            session.selectedStory = storyPath;
+            session.chooseStory = false;
+            return { status, result: { storyWritten, storyValid: true }, events };
+        }
+        catch (e) {
+            events.push(errorEvent('validation', 'The generated story is invalid', e.message));
+            status = 'failed';
+            return { status, result: { storyWritten, storyValid: false }, events };
+        }
+    }
+    if (r.failure === 'startup') {
+        events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
+        status = 'failed';
+    }
+    else if (!r.ok) {
+        events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
+        status = 'failed';
+    }
+    else {
+        events.push(errorEvent('output_missing', 'No story was written', 'The agent finished but .diffstory/story.json is missing. Check the raw output below.'));
+        status = 'failed';
+    }
+    return { status, result: { storyWritten, storyValid: false }, events };
+}
 /**
  * The shared spine for every agent workflow: emit run_started → context → app
  * phases, stream normalized agent events (advancing phases monotonically on real
@@ -727,30 +758,7 @@ function runGenerate(res, session, body) {
         },
         // For generate, the output is the story file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
-        finish: (r) => {
-            // Branch order matters: success (story written) short-circuits before we
-            // stage a failure, so startup/execution/output_missing only run when no story landed.
-            const storyWritten = existsSync(storyPath);
-            const events = [];
-            let status = 'complete';
-            if (storyWritten) {
-                session.selectedStory = storyPath;
-                session.chooseStory = false;
-            }
-            else if (r.failure === 'startup') {
-                events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
-                status = 'failed';
-            }
-            else if (!r.ok) {
-                events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
-                status = 'failed';
-            }
-            else {
-                events.push(errorEvent('output_missing', 'No story was written', 'The agent finished but .diffstory/story.json is missing. Check the raw output below.'));
-                status = 'failed';
-            }
-            return { status, result: { storyWritten }, events };
-        },
+        finish: (r) => finishStoryGeneration(r, storyPath, session),
     });
 }
 function readBody(req, done) {
