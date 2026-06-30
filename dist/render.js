@@ -396,7 +396,7 @@ function stepPanel(repo, s, i, total, comments) {
     <div class="ds-diffscroll">
       <div class="ds-diff" data-diff data-file="${esc(s.file)}"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
-          <span class="ds-difthint" data-difthint>Showing only the lines this step touches</span>
+          <span class="ds-difthint" data-difthint>Showing storyteller-selected viewport</span>
           <div class="ds-modetoggle">
             <button class="is-active" data-mode="diff">Diff</button>
             <button data-mode="full">Full file</button>

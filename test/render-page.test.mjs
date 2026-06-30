@@ -1,6 +1,9 @@
 // Unit tests for the rendered review page shell. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { renderPage } from '../dist/render.js';
 
 const tour = {
@@ -351,6 +354,70 @@ test('explicit story focus narrows which rows are highlighted during read aloud'
   const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
   assert.match(html, /data-line="2" data-step="s1" data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="1" data-step="s1" data-step-focus=/);
+});
+
+test('story viewport controls visible code while highlights control narration focus', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-viewport-'));
+  writeFileSync(
+    join(repo, 'a.ts'),
+    [
+      'function settleFee(input) {',
+      '  const account = input.account;',
+      '  const amount = input.amount;',
+      '  const feeBps = input.feeBps;',
+      '  storeFee(account, feeBps);',
+      '  return settle(account, amount);',
+      '}',
+    ].join('\n'),
+  );
+
+  const viewportTour = {
+    version: 1,
+    title: 'Viewport tour',
+    summary: 'Show the whole method, talk about the fee lines.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Settlement fee enters the method',
+        file: 'a.ts',
+        range: [4, 5],
+        viewport: [1, 7],
+        highlights: [[4, 5]],
+        kind: 'changed',
+        why: 'We wanted the fee to enter settlement with the rest of the user input.',
+      },
+    ],
+  };
+  const viewportFiles = [
+    {
+      oldPath: 'a.ts',
+      newPath: 'a.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 4,
+          oldLines: 0,
+          newStart: 4,
+          newLines: 2,
+          lines: [
+            { type: 'add', content: '  const feeBps = input.feeBps;', newNo: 4 },
+            { type: 'add', content: '  storeFee(account, feeBps);', newNo: 5 },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const html = renderPage({ repo, tour: viewportTour, files: viewportFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /settleFee/);
+  assert.match(html, /settle<\/span>\(account, amount\)/);
+  assert.match(html, /data-line="4" data-step="s1" data-step-focus="0"/);
+  assert.match(html, /data-line="5" data-step="s1" data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="2" data-step="s1" data-step-focus=/);
+  assert.match(html, /storyteller-selected viewport/i);
+
+  rmSync(repo, { recursive: true, force: true });
 });
 
 test('multiple story focus ranges are rendered as separate read-aloud groups', () => {

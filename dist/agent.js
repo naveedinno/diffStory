@@ -48,9 +48,16 @@ export function storyPrompt(baseRef, headRef, mode = 'guided') {
         `- Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
         `- Each step should continue that arc. Explain why this stop exists in the designed flow and what it unlocks next.\n` +
         `- Do not invent user intent. If the diff only proves a technical refactor, make the goal technical and keep it grounded.\n\n` +
+        `Viewport contract:\n` +
+        `- Every step must include "viewport": [startLine, endLine]. This is what the reviewer sees, chosen from the requirement and the code shape, not from the tiny diff hunk.\n` +
+        `- Every step must include "highlights": [[startLine, endLine], ...]. These are the lines the story is currently talking about and the rows diffStory should glow while reading.\n` +
+        `- Pick the viewport first: usually the whole method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement.\n` +
+        `- Pick highlights second: the exact fee field, parameter, branch, guard, call, state write, assertion, or return path being discussed inside that viewport.\n` +
+        `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
+        `- Keep "range" as the changed-line coverage anchor for diffstory check. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
         `Reading order contract:\n` +
-        `- Start at the entry point a reviewer should inspect first.\n` +
-        `- Follow runtime/control/data flow across files, then return to callers when useful.\n` +
+        `- Start where someone who just read the requirement should start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes the requirement real.\n` +
+        `- Follow the requirement's implementation flow across files, then return to callers when useful.\n` +
         `- Group related edits into one stop; do not emit one step per file or one step per hunk.\n` +
         `- Put tests, snapshots, docs, and generated files after the behavior they verify or explain.\n\n` +
         `Reviewer question contract:\n` +
@@ -91,12 +98,10 @@ export function storyPrompt(baseRef, headRef, mode = 'guided') {
         `- For pure deletions, anchor the step at the post-change location where the deletion happened and include the ` +
         `smallest surrounding code that explains the removed behavior.\n\n` +
         `Focus pointer contract:\n` +
-        `- The rendered page highlights code while the story is read aloud. Use optional "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} when the spoken point is narrower than the review window.\n` +
-        `- "focus.ranges" must use post-change line numbers and stay inside that step's "range".\n` +
-        `- The focus can be one or two lines when that is what the sentence is talking about; point to the exact guard, call, assertion, state write, or branch, not the whole displayed section.\n` +
-        `- In guided mode, add focus only for the exact line or tiny block the reviewer should look at while listening.\n` +
-        `- In detailed mode, prefer narrow focus ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n` +
-        `- If the whole step range is the right thing to point at, omit "focus"; diffStory will highlight the step range automatically.\n\n` +
+        `- Prefer "highlights" for new stories. "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} is the legacy spelling and should only be used for compatibility.\n` +
+        `- Highlight ranges must use post-change line numbers and stay inside that step's "viewport".\n` +
+        `- In guided mode, highlight only the exact line or tiny block the reviewer should look at while listening.\n` +
+        `- In detailed mode, use multiple highlight ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n\n` +
         `Truth contract:\n` +
         `- Only describe behavior you verified in the diff or current source lines you read.\n` +
         `- Do not infer intent from branch names, filenames, or vibes.\n` +

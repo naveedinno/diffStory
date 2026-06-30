@@ -17,7 +17,7 @@ export type StoryMode =
   | 'guided' // concise review path: enough context to read the diff in the right order
   | 'detailed'; // correctness audit: longer, code-path and line-level explanation
 
-/** Optional read-aloud pointer inside a step's wider review window. */
+/** Optional legacy read-aloud pointer inside a step's wider review window. */
 export interface StepFocusTarget {
   /** Inclusive post-change line ranges to glow while this step is being read aloud. */
   ranges: Array<[number, number]>;
@@ -35,9 +35,13 @@ export interface TourStep {
   title: string;
   /** Repo-relative path of the file this step shows. */
   file: string;
-  /** Inclusive line range in the *post-change* file, [start, end] (1-based). */
+  /** Inclusive changed-line coverage anchor in the *post-change* file, [start, end] (1-based). */
   range: [number, number];
-  /** Optional narrower post-change line range(s) to point at while reading aloud. */
+  /** Inclusive visible review window the storyteller wants the diff viewer to show. */
+  viewport?: [number, number];
+  /** Inclusive post-change line ranges inside viewport that the narration is currently discussing. */
+  highlights?: Array<[number, number]>;
+  /** Optional legacy narrower post-change line range(s) to point at while reading aloud. */
   focus?: StepFocusTarget;
   kind: StepKind;
   /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */

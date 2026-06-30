@@ -21,8 +21,13 @@ not hide behind a changelog.
 - Every changed hunk must be claimed by a `changed` or `new-file` step.
 - Never use "deleted" as a step kind. For deleted files, use kind "changed"
   and anchor the range at the post-change deletion location.
-- `range` uses post-change, 1-based inclusive line numbers.
-- Optional `focus.ranges` uses post-change, 1-based inclusive line numbers inside that step's `range`.
+- `range` uses post-change, 1-based inclusive line numbers as the changed-line
+  coverage anchor for `diffstory check`.
+- `viewport` uses post-change, 1-based inclusive line numbers as the visible
+  review window the diff viewer should show.
+- `highlights` uses post-change, 1-based inclusive line ranges inside
+  `viewport`; these are the lines the story is currently talking about.
+- Optional `focus.ranges` is the legacy spelling for `highlights`.
 - `context` is only for unchanged code that helps the reviewer understand a changed path.
 - Do not reproduce code in the story. diffStory pulls code from git.
 
@@ -87,7 +92,7 @@ include this map in the file.
 Identify:
 
 - the behavior this change is really about;
-- the first entry point a reviewer should inspect;
+- the first requirement-backed place a reviewer should inspect;
 - the control/data flow from that entry point through helpers, state, UI, side effects, or external boundaries;
 - the invariants, edge cases, unknowns, or risks the reviewer should keep in mind;
 - which tests, docs, snapshots, or generated files support each behavior.
@@ -119,7 +124,9 @@ step | role | file:range | kind | leads to | reason this stop exists
 
 Plan by code logic, not filenames:
 
-- Start where the behavior enters the system: endpoint, handler, command, public method, migration entry, UI interaction, or protocol call.
+- Start where someone who just read the requirement should start: the new field,
+  fee, storage struct, setting, endpoint, UI affordance, or public method that
+  makes the requirement real.
 - Follow runtime/control/data flow across files. When you dive into a helper, return to the caller if that helps the reader.
 - Put definitions before repeated uses when the definition makes later steps readable.
 - Put core behavior before glue, adapters, docs, generated files, snapshots, and tests.
@@ -130,30 +137,56 @@ Plan by code logic, not filenames:
 A good path reads like: "Start here, jump into the helper this calls, come back
 for the boundary handling, then inspect the tests that pin it."
 
-### 4. Choose tight ranges
+### 4. Choose viewport and highlighted lines
 
-Each step should show the smallest useful review unit:
+Each step must choose what the reviewer sees before choosing the exact lines the
+story is talking about.
+
+Viewport contract:
+
+- `viewport` is what the reviewer sees. Choose it from the requirement and the
+  code shape, not from the tiny diff hunk.
+- Use the whole method, storage struct, schema block, config stanza, test case,
+  or small file section when that is what makes the requirement understandable.
+- It is fine for `viewport` to be much wider than the changed lines.
+- Avoid whole-file viewports unless the whole file is genuinely new and small,
+  or the whole file is truly the review unit.
+
+Highlighted-line contract:
+
+- `highlights` are the lines the story is currently talking about and the rows
+  diffStory should glow while reading.
+- Keep every highlight range inside `viewport`.
+- Use one range for a single field/write/guard/call/assertion, and multiple
+  ranges when the sentence moves across small related sections.
+- If the whole viewport is the point, `highlights` may match `viewport`, but do
+  that intentionally.
+
+Coverage anchor contract:
 
 - Prefer a function, method, branch, schema block, test case, or config stanza.
 - Include enough surrounding lines that the hunk makes sense.
-- Avoid whole-file ranges unless the whole file is genuinely new and small, or the whole file is truly the review unit.
+- Keep `range` as the changed-line coverage anchor for `diffstory check`; do
+  not use it as the display-window control.
 - For deletion-heavy hunks, anchor to the post-change line where the deletion happened and include the smallest surrounding code that explains the removed behavior.
 - If a hunk spans unrelated behavior, create separate steps.
 
-Ranges are review windows, not coverage hacks.
+`viewport` is the review window. `highlights` are what the narrator is pointing
+at. `range` is the coverage hook.
 
 ### 4.5. Add precise read-aloud focus when useful
 
-diffStory can glow the exact code while the story is read aloud. The step
-`range` is still the review window, but optional `focus.ranges` tells the reader
-what line or tiny block to point at during narration.
+diffStory can glow the exact code while the story is read aloud. New stories
+should use `highlights`; `focus.ranges` remains accepted for old stories.
+Legacy `"focus": {"ranges": [[startLine, endLine]]}` is still accepted, but do
+not prefer it for new stories.
 
 Focus pointer contract:
 
-- Use `"focus": {"ranges": [[startLine, endLine]], "label": "short cue"}` only
-  when the spoken point is narrower than the step range.
+- Prefer `"highlights": [[startLine, endLine]]` for the lines the story is
+  currently talking about.
 - `focus.ranges` must use post-change line numbers and stay inside that step's
-  `range`.
+  `viewport` when present, or `range` for legacy stories.
 - The focus can be one or two lines when that is what the sentence is talking
   about; point to the exact guard, call, assertion, state write, or branch, not the whole displayed section.
 - In guided mode, add focus only for the exact line or tiny block the reviewer
@@ -167,7 +200,10 @@ Focus pointer contract:
 
 Each step has:
 
-- `file` + `range`: the post-change location to show.
+- `file` + `range`: the changed-line coverage anchor.
+- `viewport`: the post-change window the diff viewer should show.
+- `highlights`: the post-change lines inside `viewport` that the narration is
+  currently discussing.
 - `kind`: `changed`, `new-file`, or `context`.
 - `title`: a sidebar-readable review claim, behavior, invariant, or risk.
 - `why`: the story note for the stop.
@@ -238,12 +274,16 @@ Every changed hunk must appear in the ledger and must be claimed by a
 Never use "deleted" as a step kind. For deleted files, use kind "changed" and
 anchor the range at the post-change deletion location.
 
-### Range audit
+### Range and viewport audit
 
-- Read the post-change file with line numbers before choosing a range.
+- Read the post-change file with line numbers before choosing `range`,
+  `viewport`, and `highlights`.
 - `changed` and `new-file` ranges must overlap real changed ranges.
 - `context` ranges must be unchanged and must not be used to satisfy coverage.
 - Do not use whole-file or giant ranges just to pass `diffstory check`.
+- `viewport` should include enough surrounding code that a reviewer who just
+  read the requirement understands where the highlighted lines live.
+- `highlights` must stay inside `viewport`.
 - Use `newPath` for renamed files.
 
 ### Truth audit
@@ -252,7 +292,7 @@ anchor the range at the post-change deletion location.
 - Do not infer intent from branch names, filenames, or vibes.
 - Do not invent runtime behavior, product semantics, test results, or safety claims.
 - Do not claim tests pass unless you ran them.
-- Do not claim a test covers behavior unless the assertion is visible in the story range or in code you read.
+- Do not claim a test covers behavior unless the assertion is visible in the story viewport or in code you read.
 - If you are uncertain, narrow the claim to what the code shows.
 
 ### Reviewability audit
@@ -280,8 +320,9 @@ anchor the range at the post-change deletion location.
       "order": 1,
       "title": "Entry point: settleFunding() clamps before settlement",
       "file": "contracts/Funding.sol",
-      "range": [120, 145],
-      "focus": { "ranges": [[128, 132]], "label": "clamp before balance mutation" },
+      "range": [128, 132],
+      "viewport": [120, 145],
+      "highlights": [[128, 132]],
       "kind": "changed",
       "why": "Start here: the keeper reaches this path each epoch. I clamp the rate before settlement hands off to the math helper because the old path let over-cap values travel too far. Check that this happens before any balance mutation.",
       "calls": ["s2"],
@@ -293,6 +334,8 @@ anchor the range at the post-change deletion location.
       "title": "Helper: _capRate() owns the boundary rule",
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
+      "viewport": [40, 58],
+      "highlights": [[48, 52]],
       "kind": "new-file",
       "why": "Pause here: settleFunding() lands here after choosing the market cap. I keep the helper small so both callers use the same inclusive boundary; the review focus is the require that makes the unchecked math safe.",
       "returnsTo": "s1"

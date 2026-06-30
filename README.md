@@ -124,8 +124,8 @@ commit/tag `--base v1.2.0` · between two refs `--base main --head feature` · a
 `.diffstory/story.json` is authored by the agent: **order and narrative only, never code.**
 Generation has two story modes: **Guided review** keeps the current concise walkthrough, while
 **Detailed audit** writes a longer correctness-review story that walks important code paths and
-ranges line by line. Steps may also include optional `focus.ranges` to point the read-aloud
-highlight at a narrower line or block inside the displayed range.
+ranges line by line. Each step can declare a `viewport` for what the reviewer should see and
+`highlights` for the exact lines the narration is talking about.
 
 ```jsonc
 {
@@ -135,18 +135,19 @@ highlight at a narrower line or block inside the displayed range.
   "summary": "We wanted users to get a clear rejection before an over-cap order reaches placement. I designed the flow so createOrder() stops the request first, then hands the limit math to one helper; read that path, then the proof.",
   "steps": [
     { "id": "s1", "order": 1, "title": "createOrder() now checks the limit", "file": "src/api.ts",
-      "range": [1, 16], "focus": { "ranges": [[4, 7]], "label": "limit guard" },
+      "range": [4, 7], "viewport": [1, 16], "highlights": [[4, 7]],
       "kind": "changed", "why": "Start here: this is the flow users hit when they place an order. I first put the guard before placement so rejected orders stop at the door, then I pass the cap check to the helper in the next step.", "calls": ["s2"] },
     { "id": "s2", "order": 2, "title": "checkSpendingLimit()", "file": "src/limits.ts",
-      "range": [1, 11], "kind": "new-file", "why": "Pause here: this is the helper that owns the boundary rule. I wired the cap math here so createOrder() can stay focused on flow control while this function answers the one limit question.", "returnsTo": "s1" }
+      "range": [1, 11], "viewport": [1, 11], "highlights": [[4, 8]], "kind": "new-file", "why": "Pause here: this is the helper that owns the boundary rule. I wired the cap math here so createOrder() can stay focused on flow control while this function answers the one limit question.", "returnsTo": "s1" }
   ]
 }
 ```
 
 `kind` is `changed` (show the real hunk), `new-file`, or `context` (unchanged code the reader needs
-— like a callee you didn't touch). `focus.ranges` is optional and uses post-change line numbers
-inside `range`; it can be one or two lines when the narration is about a specific assertion,
-guard, or call, not the whole displayed section. Omit it when the whole step range should glow.
+— like a callee you didn't touch). `viewport` is the post-change line window the reviewer should
+see; `highlights` is one or more post-change line ranges inside that viewport that should glow
+while the narration talks about them. `range` remains the changed-line coverage anchor for
+`diffstory check`.
 `calls` / `returnsTo` render the cross-file jumps. Full schema in
 [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
 

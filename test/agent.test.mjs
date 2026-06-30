@@ -62,12 +62,23 @@ test('storyPrompt makes deleted-file steps use the changed kind', () => {
 test('storyPrompt teaches explicit read-aloud focus targets', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('Focus pointer contract'));
+  assert.ok(p.includes('Prefer "highlights" for new stories'));
   assert.ok(p.includes('"focus"'));
   assert.ok(p.includes('"ranges"'));
-  assert.ok(p.includes('inside that step'));
+  assert.ok(p.includes('inside that step\'s "viewport"'));
   assert.ok(p.includes('post-change line numbers'));
-  assert.ok(p.includes('one or two lines'));
-  assert.ok(p.includes('not the whole displayed section'));
+  assert.ok(p.includes('exact line or tiny block'));
+  assert.ok(p.includes('line-by-line correctness pivots'));
+});
+
+test('storyPrompt teaches viewport and highlighted line selection', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Viewport contract'));
+  assert.ok(p.includes('"viewport"'));
+  assert.ok(p.includes('"highlights"'));
+  assert.ok(p.includes('what the reviewer sees'));
+  assert.ok(p.includes('lines the story is currently talking about'));
+  assert.ok(p.includes('from the requirement'));
 });
 
 test('storyPrompt supports a detailed correctness story mode', () => {
@@ -95,7 +106,8 @@ test('bundled review-tour skill teaches reviewer-first story generation', () => 
   assert.ok(skill.includes('falsifiable mental model'));
   assert.ok(skill.includes('Hard quality gates'));
   assert.ok(skill.includes('coverage ledger'));
-  assert.ok(skill.includes('Ranges are review windows, not coverage hacks'));
+  assert.ok(skill.includes('`viewport` is the review window'));
+  assert.ok(skill.includes('`range` is the coverage hook'));
   assert.ok(skill.includes('Truth audit'));
   assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
 });
@@ -126,6 +138,16 @@ test('bundled review-tour skill teaches explicit read-aloud focus targets', () =
   assert.ok(skill.includes('post-change line numbers'));
   assert.ok(skill.includes('one or two lines'));
   assert.ok(skill.includes('not the whole displayed section'));
+});
+
+test('bundled review-tour skill teaches viewport and highlighted line selection', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Viewport contract'));
+  assert.ok(skill.includes('`viewport`'));
+  assert.ok(skill.includes('`highlights`'));
+  assert.ok(skill.includes('what the reviewer sees'));
+  assert.ok(skill.includes('lines the story is currently talking about'));
+  assert.ok(skill.includes('from the requirement'));
 });
 
 test('bundled review-tour skill teaches guided and detailed story modes', () => {

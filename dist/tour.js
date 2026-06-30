@@ -20,7 +20,7 @@ function validateLineRange(value, name, errors) {
     }
     return [value[0], value[1]];
 }
-function validateFocus(step, stepRange, where, errors) {
+function validateFocus(step, containerRange, containerName, where, errors) {
     if (step.focus === undefined)
         return;
     if (typeof step.focus !== 'object' || step.focus === null || Array.isArray(step.focus)) {
@@ -38,9 +38,25 @@ function validateFocus(step, stepRange, where, errors) {
     focus.ranges.forEach((range, j) => {
         const focusRange = validateLineRange(range, `${where}.focus.ranges[${j}]`, errors);
         if (focusRange &&
-            stepRange &&
-            (focusRange[0] < stepRange[0] || focusRange[1] > stepRange[1])) {
-            errors.push(`${where}.focus.ranges[${j}] must be inside ${where}.range`);
+            containerRange &&
+            (focusRange[0] < containerRange[0] || focusRange[1] > containerRange[1])) {
+            errors.push(`${where}.focus.ranges[${j}] must be inside ${containerName}`);
+        }
+    });
+}
+function validateHighlights(step, containerRange, containerName, where, errors) {
+    if (step.highlights === undefined)
+        return;
+    if (!Array.isArray(step.highlights) || step.highlights.length === 0) {
+        errors.push(`${where}.highlights must be a non-empty array`);
+        return;
+    }
+    step.highlights.forEach((range, j) => {
+        const highlight = validateLineRange(range, `${where}.highlights[${j}]`, errors);
+        if (highlight &&
+            containerRange &&
+            (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
+            errors.push(`${where}.highlights[${j}] must be inside ${containerName}`);
         }
     });
 }
@@ -124,7 +140,13 @@ export function validateTour(obj) {
             errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
         }
         const stepRange = validateLineRange(step.range, `${where}.range`, errors);
-        validateFocus(step, stepRange, where, errors);
+        const viewportRange = step.viewport === undefined
+            ? undefined
+            : validateLineRange(step.viewport, `${where}.viewport`, errors);
+        const containerRange = viewportRange ?? stepRange;
+        const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
+        validateFocus(step, containerRange, containerName, where, errors);
+        validateHighlights(step, containerRange, containerName, where, errors);
     });
     // referential integrity for calls / returnsTo
     t.steps.forEach((s, i) => {

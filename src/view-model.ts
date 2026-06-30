@@ -7,7 +7,7 @@
 // exactly one place. Code strings are passed through verbatim; escaping happens
 // at the render boundary.
 import { changedRanges, rangesOverlap } from './diff.js';
-import { readFileRange } from './git.js';
+import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
 import type { DiffFile, DiffHunk, DiffLine, Tour, TourStep, StepKind } from './types.js';
@@ -52,6 +52,8 @@ export interface StepView {
   order: number;
   title: string;
   file: string;
+  /** Storyteller-selected visible window. */
+  viewport: [number, number];
   range: [number, number];
   /** Narrower post-change line ranges that glow while this step is read aloud. */
   focusRanges: Array<[number, number]>;
@@ -151,14 +153,17 @@ function buildStep(
   headRef?: string,
 ): StepView {
   const { blocks, note } = stepBlocks(repo, step, files, headRef);
-  const focusExplicit = !!step.focus?.ranges.length;
+  const viewport = stepViewport(step);
+  const highlights = stepHighlights(step);
+  const focusExplicit = highlights.length > 0;
   return {
     id: step.id,
     order: step.order,
     title: step.title,
     file: step.file,
-    range: step.range,
-    focusRanges: focusExplicit ? step.focus!.ranges : [step.range],
+    viewport,
+    range: viewport,
+    focusRanges: focusExplicit ? highlights : [viewport],
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
@@ -171,17 +176,31 @@ function buildStep(
   };
 }
 
+function stepViewport(step: TourStep): [number, number] {
+  return step.viewport ?? step.range;
+}
+
+function stepHighlights(step: TourStep): Array<[number, number]> {
+  return step.highlights ?? step.focus?.ranges ?? [];
+}
+
 function stepBlocks(
   repo: string,
   step: TourStep,
   files: DiffFile[],
   headRef?: string,
 ): { blocks: SbsRow[][]; note?: string } {
-  const [start, end] = step.range;
+  const viewport = stepViewport(step);
+  const [start, end] = viewport;
   const file = files.find((f) => f.newPath === step.file);
 
   if (step.kind === 'changed') {
     if (file && file.hunks.length) {
+      const whole = readWholeFile(repo, step.file, headRef);
+      if (whole) {
+        const rows = rowsInViewport(buildFullFileRows(file, whole, []), viewport);
+        if (rows.length) return { blocks: [rows] };
+      }
       const overlap = file.hunks.filter((h) => rangesOverlap(hunkNewRange(h), [start, end]));
       const use = overlap.length ? overlap : file.hunks;
       return {
@@ -204,6 +223,28 @@ function stepBlocks(
     return { blocks: [r.lines.map((c, i) => ({ type: 'add' as const, newNo: r.startLine + i, content: c, comment: true }))] };
   }
   return { blocks: [r.lines.map((c, i) => ctxRow(c, r.startLine + i))] };
+}
+
+function rowsInViewport(rows: SbsRow[], [start, end]: [number, number]): SbsRow[] {
+  return rows.filter((row, index) => rowInViewport(row, rows, index, start, end));
+}
+
+function rowInViewport(row: SbsRow, rows: SbsRow[], index: number, start: number, end: number): boolean {
+  if (row.newNo !== undefined) return row.newNo >= start && row.newNo <= end;
+  if (row.type !== 'del') return false;
+  const prev = nearestNewLine(rows, index, -1);
+  const next = nearestNewLine(rows, index, 1);
+  return (
+    (prev !== undefined && prev >= start - 1 && prev <= end) ||
+    (next !== undefined && next >= start && next <= end + 1)
+  );
+}
+
+function nearestNewLine(rows: SbsRow[], from: number, dir: -1 | 1): number | undefined {
+  for (let i = from + dir; i >= 0 && i < rows.length; i += dir) {
+    if (rows[i].newNo !== undefined) return rows[i].newNo;
+  }
+  return undefined;
 }
 
 function buildFiles(
