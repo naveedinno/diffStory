@@ -25,11 +25,27 @@ export function availableAgents(): Agent[] {
   return (['claude', 'codex'] as Agent[]).filter(onPath);
 }
 
+/** Git pathspecs that hide generated/oversized files from the agent's own diff. */
+function excludeArgs(excludePaths: string[]): string {
+  return excludePaths.map((p) => ` ':(exclude)${p}'`).join('');
+}
+
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
-export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = 'guided'): string {
+export function storyPrompt(
+  baseRef: string,
+  headRef?: string,
+  mode: unknown = 'guided',
+  excludePaths: string[] = [],
+): string {
   const storyMode = normalizeStoryMode(mode);
-  const diff = headRef ? `git diff ${baseRef}..${headRef} --` : `git diff ${baseRef} --`;
+  const excl = excludeArgs(excludePaths);
+  const diff = headRef ? `git diff ${baseRef}..${headRef} --${excl}` : `git diff ${baseRef} --${excl}`;
   const headField = headRef ? ` and its "head" field to "${headRef}"` : '';
+  const scopeContract = excludePaths.length
+    ? `Scope contract:\n` +
+      `- These files are generated or oversized artifacts (regenerated ABIs, lockfiles, built bundles) and are intentionally excluded from this review: ${excludePaths.join(', ')}.\n` +
+      `- Do not read, narrate, or write steps for them. "diffstory check" already excludes them, so the coverage gate will not ask you to cover them — adding them back only bloats the story.\n\n`
+    : '';
   const whyLength = storyMode === 'detailed' ? '3-7 short sentences' : '1-3 short sentences';
   const modeContract =
     storyMode === 'detailed'
@@ -48,6 +64,7 @@ export function storyPrompt(baseRef: string, headRef?: string, mode: unknown = '
     `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}"${headField} and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
     modeContract +
+    scopeContract +
     `Reviewer map contract:\n` +
     `- Before writing JSON, build a private reviewer map. Do not include this map in the file.\n` +
     `- Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +

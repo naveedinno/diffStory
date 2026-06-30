@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, } from './git.js';
+import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
@@ -745,12 +745,16 @@ function runGenerate(res, session, body) {
     session.base = promptBase;
     session.head = promptHead;
     const storyPath = resolveStoryPath(repo);
+    // Generated/oversized files (regenerated ABIs, lockfiles) are subtracted from
+    // the agent's diff just as they are from the rendered review and coverage gate,
+    // so all three agree and the agent doesn't waste a run narrating a 20k-line ABI.
+    const excludePaths = noiseFiles(repo, promptBase, promptHead);
     runWorkflow(res, repo, {
         workflow,
         title: workflow === 'detailed_audit' ? 'Generating detailed audit' : 'Generating guided review',
         agent,
         model,
-        prompt: storyPrompt(promptBase, promptHead, mode),
+        prompt: storyPrompt(promptBase, promptHead, mode, excludePaths),
         context: {
             repoName: basename(repo), repoPath: repo, workflow, agent, model,
             base: describeBase(repo, promptBase),

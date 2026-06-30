@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_CONTEXT_LINES } from './config.js';
+import { isReviewNoise } from './noise.js';
 
 function git(repo: string, args: string[]): string {
   return execFileSync('git', args, {
@@ -75,12 +76,35 @@ function defaultBranchCandidates(repo: string): string[] {
  * Unified diff against `base`. With no `head`, diffs the working tree (the usual
  * "review my current change" case). With `head`, diffs `base..head` — two refs,
  * no working tree involved.
+ *
+ * Generated/oversized files (see `noiseFiles`) are subtracted from the diff:
+ * a regenerated 20k-line ABI would otherwise become tens of thousands of DOM
+ * rows in the review and crash the tab. Keeping this in the one diff everything
+ * shares means the rendered review, the coverage gate, and the change summary
+ * all agree on the same reduced set without each call site re-deriving it.
  */
 export function getDiff(repo: string, base: string, head?: string): string {
   const args = ['diff', '--no-color', '--no-ext-diff', `-U${DIFF_CONTEXT_LINES}`, base];
   if (head) args.push(head);
-  args.push('--');
+  args.push('--', ...excludePathspecs(noiseFiles(repo, base, head)));
   return git(repo, args);
+}
+
+/**
+ * Files nobody reviews by hand — generated/vendored by path, or so large they're
+ * almost certainly machine-written (see `isReviewNoise`). Derived from `--numstat`,
+ * so it's a cheap count with no file content read. The change summary folds the
+ * same set into its collapsed "generated & large" group.
+ */
+export function noiseFiles(repo: string, base: string, head?: string): string[] {
+  return numstat(repo, base, head)
+    .filter((f) => isReviewNoise(f.path, (f.added ?? 0) + (f.removed ?? 0)))
+    .map((f) => f.path);
+}
+
+/** Git pathspecs that subtract the given paths from a diff (`:(exclude)<path>`). */
+export function excludePathspecs(paths: string[]): string[] {
+  return paths.map((p) => `:(exclude)${p}`);
 }
 
 export interface BranchRef {

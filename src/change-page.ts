@@ -6,6 +6,7 @@ import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS } from './brand.js';
 import type { ChangeSummary, ChangeFile } from './change-view.js';
+import { isReviewNoise } from './noise.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 
 function esc(s: string): string {
@@ -20,19 +21,11 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
-// Files nobody reviews by hand: vendored/build output, lockfiles, generated ABIs,
-// or anything so large it's almost certainly machine-written. These get folded into
-// a collapsed group so the real change isn't buried under noise.
-const HUGE = 1500;
+// Files nobody reviews by hand get folded into a collapsed group so the real
+// change isn't buried under noise. Same classifier the diff layer uses to drop
+// them from the story and review, so the two screens never disagree.
 function isNoise(f: ChangeFile): boolean {
-  const p = f.path.toLowerCase();
-  const generated =
-    /(^|\/)(dist|build|out|node_modules|vendor|\.next|coverage|__generated__)\//.test(p) ||
-    /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|cargo\.lock|go\.sum)$/.test(p) ||
-    /\.(min\.js|min\.css|map|lock)$/.test(p) ||
-    /(^|\/)abis?\//.test(p) ||
-    /\.abi\.json$/.test(p);
-  return generated || (f.added ?? 0) + (f.removed ?? 0) >= HUGE;
+  return isReviewNoise(f.path, (f.added ?? 0) + (f.removed ?? 0));
 }
 
 /** A fixed-width green/red proportion bar so change size is felt, not just read. */

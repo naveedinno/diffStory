@@ -112,6 +112,13 @@ function ProgressPanel(root, opts){
   function tick(){ setLive(curState,0); }
   function clip(s,n){ s=String(s||'').replace(/\\s+/g,' ').trim(); return s.length>n?s.slice(0,n)+'…':s; }
   function firstLine(s){ s=String(s||''); var i=s.indexOf(NL); return i>=0?s.slice(0,i):s; }
+  var RAW_CAP=200000;
+  function appendRaw(s){
+    if(!els.raw||!s)return;
+    var t=els.raw.textContent+s;
+    if(t.length>RAW_CAP)t='…'+t.slice(t.length-RAW_CAP); // bound memory like the server caps its own capture
+    els.raw.textContent=t; els.raw.scrollTop=els.raw.scrollHeight;
+  }
   function setCurrent(text){
     var t=clip(text,120); if(!t)return;
     if(activeNow){ activeNow.textContent=t; if(els.now)els.now.hidden=true; }
@@ -179,11 +186,11 @@ function ProgressPanel(root, opts){
       case 'activity': setCurrent(ev.label); break;
       case 'tool': setCurrent(ev.label); break;
       case 'text':
-        if(els.raw){ els.raw.textContent+=ev.data||''; els.raw.scrollTop=els.raw.scrollHeight; }
+        appendRaw(ev.data||'');
         if(!hasPlan){ var ln=clip(firstLine(ev.data),120); if(ln)setCurrent(ln); } break;
       case 'heartbeat': setLive(curState, ev.quietMs); break;
-      case 'warning': if(els.raw)els.raw.textContent+='[warn] '+(ev.label||'')+NL; break;
-      case 'error': if(els.raw)els.raw.textContent+='[error] '+(ev.label||'')+(ev.detail?(' — '+ev.detail):'')+NL; break;
+      case 'warning': appendRaw('[warn] '+(ev.label||'')+NL); break;
+      case 'error': appendRaw('[error] '+(ev.label||'')+(ev.detail?(' — '+ev.detail):'')+NL); break;
       case 'run_done': finish(ev.status, ev.result||{}); break;
     }
   }

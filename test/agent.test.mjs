@@ -166,6 +166,22 @@ test('storyPrompt records the head ref for fixed range stories', () => {
   assert.ok(p.includes('set its "base" field to "main" and its "head" field to "feature/liquidation"'));
 });
 
+test('storyPrompt excludes oversized files from the diff and tells the agent to skip them', () => {
+  const p = storyPrompt('main', 'feature/x', 'guided', ['abis/symmio.json', 'docs/gen.html']);
+  // The agent's own diff command must subtract the generated files via pathspec.
+  assert.ok(p.includes("git diff main..feature/x -- ':(exclude)abis/symmio.json' ':(exclude)docs/gen.html'"));
+  // And it must be told not to chase coverage on them (which would loop forever).
+  assert.ok(p.includes('Scope contract'));
+  assert.ok(p.includes('intentionally excluded from this review: abis/symmio.json, docs/gen.html'));
+});
+
+test('storyPrompt with no exclusions leaves the diff command untouched', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('git diff main --'));
+  assert.ok(!p.includes(':(exclude)'));
+  assert.ok(!p.includes('Scope contract'));
+});
+
 test('agentCommand builds headless invocations with a safe default model', () => {
   assert.deepEqual(agentCommand('claude', 'GO'), [
     'claude',
