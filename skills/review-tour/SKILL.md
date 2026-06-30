@@ -132,6 +132,9 @@ Plan by code logic, not filenames:
 - Put core behavior before glue, adapters, docs, generated files, snapshots, and tests.
 - Group related hunks into one stop when they answer one review question.
 - Split one file into multiple stops when separate hunks represent different decisions.
+- Split far-apart focus into separate stops. A single step should feel like a
+  steady camera shot over one method, struct, test case, or doc section, not a
+  teleport between distant highlight islands.
 - Use context stops only for real dependency contracts: unchanged callers, callees, storage/schema/config, feature flags, external API boundaries, or helper preconditions.
 
 A good path reads like: "Start here, jump into the helper this calls, come back
@@ -149,6 +152,9 @@ Viewport contract:
 - Use the whole method, storage struct, schema block, config stanza, test case,
   or small file section when that is what makes the requirement understandable.
 - It is fine for `viewport` to be much wider than the changed lines.
+- Keep the visible window local to the thing being explained. If the story needs
+  two distant changed blocks, write two steps instead of one step with scattered
+  highlights.
 - Avoid whole-file viewports unless the whole file is genuinely new and small,
   or the whole file is truly the review unit.
 
@@ -159,6 +165,9 @@ Highlighted-line contract:
 - Keep every highlight range inside `viewport`.
 - Use one range for a single field/write/guard/call/assertion, and multiple
   ranges when the sentence moves across small related sections.
+- Do not make one step jump between far-apart highlight islands. If the
+  highlighted ranges would force the viewer to scroll or lose the current
+  method/test/doc section, split the step.
 - If the whole viewport is the point, `highlights` may match `viewport`, but do
   that intentionally.
 
@@ -273,6 +282,9 @@ Every changed hunk must appear in the ledger and must be claimed by a
 `changed` or `new-file` step. Context steps never count as coverage.
 Never use "deleted" as a step kind. For deleted files, use kind "changed" and
 anchor the range at the post-change deletion location.
+Do not add steps for generated or oversized artifacts that the prompt excludes
+from the diff. Those files are intentionally outside the coverage gate; adding
+them back creates stale pointers and noisy review stops.
 
 ### Range and viewport audit
 
@@ -284,6 +296,9 @@ anchor the range at the post-change deletion location.
 - `viewport` should include enough surrounding code that a reviewer who just
   read the requirement understands where the highlighted lines live.
 - `highlights` must stay inside `viewport`.
+- `viewport` and `highlights` should stay focused on one nearby section. If a
+  range covers unrelated islands for coverage, use separate local viewports or
+  split the range into separate steps.
 - Use `newPath` for renamed files.
 
 ### Truth audit
@@ -302,6 +317,8 @@ anchor the range at the post-change deletion location.
 - Every title should name behavior, risk, contract, or invariant, not a file operation.
 - Every `why` should connect previous context, local change, and next implication.
 - Tests, docs, snapshots, and generated files go after the behavior they verify or explain.
+- Generated or oversized files excluded by the prompt must not appear as story
+  steps.
 - Low-risk mechanical changes still need coverage, but put them late and mark them as skim-worthy.
 
 ## Schema
@@ -376,5 +393,7 @@ Tell the user: "Story ready - run `diffstory serve` to review."
 - Don't write checklist-only copy. Work the review focus into the story.
 - Don't add context steps as scenery.
 - Don't bury the core behavior behind docs, tests, generated files, or cleanup.
+- Don't make one story step bounce between distant lines; split it until the
+  visible code and highlighted code stay in one local review moment.
 - Don't make unsupported confidence claims like "this is safe" or "tests cover it" without naming the exact condition or evidence.
 - Don't skip the `diffstory check` gate.

@@ -79,6 +79,8 @@ test('storyPrompt teaches viewport and highlighted line selection', () => {
   assert.ok(p.includes('what the reviewer sees'));
   assert.ok(p.includes('lines the story is currently talking about'));
   assert.ok(p.includes('from the requirement'));
+  assert.ok(p.includes('far-apart highlight islands'));
+  assert.ok(p.includes('scroll-stable'));
 });
 
 test('storyPrompt supports a detailed correctness story mode', () => {
@@ -148,6 +150,8 @@ test('bundled review-tour skill teaches viewport and highlighted line selection'
   assert.ok(skill.includes('what the reviewer sees'));
   assert.ok(skill.includes('lines the story is currently talking about'));
   assert.ok(skill.includes('from the requirement'));
+  assert.ok(skill.includes('far-apart highlight islands'));
+  assert.ok(skill.includes('steady camera shot'));
 });
 
 test('bundled review-tour skill teaches guided and detailed story modes', () => {
@@ -173,6 +177,7 @@ test('storyPrompt excludes oversized files from the diff and tells the agent to 
   // And it must be told not to chase coverage on them (which would loop forever).
   assert.ok(p.includes('Scope contract'));
   assert.ok(p.includes('intentionally excluded from this review: abis/symmio.json, docs/gen.html'));
+  assert.ok(p.includes('Do not read, narrate, or write steps for them'));
 });
 
 test('storyPrompt with no exclusions leaves the diff command untouched', () => {

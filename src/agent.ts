@@ -83,12 +83,13 @@ export function storyPrompt(
     `- Pick the viewport first: usually the whole method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement.\n` +
     `- Pick highlights second: the exact fee field, parameter, branch, guard, call, state write, assertion, or return path being discussed inside that viewport.\n` +
     `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
+    `- Do not make one step jump between far-apart highlight islands. If the story needs distant lines, split it into separate steps so each viewport/highlights pair stays local and scroll-stable.\n` +
     `- Keep "range" as the changed-line coverage anchor for diffstory check. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
     `Reading order contract:\n` +
     `- Start where someone who just read the requirement should start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes the requirement real.\n` +
     `- Follow the requirement's implementation flow across files, then return to callers when useful.\n` +
     `- Group related edits into one stop; do not emit one step per file or one step per hunk.\n` +
-    `- Put tests, snapshots, docs, and generated files after the behavior they verify or explain.\n\n` +
+    `- Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n\n` +
     `Reviewer question contract:\n` +
     `- Each step must answer a reviewer question.\n` +
     `- Good questions: where does the behavior start; what invariant changed; what is passed, rejected, stored, ` +
