@@ -91,6 +91,16 @@ test('client mounts a persistent chat composer that posts and re-runs the agent'
 
 test('the composer send is disabled while the agent is busy', () => {
   assert.match(PAGE_JS, /\[data-thread-send\]'\)\.forEach/);
+  assert.match(PAGE_JS, /\[data-thread-add\]'\)\.forEach/);
+});
+
+test('comment counts are by unique id, so cross-surfaced comments are not double-counted', () => {
+  // a single comment mounts as several .ds-comment nodes (diff hunks, full-file, tour);
+  // collectOpenIds and refreshCount must dedupe by data-comment-id, not count nodes.
+  assert.match(PAGE_JS, /function uniqueIds\(sel\)/);
+  assert.match(PAGE_JS, /return uniqueIds\('\.ds-comment\.status-open'\)/);
+  assert.match(PAGE_JS, /var openN=uniqueIds\('\.ds-comment:not\(\.status-resolved\)'\)\.length/);
+  assert.doesNotMatch(PAGE_JS, /\$all\('\.ds-comment'\)\.length-\$all\('\.ds-comment\.status-resolved'\)\.length/);
 });
 
 test('the new-comment composer offers Add comment (save only) and Ask now', () => {

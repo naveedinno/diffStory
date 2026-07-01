@@ -634,6 +634,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-thread-ta:focus{outline:none;border-color:var(--accent-blue)}
 .ds-thread-ta:disabled{opacity:0.5}
 .ds-thread-send{flex:none;align-self:flex-end}
+.ds-composer-add,.ds-thread-add{color:var(--accent-blue);border-color:var(--accent-blue)}
 `;
 
 // No backticks and no ${} below — safe to embed in a template literal.
@@ -1624,8 +1625,16 @@ export const PAGE_JS = `
       refreshCount();
     }).catch(function(){});
   }
+  // A comment is cross-surfaced into multiple views (diff hunks, full-file, tour),
+  // so it appears as several .ds-comment nodes sharing one id. Count/collect by
+  // unique id — never by node — or every count doubles per surface it's shown in.
+  function uniqueIds(sel){
+    var seen={},out=[];
+    $all(sel).forEach(function(w){var id=w.getAttribute('data-comment-id');if(id&&!seen[id]){seen[id]=1;out.push(id);}});
+    return out;
+  }
   function collectOpenIds(){
-    return $all('.ds-comment.status-open').map(function(w){return w.getAttribute('data-comment-id');});
+    return uniqueIds('.ds-comment.status-open');
   }
   function setBusy(b){
     agentBusy=b;
@@ -1680,7 +1689,7 @@ export const PAGE_JS = `
         if(!found)allComments.push(updated);
         patchComment(updated);refreshCount();
         if(run)sendToAgent([id]);
-      }).catch(function(){toast('Could not send your message.');});
+      }).catch(function(){if(!ta.value)ta.value=text;toast('Could not send your message.');});
   }
   function commentIdsForSend(ids){
     if(ids==='all')return collectOpenIds();
@@ -1874,17 +1883,17 @@ export const PAGE_JS = `
     runProgress(panel,'/api/generate',payload,ctrl);
   }
   function refreshCount(){
-    var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
+    var openN=uniqueIds('.ds-comment:not(.status-resolved)').length;
     var b=$('#ds-open-count b');if(b){b.textContent=openN;if(b.nextSibling)b.nextSibling.nodeValue=' '+(openN===1?'comment':'comments');}
     var approve=$('[data-verdict="approve"]'),pill=$('.ds-trustpill'),clean=pill&&pill.classList.contains('is-clean');
     if(approve)approve.disabled=!(openN===0&&clean);
     var aa=$('[data-address-all]');if(aa&&!agentBusy)aa.disabled=openN===0;
     var sa=$('#ds-send-all');if(sa){var sab=$('b',sa);if(sab)sab.textContent=openN;sa.hidden=openN===0;if(!agentBusy)sa.disabled=openN===0;}
     var co=$('[data-copy-comments="open"]');if(co)co.disabled=openN===0;
-    var ca=$('[data-copy-comments="all"]');if(ca)ca.disabled=$all('.ds-comment').length===0;
+    var ca=$('[data-copy-comments="all"]');if(ca)ca.disabled=uniqueIds('.ds-comment').length===0;
   }
   function verdict(kind){
-    var openN=$all('.ds-comment').length-$all('.ds-comment.status-resolved').length;
+    var openN=uniqueIds('.ds-comment:not(.status-resolved)').length;
     if(kind==='approve'){toast('Looks clean — every change is explained and there are no open comments. ✓');return;}
     if(openN>0)toast(openN+' open '+(openN===1?'comment':'comments')+' already '+(openN===1?'has':'have')+' a path to the agent. Use Send open comments only if something needs resending.');
     else toast('No open comments yet. Select text in the review, then right-click to comment.');
