@@ -118,3 +118,14 @@ test('the thread composer offers Add (save only) and Ask now (save + run)', () =
   // Enter sends via the run path
   assert.match(PAGE_JS, /sendThreadMessage\(closest\(ta,'\.ds-comment'\),true\)/);
 });
+
+test('the Send all button runs the batch and tracks the open count', () => {
+  // click delegation fires the existing batch path
+  assert.match(PAGE_JS, /\[data-send-all\]'\);if\(b\)\{if\(b\.disabled\)return;sendToAgent\('all'\)/);
+  // refreshCount updates the counted label + hidden state
+  assert.match(PAGE_JS, /ds-send-all/);
+  assert.match(PAGE_JS, /sa\.hidden=openN===0/);
+  // setBusy disables it during a run
+  assert.match(PAGE_JS, /\[data-send-all\]'\)/);
+  assert.match(PAGE_CSS, /\.ds-send-all/);
+});

@@ -109,6 +109,7 @@ ${BRAND_HEAD_LINKS}
   </div>
   <div class="ds-status">
     <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(openCount, 'comment')}</span>
+    <button class="ds-btn ds-btn-solid ds-send-all" id="ds-send-all" data-send-all title="Send every open comment to the agent in one run"${openCount ? '' : ' hidden'}>Send all (<b>${openCount}</b>)</button>
     ${trustPill}
   </div>
   <div class="ds-settings-wrap">

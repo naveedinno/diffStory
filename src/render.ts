@@ -158,6 +158,7 @@ ${BRAND_HEAD_LINKS}
       openCount,
       'comment',
     )}</span>
+    <button class="ds-btn ds-btn-solid ds-send-all" id="ds-send-all" data-send-all title="Send every open comment to the agent in one run"${openCount ? '' : ' hidden'}>Send all (<b>${openCount}</b>)</button>
     ${trustPill}
   </div>
   <div class="ds-settings-wrap">
