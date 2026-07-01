@@ -10,6 +10,7 @@ import { BRAND_HEAD_LINKS, brandMarkSvg, brandStoryMarkSvg } from './brand.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
 import { highlight } from './highlight.js';
+import { intraLineMap, type IntraSides } from './intra-line.js';
 import type {
   FileView,
   ReviewModel,
@@ -19,7 +20,8 @@ import type {
   UncoveredView,
   UnifiedRow,
 } from './view-model.js';
-import type { Comment, CommentType, DiffFile, Tour } from './types.js';
+import { normalizeComment } from './comments.js';
+import type { Comment, CommentSide, CommentType, DiffFile, Tour, Turn } from './types.js';
 
 export interface RenderInput {
   repo: string;
@@ -32,6 +34,8 @@ export interface RenderInput {
   routeBase?: string;
   /** Repo display name for the breadcrumb. Falls back to the routeBase tail. */
   repoName?: string;
+  /** Render the diff with no story: All-files default, Story tab → Generate. */
+  storyless?: boolean;
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -46,6 +50,36 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
   resolved: 'Resolved',
 };
 
+type CommentTarget = { side: CommentSide; file: string; line: number };
+
+function commentSide(c: Comment): CommentSide {
+  return c.side === 'left' ? 'left' : 'right';
+}
+
+function targetAttrs(target?: CommentTarget): string {
+  return target
+    ? ` data-comment-code="1" data-comment-side="${target.side}" data-comment-file="${esc(
+        target.file,
+      )}" data-comment-line="${target.line}"`
+    : '';
+}
+
+function rowAttrs(target?: CommentTarget, step?: string): string {
+  return target
+    ? ` data-file="${esc(target.file)}" data-line="${target.line}" data-side="${target.side}"${
+        step ? ` data-step="${esc(step)}"` : ''
+      }`
+    : '';
+}
+
+function threadForTargets(targets: Array<CommentTarget | undefined>, comments: Comment[]): string {
+  const here = comments.filter((c) =>
+    targets.some((t) => t && commentSide(c) === t.side && c.file === t.file && c.line === t.line),
+  );
+  if (!here.length) return '';
+  return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
+}
+
 export function renderPage(input: RenderInput): string {
   const { repo, tour, files, baseLabel, comments, headRef } = input;
   const routeBase = input.routeBase ?? '';
@@ -56,7 +90,9 @@ export function renderPage(input: RenderInput): string {
       return 'repo';
     }
   })();
-  const model = buildReviewModel(repo, tour, files, headRef);
+  const storyless = input.storyless ?? false;
+  const model = buildReviewModel(repo, tour, files, headRef, { storyless });
+  const pageTitle = storyless ? 'Reviewing the diff' : tour.title;
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
   // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
   const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));
@@ -64,9 +100,17 @@ export function renderPage(input: RenderInput): string {
   const openCount = comments.filter((c) => c.status !== 'resolved').length;
   const uncoveredCount = model.trust.uncovered.length;
   const approveReady = openCount === 0 && uncoveredCount === 0;
+  // No story → no coverage to report, so the trust pill is meaningless; hide it.
+  const trustPill = storyless
+    ? ''
+    : `<button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${
+        uncoveredCount
+          ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained`
+          : `<span class="ds-check">✓</span> all changes explained`
+      }</button>`;
 
   const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
-  const railFiles = model.files.map((f, i) => railFileItem(f, i)).join('');
+  const railFiles = railFileTree(model.files);
   const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
   const stepPanels = model.steps
     .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
@@ -82,10 +126,10 @@ export function renderPage(input: RenderInput): string {
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
 ${BRAND_HEAD_LINKS}
-<title>${esc(APP_BRAND)} — ${esc(tour.title)}</title>
+<title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body>
+<body${storyless ? ' data-storyless="1"' : ''}>
 <header class="ds-top">
   <a class="ds-brand" href="/repos" title="Home — your repositories" aria-label="Home — your repositories">
     ${BRAND_MARK}
@@ -107,18 +151,14 @@ ${BRAND_HEAD_LINKS}
         baseLabel,
       )}">${esc(baseLabel)}</span></span>
     </div>
-    <div class="ds-title" title="${esc(tour.summary || tour.title)}">${esc(tour.title)}</div>
+    <div class="ds-title" title="${esc(storyless ? 'The current diff, file by file' : tour.summary || tour.title)}">${esc(pageTitle)}</div>
   </div>
   <div class="ds-status">
     <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(
       openCount,
       'comment',
     )}</span>
-    <button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${
-      uncoveredCount
-        ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained`
-        : `<span class="ds-check">✓</span> all changes explained`
-    }</button>
+    ${trustPill}
   </div>
   <div class="ds-settings-wrap">
     <button class="ds-readaloud" data-readaloud title="Read each step's story aloud as you walk the change" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span data-readaloud-label>Read aloud</span></button>
@@ -179,6 +219,14 @@ ${BRAND_HEAD_LINKS}
   </div>
   <div class="ds-vsep"></div>
   <div class="ds-actions">
+    ${
+      storyless
+        ? `<button class="ds-review-menu ds-reload-diff" data-reload-diff type="button" title="Re-read the working tree and refresh this diff">
+        <span class="ds-review-menu-dot" aria-hidden="true"></span>
+        <span>Reload diff</span>
+      </button>`
+        : ''
+    }
     <div class="ds-review-menu-wrap">
       <button class="ds-review-menu" data-review-menu aria-haspopup="menu" aria-expanded="false" title="Open review actions">
         <span class="ds-review-menu-dot" aria-hidden="true"></span>
@@ -230,10 +278,9 @@ ${BRAND_HEAD_LINKS}
     <div class="ds-readhead" data-rail="tour">
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Reading order</span>
-        <span class="ds-readhead-count" id="ds-progress-text">${model.totalSteps} ${plural(
-    model.totalSteps,
-    'step',
-  )}</span>
+        <span class="ds-readhead-count" id="ds-progress-text">${
+          storyless ? 'No story yet' : `${model.totalSteps} ${plural(model.totalSteps, 'step')}`
+        }</span>
       </div>
       <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:0%"></div></div>
     </div>
@@ -258,8 +305,8 @@ ${BRAND_HEAD_LINKS}
 
   <main class="ds-main">
     <div class="ds-view" id="ds-view-tour">
-      ${introPanel(model, tour)}
-      ${stepPanels}
+      ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour)}
+      ${storyless ? '' : stepPanels}
     </div>
     <div class="ds-view" id="ds-view-files" hidden>
       <div class="ds-fileshead">
@@ -394,6 +441,64 @@ function introPanel(model: ReviewModel, tour: Tour): string {
   </section>`;
 }
 
+// The Story tab when there's no story yet: generation controls live beside the
+// full diff, and the request carries the same base/head scope the viewer opened.
+function generateCta(model: ReviewModel, routeBase: string, baseRef?: string, headRef?: string): string {
+  const filesLabel = `${plural(model.filesChanged, 'file')} changed${
+    model.contextFiles ? ` · ${model.contextFiles} for context` : ''
+  }`;
+  const dataBase = baseRef ? ` data-base="${esc(baseRef)}"` : '';
+  const dataHead = headRef ? ` data-head="${esc(headRef)}"` : '';
+  return `<section class="ds-step is-intro" data-step-panel="0">
+    <div class="ds-introwrap">
+      <span class="ds-intro-eyebrow">${STORY_MARK}<span>No story yet</span></span>
+      <h1 class="ds-intro-title">Read the diff, or have the agent narrate it</h1>
+      <p class="ds-intro-lede">The real diff is under <b>All files</b>. Keep reading it directly, or generate a story for this exact scope.</p>
+      <div class="ds-intro-facts">
+        <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
+        <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
+      </div>
+      <div class="ds-storygen-card">
+        <div class="ds-storygen-head">
+          <div>
+            <span class="ds-storygen-eyebrow">Generate a story</span>
+            <strong>${model.filesChanged} ${plural(model.filesChanged, 'file')}</strong>
+          </div>
+          <span class="ds-storygen-stat"><span class="ds-stat-add">+${model.totalAdd}</span><span class="ds-stat-del">−${model.totalDel}</span></span>
+        </div>
+        <div class="ds-storygen-grid">
+          <div class="ds-storygen-field ds-field-agent">
+            <span class="ds-storygen-label">Agent</span>
+            <input id="storyAgentSel" type="hidden" value="codex" />
+            <div class="ds-choicegroup" id="storyAgentChoices" role="radiogroup" aria-label="Agent"></div>
+          </div>
+          <div class="ds-storygen-field ds-field-model">
+            <span class="ds-storygen-label">Model</span>
+            <input id="storyModelSel" type="hidden" value="" />
+            <div class="ds-choicegroup" id="storyModelChoices" role="radiogroup" aria-label="Model"></div>
+          </div>
+          <div class="ds-storygen-field ds-field-detail">
+            <span class="ds-storygen-label">Detail</span>
+            <input id="storyMode" type="hidden" value="guided" />
+            <div class="ds-choicegroup" role="radiogroup" aria-label="Story detail">
+              <button class="ds-choice" type="button" data-story-choice="storyMode" data-value="brief" aria-pressed="false" title="One short sentence per meaningful change cluster">Brief</button>
+              <button class="ds-choice is-active" type="button" data-story-choice="storyMode" data-value="guided" aria-pressed="true" title="Enough context to review the change in order">Balanced</button>
+              <button class="ds-choice" type="button" data-story-choice="storyMode" data-value="detailed" aria-pressed="false" title="Walk important ranges line by line">Line-by-line</button>
+            </div>
+          </div>
+        </div>
+        <button class="ds-intro-start ds-storygen-button" data-generate-story data-review-url="${esc(
+          routeBase,
+        )}/review?story=story.json"${dataBase}${dataHead}>
+          <span class="ds-intro-start-main">Generate story <span class="ds-intro-arrow">→</span></span>
+          <span class="ds-intro-start-sub">The agent writes the walkthrough for this diff scope</span>
+        </button>
+        <p class="ds-storygen-warn" id="storySkillWarn" hidden><span id="storySkillWarnText"></span><button class="ds-storygen-fix" id="storySkillUpdateBtn" type="button">Update skills</button></p>
+      </div>
+    </div>
+  </section>`;
+}
+
 function trustRailCard(trust: TrustView): string {
   // When everything's explained the header pill already says so — don't spend
   // sidebar space on a redundant "all clear" card.
@@ -410,28 +515,120 @@ function trustRailCard(trust: TrustView): string {
   </button>`;
 }
 
-function railFileItem(f: FileView, i: number): string {
+type FileTreeChild = FileTreeDir | FileTreeFile;
+
+interface FileTreeDir {
+  kind: 'dir';
+  name: string;
+  path: string;
+  children: FileTreeChild[];
+  dirs: Map<string, FileTreeDir>;
+  count: number;
+  add: number;
+  del: number;
+  untoured: number;
+}
+
+interface FileTreeFile {
+  kind: 'file';
+  file: FileView;
+  index: number;
+}
+
+function railFileTree(files: FileView[]): string {
+  if (!files.length) return '';
+  const root = createFileTreeDir('', '');
+  files.forEach((file, index) => addFileTreeEntry(root, file, index));
+  return `<div class="ds-filetree" role="tree">${renderFileTreeChildren(root.children, 0)}</div>`;
+}
+
+function createFileTreeDir(name: string, path: string): FileTreeDir {
+  return { kind: 'dir', name, path, children: [], dirs: new Map(), count: 0, add: 0, del: 0, untoured: 0 };
+}
+
+function addFileTreeEntry(root: FileTreeDir, file: FileView, index: number): void {
+  const parts = file.file.split('/').filter(Boolean);
+  parts.pop();
+  let node = root;
+  addFileTreeStats(node, file);
+
+  let path = '';
+  for (const part of parts) {
+    path += `${part}/`;
+    let dir = node.dirs.get(part);
+    if (!dir) {
+      dir = createFileTreeDir(part, path);
+      node.dirs.set(part, dir);
+      node.children.push(dir);
+    }
+    addFileTreeStats(dir, file);
+    node = dir;
+  }
+
+  node.children.push({ kind: 'file', file, index });
+}
+
+function addFileTreeStats(node: FileTreeDir, file: FileView): void {
+  node.count += 1;
+  node.add += file.add;
+  node.del += file.del;
+  node.untoured += file.untoured;
+}
+
+function renderFileTreeChildren(children: FileTreeChild[], depth: number): string {
+  return children
+    .map((child) => (child.kind === 'dir' ? renderFileTreeDir(child, depth) : railFileItem(child.file, child.index, depth)))
+    .join('');
+}
+
+function renderFileTreeDir(dir: FileTreeDir, depth: number): string {
+  const stat = railFileStat(dir.add, dir.del);
+  const flag = dir.untoured
+    ? `<span class="ds-fileitem-flag" title="${dir.untoured} unexplained ${plural(dir.untoured, 'change')}">▲</span>`
+    : '';
+  return `<details class="ds-filetree-dir" data-filetree-path="${esc(dir.path)}" style="--tree-depth:${depth}" open>
+    <summary class="ds-filetree-summary" style="--tree-indent:${depth * 14}px" title="${esc(dir.path)}">
+      <span class="ds-filetree-caret" aria-hidden="true">›</span>
+      <span class="ds-filetree-folder" aria-hidden="true"></span>
+      <span class="ds-filetree-name">${esc(dir.name)}</span>
+      <span class="ds-filetree-count">${dir.count} ${plural(dir.count, 'file')}</span>
+      ${flag}
+      <span class="ds-filetree-stat">${stat}</span>
+    </summary>
+    <div class="ds-filetree-children" role="group">${renderFileTreeChildren(dir.children, depth + 1)}</div>
+  </details>`;
+}
+
+function railFileItem(f: FileView, i: number, depth = 0): string {
   const [dir, base] = splitPath(f.file);
   const kindClass = f.kind === 'new' ? 'new' : f.kind;
-  const stat =
-    f.add || f.del
-      ? `${f.add ? `<span class="ds-stat-add">+${f.add}</span>` : ''}${
-          f.del ? `<span class="ds-stat-del">−${f.del}</span>` : ''
-        }`
-      : '<span class="ds-dim">·</span>';
+  const stat = railFileStat(f.add, f.del);
   const flag = f.untoured
     ? `<span class="ds-fileitem-flag" title="${f.untoured} unexplained ${plural(f.untoured, 'change')}">▲</span>`
     : '';
   return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
     f.file,
-  )}" title="${esc(f.file)} — ${esc(f.kindLabel)}">
+  )}" style="--tree-indent:${depth * 14}px" role="treeitem" title="${esc(f.file)} — ${esc(f.kindLabel)}">
     <span class="ds-fileitem-dot k-${kindClass}"></span>
-    <span class="ds-fileitem-path"><span class="ds-dim">${esc(dir)}</span><span class="ds-fileitem-base">${esc(
-      base,
-    )}</span></span>
+    <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
     <span class="ds-fileitem-stat">${stat}</span>
   </button>`;
+}
+
+function railFileStat(add: number, del: number): string {
+  if (!add && !del) return '<span class="ds-dim">·</span>';
+  return `${add ? `<span class="ds-stat-add">+${add}</span>` : ''}${
+    del ? `<span class="ds-stat-del">−${del}</span>` : ''
+  }`;
+}
+
+function changeJumpControls(): string {
+  return `<div class="ds-changejump" data-change-nav hidden>
+    <button class="ds-changebtn" data-change-prev title="Previous change (← / P)" aria-label="Previous change">←</button>
+    <span class="ds-changecount" data-change-count>0 / 0</span>
+    <button class="ds-changebtn" data-change-next title="Next change (→ / N)" aria-label="Next change">→</button>
+  </div>`;
 }
 
 // ---- story tour ----
@@ -481,6 +678,8 @@ function stepPanel(
       <div class="ds-diff" data-diff data-file="${esc(s.file)}"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
           <span class="ds-difthint" data-difthint>Showing storyteller-selected viewport</span>
+          <span class="ds-flex"></span>
+          ${changeJumpControls()}
           <div class="ds-modetoggle">
             <button class="is-active" data-mode="diff">Diff</button>
             <button data-mode="full">Full file</button>
@@ -499,11 +698,13 @@ function diffInner(s: StepView, comments: Comment[]): string {
   }
   const head = diffHead(s);
   const body = s.blocks
-    .map(
-      (block, bi) =>
+    .map((block, bi) => {
+      const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
+      return (
         (bi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-        block.map((row) => sbsRow(row, s, comments, bi)).join(''),
-    )
+        block.map((row) => sbsRow(row, s, comments, bi, intra)).join('')
+      );
+    })
     .join('');
   const note =
     s.note && s.blocks.some((b) => b.length)
@@ -531,30 +732,35 @@ function diffHead(s: StepView): string {
   const leftLabel = s.newFile ? 'Did not exist' : 'Before';
   const rightLabel = s.newFile ? 'New file' : 'After';
   return `<div class="ds-diffhead">
-    <span class="ds-diffhead-side">
+    <span class="ds-diffhead-side ds-diffhead-side-l">
       <span class="ds-diffhead-label${s.newFile ? ' ds-dim' : ''}">${leftLabel}</span>
       ${s.newFile ? '' : `<span class="ds-diffhead-path">${esc(s.file)}</span>`}
     </span>
     <span class="ds-diffhead-divider"></span>
-    <span class="ds-diffhead-side">
+    <span class="ds-diffhead-side ds-diffhead-side-r">
       <span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${rightLabel}</span>
       <span class="ds-diffhead-path">${esc(s.file)}</span>
     </span>
   </div>`;
 }
 
-function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: number): string {
-  const commentable = !!row.comment && row.newNo !== undefined;
-  const attrs = commentable
-    ? ` data-file="${esc(s.file)}" data-line="${row.newNo}" data-step="${esc(s.id)}"`
-    : '';
+function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: number, intra?: Map<SbsRow, IntraSides>): string {
+  const leftTarget =
+    !s.context && !s.newFile && row.oldNo !== undefined
+      ? { side: 'left' as const, file: s.oldFile, line: row.oldNo }
+      : undefined;
+  const rightTarget =
+    row.newNo !== undefined ? { side: 'right' as const, file: s.file, line: row.newNo } : undefined;
+  const primaryTarget = rightTarget ?? leftTarget;
+  const attrs = rowAttrs(primaryTarget, primaryTarget ? s.id : undefined);
   const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
   const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
+  const sides = intra?.get(row);
   const cells = s.context || s.newFile
-    ? singleCell(row, commentable)
-    : `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row, commentable)}`;
+    ? singleCell(row, rightTarget)
+    : `${cell('left', row, leftTarget, sides?.left)}<span class="ds-celldiv"></span>${cell('right', row, rightTarget, sides?.right)}`;
   const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}</div>`;
-  const thread = commentable ? threadFor(s.file, row.newNo!, comments) : '';
+  const thread = threadForTargets([leftTarget, rightTarget], comments);
   return rowHtml + thread;
 }
 
@@ -567,7 +773,7 @@ function rowVoiceFocusIndex(row: SbsRow, s: StepView, blockIndex: number): numbe
   return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
 }
 
-function cell(side: 'left' | 'right', row: SbsRow, commentCode = false): string {
+function cell(side: 'left' | 'right', row: SbsRow, target?: CommentTarget, intra?: string): string {
   const add = row.type === 'add';
   const del = row.type === 'del';
   const sideCls = side === 'left' ? ' ds-cell-l' : ' ds-cell-r';
@@ -595,49 +801,52 @@ function cell(side: 'left' | 'right', row: SbsRow, commentCode = false): string 
   if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
   const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-  return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${commentCode ? ' data-comment-code="1"' : ''}>${
-    highlight(row.content) || ' '
+  return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
+    (intra ?? highlight(row.content)) || ' '
   }</span>${flag}</span>`;
 }
 
-function singleCell(row: SbsRow, commentCode = false): string {
+function singleCell(row: SbsRow, target?: CommentTarget): string {
   const no = row.newNo ?? row.oldNo ?? '';
   const add = row.type === 'add';
   const sign = add ? '+' : '';
   const signCls = add ? ' ds-sign-add' : '';
   const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
   const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-  return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${commentCode ? ' data-comment-code="1"' : ''}>${
+  return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
     highlight(row.content) || ' '
   }</span>${flag}</span>`;
 }
 
-function threadFor(file: string, line: number, comments: Comment[]): string {
-  const here = comments.filter((c) => c.file === file && c.line === line);
-  if (!here.length) return '';
-  return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
-}
-
-export function commentHtml(c: Comment): string {
-  const type = (['change', 'question', 'nit'] as CommentType[]).includes(c.type as CommentType)
-    ? (c.type as CommentType)
-    : 'change';
-  const reply = c.reply
-    ? `<div class="ds-reply">
+function turnHtml(t: Turn): string {
+  if (t.role === 'user') {
+    return `<div class="ds-comment-body ds-turn ds-turn-user ds-md">${renderMarkdown(t.text)}</div>`;
+  }
+  return `<div class="ds-reply ds-turn">
         <span class="ds-reply-av">◈</span>
         <div class="ds-reply-main">
           <div class="ds-reply-who"><span class="ds-reply-name">${esc(APP_BRAND)}</span><span class="ds-ai-badge">AI</span></div>
-          <div class="ds-reply-body">${nl(esc(c.reply))}</div>
+          <div class="ds-reply-body ds-md">${renderMarkdown(t.text)}</div>
         </div>
-      </div>`
-    : '';
+      </div>`;
+}
+
+export function commentHtml(c0: Comment): string {
+  const c = normalizeComment(c0);
+  const type = (['change', 'question', 'nit'] as CommentType[]).includes(c.type as CommentType)
+    ? (c.type as CommentType)
+    : 'change';
+  const turns = c.turns ?? [];
+  const turnsHtml = turns.map(turnHtml).join('');
+  const hasReply = turns.some((t) => t.role === 'ai');
   const resolved = c.status === 'resolved';
+  const selectionLabel = commentSide(c) === 'left' ? 'Selected old side' : 'Selected new side';
   const selection = c.selectedText
-    ? `<div class="ds-comment-selection"><span>Selected</span><code>${esc(c.selectedText)}</code></div>`
+    ? `<div class="ds-comment-selection"><span>${selectionLabel}</span><code>${esc(c.selectedText)}</code></div>`
     : '';
   return `<div class="ds-comment status-${c.status}" data-comment-id="${esc(c.id)}" data-status="${
     c.status
-  }"${c.reply ? ' data-hasreply="1"' : ''}>
+  }"${hasReply ? ' data-hasreply="1"' : ''}>
     <div class="ds-comment-card flavor-${type}">
       <div class="ds-comment-head">
         <span class="ds-flavor-ico">${FLAVOR_ICON[type]}</span>
@@ -648,14 +857,9 @@ export function commentHtml(c: Comment): string {
         <span class="ds-statusbadge"><span class="ds-dot"></span>${STATUS_LABEL[c.status]}</span>
       </div>
       ${selection}
-      <div class="ds-comment-body">${nl(esc(c.body))}</div>
-      ${reply}
+      <div class="ds-comment-body ds-md">${renderMarkdown(c.body)}</div>
+      ${turnsHtml}
       <div class="ds-comment-actions">
-        ${
-          c.status !== 'resolved'
-            ? '<button class="ds-ghost ds-send" data-send title="Send this comment to your agent again">Send again</button>'
-            : ''
-        }
         <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
         <button class="ds-ghost ds-del" data-delete>Delete</button>
       </div>
@@ -687,11 +891,13 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
       : '<span class="ds-dim">unchanged</span>';
   const unified = f.hunks.length
     ? f.hunks
-        .map(
-          (hunk, hi) =>
+        .map((hunk, hi) => {
+          const intra = intraLineMap(hunk, (r) => r.type, (r) => r.content);
+          return (
             (hi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
-            hunk.map((r) => unifiedRow(r, f.file)).join(''),
-        )
+            hunk.map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra))).join('')
+          );
+        })
         .join('')
     : '<div class="ds-diffnote">No diff to show.</div>';
   // The All-files pane is a master/detail viewer: one file at a time (driven by
@@ -712,6 +918,7 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
       ${stepChip}
       <span class="ds-flex"></span>
       <span class="ds-cardstat">${stat}</span>
+      ${changeJumpControls()}
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
@@ -721,16 +928,29 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
   </section>`;
 }
 
-function unifiedRow(row: UnifiedRow, file: string): string {
+function unifiedRow(row: UnifiedRow, file: string, oldFile = file, intra?: string): string {
   const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
   const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-  const commentable = row.type !== 'del' && row.no !== undefined;
-  const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.no}"` : '';
+  const target =
+    row.no === undefined
+      ? undefined
+      : {
+          side: row.type === 'del' ? ('left' as const) : ('right' as const),
+          file: row.type === 'del' ? oldFile : file,
+          line: row.no,
+        };
+  const attrs = rowAttrs(target);
   return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${
     row.no ?? ''
-  }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${commentable ? ' data-comment-code="1"' : ''}>${
-    highlight(row.content) || ' '
+  }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
+    (intra ?? highlight(row.content)) || ' '
   }</span>${flag}</div>`;
+}
+
+/** Look up a unified row's precomputed intra-line side (del→left, add→right). */
+function unifiedIntra(row: UnifiedRow, map: Map<UnifiedRow, IntraSides>): string | undefined {
+  const sides = map.get(row);
+  return row.type === 'del' ? sides?.left : sides?.right;
 }
 
 // ---- trust drawer ----
@@ -770,8 +990,9 @@ function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): stri
 }
 
 function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string {
+  const intra = intraLineMap(u.rows, (r) => r.type, (r) => r.content);
   const rows = u.rows.length
-    ? u.rows.map((r) => unifiedRow(r, u.file)).join('')
+    ? u.rows.map((r) => unifiedRow(r, u.file, u.file, unifiedIntra(r, intra))).join('')
     : `<div class="ds-diffnote">${esc(u.file)}:${u.line}</div>`;
   const stepIdx = u.stepId !== undefined ? stepIndexById.get(u.stepId) : undefined;
   const jump =
@@ -794,29 +1015,41 @@ function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string
 
 // ---- full file (used by the lazy /api/fullfile endpoint) ----
 
-export function renderFullFile(rows: SbsRow[], opts: { file: string; newFile: boolean }): string {
+export function renderFullFile(rows: SbsRow[], opts: { file: string; oldFile?: string; newFile: boolean }): string {
   if (!rows.length) {
     return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
   }
   const leftLabel = opts.newFile ? 'Did not exist' : 'Before';
   const rightLabel = opts.newFile ? 'New file' : 'After';
   const head = `<div class="ds-diffhead">
-    <span class="ds-diffhead-side"><span class="ds-diffhead-label${
+    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${
       opts.newFile ? ' ds-dim' : ''
-    }">${leftLabel}</span>${opts.newFile ? '' : `<span class="ds-diffhead-path">${esc(opts.file)}</span>`}</span>
+    }">${leftLabel}</span>${opts.newFile ? '' : `<span class="ds-diffhead-path">${esc(opts.oldFile ?? opts.file)}</span>`}</span>
     <span class="ds-diffhead-divider"></span>
-    <span class="ds-diffhead-side"><span class="ds-diffhead-label${
+    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${
       opts.newFile ? ' ds-green' : ''
     }">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
   </div>`;
-  const body = rows.map((r) => fullRow(r, opts.file)).join('');
+  const intra = intraLineMap(rows, (r) => r.type, (r) => r.content);
+  const body = rows.map((r) => fullRow(r, opts, intra)).join('');
   return `${head}<div class="ds-diffbody">${body}</div>`;
 }
 
-function fullRow(row: SbsRow, file: string): string {
-  const commentable = row.newNo !== undefined;
-  const cells = `${cell('left', row)}<span class="ds-celldiv"></span>${cell('right', row, commentable)}`;
-  const attrs = commentable ? ` data-file="${esc(file)}" data-line="${row.newNo}"` : '';
+function fullRow(
+  row: SbsRow,
+  opts: { file: string; oldFile?: string; newFile: boolean },
+  intra?: Map<SbsRow, IntraSides>,
+): string {
+  const leftTarget =
+    !opts.newFile && row.oldNo !== undefined
+      ? { side: 'left' as const, file: opts.oldFile ?? opts.file, line: row.oldNo }
+      : undefined;
+  const rightTarget =
+    row.newNo !== undefined ? { side: 'right' as const, file: opts.file, line: row.newNo } : undefined;
+  const primaryTarget = rightTarget ?? leftTarget;
+  const sides = intra?.get(row);
+  const cells = `${cell('left', row, leftTarget, sides?.left)}<span class="ds-celldiv"></span>${cell('right', row, rightTarget, sides?.right)}`;
+  const attrs = rowAttrs(primaryTarget);
   return `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}</div>`;
 }
 
@@ -850,4 +1083,99 @@ function esc(s: string): string {
 
 function nl(s: string): string {
   return s.replace(/\n/g, '<br>');
+}
+
+function renderMarkdown(input: string): string {
+  const lines = input.replace(/\r\n/g, '\n').trim().split('\n');
+  const out: string[] = [];
+  let paragraph: string[] = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    out.push(`<p>${renderInlineMarkdown(paragraph.join('\n'))}</p>`);
+    paragraph = [];
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+
+    const fence = line.match(/^```([\w-]+)?\s*$/);
+    if (fence) {
+      flushParagraph();
+      const code: string[] = [];
+      i += 1;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      const lang = fence[1] ? ` data-lang="${esc(fence[1])}"` : '';
+      out.push(`<pre class="ds-md-code"${lang}><code>${esc(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      const quoted = [quote[1]];
+      while (i + 1 < lines.length) {
+        const next = lines[i + 1].match(/^>\s?(.*)$/);
+        if (!next) break;
+        quoted.push(next[1]);
+        i += 1;
+      }
+      out.push(`<blockquote>${renderMarkdown(quoted.join('\n'))}</blockquote>`);
+      continue;
+    }
+
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      const items = [bullet[1]];
+      while (i + 1 < lines.length) {
+        const next = lines[i + 1].match(/^\s*[-*]\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        i += 1;
+      }
+      out.push(`<ul>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`);
+      continue;
+    }
+
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      const items = [ordered[1]];
+      while (i + 1 < lines.length) {
+        const next = lines[i + 1].match(/^\s*\d+[.)]\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        i += 1;
+      }
+      out.push(`<ol>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ol>`);
+      continue;
+    }
+
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  return out.join('');
+}
+
+function renderInlineMarkdown(input: string): string {
+  return input
+    .split(/(`[^`]*`)/g)
+    .map((part) => {
+      if (part.startsWith('`') && part.endsWith('`')) return `<code>${esc(part.slice(1, -1))}</code>`;
+      return esc(part)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+        .replace(/(^|[^\*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+        .replace(/\n/g, '<br>');
+    })
+    .join('');
 }

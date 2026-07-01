@@ -1,7 +1,7 @@
 // Comments rendering across views. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderPage, renderFullFile } from '../dist/render.js';
+import { commentHtml, renderPage, renderFullFile } from '../dist/render.js';
 
 const tour = {
   version: 1, title: 't', summary: 's',
@@ -26,17 +26,20 @@ test('renderFullFile marks every current-file line selectable for comments', () 
   assert.match(html, /data-file="a\.ts" data-line="1"/);
   assert.match(html, /data-file="a\.ts" data-line="2"/);
   assert.match(html, /data-comment-code="1"/);
+  assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
+  assert.match(html, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="1"/);
   assert.doesNotMatch(html, /ds-addcomment/);
 });
 
-test('all-files diff rows expose selectable comment text on the new side, not on deletions', () => {
+test('all-files diff rows expose side-aware selectable comment text', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /ds-urow ds-row-add[^>]*data-file="a\.ts" data-line="1"/);
   assert.match(html, /data-line="2"/);
   assert.match(html, /data-comment-code="1"/);
   assert.doesNotMatch(html, /ds-addcomment/);
-  // A pure deletion row must not expose a comment anchor in any view.
-  assert.doesNotMatch(html, /ds-row-del[^>]*data-file=/);
+  assert.match(html, /ds-urow ds-row-del[^>]*data-file="a\.ts" data-line="1"/);
+  assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
+  assert.match(html, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="1"/);
 });
 
 test('a selected-text comment renders by (file,line) with no step and shows its snippet', () => {
@@ -48,4 +51,55 @@ test('a selected-text comment renders by (file,line) with no step and shows its 
   assert.match(html, /NEEDS_FIX_HERE/);
   assert.match(html, /ds-comment-selection/);
   assert.match(html, /new1/);
+});
+
+test('a left-side selected-text comment renders beside the old panel line', () => {
+  const comments = [{ id: 'c1', file: 'a.ts', line: 1, side: 'left', type: 'question',
+                      selectedText: 'old',
+                      selection: { startLine: 1, endLine: 1 },
+                      body: 'OLD_SIDE_QUESTION', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
+  assert.match(html, /OLD_SIDE_QUESTION/);
+  assert.match(html, /Selected/);
+  assert.match(html, /old/);
+});
+
+test('a multi-turn comment renders body then turns in order', () => {
+  const html = commentHtml({
+    id: 'c3', file: 'a.ts', line: 1, type: 'question',
+    body: 'why this branch?', status: 'addressed', createdAt: '2026-01-01T00:00:00Z',
+    turns: [
+      { role: 'ai', text: 'It guards the retry path.', at: '2026-01-01T00:01:00Z' },
+      { role: 'user', text: 'what about the first attempt?', at: '2026-01-01T00:02:00Z' },
+      { role: 'ai', text: 'First attempt skips it.', at: '2026-01-01T00:03:00Z' },
+    ],
+  });
+  const iBody = html.indexOf('why this branch?');
+  const iAi1 = html.indexOf('It guards the retry path.');
+  const iUser = html.indexOf('what about the first attempt?');
+  const iAi2 = html.indexOf('First attempt skips it.');
+  assert.ok(iBody >= 0 && iAi1 > iBody && iUser > iAi1 && iAi2 > iUser, 'turns render in order after body');
+  assert.match(html, /ds-turn-user/);
+  assert.match(html, /data-hasreply="1"/);
+  assert.doesNotMatch(html, /data-send/);
+});
+
+test('agent replies render Markdown as safe chat content', () => {
+  const html = commentHtml({
+    id: 'c2',
+    file: 'a.ts',
+    line: 1,
+    type: 'question',
+    body: 'Can this use `fills[i]`?',
+    status: 'addressed',
+    createdAt: '2026-01-01T00:00:00Z',
+    reply: 'Use `fills[i]` for **mixed batches**.\n\n- Wallet-only batches can skip fills.\n- Non-wallet ops still need data.\n\n<script>alert(1)</script>',
+  });
+
+  assert.match(html, /class="ds-reply-body ds-md"/);
+  assert.match(html, /<code>fills\[i\]<\/code>/);
+  assert.match(html, /<strong>mixed batches<\/strong>/);
+  assert.match(html, /<ul><li>Wallet-only batches can skip fills\.<\/li><li>Non-wallet ops still need data\.<\/li><\/ul>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>alert/);
 });
