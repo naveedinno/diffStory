@@ -1,121 +1,20 @@
 // The "Your change" screen — the app's honest front door. Pure git, NO agent runs
-// here. Shows the current change + a scope switcher, and a single "Generate guided
-// review" button that streams POST /api/generate into a small cancelable console and
-// navigates into the review on success. Self-contained; all server values escaped.
+// here. Shows the current scope + changed-file summary, then links into the real
+// review viewer for the full diff, comments, and optional story generation.
+// Self-contained; all server values escaped.
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS } from './brand.js';
-import type { ChangeSummary, ChangeFile } from './change-view.js';
-import { isReviewNoise } from './noise.js';
-import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
+import type { ChangeSummary } from './change-view.js';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function count(n: number | null, sign: string): string {
-  return n == null ? '' : `<span class="${sign === '+' ? 'add' : 'del'}">${sign}${n}</span>`;
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
-// Files nobody reviews by hand get folded into a collapsed group so the real
-// change isn't buried under noise. Same classifier the diff layer uses to drop
-// them from the story and review, so the two screens never disagree.
-function isNoise(f: ChangeFile): boolean {
-  return isReviewNoise(f.path, (f.added ?? 0) + (f.removed ?? 0));
-}
-
-/** A fixed-width green/red proportion bar so change size is felt, not just read. */
-function diffBar(added: number | null, removed: number | null): string {
-  if (added == null && removed == null) return `<span class="bar bar-bin" aria-hidden="true"></span>`;
-  const a = added ?? 0;
-  const d = removed ?? 0;
-  const tot = a + d;
-  if (tot === 0) return `<span class="bar" aria-hidden="true"></span>`;
-  const W = 42;
-  let aw = Math.round((W * a) / tot);
-  if (a > 0 && aw === 0) aw = 1;
-  if (d > 0 && aw >= W) aw = W - 1;
-  const dw = W - aw;
-  return `<span class="bar" aria-hidden="true"><span class="bar-a" style="width:${aw}px"></span><span class="bar-d" style="width:${dw}px"></span></span>`;
-}
-
-function fileRow(f: ChangeFile): string {
-  const i = f.path.lastIndexOf('/');
-  const dir = i < 0 ? '' : f.path.slice(0, i + 1);
-  const base = i < 0 ? f.path : f.path.slice(i + 1);
-  return (
-    `<div class="frow">` +
-    `<span class="fp" title="${esc(f.path)}">` +
-    (dir ? `<span class="fdir"><bdi>${esc(dir)}</bdi></span>` : '') +
-    `<span class="fname">${esc(base)}</span>` +
-    `</span>` +
-    diffBar(f.added, f.removed) +
-    `<span class="fc">${count(f.added, '+')} ${count(f.removed, '−')}</span>` +
-    `</div>`
-  );
-}
-
-function topFolder(path: string): string {
-  const i = path.indexOf('/');
-  return i < 0 ? 'root' : path.slice(0, i) + '/';
-}
-
-function fileList(sum: ChangeSummary): string {
-  const totals = sum.files.reduce(
-    (acc, f) => ({ a: acc.a + (f.added ?? 0), d: acc.d + (f.removed ?? 0) }),
-    { a: 0, d: 0 },
-  );
-  const summaryHead =
-    `<div class="fsum">` +
-    `<span class="fsum-n"><b>${sum.totalChanged}</b> ${sum.totalChanged === 1 ? 'file' : 'files'} changed</span>` +
-    `<span class="fsum-stat"><span class="add">+${totals.a}</span><span class="del">−${totals.d}</span></span>` +
-    `</div>`;
-
-  const normal = sum.files.filter((f) => !isNoise(f));
-  const noise = sum.files.filter((f) => isNoise(f));
-
-  const groups = new Map<string, ChangeFile[]>();
-  for (const f of normal) {
-    const key = topFolder(f.path);
-    (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
-  }
-  const groupKeys = [...groups.keys()].sort((a, b) => {
-    if (a === 'root') return 1;
-    if (b === 'root') return -1;
-    return a.localeCompare(b);
-  });
-
-  const groupHtml = groupKeys
-    .map((k) => {
-      const fs = groups.get(k)!;
-      const subhead =
-        groupKeys.length > 1 || noise.length
-          ? `<div class="fgrp"><span class="fgrp-name">${esc(k)}</span><span class="fgrp-n">${plural(fs.length, 'file')}</span></div>`
-          : '';
-      return subhead + fs.map(fileRow).join('');
-    })
-    .join('');
-
-  let noiseHtml = '';
-  if (noise.length) {
-    const nt = noise.reduce(
-      (acc, f) => ({ a: acc.a + (f.added ?? 0), d: acc.d + (f.removed ?? 0) }),
-      { a: 0, d: 0 },
-    );
-    noiseHtml =
-      `<details class="fgen"><summary class="fgen-sum">` +
-      `<span class="fgen-chev" aria-hidden="true">›</span>` +
-      `<span>${plural(noise.length, 'generated & large file')}</span>` +
-      `<span class="fgen-stat"><span class="add">+${nt.a}</span><span class="del">−${nt.d}</span></span>` +
-      `</summary><div class="fgen-rows">${noise.map(fileRow).join('')}</div></details>`;
-  }
-
-  return summaryHead + `<div class="files">${groupHtml}${noiseHtml}</div>`;
-}
+// A reload control lives in the (sticky) nav so it's always reachable: the diff
+// is rendered from the working tree at request time, so editing code and hitting
+// this re-reads the tree and rebuilds the diff + counts in one shot.
+const REFRESH_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>`;
 
 function totals(sum: ChangeSummary): { added: number; removed: number } {
   return sum.files.reduce(
@@ -124,25 +23,97 @@ function totals(sum: ChangeSummary): { added: number; removed: number } {
   );
 }
 
+function splitPath(path: string): [string, string] {
+  const i = path.lastIndexOf('/');
+  return i < 0 ? ['', path] : [path.slice(0, i + 1), path.slice(i + 1)];
+}
+
+function filePathHtml(path: string): string {
+  const [dir, base] = splitPath(path);
+  return `${dir ? `<span class="fdir">${esc(dir)}</span>` : ''}<span class="fname">${esc(base)}</span>`;
+}
+
+function fileStat(file: ChangeSummary['files'][number]): string {
+  if (file.added === null || file.removed === null) return '<span class="muted">binary / metadata</span>';
+  const parts = [];
+  if (file.added) parts.push(`<span class="add">+${file.added}</span>`);
+  if (file.removed) parts.push(`<span class="del">−${file.removed}</span>`);
+  return parts.length ? parts.join(' ') : '<span class="muted">metadata</span>';
+}
+
+function changeBar(file: ChangeSummary['files'][number]): string {
+  if (file.added === null || file.removed === null) return '<span class="bar bar-bin"></span>';
+  const changed = Math.max(1, file.added + file.removed);
+  const addWidth = Math.round((file.added / changed) * 100);
+  const delWidth = 100 - addWidth;
+  return `<span class="bar" aria-hidden="true"><span class="bar-a" style="width:${addWidth}%"></span><span class="bar-d" style="width:${delWidth}%"></span></span>`;
+}
+
+function renderFileSummary(sum: ChangeSummary, diffHref: string): string {
+  const total = totals(sum);
+  const rows = sum.files
+    .map(
+      (file) =>
+        `<div class="frow">` +
+        `<span class="fp" title="${esc(file.path)}">${filePathHtml(file.path)}</span>` +
+        changeBar(file) +
+        `<span class="fc">${fileStat(file)}</span>` +
+        `</div>`,
+    )
+    .join('');
+  return `<div class="card file-summary-card">
+    <div class="fsum">
+      <span class="fsum-n"><b>${sum.totalChanged}</b> ${sum.totalChanged === 1 ? 'file changed' : 'files changed'}</span>
+      <span class="fsum-stat"><span class="add">+${total.added}</span><span class="del">−${total.removed}</span></span>
+      <a class="openreview" href="${esc(diffHref)}">Open diff viewer <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="files">${rows}</div>
+  </div>`;
+}
+
+/** Carry the current scope to the /diff viewer so it diffs the same thing. */
+function scopeQuery(base?: string, head?: string): string {
+  const parts: string[] = [];
+  if (base) parts.push(`base=${encodeURIComponent(base)}`);
+  if (head) parts.push(`head=${encodeURIComponent(head)}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
 export function renderChangePage(
   sum: ChangeSummary,
-  opts: { repoName: string; routeBase?: string; base?: string; head?: string; scopeLabel?: string; active?: string; notice?: string },
+  opts: {
+    repoName: string;
+    routeBase?: string;
+    base?: string;
+    head?: string;
+    scopeLabel?: string;
+    active?: string;
+    notice?: string;
+    compareBaseRef?: string;
+    compareBaseCommit?: string;
+    compareHeadRef?: string;
+    compareHeadCommit?: string;
+  },
 ): string {
   const label = opts.scopeLabel ?? sum.baseLabel;
   const active = opts.active ?? '';
   const routeBase = opts.routeBase ?? '';
   const total = totals(sum);
   const notice = opts.notice
-    ? `<div class="notice"><b>That review couldn't be loaded.</b> ${esc(opts.notice)} Generate a fresh one below.</div>`
+    ? `<div class="notice"><b>That review couldn't be loaded.</b> ${esc(
+        opts.notice,
+      )} Open the diff viewer below, then generate a fresh story from the Story tab.</div>`
     : '';
 
   const nav = navBar({
     home: '/repos',
     crumbs: [
       { label: opts.repoName, href: `${routeBase}/stories` },
-      { label: 'New review' },
+      { label: 'Diff' },
     ],
-    right: `<a class="nv-act" href="${esc(routeBase)}/stories">Saved stories</a>`,
+    right:
+      `<button class="nv-act" id="reloadBtn" type="button" title="Re-read the working tree and rebuild the diff">${REFRESH_ICON}Reload</button>` +
+      `<a class="nv-act" href="${esc(routeBase)}/stories">Saved stories</a>`,
   });
 
   const scopeControls =
@@ -153,44 +124,22 @@ export function renderChangePage(
     `<button class="sopt${active === 'commit' ? ' on' : ''}" data-open-panel="commit" type="button">` +
     `<span class="sopt-k">Single commit</span><span class="sopt-t">Parent -> selected commit</span>` +
     `</button>` +
-    `<a class="sopt${active === 'branch' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=branch">` +
-    `<span class="sopt-k">Current branch</span><span class="sopt-t">Merge-base -> HEAD</span>` +
-    `</a>` +
-    `<button class="sopt" data-open-panel="range" type="button">` +
-    `<span class="sopt-k">Branch commits</span><span class="sopt-t">Two commits on one branch</span>` +
-    `</button>` +
-    `<button class="sopt" data-open-panel="cross" type="button">` +
-    `<span class="sopt-k">Cross-branch commits</span><span class="sopt-t">Commit from each branch</span>` +
-    `</button>` +
     `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button">` +
-    `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Branches, heads, commits</span>` +
+    `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Branches with optional commit pins</span>` +
     `</button>` +
     `</div>`;
 
-  const launch = sum.hasChanges
-    ? `<aside class="launch" aria-label="Generate review">
-         <div class="launch-head">
-           <span class="launch-eyebrow">Ready to narrate</span>
-           <strong>${plural(sum.totalChanged, 'file')}</strong>
-           <span><span class="add">+${total.added}</span><span class="del">-${total.removed}</span></span>
-         </div>
-         <div class="launch-body">
-           <div class="genctl">
-             <label class="genfield">Agent <select id="agentSel" aria-label="Agent"></select></label>
-             <label class="genfield">Model <select id="modelSel" aria-label="Model"></select></label>
-             <input id="modelInp" class="modelother" type="text" placeholder="model name" autocomplete="off" spellcheck="false" aria-label="Custom model" hidden />
-             <label class="genfield">Story <select id="storyMode" aria-label="Story mode"><option value="guided" selected>Guided review</option><option value="detailed">Detailed audit</option></select></label>
-           </div>
-           <button class="gen" id="genBtn" type="button" data-base="${esc(opts.base ?? '')}" data-head="${esc(opts.head ?? '')}">Generate guided review</button>
-         </div>
-         <p class="skillwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
-         <p class="gennote">Guided is the fast path; Detailed audit walks code paths line by line. Nothing starts until you click.</p>
-       </aside>`
-    : '';
+  const diffHref = `${routeBase}/diff${scopeQuery(opts.base, opts.head)}`;
+  const compareLeftValue = opts.compareBaseRef ?? opts.base ?? '';
+  const hasCompareHead = typeof opts.head === 'string' && opts.head.length > 0;
+  const compareRightValue = opts.compareHeadRef ?? (hasCompareHead ? opts.head ?? '' : 'HEAD');
+  const compareLeftCommitValue = opts.compareBaseCommit ?? '';
+  const compareRightCommitValue = opts.compareHeadCommit ?? (hasCompareHead ? '' : 'HEAD + working tree');
+  const compareRightWorktree = opts.compareHeadCommit || hasCompareHead ? '' : ' data-worktree="1"';
 
   const cardBody = sum.hasChanges
-    ? fileList(sum)
-    : `<div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div>`;
+    ? renderFileSummary(sum, diffHref)
+    : `<div class="card"><div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div></div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -214,7 +163,7 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .metric{display:flex;flex-direction:column;gap:2px;min-width:80px;padding:9px 11px;border:.5px solid var(--hair);border-radius:12px;background:var(--elev);box-shadow:0 1px 2px rgba(0,0,0,.035)}
 .metric b{font-size:18px;line-height:1;color:var(--label);font-variant-numeric:tabular-nums}
 .metric span{white-space:nowrap}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
 .card{background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
 .scope-card{grid-column:1;padding:16px;overflow:visible}
 .scope{display:flex;flex-direction:column;gap:14px;font-size:13px;color:var(--l2)}
@@ -226,18 +175,20 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .sopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:100%}
 .sopt{position:relative;display:flex;flex-direction:column;gap:5px;min-height:78px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:.5px solid var(--sep);cursor:pointer;padding:13px 13px 12px;border-radius:12px;text-decoration:none;white-space:normal}
 .sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
-.sopt:hover{color:var(--label);border-color:var(--hair);background:var(--fill)}
+.sopt:hover,.sopt.is-open{color:var(--label);border-color:var(--hair);background:var(--fill)}
+.sopt.is-open:not(.on){border-color:color-mix(in srgb,var(--blue) 30%,var(--hair));background:color-mix(in srgb,var(--blue) 8%,var(--elev))}
+.sopt.is-open:not(.on):before{background:color-mix(in srgb,var(--blue) 55%,transparent)}
 .sopt.on{background:linear-gradient(180deg,color-mix(in srgb,var(--blue) 10%,var(--elev)),var(--elev));color:var(--label);font-weight:590;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--blue) 40%,transparent),0 1px 2px rgba(0,0,0,.06);border-color:transparent}
 .sopt.on:before{background:var(--blue)}
 .sopt-k{font-size:13px;font-weight:700;color:var(--label);line-height:1.2}
 .sopt-t{font-size:11.5px;line-height:1.3;color:var(--l2)}
 .sopt.on .sopt-t{color:var(--l2)}
-.refpanel{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:end;gap:10px;margin-top:12px;padding:13px;border:.5px solid var(--sep);border-radius:12px;background:var(--subbg)}
+.refpanel{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px;margin-top:12px;padding:13px;border:.5px solid var(--sep);border-radius:12px;background:var(--subbg)}
 .refpanel[hidden]{display:none}
-.refpanel[data-panel="commit"]{grid-template-columns:minmax(220px,1fr) auto;align-items:end}
-.refpanel[data-panel="range"]{grid-template-columns:minmax(150px,.7fr) minmax(0,1fr) auto minmax(0,1fr) auto}
-.refpanel[data-panel="cross"]{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto}
-.refside{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;min-width:0}
+.refpanel[data-panel="commit"]{grid-template-columns:minmax(220px,1fr);align-items:end}
+.refpanel[data-panel="compare"]{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:stretch}
+.refside{display:grid;grid-template-columns:1fr;gap:9px;align-content:start;min-width:0}
+.refside-title{font-size:12px;font-weight:740;color:var(--label);letter-spacing:.05em;text-transform:uppercase}
 .refrow{position:relative;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);min-width:0}
 .refrow span{font-weight:620;color:var(--l2)}
 .refhint{grid-column:1 / -1;margin:0;color:var(--l3);font-size:12px;line-height:1.4}
@@ -253,17 +204,14 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .refpick-meta{grid-column:1;color:var(--l2);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .refpick-empty{padding:9px 10px;color:var(--l3);font-size:12px}
 .cmparrow{color:var(--l3);display:inline-flex;align-self:center;padding-bottom:8px}
-.cmpgo{font:inherit;font-size:13px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:8px;height:34px;padding:0 16px;cursor:pointer;white-space:nowrap}
-.cmpgo:hover{background:var(--blue2)}
 .file-card{grid-column:1;min-width:0}
-.fsum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-bottom:.5px solid var(--sep);background:var(--subbg);font-size:13px;color:var(--l2)}
+.file-summary-card{overflow:hidden}
+.fsum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-bottom:.5px solid var(--sep);background:var(--subbg);font-size:13px;color:var(--l2);flex-wrap:wrap}
 .fsum-n b{color:var(--label);font-weight:650;font-variant-numeric:tabular-nums}
 .fsum-stat{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12.5px;display:inline-flex;gap:9px}
+.openreview{margin-left:auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:9px;background:var(--blue);color:#fff;text-decoration:none;font-size:13px;font-weight:650;box-shadow:0 1px 2px rgba(0,40,120,.18)}
+.openreview:hover{background:var(--blue2)}
 .files{max-height:min(58vh,620px);overflow:auto}
-.fgrp{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 15px;background:var(--subbg);
-  font-size:11.5px;font-weight:700;letter-spacing:.02em;color:var(--l3);text-transform:uppercase;position:sticky;top:0;z-index:1;border-bottom:.5px solid var(--sep)}
-.fgrp-name{font-family:"SF Mono",ui-monospace,Menlo,monospace;text-transform:none;letter-spacing:0;font-weight:600;color:var(--l2)}
-.fgrp-n{font-weight:600}
 .frow{display:flex;align-items:center;gap:12px;padding:9px 15px;border-bottom:.5px solid var(--sep);font-size:13px}
 .frow:last-child{border-bottom:none}
 .fp{flex:1;min-width:0;display:flex;align-items:baseline;overflow:hidden;font-family:"SF Mono",ui-monospace,Menlo,monospace}
@@ -273,57 +221,25 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .bar-a{background:var(--addbar);height:100%}.bar-d{background:var(--delbar);height:100%}
 .bar-bin{background:repeating-linear-gradient(45deg,var(--fill),var(--fill) 3px,transparent 3px,transparent 6px)}
 .fc{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;flex:none;min-width:78px;text-align:right}
+.muted{color:var(--l3)}
 .add{color:var(--add)}.del{color:var(--del);margin-left:6px}
-.fgen{border-top:.5px solid var(--sep)}
-.fgen-sum{display:flex;align-items:center;gap:9px;padding:10px 15px;font-size:12.5px;color:var(--l2);cursor:pointer;list-style:none;user-select:none}
-.fgen-sum::-webkit-details-marker{display:none}
-.fgen-sum:hover{background:var(--fill)}
-.fgen-chev{display:inline-flex;transition:transform .15s ease;color:var(--l3);font-size:15px;line-height:1}
-.fgen[open] .fgen-chev{transform:rotate(90deg)}
-.fgen-stat{margin-left:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;display:inline-flex;gap:8px}
-.fgen-rows .frow{padding-left:26px}
-.launch{grid-column:2;grid-row:1 / span 2;position:sticky;top:70px;background:var(--elev);border:.5px solid var(--hair);border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.08);padding:15px;overflow:hidden}
-.launch-head{display:grid;grid-template-columns:1fr auto;align-items:end;gap:3px 10px;padding-bottom:13px;border-bottom:.5px solid var(--sep);font-size:12.5px;color:var(--l2)}
-.launch-head strong{grid-column:1;font-size:20px;line-height:1;color:var(--label);font-weight:730;letter-spacing:-.02em}
-.launch-head>span:last-child{grid-column:2;grid-row:1 / span 2;align-self:center;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;white-space:nowrap}
-.launch-eyebrow{grid-column:1;color:var(--l3);font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
-.launch-body{padding-top:14px}
-.gennote{color:var(--l3);font-size:12px;margin:8px 2px 0;line-height:1.4}
 .notice{background:rgba(255,159,10,.13);border:.5px solid rgba(255,159,10,.42);color:var(--label);border-radius:12px;padding:12px 15px;margin-bottom:16px;font-size:13.5px;line-height:1.5}
 .notice b{font-weight:600}
 .empty{padding:34px 16px;text-align:center;color:var(--l2);font-size:14px}
 .empty b{color:var(--label);font-weight:600}
-.genctl{display:flex;flex-direction:column;gap:10px;min-width:0}
-.genfield{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);font-weight:590}
-.genfield select,.genfield input{font:inherit;font-size:13px;color:var(--label);background-color:var(--bg);border:.5px solid var(--hair);border-radius:8px;height:34px;padding:0 11px}
-.genfield select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
-.genfield input{min-width:130px}
-.genfield select:focus,.genfield input:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
-.modelother{font:inherit;font-size:13px;color:var(--label);background-color:var(--bg);border:.5px solid var(--hair);border-radius:8px;height:34px;padding:0 11px;min-width:140px}
-.modelother:focus{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 30%,transparent)}
-.modelother[hidden]{display:none}
-.gen{width:100%;height:42px;margin-top:13px;padding:0 18px;font:inherit;font-size:15px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:11px;cursor:pointer;letter-spacing:-.01em;box-shadow:0 1px 2px rgba(0,40,120,.18)}
-.gen:hover{background:var(--blue2)}.gen:active{transform:scale(.99)}.gen:disabled{opacity:.5;cursor:default}
-.skillwarn{margin:12px 0 0;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:10px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
-.skillwarn[hidden]{display:none}
-.skillwarn span{flex:1;min-width:0}
-.skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
-.skillfix:hover{background:var(--blue2)}.skillfix:disabled{opacity:.55;cursor:default}
-.progress-host{grid-column:1 / -1}
-@media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.refpanel[data-panel="range"],.refpanel[data-panel="cross"]{grid-template-columns:1fr}.refside{grid-template-columns:1fr 1fr}.refpanel[data-panel="range"] .cmparrow,.refpanel[data-panel="cross"] .cmparrow{display:none}}
-@media (max-width:980px){.layout{grid-template-columns:1fr}.scope-card,.file-card,.launch{grid-column:1}.launch{grid-row:auto;position:static}.genctl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen{margin-top:14px}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
-@media (max-width:700px){.refpanel,.refpanel[data-panel="commit"]{grid-template-columns:1fr}.refside{grid-template-columns:1fr}.cmparrow{display:none}}
-@media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.cmpgo{width:100%;max-width:none}.genctl{grid-template-columns:1fr}.launch{border-radius:14px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}}
-${progressPanelStyles()}
+@media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:980px){.scope-card,.file-card{grid-column:1}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
+@media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}}
+@media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
 </style></head>
 <body>
 ${nav}
 <main class="wrap">
   <div class="lede">
     <div>
-      <p class="eyebrow">Review scope</p>
-      <h1>Choose what the story should cover</h1>
-      <p>Pick the diff boundary first, then generate the walkthrough from the exact files in that scope.</p>
+      <p class="eyebrow">Your change</p>
+      <h1>Change summary</h1>
+      <p>A quick file-by-file summary for this scope. Open the review viewer for the full diff, comments, and optional story.</p>
     </div>
     <div class="scope-metrics" aria-label="Current scope summary">
       <span class="metric"><b>${sum.totalChanged}</b><span>${sum.totalChanged === 1 ? 'file' : 'files'}</span></span>
@@ -343,62 +259,60 @@ ${nav}
       </div>
       <div class="refpanel" data-panel="commit" id="commitPanel"${active === 'commit' ? '' : ' hidden'}>
         <label class="refrow"><span>Commit</span><input id="commitRef" data-picker="commit" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
-        <button class="cmpgo" id="commitGo" type="button">Review commit</button>
         <p class="refhint">Shows that commit against its first parent; root commits are shown against the empty tree.</p>
       </div>
-      <div class="refpanel" data-panel="range" id="rangePanel" hidden>
-        <label class="refrow"><span>Branch</span><input id="rangeBranch" data-picker="branch" placeholder="branch" value="HEAD" autocomplete="off" spellcheck="false"></label>
-        <label class="refrow"><span>Older commit</span><input id="rangeBase" data-picker="branch-commit" data-branch-input="rangeBranch" placeholder="base commit" autocomplete="off" spellcheck="false"></label>
-        <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="refrow"><span>Newer commit</span><input id="rangeHead" data-picker="branch-commit" data-branch-input="rangeBranch" placeholder="newer commit" value="HEAD" autocomplete="off" spellcheck="false"></label>
-        <button class="cmpgo" id="rangeGo" type="button">Compare commits</button>
-        <p class="refhint">Use this for two commits from the same branch. Pick a branch first, then pick older and newer commits from that branch.</p>
-      </div>
-      <div class="refpanel" data-panel="cross" id="crossPanel" hidden>
-        <div class="refside">
-          <label class="refrow"><span>From branch</span><input id="crossBaseBranch" data-picker="branch" placeholder="branch" autocomplete="off" spellcheck="false"></label>
-          <label class="refrow"><span>From commit</span><input id="crossBaseCommit" data-picker="branch-commit" data-branch-input="crossBaseBranch" placeholder="commit on branch" autocomplete="off" spellcheck="false"></label>
-        </div>
-        <span class="cmparrow" aria-hidden="true">→</span>
-        <div class="refside">
-          <label class="refrow"><span>To branch</span><input id="crossHeadBranch" data-picker="branch" placeholder="branch" autocomplete="off" spellcheck="false"></label>
-          <label class="refrow"><span>To commit</span><input id="crossHeadCommit" data-picker="branch-commit" data-branch-input="crossHeadBranch" placeholder="commit on branch" autocomplete="off" spellcheck="false"></label>
-        </div>
-        <button class="cmpgo" id="crossGo" type="button">Compare commits</button>
-        <p class="refhint">Use this for two commits that live on two different branches. The diff uses the selected commit SHAs directly.</p>
-      </div>
       <div class="refpanel" data-panel="compare" id="comparePanel"${active === 'compare' ? '' : ' hidden'}>
-        <label class="refrow"><span>From</span><input id="cmpBase" data-picker="ref" placeholder="branch, tag, or commit" value="${esc(opts.base ?? '')}" autocomplete="off" spellcheck="false"></label>
+        <div class="refside" data-ref-side="left">
+          <span class="refside-title">Left</span>
+          <label class="refrow"><span>Branch / ref</span><input id="cmpBaseRef" data-picker="ref" placeholder="local or remote branch" value="${esc(
+            compareLeftValue,
+          )}" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Commit</span><input id="cmpBase" data-picker="side-commit" data-ref-input="cmpBaseRef" placeholder="Use selected ref head, or pick a commit" value="${esc(
+            compareLeftCommitValue,
+          )}" autocomplete="off" spellcheck="false"></label>
+        </div>
         <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="refrow"><span>To</span><input id="cmpHead" data-picker="ref" placeholder="branch head, commit, or blank for working tree" value="${esc(opts.head ?? '')}" autocomplete="off" spellcheck="false"></label>
-        <button class="cmpgo" id="cmpGo" type="button">Compare refs</button>
-        <p class="refhint">Use this for branch head vs branch head, branch head vs a commit, or commits from different branches.</p>
+        <div class="refside" data-ref-side="right">
+          <span class="refside-title">Right</span>
+          <label class="refrow"><span>Branch / ref</span><input id="cmpHeadRef" data-picker="ref" placeholder="local or remote branch" value="${esc(
+            compareRightValue,
+          )}" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Commit</span><input id="cmpHead" data-picker="side-commit" data-ref-input="cmpHeadRef" placeholder="Use selected ref head, or pick a commit" value="${esc(
+            compareRightCommitValue,
+          )}"${compareRightWorktree} autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="refhint">Pick a branch/ref on each side, then optionally pin either side to a commit from that branch. Right can stay on HEAD + working tree to include the latest uncommitted edits.</p>
       </div>
       <div class="refpicker" id="refPicker" role="listbox" hidden></div>
     </section>
-    ${launch}
-    <section class="card file-card" aria-label="Files in scope">
+    <section class="file-card" aria-label="Changed files">
       ${cardBody}
     </section>
-    <div id="genpanel" class="progress-host">${progressPanelMarkup('inline')}</div>
   </div>
 </main>
-<script>${progressPanelScript()}</script>
 <script>
 (function(){
+  var reloadBtn=document.getElementById('reloadBtn');
+  if(reloadBtn)reloadBtn.addEventListener('click',function(){reloadBtn.disabled=true;location.reload();});
   var loaded=false,loadingRefs=false,refsPromise=null,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
-  var refData={current:'HEAD',branches:[],commits:[],branchCommits:{}};
+  var refData={current:'HEAD',branches:[],commits:[]},commitCache={},commitFetches={};
   var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[],refQueries=new WeakMap();
   function showPanel(name){
     panels.forEach(function(p){p.hidden=p.getAttribute('data-panel')!==name;});
-    [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('on');});
-    var btn=document.querySelector('[data-open-panel="'+name+'"]');if(btn)btn.classList.add('on');
+    [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('is-open');});
+    var btn=document.querySelector('[data-open-panel="'+name+'"]');if(btn)btn.classList.add('is-open');
     ensureRefs();
   }
   [].slice.call(document.querySelectorAll('[data-open-panel]')).forEach(function(btn){
     btn.addEventListener('click',function(){showPanel(btn.getAttribute('data-open-panel'));});
   });
   function option(value,label,meta,kind){return {value:value,label:label||value,meta:meta||'',kind:kind||''};}
+  function headOption(){return option('HEAD','HEAD','current HEAD','head');}
+  function worktreeOption(){return option('__WORKTREE__','HEAD + working tree','latest uncommitted work','worktree');}
+  function sideHeadOption(input){
+    var ref=sideRef(input);
+    return option('__REF_HEAD__',ref+' head','use selected ref without pinning a commit','ref head');
+  }
   function branchOptions(){
     return (refData.branches||[]).map(function(b){
       return option(b.name,b.name,b.kind==='remote'?'remote branch':'local branch',b.kind==='remote'?'remote':'branch');
@@ -416,14 +330,13 @@ ${nav}
     return [when,rel,subject].filter(Boolean).join(' · ');
   }
   function refOptions(){
-    return [option('HEAD','HEAD','current HEAD','head')].concat(branchOptions(),commitOptions());
+    return branchOptions();
   }
   function fillRefs(d){
     refData.current=d.current||'HEAD';
     refData.branches=(d.branches||[]).map(function(raw){return typeof raw==='string'?{name:raw,kind:'branch'}:raw;});
     refData.commits=d.commits||[];
-    var rb=document.getElementById('rangeBranch');
-    if(rb&&rb.value==='HEAD'&&refData.current)rb.value=refData.current;
+    commitCache['--all']=refData.commits;
   }
   function ensureRefs(){
     if(loaded)return Promise.resolve();
@@ -433,36 +346,39 @@ ${nav}
     return refsPromise;
   }
   if(panels.some(function(p){return !p.hidden;}))ensureRefs();
-  function branchFor(input){
-    var id=input.getAttribute('data-branch-input');
-    var b=id?document.getElementById(id):null;
-    return b&&b.value.trim()?b.value.trim():'HEAD';
+  function refInputFor(input){
+    var id=input&&input.getAttribute('data-ref-input');
+    return id?document.getElementById(id):null;
   }
-  function fetchBranchCommits(ref){
-    if(refData.branchCommits[ref])return Promise.resolve(refData.branchCommits[ref]);
-    return fetch('/api/commits?ref='+encodeURIComponent(ref)).then(function(r){return r.json();}).then(function(d){
-      refData.branchCommits[ref]=d.commits||[];
-      return refData.branchCommits[ref];
-    });
+  function sideRef(input){
+    var refInput=refInputFor(input);
+    return ((refInput&&refInput.value)||refData.current||'HEAD').trim()||'HEAD';
   }
-  function sourceOptions(input){
+  function sideAllowsWorktree(input){return input&&(input.id==='cmpHead'||input.getAttribute('id')==='cmpHead');}
+  function ensureSideCommits(input){
+    var ref=sideRef(input);
+    if(commitCache[ref])return Promise.resolve();
+    if(commitFetches[ref])return commitFetches[ref];
+    commitFetches[ref]=fetch('/api/refs?ref='+encodeURIComponent(ref)).then(function(r){return r.json();}).then(function(d){
+      if(d.branches)refData.branches=(d.branches||[]).map(function(raw){return typeof raw==='string'?{name:raw,kind:'branch'}:raw;});
+      commitCache[d.ref||ref]=d.commits||[];
+      commitFetches[ref]=null;
+    }).catch(function(){commitCache[ref]=[];commitFetches[ref]=null;});
+    return commitFetches[ref];
+  }
+  function optionsForInput(input){
     var kind=input.getAttribute('data-picker');
     if(!loaded)return [option('', 'Loading refs…', 'reading local git refs', '')];
-    if(kind==='branch')return branchOptions();
-    if(kind==='commit')return [option('HEAD','HEAD','current HEAD','head')].concat(commitOptions());
-    if(kind==='branch-commit'){
-      var ref=branchFor(input);
-      if(!refData.branchCommits[ref]){
-        fetchBranchCommits(ref).then(function(){if(activeInput===input)renderPicker();}).catch(function(){refData.branchCommits[ref]=[];if(activeInput===input)renderPicker();});
-        return [option('', 'Loading commits…', ref, '')];
-      }
-      return [option(ref,ref,'branch head','head')].concat(commitOptions(refData.branchCommits[ref]));
+    if(kind==='commit')return [headOption()].concat(commitOptions());
+    if(kind==='side-commit'){
+      var opts=sideAllowsWorktree(input)?[worktreeOption(),sideHeadOption(input)]:[sideHeadOption(input)];
+      return opts.concat(commitOptions(commitCache[sideRef(input)]||[]));
     }
     return refOptions();
   }
   function filteredOptions(input){
     var q=(refQueries.get(input)||'').trim().toLowerCase();
-    return sourceOptions(input).filter(function(o){
+    return optionsForInput(input).filter(function(o){
       if(!o.value)return true;
       if(!q)return true;
       return (o.value+' '+o.label+' '+o.meta+' '+o.kind).toLowerCase().indexOf(q)>=0;
@@ -498,7 +414,8 @@ ${nav}
         var meta=document.createElement('span');meta.className='refpick-meta';meta.textContent=o.meta;
         var kind=document.createElement('span');kind.className='refpick-kind';kind.textContent=o.kind;
         row.appendChild(main);row.appendChild(meta);row.appendChild(kind);
-        row.addEventListener('mousedown',function(ev){ev.preventDefault();chooseRef(o.value);});
+        row.addEventListener('mousedown',function(ev){ev.preventDefault();});
+        row.addEventListener('click',function(ev){ev.preventDefault();chooseRef(o.value);});
         picker.appendChild(row);
       });
     }
@@ -507,7 +424,9 @@ ${nav}
   function openPicker(input,query){
     activeInput=input;
     if(query!==undefined)refQueries.set(input,query);
-    ensureRefs().then(renderPicker);
+    ensureRefs().then(function(){
+      if(input.getAttribute('data-picker')==='side-commit')return ensureSideCommits(input);
+    }).then(renderPicker);
   }
   function closePicker(){
     if(picker)picker.hidden=true;
@@ -516,24 +435,26 @@ ${nav}
   function chooseRef(value){
     if(!activeInput||!value)return;
     refQueries.set(activeInput,'');
-    activeInput.value=value;
+    if(value==='__WORKTREE__'){
+      activeInput.value='HEAD + working tree';
+      activeInput.setAttribute('data-worktree','1');
+    }else if(value==='__REF_HEAD__'){
+      activeInput.value='';
+      activeInput.removeAttribute('data-worktree');
+    }else{
+      activeInput.value=value;
+      activeInput.removeAttribute('data-worktree');
+    }
     activeInput.dispatchEvent(new Event('change',{bubbles:true}));
     closePicker();
   }
   [].slice.call(document.querySelectorAll('[data-picker]')).forEach(function(input){
     input.addEventListener('focus',function(){openPicker(input,'');});
-    input.addEventListener('input',function(){openPicker(input,input.value);});
+    input.addEventListener('click',function(){openPicker(input,refQueries.get(input)||'');});
+    input.addEventListener('input',function(){input.removeAttribute('data-worktree');openPicker(input,input.value);});
     input.addEventListener('keydown',function(ev){
       if(ev.key==='Escape'){closePicker();return;}
       if(ev.key==='Enter'&&activeInput===input&&activeRows[0]&&activeRows[0].value){ev.preventDefault();chooseRef(activeRows[0].value);}
-    });
-  });
-  [['rangeBranch','rangeBase','rangeHead'],['crossBaseBranch','crossBaseCommit'],['crossHeadBranch','crossHeadCommit']].forEach(function(ids){
-    var branch=document.getElementById(ids[0]);
-    if(!branch)return;
-    branch.addEventListener('change',function(){
-      ids.slice(1).forEach(function(id){var el=document.getElementById(id);if(el){el.value='';refQueries.set(el,'');}});
-      var ref=branch.value.trim();if(ref)fetchBranchCommits(ref).catch(function(){});
     });
   });
   document.addEventListener('mousedown',function(ev){
@@ -544,91 +465,82 @@ ${nav}
   });
   window.addEventListener('resize',placePicker);
   window.addEventListener('scroll',placePicker,true);
+  var autoScopeTimer=null;
   function navTo(url){location.href=url;}
-  var commitGo=document.getElementById('commitGo'),commitRef=document.getElementById('commitRef');
-  if(commitGo)commitGo.addEventListener('click',function(){
-    var c=(commitRef.value||'HEAD').trim();
-    navTo('${esc(routeBase)}/change?scope=commit&commit='+encodeURIComponent(c));
-  });
-  var rangeGo=document.getElementById('rangeGo'),rangeBase=document.getElementById('rangeBase'),rangeHead=document.getElementById('rangeHead');
-  if(rangeGo)rangeGo.addEventListener('click',function(){
-    var b=rangeBase.value.trim(),h=(rangeHead.value.trim()||'HEAD');if(!b)return;
-    navTo('${esc(routeBase)}/change?base='+encodeURIComponent(b)+'&head='+encodeURIComponent(h));
-  });
-  var crossGo=document.getElementById('crossGo'),crossBase=document.getElementById('crossBaseCommit'),crossHead=document.getElementById('crossHeadCommit');
-  if(crossGo)crossGo.addEventListener('click',function(){
-    var b=crossBase.value.trim(),h=crossHead.value.trim();if(!b||!h)return;
-    navTo('${esc(routeBase)}/change?base='+encodeURIComponent(b)+'&head='+encodeURIComponent(h));
-  });
-  var cmpGo=document.getElementById('cmpGo');
-  if(cmpGo)cmpGo.addEventListener('click',function(){
-    var baseSel=document.getElementById('cmpBase'),headSel=document.getElementById('cmpHead');
-    var b=baseSel.value.trim(),h=headSel.value.trim();if(!b)return;
-    var u='${esc(routeBase)}/change?base='+encodeURIComponent(b);if(h)u+='&head='+encodeURIComponent(h);location.href=u;
-  });
-  var agentSel=document.getElementById('agentSel'),modelSel=document.getElementById('modelSel'),modelInp=document.getElementById('modelInp'),modeSel=document.getElementById('storyMode');
-  var MODELS={claude:[['Default (Sonnet)',''],['Opus','opus'],['Haiku','haiku'],['Other…','__other__']],codex:[['Default',''],['Other…','__other__']]};
-  function syncOther(){if(modelInp&&modelSel)modelInp.hidden=(modelSel.value!=='__other__');}
-  function fillModels(){
-    if(!modelSel)return;
-    while(modelSel.options.length)modelSel.remove(0);
-    var ms=MODELS[agentSel?agentSel.value:'']||[['Default','']];
-    ms.forEach(function(m){modelSel.add(new Option(m[0],m[1]));});
-    syncOther();
+  function currentRoute(){
+    return (location.pathname||'')+(location.search||'');
   }
-  if(modelSel)modelSel.addEventListener('change',syncOther);
-  function showSkillState(sk){
-    var sw=document.getElementById('skillWarn'),txt=document.getElementById('skillWarnText'),btn=document.getElementById('skillUpdateBtn');
-    if(!sw||!txt||!btn||!sk)return;
-    if(sk.current){
-      sw.hidden=false;txt.textContent='Story-generation skills are up to date.';btn.hidden=true;
-      setTimeout(function(){sw.hidden=true;},1400);return;
-    }
-    sw.hidden=false;btn.hidden=false;btn.disabled=false;btn.textContent='Update skills';
-    txt.textContent=sk.installed
-      ? 'Story-generation skill is installed but does not match this app. Update it before generating so the agent sees the current story rules.'
-      : 'Story-generation skill was not found in ~/.agents, ~/.claude, or ~/.codex. Install it before generating so the agent can create the story reliably.';
-  }
-  function wireSkillUpdate(){
-    var btn=document.getElementById('skillUpdateBtn'),txt=document.getElementById('skillWarnText');if(!btn)return;
-    btn.onclick=function(){
-      btn.disabled=true;btn.textContent='Updating…';if(txt)txt.textContent='Installing bundled diffStory skills locally…';
-      fetch('/api/skills/update',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-        if(d&&d.skills)showSkillState(d.skills);else throw new Error('bad response');
-      }).catch(function(){btn.disabled=false;btn.textContent='Try again';if(txt)txt.textContent='Could not update skills. Run scripts/install-skills.sh from this repo, or re-run the diffStory installer.';});
+  function scheduleNavTo(url,delay){
+    if(!url)return;
+    if(autoScopeTimer)clearTimeout(autoScopeTimer);
+    var go=function(){
+      if(url!==currentRoute())navTo(url);
     };
+    if(delay>0)autoScopeTimer=setTimeout(go,delay);
+    else go();
   }
-  wireSkillUpdate();
-  if(agentSel){
-    fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
-      (d.agents||[]).forEach(function(a){agentSel.add(new Option(a,a));});
-      if(!agentSel.options.length)agentSel.add(new Option('no agent found',''));
-      showSkillState(d.skills);
-      fillModels();
-    }).catch(function(){});
-    agentSel.addEventListener('change',fillModels);
+  function commitUrl(){
+    var c=(commitRef&&commitRef.value||'HEAD').trim()||'HEAD';
+    return '${esc(routeBase)}/change?scope=commit&commit='+encodeURIComponent(c);
   }
-  var gen=document.getElementById('genBtn');
-  if(!gen)return;
-  gen.addEventListener('click',function(){
-    gen.disabled=true;
-    var root=document.querySelector('#genpanel .ds-pp');
-    if(!root){gen.disabled=false;return;}
-    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-    var panel=new ProgressPanel(root,{
-      onStop:function(){ if(ctrl)ctrl.abort(); },
-      onClose:function(){ root.hidden=true; gen.disabled=false; },
-      onDone:function(status,result){
-        gen.disabled=false;
-        if(status==='complete'&&result&&result.storyWritten){ location.href='${esc(routeBase)}/review?story=story.json'; }
-      }
-    });
-    panel.start();
-    var agent=agentSel?agentSel.value:'';
-    var msel=modelSel?modelSel.value:'';
-    var model=(msel==='__other__')?(modelInp?modelInp.value.trim():''):msel;
-    var payload={base:gen.getAttribute('data-base')||undefined,head:gen.getAttribute('data-head')||undefined,agent:agent||undefined,model:model||undefined,mode:modeSel?modeSel.value:undefined};
-    runProgress(panel,'/api/generate',payload,ctrl).then(function(){ gen.disabled=false; });
+  function syncSideCommit(refId,commitId,allowWorktree){
+    var refInput=document.getElementById(refId),commitInput=document.getElementById(commitId);
+    if(!refInput||!commitInput)return;
+    var v=(refInput.value||'').trim();
+    if(allowWorktree&&(!v||v==='HEAD')){
+      commitInput.value='HEAD + working tree';
+      commitInput.setAttribute('data-worktree','1');
+    }else{
+      commitInput.value='';
+      commitInput.removeAttribute('data-worktree');
+    }
+  }
+  function sideValue(refId,commitId,allowWorktree){
+    var refInput=document.getElementById(refId),commitInput=document.getElementById(commitId);
+    if(allowWorktree&&commitInput&&commitInput.getAttribute('data-worktree')==='1')return '';
+    var commit=(commitInput&&commitInput.value||'').trim();
+    if(commit==='HEAD + working tree')return '';
+    if(commit)return commit;
+    return (refInput&&refInput.value||'').trim();
+  }
+  function compareUrl(){
+    var b=sideValue('cmpBaseRef','cmpBase',false),h=sideValue('cmpHeadRef','cmpHead',true);
+    if(!b)return '';
+    var u='${esc(routeBase)}/change?base='+encodeURIComponent(b);
+    var baseRefInput=document.getElementById('cmpBaseRef'),baseCommitInput=document.getElementById('cmpBase');
+    var baseCommit=(baseCommitInput&&baseCommitInput.value||'').trim();
+    if(baseCommit&&baseCommit!=='HEAD + working tree'){
+      var baseRef=(baseRefInput&&baseRefInput.value||refData.current||'HEAD').trim()||'HEAD';
+      u+='&baseRef='+encodeURIComponent(baseRef)+'&baseCommit='+encodeURIComponent(baseCommit);
+    }
+    if(h)u+='&head='+encodeURIComponent(h);
+    var headRefInput=document.getElementById('cmpHeadRef'),headCommitInput=document.getElementById('cmpHead');
+    var headCommit=(headCommitInput&&headCommitInput.value||'').trim();
+    if(h&&headCommit&&headCommit!=='HEAD + working tree'){
+      var headRef=(headRefInput&&headRefInput.value||refData.current||'HEAD').trim()||'HEAD';
+      u+='&headRef='+encodeURIComponent(headRef)+'&headCommit='+encodeURIComponent(headCommit);
+    }
+    return u;
+  }
+  var commitRef=document.getElementById('commitRef');
+  if(commitRef){
+    commitRef.addEventListener('change',function(){scheduleNavTo(commitUrl(),0);});
+    commitRef.addEventListener('input',function(){scheduleNavTo(commitUrl(),700);});
+  }
+  ['cmpBase','cmpHead'].forEach(function(id){
+    var input=document.getElementById(id);
+    if(!input)return;
+    input.addEventListener('change',function(){scheduleNavTo(compareUrl(),0);});
+    input.addEventListener('input',function(){scheduleNavTo(compareUrl(),700);});
+  });
+  [
+    ['cmpBaseRef','cmpBase',false],
+    ['cmpHeadRef','cmpHead',true]
+  ].forEach(function(pair){
+    var input=document.getElementById(pair[0]);
+    if(!input)return;
+    input.addEventListener('change',function(){syncSideCommit(pair[0],pair[1],pair[2]);scheduleNavTo(compareUrl(),0);});
+    input.addEventListener('input',function(){syncSideCommit(pair[0],pair[1],pair[2]);scheduleNavTo(compareUrl(),700);});
   });
 })();
 </script>

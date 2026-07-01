@@ -12,36 +12,75 @@ const withChanges = {
   hasChanges: true,
 };
 
-test('renderChangePage shows the change, the base label, and the Generate action', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo' });
+/** The parsed diff the server hands the change page so it can render the hunks. */
+const diffFiles = [
+  {
+    oldPath: 'src/api.ts',
+    newPath: 'src/api.ts',
+    status: 'modified',
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 2,
+        lines: [
+          { type: 'ctx', oldNo: 1, newNo: 1, content: 'const a = 1;' },
+          { type: 'add', newNo: 2, content: 'const b = 2;' },
+        ],
+      },
+    ],
+  },
+];
+
+test('renderChangePage shows the change summary, base label, and review-viewer action', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
   assert.ok(html.includes('src/api.ts'));
+  assert.ok(!html.includes('class="dv-file"'), 'does not render full diff hunks on the change summary');
+  assert.ok(html.includes('Open diff viewer'), 'links into the real review viewer');
+  assert.ok(html.includes('id="reloadBtn"') && html.includes('location.reload()'), 'has a wired reload control');
   assert.ok(html.includes('main (abc123)'));
-  assert.ok(html.includes('Generate guided review'));
-  assert.ok(html.toLowerCase().includes('nothing starts until you click'));
-  assert.ok(html.includes('id="storyMode"'), 'has a story mode picker');
-  assert.ok(html.includes('value="guided" selected'), 'defaults to guided mode');
-  assert.ok(html.includes('value="detailed"'), 'offers detailed correctness mode');
-  assert.ok(html.includes('mode:modeSel?modeSel.value:undefined'), 'sends the selected story mode');
+  assert.ok(!html.includes('Generate guided review'), 'does not duplicate story generation on the change page');
+  assert.ok(!html.includes('id="storyMode"'), 'story mode picker lives in the review page Story tab');
   assert.ok(html.includes('Single commit'), 'offers a single-commit scope');
-  assert.ok(html.includes('Cross-branch commits'), 'offers commits from two different branches as a first-class scope');
   assert.ok(html.includes('Compare any refs'), 'offers arbitrary ref comparison');
+  assert.ok(
+    !html.includes('Current branch') && !html.includes('Branch commits') && !html.includes('Cross-branch commits'),
+    'drops the redundant current-branch, branch-commits, and cross-branch cards',
+  );
   assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
-  assert.ok(html.includes('id="crossBaseBranch"') && html.includes('id="crossHeadCommit"'), 'has branch + commit controls for both sides');
-  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has from/to compare inputs');
-  assert.ok(html.includes('data-picker="branch"'), 'uses the custom branch picker');
+  assert.ok(html.includes('id="cmpBaseRef"') && html.includes('id="cmpHeadRef"'), 'has left/right branch selectors');
+  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has left/right commit selectors');
+  assert.ok(html.includes('class="refside-title">Left</span>'), 'labels the base side Left');
+  assert.ok(html.includes('class="refside-title">Right</span>'), 'labels the head side Right');
+  assert.ok(!html.includes('<span>From</span>') && !html.includes('<span>To</span>'), 'does not use from/to labels');
+  assert.ok(!html.includes('id="commitGo"') && !html.includes('Review commit'), 'single-commit scope auto-applies without a button');
+  assert.ok(!html.includes('id="cmpGo"') && !html.includes('Compare refs'), 'compare scope auto-applies without a button');
+  assert.ok(html.includes('data-picker="commit"'), 'uses the custom commit picker');
   assert.ok(html.includes('data-picker="ref"'), 'uses the custom ref picker');
+  assert.ok(html.includes('data-picker="side-commit"'), 'uses branch-scoped commit pickers for compare sides');
   assert.ok(!html.includes('<datalist'), 'does not rely on the native datalist menu');
-  const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo' });
+  const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', diffFiles });
   assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
-  assert.ok(routed.includes("'/repo/demo/change?base='"), 'manual compare stays on the repo-named change route');
-  assert.ok(routed.includes("location.href='/repo/demo/review?story=story.json'"), 'generation success opens the repo-named review route');
+  assert.ok(routed.includes("'/repo/demo/change?base='"), 'auto compare stays on the repo-named change route');
+  assert.ok(routed.includes('href="/repo/demo/diff"'), 'summary opens the repo-named diff viewer');
 });
 
 test('renderChangePage escapes file paths and shows an empty-change guard', () => {
   const html = renderChangePage(
     { base: 'x', baseLabel: 'x', files: [{ path: '<script>x', added: 1, removed: 0 }], totalChanged: 1, hasChanges: true },
-    { repoName: 'd' },
+    {
+      repoName: 'd',
+      diffFiles: [
+        {
+          oldPath: '<script>x',
+          newPath: '<script>x',
+          status: 'added',
+          hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: [{ type: 'add', newNo: 1, content: 'x' }] }],
+        },
+      ],
+    },
   );
   assert.ok(html.includes('&lt;script&gt;x'));
   assert.ok(!html.includes('<script>x'));
@@ -59,9 +98,43 @@ test('renderChangePage shows the human scope label and highlights the active seg
   assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
   assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
-  assert.ok(html.includes('data-panel="cross"'), 'has a dedicated cross-branch commit panel');
   assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
-  assert.ok(html.includes('.refpanel,.refpanel[data-panel="commit"]{grid-template-columns:1fr}'), 'commit picker stacks on mobile');
+  assert.ok(!html.includes('data-panel="cross"') && !html.includes('data-panel="range"'), 'no longer renders the cross/range panels');
+  assert.ok(html.includes('.sopt.is-open'), 'has a distinct panel-open state separate from the selected scope');
+  assert.ok(html.includes("classList.remove('is-open')"), 'opening a panel clears only the open-state marker');
+  assert.ok(!html.includes("classList.remove('on')"), 'opening a picker panel does not lie about the URL-backed selected scope');
+  assert.ok(
+    html.includes('.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}'),
+    'commit and compare pickers stack on mobile',
+  );
+});
+
+test('compare panel does not mirror refs into commit fields', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'HEAD' });
+  assert.match(html, /id="cmpBaseRef"[^>]+value="HEAD"/, 'left ref starts at HEAD');
+  assert.match(html, /id="cmpBase"[^>]+value=""/, 'left commit starts unpinned instead of duplicating HEAD');
+  assert.match(html, /id="cmpHeadRef"[^>]+value="HEAD"/, 'right ref starts at HEAD');
+  assert.match(html, /id="cmpHead"[^>]+value="HEAD \+ working tree"[^>]+data-worktree="1"/, 'right commit shows the working-tree pseudo option');
+  assert.match(html, /placeholder="Use selected ref head, or pick a commit"/, 'commit selector explains the default');
+});
+
+test('compare panel preserves pinned commit selections after navigation', () => {
+  const html = renderChangePage(withChanges, {
+    repoName: 'demo',
+    active: 'compare',
+    base: '42dbc69',
+    head: 'c4d0151',
+    compareBaseRef: 'main',
+    compareBaseCommit: '42dbc69',
+    compareHeadRef: 'origin/main',
+    compareHeadCommit: 'c4d0151',
+  });
+
+  assert.match(html, /id="cmpBaseRef"[^>]+value="main"/, 'left branch/ref keeps the source ref');
+  assert.match(html, /id="cmpBase"[^>]+value="42dbc69"/, 'left commit keeps the pinned commit');
+  assert.match(html, /id="cmpHeadRef"[^>]+value="origin\/main"/, 'right branch/ref keeps the source ref');
+  assert.match(html, /id="cmpHead"[^>]+value="c4d0151"/, 'right commit keeps the pinned commit');
+  assert.doesNotMatch(html, /id="cmpHead"[^>]+data-worktree="1"/, 'pinned right commits do not render as worktree');
 });
 
 test('commit picker shows commits when the current value is HEAD', async () => {
@@ -160,21 +233,501 @@ test('commit picker shows commits when the current value is HEAD', async () => {
   assert.equal(metas[2], '2026-06-29 09:12 · 1d ago · Second commit');
 });
 
+test('picker rows select refs through the normal click path', async () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs };
+      this.children = [];
+      this.listeners = {};
+      this.hidden = !!attrs.hidden;
+      this.style = {};
+      this.value = attrs.value ?? '';
+      this.textContent = '';
+      this.className = '';
+      this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    }
+    setAttribute(name, value) {
+      this.attrs[name] = String(value);
+    }
+    removeAttribute(name) {
+      delete this.attrs[name];
+    }
+    addEventListener(name, fn) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    replaceChildren(...children) {
+      this.children = children;
+    }
+    contains(target) {
+      return target === this || this.children.includes(target);
+    }
+    dispatchEvent(ev) {
+      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
+    }
+    getBoundingClientRect() {
+      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
+    }
+    get offsetHeight() {
+      return 140;
+    }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'HEAD' });
+  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((script) => script.includes('function filteredOptions'));
+  assert.ok(pickerScript, 'has the embedded ref picker script');
+
+  const picker = new FakeEl({ id: 'refPicker', hidden: true });
+  const commitInput = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD' });
+  const commitPanel = new FakeEl({ 'data-panel': 'commit' });
+  const elements = { refPicker: picker, commitRef: commitInput };
+  const context = {
+    console,
+    Event: class Event {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    fetch: async () => ({
+      json: async () => ({
+        current: 'main',
+        branches: [],
+        commits: [
+          { sha: 'abc1234', subject: 'First commit', committedAtLabel: '2026-06-30 14:34' },
+          { sha: 'def5678', subject: 'Second commit', committedAtLabel: '2026-06-29 09:12' },
+        ],
+      }),
+    }),
+    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=HEAD' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === '[data-panel]') return [commitPanel];
+        if (selector === '[data-picker]') return [commitInput];
+        return [];
+      },
+      createElement: () => new FakeEl(),
+      addEventListener() {},
+    },
+  };
+
+  vm.runInNewContext(pickerScript, context);
+  commitInput.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const row = picker.children.find((child) => child.attrs['data-value'] === 'def5678');
+  assert.ok(row, 'renders the commit row');
+  assert.ok(row.listeners.click?.length, 'picker rows use a click handler for selection');
+  row.listeners.click[0]({ preventDefault() {} });
+
+  assert.equal(commitInput.value, 'def5678');
+assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=def5678');
+}
+);
+
+test('branch ref picker only offers branch rows', async () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs };
+      this.children = [];
+      this.listeners = {};
+      this.hidden = !!attrs.hidden;
+      this.style = {};
+      this.value = attrs.value ?? '';
+      this.textContent = '';
+      this.className = '';
+      this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    }
+    setAttribute(name, value) {
+      this.attrs[name] = String(value);
+    }
+    addEventListener(name, fn) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    replaceChildren(...children) {
+      this.children = children;
+    }
+    contains(target) {
+      return target === this || this.children.includes(target);
+    }
+    getBoundingClientRect() {
+      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
+    }
+    get offsetHeight() {
+      return 140;
+    }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main' });
+  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((script) => script.includes('function filteredOptions'));
+  assert.ok(pickerScript, 'has the embedded ref picker script');
+
+  const picker = new FakeEl({ id: 'refPicker', hidden: true });
+  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
+  const comparePanel = new FakeEl({ 'data-panel': 'compare' });
+  const elements = { refPicker: picker, cmpBaseRef };
+  const context = {
+    console,
+    Event: class Event {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    fetch: async () => ({
+      json: async () => ({
+        current: 'HEAD',
+        branches: [
+          { name: 'main', kind: 'local' },
+          { name: 'origin/main', kind: 'remote' },
+          { name: 'origin/feat/scope-selector', kind: 'remote' },
+        ],
+        commits: [
+          { sha: '1ce5906', subject: 'Spec: collapse scope picker' },
+          { sha: '42dbc69', subject: 'Previous scope selector change' },
+        ],
+      }),
+    }),
+    location: { href: '' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === '[data-panel]') return [comparePanel];
+        if (selector === '[data-picker]') return [cmpBaseRef];
+        return [];
+      },
+      createElement: () => new FakeEl(),
+      addEventListener() {},
+    },
+  };
+
+  vm.runInNewContext(pickerScript, context);
+  cmpBaseRef.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(cmpBaseRef.listeners.click?.length, 'branch/ref inputs reopen the picker on click');
+  const values = picker.children.map((row) => row.attrs['data-value']);
+  assert.deepEqual(values, ['main', 'origin/main', 'origin/feat/scope-selector']);
+  assert.ok(!values.includes('HEAD'), 'does not offer HEAD in the branch selector');
+  assert.ok(!values.includes('1ce5906') && !values.includes('42dbc69'), 'does not offer commits in the branch selector');
+});
+
+test('compare commit picker scopes commits to the selected side ref and exposes working-tree HEAD', async () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs };
+      this.children = [];
+      this.listeners = {};
+      this.hidden = !!attrs.hidden;
+      this.style = {};
+      this.value = attrs.value ?? '';
+      this.textContent = '';
+      this.className = '';
+      this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    }
+    setAttribute(name, value) {
+      this.attrs[name] = String(value);
+    }
+    removeAttribute(name) {
+      delete this.attrs[name];
+    }
+    addEventListener(name, fn) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    replaceChildren(...children) {
+      this.children = children;
+    }
+    contains(target) {
+      return target === this || this.children.includes(target);
+    }
+    getBoundingClientRect() {
+      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
+    }
+    get offsetHeight() {
+      return 140;
+    }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main', head: 'feature/demo' });
+  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((script) => script.includes('function filteredOptions'));
+  assert.ok(pickerScript, 'has the embedded ref picker script');
+
+  const picker = new FakeEl({ id: 'refPicker', hidden: true });
+  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
+  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'side-commit', 'data-ref-input': 'cmpBaseRef', value: 'main' });
+  const cmpHeadRef = new FakeEl({ id: 'cmpHeadRef', 'data-picker': 'ref', value: 'feature/demo' });
+  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'side-commit', 'data-ref-input': 'cmpHeadRef', value: 'feature/demo' });
+  const comparePanel = new FakeEl({ 'data-panel': 'compare' });
+  const elements = { refPicker: picker, cmpBaseRef, cmpBase, cmpHeadRef, cmpHead };
+  const fetched = [];
+  const context = {
+    console,
+    Event: class Event {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    fetch: async (url) => {
+      fetched.push(String(url));
+      if (String(url).includes('ref=main')) {
+        return {
+          json: async () => ({
+            current: 'main',
+            branches: [],
+            commits: [{ sha: 'aaa1111', subject: 'Main commit', committedAtLabel: '2026-06-30 14:34' }],
+          }),
+        };
+      }
+      if (String(url).includes('ref=feature%2Fdemo')) {
+        return {
+          json: async () => ({
+            current: 'main',
+            branches: [],
+            commits: [{ sha: 'bbb2222', subject: 'Feature commit', committedAtLabel: '2026-06-30 15:10' }],
+          }),
+        };
+      }
+      return {
+        json: async () => ({
+          current: 'main',
+          branches: [{ name: 'main', kind: 'local' }, { name: 'feature/demo', kind: 'local' }],
+          commits: [{ sha: 'all9999', subject: 'All branch commit', committedAtLabel: '2026-06-29 09:12' }],
+        }),
+      };
+    },
+    location: { href: '' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === '[data-panel]') return [comparePanel];
+        if (selector === '[data-picker]') return [cmpBaseRef, cmpBase, cmpHeadRef, cmpHead];
+        return [];
+      },
+      createElement: () => new FakeEl(),
+      addEventListener() {},
+    },
+  };
+
+  vm.runInNewContext(pickerScript, context);
+  cmpBase.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  let values = picker.children.map((row) => row.attrs['data-value']);
+  assert.ok(fetched.includes('/api/refs?ref=main'), 'fetches commits for the left branch/ref');
+  assert.deepEqual(values.slice(0, 2), ['__REF_HEAD__', 'aaa1111']);
+  assert.equal(picker.children[0].children[0].textContent, 'main head');
+  assert.ok(!values.includes('all9999'), 'does not reuse the unscoped all-refs commit list');
+
+  cmpHead.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  values = picker.children.map((row) => row.attrs['data-value']);
+  const labels = picker.children.map((row) => row.children[0].textContent);
+  assert.ok(fetched.includes('/api/refs?ref=feature%2Fdemo'), 'fetches commits for the right branch/ref');
+  assert.equal(values[0], '__WORKTREE__');
+  assert.equal(labels[0], 'HEAD + working tree');
+  assert.equal(values[1], '__REF_HEAD__');
+  assert.equal(labels[1], 'feature/demo head');
+  assert.ok(values.includes('bbb2222'), 'shows commits from the selected right branch/ref');
+});
+
+test('scope inputs automatically navigate so the summary refreshes', () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs };
+      this.children = [];
+      this.listeners = {};
+      this.hidden = !!attrs.hidden;
+      this.style = {};
+      this.value = attrs.value ?? '';
+      this.textContent = '';
+      this.className = '';
+      this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    }
+    setAttribute(name, value) {
+      this.attrs[name] = String(value);
+    }
+    removeAttribute(name) {
+      delete this.attrs[name];
+    }
+    addEventListener(name, fn) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    dispatchEvent(ev) {
+      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
+    }
+    contains(target) {
+      return target === this || this.children.includes(target);
+    }
+    replaceChildren(...children) {
+      this.children = children;
+    }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    getBoundingClientRect() {
+      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
+    }
+    get offsetHeight() {
+      return 140;
+    }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'old' });
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((candidate) => candidate.includes('function scheduleNavTo'));
+  assert.ok(script, 'has the embedded auto-refresh script');
+
+  const commitRef = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'old' });
+  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
+  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'side-commit', 'data-ref-input': 'cmpBaseRef', value: 'main' });
+  const cmpHeadRef = new FakeEl({ id: 'cmpHeadRef', 'data-picker': 'ref', value: 'HEAD' });
+  const cmpHead = new FakeEl({
+    id: 'cmpHead',
+    'data-picker': 'side-commit',
+    'data-ref-input': 'cmpHeadRef',
+    value: 'HEAD + working tree',
+    'data-worktree': '1',
+  });
+  const elements = {
+    refPicker: new FakeEl({ id: 'refPicker', hidden: true }),
+    commitRef,
+    cmpBaseRef,
+    cmpBase,
+    cmpHeadRef,
+    cmpHead,
+  };
+  const context = {
+    console,
+    Event: class Event {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    fetch: async () => ({ json: async () => ({ branches: [], commits: [] }) }),
+    setTimeout: (fn) => {
+      fn();
+      return 1;
+    },
+    clearTimeout() {},
+    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=old' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === '[data-panel]') return [new FakeEl({ 'data-panel': 'commit' })];
+        if (selector === '[data-picker]') return [commitRef, cmpBaseRef, cmpBase, cmpHeadRef, cmpHead];
+        return [];
+      },
+      createElement: () => new FakeEl(),
+      addEventListener() {},
+    },
+  };
+
+  vm.runInNewContext(script, context);
+
+  commitRef.value = 'feature/demo';
+  commitRef.dispatchEvent(new context.Event('change'));
+  assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=feature%2Fdemo');
+
+  context.location.href = '';
+  context.location.search = '?base=main';
+  cmpBaseRef.value = 'main';
+  cmpBase.value = '42dbc69';
+  cmpBase.dispatchEvent(new context.Event('change'));
+  assert.equal(
+    context.location.href,
+    '/repo/demo/change?base=42dbc69&baseRef=main&baseCommit=42dbc69',
+    'left commit pins preserve both the diff ref and displayed source ref',
+  );
+
+  context.location.href = '';
+  context.location.search = '?base=main';
+  cmpBaseRef.value = 'main';
+  cmpBase.value = '';
+  cmpHead.value = 'feature/demo';
+  cmpHead.removeAttribute('data-worktree');
+  cmpHead.dispatchEvent(new context.Event('change'));
+  assert.equal(context.location.href, '/repo/demo/change?base=main&head=feature%2Fdemo&headRef=HEAD&headCommit=feature%2Fdemo');
+
+  context.location.href = '';
+  context.location.search = '?base=main&head=feature%2Fdemo';
+  cmpHeadRef.value = 'HEAD';
+  cmpHeadRef.dispatchEvent(new context.Event('change'));
+  assert.equal(cmpHead.value, 'HEAD + working tree');
+  assert.equal(context.location.href, '/repo/demo/change?base=main');
+
+  context.location.href = '';
+  context.location.search = '?base=main';
+  cmpHeadRef.value = 'feature/demo';
+  cmpHeadRef.dispatchEvent(new context.Event('change'));
+  assert.equal(cmpHead.value, '');
+  assert.equal(context.location.href, '/repo/demo/change?base=main&head=feature%2Fdemo');
+
+  context.location.href = '';
+  context.location.search = '?base=main&head=feature%2Fdemo';
+  cmpHeadRef.value = 'feature/demo';
+  cmpHead.value = 'c4d0151';
+  cmpHead.removeAttribute('data-worktree');
+  cmpHead.dispatchEvent(new context.Event('change'));
+  assert.equal(
+    context.location.href,
+    '/repo/demo/change?base=main&head=c4d0151&headRef=feature%2Fdemo&headCommit=c4d0151',
+    'right commit pins preserve both the diff ref and displayed source ref',
+  );
+});
+
 test('renderChangePage shows a notice banner and the agent + model picker', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', notice: 'steps must be a non-empty array' });
   assert.ok(html.includes('class="notice"') && html.includes('steps must be a non-empty array'), 'shows the notice');
-  assert.ok(html.includes('id="agentSel"') && html.includes('id="modelSel"'), 'has the agent + model dropdowns');
-  assert.ok(html.includes('Update skills'), 'has skill update action');
-  assert.ok(html.includes('/api/skills/update'), 'calls the skill update endpoint');
+  assert.ok(html.includes('generate a fresh story from the Story tab'), 'points generation to the review page');
+  assert.ok(!html.includes('id="agentSel"') && !html.includes('id="modelSel"'), 'does not render story controls here');
 });
 
-test('change page embeds the shared progress panel and drives ProgressPanel', () => {
+test('change page does not embed the generation progress panel', () => {
   const html = renderChangePage(
     { hasChanges: true, baseLabel: 'main', files: [{ path: 'a.ts', added: 1, removed: 0 }] },
     { repoName: 'r', base: '', head: '', scopeLabel: 'Uncommitted', active: 'uncommitted' },
   );
-  assert.match(html, /ds-pp-plan/);
-  assert.match(html, /function ProgressPanel/);
-  assert.match(html, /new ProgressPanel|ProgressPanel\(/);
-  assert.match(html, /run_done/);
+  assert.doesNotMatch(html, /ds-pp-plan/);
+  assert.doesNotMatch(html, /function ProgressPanel/);
+  assert.doesNotMatch(html, /new ProgressPanel|ProgressPanel\(/);
+  assert.doesNotMatch(html, /run_done/);
 });

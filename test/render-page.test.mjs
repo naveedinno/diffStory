@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderPage } from '../dist/render.js';
+import { renderFullFile, renderPage } from '../dist/render.js';
 
 const tour = {
   version: 1,
@@ -136,6 +136,97 @@ test('sidebar file warnings avoid the awkward amber rail', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.doesNotMatch(html, /\.ds-fileitem\.is-untoured\{box-shadow/);
   assert.match(html, /\.ds-fileitem-flag\{flex:none;color:var\(--amber\)/);
+});
+
+test('all-files sidebar groups changed paths into an expanded tree', () => {
+  const treeFiles = [
+    {
+      oldPath: 'contracts/DepositVault.sol',
+      newPath: 'contracts/DepositVault.sol',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'contract DepositVault {}', newNo: 1 }],
+        },
+      ],
+    },
+    {
+      oldPath: 'contracts/interfaces/IInstantWithdraw.sol',
+      newPath: 'contracts/interfaces/IInstantWithdraw.sol',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'interface IInstantWithdraw {}', newNo: 1 }],
+        },
+      ],
+    },
+    {
+      oldPath: 'README.md',
+      newPath: 'README.md',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: [{ type: 'add', content: '# diffStory', newNo: 1 }],
+        },
+      ],
+    },
+  ];
+
+  const html = renderPage({ repo: process.cwd(), tour, files: treeFiles, baseLabel: 'main', comments: [], storyless: true });
+
+  assert.match(html, /<div class="ds-filetree" role="tree">/);
+  assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/" style="--tree-depth:0" open/);
+  assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/interfaces\/" style="--tree-depth:1" open/);
+  assert.match(html, /data-goto-file="contracts\/DepositVault\.sol"/);
+  assert.match(html, /data-goto-file="contracts\/interfaces\/IInstantWithdraw\.sol"/);
+  assert.match(html, /data-goto-file="README\.md"/);
+  assert.match(html, /it\.classList\.toggle\('is-active',Number\(it\.getAttribute\('data-file-index'\)\)===i\)/);
+});
+
+test('split diff headers use the same resizable columns as the code rows', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-diffhead-side ds-diffhead-side-l"/);
+  assert.match(html, /class="ds-diffhead-side ds-diffhead-side-r"/);
+  assert.match(html, /\.ds-diffhead-side-l\{flex-grow:var\(--ds-split,50\);flex-shrink:1;flex-basis:0\}/);
+  assert.match(html, /\.ds-diffhead-side-r\{flex-grow:calc\(100 - var\(--ds-split,50\)\);flex-shrink:1;flex-basis:0\}/);
+
+  const fullHtml = renderFullFile([{ type: 'ctx', oldNo: 1, newNo: 1, oldText: 'same', newText: 'same' }], {
+    file: 'a.ts',
+    newFile: false,
+  });
+  assert.match(fullHtml, /class="ds-diffhead-side ds-diffhead-side-l"/);
+  assert.match(fullHtml, /class="ds-diffhead-side ds-diffhead-side-r"/);
+});
+
+test('diff panels expose automatic first-change navigation controls', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /ds-changemap|data-change-map|refreshChangeMap|data-change-jump/);
+  assert.match(html, /class="ds-changejump" data-change-nav hidden/);
+  assert.match(html, /data-change-prev title="Previous change/);
+  assert.match(html, /data-change-next title="Next change/);
+  assert.match(html, /data-change-count>0 \/ 0/);
+  assert.match(html, /\.ds-changejump\{[^}]*display:flex[^}]*align-items:center/s);
+  assert.match(html, /function updateChangeNav\(holder\)/);
+  assert.match(html, /function jumpToChange\(holder,index,opts\)/);
+  assert.match(html, /function jumpRelativeChange\(holder,delta\)/);
+  assert.match(html, /function jumpToFirstChange\(holder\)/);
+  assert.match(html, /function handleChangeShortcut\(e\)/);
+  assert.match(html, /b=closest\(t,'\[data-change-prev\]'\);if\(b\)\{jumpRelativeChange\(closest\(b,'.ds-filepanel'\)\|\|closest\(b,'.ds-diff'\),-1\);return;\}/);
+  assert.match(html, /b=closest\(t,'\[data-change-next\]'\);if\(b\)\{jumpRelativeChange\(closest\(b,'.ds-filepanel'\)\|\|closest\(b,'.ds-diff'\),1\);return;\}/);
+  assert.match(html, /jumpToFirstChange\(panel\)/);
+  assert.match(html, /mountThreads\(fullInner\);updateChangeNav\(closest\(fullInner,'.ds-filepanel'\)\|\|closest\(fullInner,'.ds-diff'\)\);jumpToFirstChange\(closest\(fullInner,'.ds-filepanel'\)\|\|closest\(fullInner,'.ds-diff'\)\);/);
 });
 
 test('read aloud keeps browser presets separate from two mac voices', () => {
@@ -352,8 +443,8 @@ test('explicit story focus narrows which rows are highlighted during read aloud'
     },
   ];
   const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-line="2" data-step="s1" data-step-focus="0"/);
-  assert.doesNotMatch(html, /data-line="1" data-step="s1" data-step-focus=/);
+  assert.match(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="1"[^>]*data-step="s1"[^>]*data-step-focus=/);
 });
 
 test('story viewport controls visible code while highlights control narration focus', () => {
@@ -412,9 +503,9 @@ test('story viewport controls visible code while highlights control narration fo
   const html = renderPage({ repo, tour: viewportTour, files: viewportFiles, baseLabel: 'main', comments: [] });
   assert.match(html, /settleFee/);
   assert.match(html, /settle<\/span>\(account, amount\)/);
-  assert.match(html, /data-line="4" data-step="s1" data-step-focus="0"/);
-  assert.match(html, /data-line="5" data-step="s1" data-step-focus="0"/);
-  assert.doesNotMatch(html, /data-line="2" data-step="s1" data-step-focus=/);
+  assert.match(html, /data-line="4"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
   assert.match(html, /storyteller-selected viewport/i);
 
   rmSync(repo, { recursive: true, force: true });
@@ -459,9 +550,9 @@ test('multiple story focus ranges are rendered as separate read-aloud groups', (
     },
   ];
   const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-line="1" data-step="s1" data-step-focus="0"/);
-  assert.doesNotMatch(html, /data-line="2" data-step="s1" data-step-focus=/);
-  assert.match(html, /data-line="3" data-step="s1" data-step-focus="1"/);
+  assert.match(html, /data-line="1"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
+  assert.match(html, /data-line="3"[^>]*data-step="s1"[^>]*data-step-focus="1"/);
   assert.ok(html.includes('data-step-focus="\'+g+\'"]'));
   assert.match(html, /voiceFocusTimers\.push\(setTimeout\(function\(\)\{applyVoiceFocusGroup\(stepIndex,group\);\}/);
 });
@@ -507,8 +598,8 @@ test('steps without explicit focus use rendered hunks as read-aloud groups', () 
     },
   ];
   const html = renderPage({ repo: process.cwd(), tour: hunkTour, files: hunkFiles, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-line="1" data-step="s1" data-step-focus="0"/);
-  assert.match(html, /data-line="10" data-step="s1" data-step-focus="1"/);
+  assert.match(html, /data-line="1"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.match(html, /data-line="10"[^>]*data-step="s1"[^>]*data-step-focus="1"/);
 });
 
 test('space pauses and resumes voice without stealing focused controls', () => {
@@ -526,10 +617,11 @@ test('space pauses and resumes voice without stealing focused controls', () => {
   assert.match(html, /if\(e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar'\)\{if\(toggleVoicePause\(\)\)e\.preventDefault\(\);return;\}/);
 });
 
-test('arrow keys navigate the story and keep read aloud moving even when controls are focused', () => {
+test('arrow keys navigate changes while j/k still navigate the story or file list', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /function setActive\(i\)[\s\S]*speakStep\(i\);/);
-  assert.match(html, /var next=e\.key==='ArrowRight'\|\|e\.key==='j',prev=e\.key==='ArrowLeft'\|\|e\.key==='k';/);
+  assert.match(html, /if\(handleChangeShortcut\(e\)\)return;/);
+  assert.match(html, /var next=e\.key==='j',prev=e\.key==='k';/);
   assert.match(html, /if\(next\|\|prev\)\{[\s\S]*if\(isTextEntryTarget\(e\.target\)\)return;/);
   assert.match(html, /if\(filesView&&!filesView\.hidden\)selectFile\(selectedFile\+\(next\?1:-1\)\);/);
   assert.match(html, /else if\(tourView&&!tourView\.hidden\)setActive\(active\+\(next\?1:-1\)\);/);
@@ -551,4 +643,66 @@ test('review page embeds the shared progress panel and ProgressPanel script', ()
   assert.match(html, /function ProgressPanel/);
   assert.match(html, /run_done/);
   assert.match(html, /data-pp-stop/);
+});
+
+test('storyless review page puts story generation controls in the Story tab', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'abc123' },
+    files,
+    baseLabel: 'main',
+    headRef: 'def456',
+    comments: [],
+    routeBase: '/repo/demo',
+    storyless: true,
+  });
+  assert.match(html, /data-storyless="1"/);
+  assert.match(html, /id="storyAgentSel"/);
+  assert.match(html, /id="storyModelSel"/);
+  assert.match(html, /id="storyMode"/);
+  assert.doesNotMatch(html, /<select id="storyAgentSel"|<select id="storyModelSel"|<select id="storyMode"/);
+  assert.match(html, /id="storyAgentChoices"/);
+  assert.match(html, /id="storyModelChoices"/);
+  assert.match(html, />Detail<\/span>/);
+  assert.match(html, /aria-label="Story detail"/);
+  assert.match(html, /data-story-choice="storyMode" data-value="brief"/);
+  assert.match(html, />Brief<\/button>/);
+  assert.match(html, /data-story-choice="storyMode" data-value="guided"/);
+  assert.match(html, />Balanced<\/button>/);
+  assert.match(html, /data-story-choice="storyMode" data-value="detailed"/);
+  assert.match(html, />Line-by-line<\/button>/);
+  assert.match(html, /data-reload-diff/);
+  assert.match(html, /Reload diff/);
+  assert.match(html, /closest\(t,'\[data-reload-diff\]'\)/);
+  assert.match(html, /b\.disabled=true;location\.reload\(\);return;/);
+  assert.doesNotMatch(html, />Guided<\/button>/);
+  assert.doesNotMatch(html, />Detailed<\/button>/);
+  assert.match(html, /Best story/);
+  assert.match(html, /Lower cost/);
+  assert.doesNotMatch(html, /id="storyModelInp"/);
+  assert.doesNotMatch(html, /id="storyCodexPanel"/);
+  assert.doesNotMatch(html, /id="storyCodexProvider"/);
+  assert.doesNotMatch(html, /id="storyCodexSandbox"/);
+  assert.doesNotMatch(html, /id="storyCodexProfile"/);
+  assert.doesNotMatch(html, /id="storyCodexConfig"/);
+  assert.doesNotMatch(html, /GPT-5 Codex/);
+  assert.doesNotMatch(html, /\bo3\b/);
+  assert.doesNotMatch(html, /LM Studio/);
+  assert.doesNotMatch(html, /Ollama/);
+  assert.doesNotMatch(html, /No sandbox/);
+  assert.doesNotMatch(html, /overflow-x:auto/);
+  assert.match(html, /data-generate-story data-review-url="\/repo\/demo\/review\?story=story\.json" data-base="abc123" data-head="def456"/);
+  assert.match(html, /fetch\('\/api\/agents'\)/);
+  assert.match(html, /fetch\('\/api\/skills\/update',\{method:'POST'\}\)/);
+  assert.match(html, /data-story-choice/);
+  assert.match(html, /function renderStoryChoices/);
+  assert.match(html, /function setStoryChoice/);
+  assert.match(html, /base:btn\.getAttribute\('data-base'\)\|\|undefined/);
+  assert.match(html, /head:btn\.getAttribute\('data-head'\)\|\|undefined/);
+  assert.match(html, /agent:e\.agentSel&&e\.agentSel\.value\?e\.agentSel\.value:undefined/);
+  assert.match(html, /mode:e\.modeSel&&e\.modeSel\.value\?e\.modeSel\.value:undefined/);
+  assert.doesNotMatch(html, /codexProvider:/);
+  assert.doesNotMatch(html, /codexSandbox:/);
+  assert.doesNotMatch(html, /codexProfile:/);
+  assert.doesNotMatch(html, /codexConfig:/);
 });

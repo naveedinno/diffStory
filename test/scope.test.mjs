@@ -44,9 +44,6 @@ test('explicit presets and compare refs override the default', () => {
   const d = repo();
   try {
     assert.equal(resolveScope(d, Q('scope=uncommitted')).active, 'uncommitted');
-    const branch = resolveScope(d, Q('scope=branch'));
-    assert.equal(branch.active, 'branch');
-    assert.equal(branch.head, 'HEAD');
     const r = resolveScope(d, Q('base=HEAD~1&head=HEAD'));
     assert.equal(r.active, 'compare');
     assert.equal(r.base, 'HEAD~1');

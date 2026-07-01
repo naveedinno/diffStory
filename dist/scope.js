@@ -1,9 +1,8 @@
 // Resolve the review scope for the "Your change" screen. The default is "what I just
 // did": uncommitted changes if the working tree is dirty, otherwise the latest commit.
-// Explicit modes can pin a single commit, the committed current branch, or any
-// base/head pair. Produces the exact base/head to diff plus a human label and active
-// mode for the UI.
-import { resolveBase, describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, } from './git.js';
+// Explicit modes can pin a single commit or any base/head pair. Produces the exact
+// base/head to diff plus a human label and active mode for the UI.
+import { describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, } from './git.js';
 export function resolveScope(repo, params) {
     const ref = params.get('base');
     if (ref) {
@@ -16,10 +15,7 @@ export function resolveScope(repo, params) {
             active: 'compare',
         };
     }
-    const sel = params.get('scope'); // 'uncommitted' | 'last' | 'branch' | null (auto)
-    if (sel === 'branch') {
-        return { base: resolveBase(repo), head: 'HEAD', label: 'Current branch', active: 'branch' };
-    }
+    const sel = params.get('scope'); // 'uncommitted' | 'last' | null (auto)
     if (sel === 'commit' || sel === 'last')
         return commitScope(repo, params.get('commit') || 'HEAD');
     if (sel === 'uncommitted' || (sel == null && isDirty(repo))) {

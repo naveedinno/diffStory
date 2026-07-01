@@ -20,13 +20,15 @@ const FILE_KIND_LABEL = {
     new: 'New file',
     context: 'Context',
 };
-export function buildReviewModel(repo, tour, files, headRef) {
+export function buildReviewModel(repo, tour, files, headRef, opts) {
     const steps = orderedSteps(tour);
     const byId = new Map(steps.map((s) => [s.id, s]));
-    const coverage = computeCoverage(tour, files);
+    // Story-less (diff-only) view: there's no story to measure the diff against,
+    // so nothing is "unexplained" — skip coverage instead of flagging every line.
+    const uncovered = opts?.storyless ? [] : computeCoverage(tour, files).uncovered;
     // Uncovered ranges grouped by file, for line-level "untoured" flagging.
     const uncoveredByFile = new Map();
-    for (const u of coverage.uncovered) {
+    for (const u of uncovered) {
         const list = uncoveredByFile.get(u.file) ?? [];
         list.push(u.range);
         uncoveredByFile.set(u.file, list);
@@ -38,7 +40,7 @@ export function buildReviewModel(repo, tour, files, headRef) {
             stepByFile.set(s.file, s);
     const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
     const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
-    const trust = buildTrust(files, coverage.uncovered, stepByFile);
+    const trust = buildTrust(files, uncovered, stepByFile);
     return {
         steps: stepViews,
         files: fileViews,
@@ -52,6 +54,7 @@ export function buildReviewModel(repo, tour, files, headRef) {
 }
 function buildStep(repo, step, files, byId, total, headRef) {
     const { blocks, note } = stepBlocks(repo, step, files, headRef);
+    const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
     const highlights = stepHighlights(step);
     const focusExplicit = highlights.length > 0;
@@ -60,6 +63,7 @@ function buildStep(repo, step, files, byId, total, headRef) {
         order: step.order,
         title: step.title,
         file: step.file,
+        oldFile: diffFile?.oldPath ?? step.file,
         viewport,
         range: viewport,
         focusRanges: focusExplicit ? highlights : [viewport],
@@ -150,6 +154,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
         const step = stepByFile.get(file.newPath);
         views.push({
             file: file.newPath,
+            oldFile: file.oldPath,
             kind: file.status === 'added' ? 'new' : 'changed',
             kindLabel: file.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
             add,
@@ -170,6 +175,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
         const rows = r ? r.lines.map((c, i) => ({ type: 'ctx', no: r.startLine + i, content: c })) : [];
         views.push({
             file: step.file,
+            oldFile: step.file,
             kind: 'context',
             kindLabel: FILE_KIND_LABEL.context,
             add: 0,

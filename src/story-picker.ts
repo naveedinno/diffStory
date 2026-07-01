@@ -28,7 +28,12 @@ const TRASH = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" strok
 
 function storyRow(s: StorySummary, now: number, routeBase: string): string {
   const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
-  const mode = s.mode === 'detailed' ? 'Detailed audit' : 'Guided review';
+  const mode =
+    s.mode === 'brief'
+      ? 'Brief story'
+      : s.mode === 'detailed'
+        ? 'Line-by-line story'
+        : 'Balanced story';
 
   const badges =
     (s.current ? `<span class="badge badge-cur">Current</span>` : '') +
@@ -76,7 +81,7 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
     crumbs: [{ label: opts.repoName }],
     right:
       `<a class="nv-act" href="${esc(rb)}/stories" title="Reload after another agent saves a story">Refresh</a>` +
-      `<a class="nv-pri" href="${esc(rb)}/change">+ New story</a>`,
+      `<a class="nv-pri" href="${esc(rb)}/change">New diff scope</a>`,
   });
 
   const body = hasStories
@@ -85,12 +90,12 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
          <p class="kicker">Story library</p>
          <h1>${esc(opts.repoName)}</h1>
          <p class="sub">Open a saved walkthrough, refresh after an agent writes a new one, or remove old story files you no longer need.</p>
-         <a class="side-cta" href="${esc(rb)}/change">+ New story</a>
+         <a class="side-cta" href="${esc(rb)}/change">New diff scope</a>
        </aside>
        <section class="stories-panel">
          <div class="head">
            <div><p class="kicker">Saved stories</p><h2>${opts.stories.length} ${opts.stories.length === 1 ? 'story' : 'stories'}</h2></div>
-           <a class="panel-action" href="${esc(rb)}/change">+ New story</a>
+           <a class="panel-action" href="${esc(rb)}/change">New diff scope</a>
          </div>
          <div class="card" id="storyList">${list}</div>
        </section>
@@ -99,8 +104,8 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
     : `<div class="empty">
          <span class="empty-mark">${MARK}</span>
          <h1 class="empty-title">No stories yet</h1>
-         <p class="empty-sub">Generate a guided walkthrough of <b>${esc(opts.repoName)}</b>'s current diff — the agent that wrote the change explains it in reading order.</p>
-         <a class="empty-cta" href="${esc(rb)}/change">Start your first review</a>
+         <p class="empty-sub">Open <b>${esc(opts.repoName)}</b>'s current diff to read the change — then generate a guided story from it whenever you want one.</p>
+         <a class="empty-cta" href="${esc(rb)}/change">New diff scope</a>
        </div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">

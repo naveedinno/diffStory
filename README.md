@@ -37,20 +37,28 @@ steps, leave a comment, watch the trust check flag a sneaky change.
 Then use it for real, in any repo after making changes:
 
 ```text
-1.  diffstory story                →  your agent writes .diffstory/story.json, then the review opens
-2.  Read in order, select text, right-click to comment
-3.  Hit "Ask agent" on the page    →  it answers and fixes inline, live ✅
+diffstory                          →  opens the app in your browser
 ```
 
-**Reviewing a teammate's PR?** If they committed their story (`diffstory init` → *share via git*),
-just `git checkout <their-branch> && diffstory serve` to replay their guided walkthrough — no agent
+Everything happens in the page:
+
+```text
+1.  Pick a saved story, or "New diff scope" to read the change with no story at all
+2.  From the diff, generate a guided story with your agent (claude/codex) — optional
+3.  Read in order, select text, right-click to comment
+4.  Hit "Ask agent"                →  it answers and fixes inline, live ✅
+```
+
+**Reviewing a teammate's PR?** If they committed their story file (`.diffstory/story.json`),
+just `git checkout <their-branch> && diffstory` to replay their guided walkthrough — no agent
 needed.
 
 ## What you get
 
 - 🧭 **A guided reading order** — walk the change step by step in call-flow order, not by filename.
 - 📝 **A "why" for every step** — what to look at, what's subtle, why it's safe.
-- ⚖️ **Real side-by-side diffs** — before/after from the actual `git diff`, never reproduced by the AI. Flip to the full file anytime.
+- ⚖️ **A plain diff viewer, no story required** — open any repo and read the real `git diff` straight away, file by file, with a "Full file" flip. Generate a guided story from it only if you want one.
+- 🧠 **Real side-by-side diffs in the story** — before/after from the actual `git diff`, never reproduced by the AI.
 - 💬 **Comments that loop back, live** — drop a change request, question, or nit, then hit **Ask agent** (or **Address all open**) and watch the agent reply and fix right on the page; you resolve.
 - 🛡️ **A trust check** — any change no step explains gets flagged, so nothing slips in quietly.
 - 🗂️ **An all-files view** — a clean, file-by-file overview when you want the bird's-eye.
@@ -84,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/i
 
 </details>
 
-Then add the skills your agent runs (the CLI is agent-agnostic):
+Then add the skills your agent runs (diffStory is agent-agnostic):
 
 **Claude Code**
 ```text
@@ -98,21 +106,21 @@ git clone git@github.com:naveedinno/diffStory.git && cd diffStory
 ./scripts/install-skills.sh
 ```
 
-## Commands
+## Running it
 
-| Command | What it does |
+There's one command — `diffstory` — and it just opens the app in your browser. In a git repo it
+opens that repo; anywhere else you pick one in the page. Everything else happens in the browser.
+
+| Flag | What it does |
 | --- | --- |
-| `diffstory serve` | Open the guided review page (default command). |
-| `diffstory check` | Print coverage; **exits non-zero if a change isn't in the story** — great for CI. |
-| `diffstory init` | Scaffold `.diffstory/` with a starter story. |
-| `diffstory help` | Full usage and flags. |
+| `--dir <path>` | Open a specific repo instead of the current directory. |
+| `--port <n>` | Server port. |
+| `--no-open` | Don't open the browser automatically. |
+| `diffstory --help` | Full usage. |
 
-Flags: `--dir <path>` · `--base <ref>` · `--head <ref>` · `--port <n>` · `--no-open`.
-
-**Choosing what to diff** — just run `diffstory serve` and it **asks** (pick a branch or commit
-from a list). Prefer flags? Pass one to skip the prompt: uncommitted only `--base HEAD` · since a
-commit/tag `--base v1.2.0` · between two refs `--base main --head feature` · a different repo
-`--dir /path/to/repo`.
+**Choosing what to diff** happens in the page: a scope switcher picks uncommitted changes, the
+current branch, a single commit, or compares any two refs — and the diff re-renders instantly. No
+flags to memorise.
 
 ---
 
@@ -146,8 +154,8 @@ ranges line by line. Each step can declare a `viewport` for what the reviewer sh
 `kind` is `changed` (show the real hunk), `new-file`, or `context` (unchanged code the reader needs
 — like a callee you didn't touch). `viewport` is the post-change line window the reviewer should
 see; `highlights` is one or more post-change line ranges inside that viewport that should glow
-while the narration talks about them. `range` remains the changed-line coverage anchor for
-`diffstory check`.
+while the narration talks about them. `range` remains the changed-line coverage anchor the
+in-page trust check uses to flag any change no step explains.
 `calls` / `returnsTo` render the cross-file jumps. Full schema in
 [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
 

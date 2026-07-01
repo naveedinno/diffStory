@@ -78,11 +78,13 @@ test('listStories explains whether a story covers working tree or a ref range', 
 test('listStories exposes the story generation mode', () => {
   const repo = tmp();
   writeStory(repo, 'story.json', 'Guided work');
+  writeStory(repo, 'stories/brief.json', 'Brief work', { mode: 'brief' });
   writeStory(repo, 'stories/deep.json', 'Detailed work', { mode: 'detailed' });
 
   const stories = listStories(repo);
   assert.equal(stories[0].mode, 'guided');
-  assert.equal(stories[1].mode, 'detailed');
+  assert.equal(stories[1].mode, 'brief');
+  assert.equal(stories[2].mode, 'detailed');
 
   rmSync(repo, { recursive: true, force: true });
 });

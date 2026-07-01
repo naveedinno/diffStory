@@ -34,6 +34,8 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
   }
   assert.match(s, /blocked/);
   assert.match(s, /quiet/);
+  assert.match(s, /if\(opts\.onEvent\)opts\.onEvent\(ev\)/);
+  assert.match(s, /if\(opts\.onBlocked\)opts\.onBlocked\(err\|\|\{\}\)/);
   // Preserved public surface used by callers.
   assert.match(s, /showFoot/);
   assert.match(s, /ds-pp-reload|reload/);

@@ -164,6 +164,7 @@ function ProgressPanel(root, opts){
   function stopTimer(){ if(timer){clearInterval(timer);timer=null;} }
   function handle(ev){
     if(!ev||!ev.type)return;
+    if(opts.onEvent)opts.onEvent(ev);
     switch(ev.type){
       case 'run_started':
         workflow=ev.workflow||'';
@@ -215,6 +216,7 @@ function ProgressPanel(root, opts){
     if(els.live){ els.live.hidden=false; els.live.className='ds-pp-live is-error';
       if(els.liveTx)els.liveTx.textContent=(err&&err.label)||'Blocked'; if(els.liveCount)els.liveCount.textContent=''; }
     if(els.foot){ els.foot.hidden=false; els.foot.textContent=(err&&err.detail)||(err&&err.label)||'Blocked.'; }
+    if(opts.onBlocked)opts.onBlocked(err||{});
   }
   if(els.stop)els.stop.addEventListener('click',function(){ if(opts.onStop)opts.onStop(); });
   if(els.close)els.close.addEventListener('click',function(){ if(opts.onClose)opts.onClose(); else root.hidden=true; });

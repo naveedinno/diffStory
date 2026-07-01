@@ -9,7 +9,7 @@ import { loadTour, validateTour } from '../dist/tour.js';
 test('a well-formed tour has no errors', () => {
   const errs = validateTour({
     version: 1,
-    mode: 'detailed',
+    mode: 'brief',
     title: 'T',
     summary: '',
     steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],

@@ -3,7 +3,7 @@
 // not render a broken page.
 import { readFileSync } from 'node:fs';
 const KINDS = ['changed', 'context', 'new-file'];
-const MODES = ['guided', 'detailed'];
+const MODES = ['brief', 'guided', 'detailed'];
 export class TourError extends Error {
 }
 function isLineNumber(v) {
@@ -66,7 +66,7 @@ export function loadTour(path) {
         raw = readFileSync(path, 'utf8');
     }
     catch {
-        throw new TourError(`No review story found at ${path}. Run "diffstory story" to create one.`);
+        throw new TourError(`No review story found at ${path}. Open the diff in the diffStory app and generate one.`);
     }
     let parsed;
     try {

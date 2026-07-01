@@ -52,6 +52,7 @@ export interface StepView {
   order: number;
   title: string;
   file: string;
+  oldFile: string;
   /** Storyteller-selected visible window. */
   viewport: [number, number];
   range: [number, number];
@@ -73,6 +74,7 @@ export interface StepView {
 
 export interface FileView {
   file: string;
+  oldFile: string;
   kind: FileKind;
   kindLabel: string;
   add: number;
@@ -111,14 +113,22 @@ export interface ReviewModel {
   totalDel: number;
 }
 
-export function buildReviewModel(repo: string, tour: Tour, files: DiffFile[], headRef?: string): ReviewModel {
+export function buildReviewModel(
+  repo: string,
+  tour: Tour,
+  files: DiffFile[],
+  headRef?: string,
+  opts?: { storyless?: boolean },
+): ReviewModel {
   const steps = orderedSteps(tour);
   const byId = new Map(steps.map((s) => [s.id, s]));
-  const coverage = computeCoverage(tour, files);
+  // Story-less (diff-only) view: there's no story to measure the diff against,
+  // so nothing is "unexplained" — skip coverage instead of flagging every line.
+  const uncovered = opts?.storyless ? [] : computeCoverage(tour, files).uncovered;
 
   // Uncovered ranges grouped by file, for line-level "untoured" flagging.
   const uncoveredByFile = new Map<string, Array<[number, number]>>();
-  for (const u of coverage.uncovered) {
+  for (const u of uncovered) {
     const list = uncoveredByFile.get(u.file) ?? [];
     list.push(u.range);
     uncoveredByFile.set(u.file, list);
@@ -130,7 +140,7 @@ export function buildReviewModel(repo: string, tour: Tour, files: DiffFile[], he
 
   const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
   const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
-  const trust = buildTrust(files, coverage.uncovered, stepByFile);
+  const trust = buildTrust(files, uncovered, stepByFile);
 
   return {
     steps: stepViews,
@@ -153,6 +163,7 @@ function buildStep(
   headRef?: string,
 ): StepView {
   const { blocks, note } = stepBlocks(repo, step, files, headRef);
+  const diffFile = files.find((f) => f.newPath === step.file);
   const viewport = stepViewport(step);
   const highlights = stepHighlights(step);
   const focusExplicit = highlights.length > 0;
@@ -161,6 +172,7 @@ function buildStep(
     order: step.order,
     title: step.title,
     file: step.file,
+    oldFile: diffFile?.oldPath ?? step.file,
     viewport,
     range: viewport,
     focusRanges: focusExplicit ? highlights : [viewport],
@@ -268,6 +280,7 @@ function buildFiles(
     const step = stepByFile.get(file.newPath);
     views.push({
       file: file.newPath,
+      oldFile: file.oldPath,
       kind: file.status === 'added' ? 'new' : 'changed',
       kindLabel: file.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
       add,
@@ -288,6 +301,7 @@ function buildFiles(
     const rows = r ? r.lines.map((c, i) => ({ type: 'ctx' as const, no: r.startLine + i, content: c })) : [];
     views.push({
       file: step.file,
+      oldFile: step.file,
       kind: 'context',
       kindLabel: FILE_KIND_LABEL.context,
       add: 0,

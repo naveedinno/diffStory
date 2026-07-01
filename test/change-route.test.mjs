@@ -120,17 +120,23 @@ test('opening a repo lands on story selection before generating a new story', as
     });
     const route = repoRoute(repo);
     const html = (await (await fetch(`${base}${route}/stories`)).text());
-    assert.ok(html.includes('+ New story'), 'shows story selection');
-    assert.ok(html.includes('New story'), 'offers a new story');
+    assert.ok(html.includes('New diff scope'), 'shows story selection');
+    assert.ok(html.includes('No stories yet'), 'shows the empty story state');
     assert.ok(html.includes(`href="${route}/change"`), 'new story has its own repo-named route');
     assert.ok(!html.includes('Generate guided review'), 'does not jump straight to generation');
 
     const next = await (await fetch(`${base}${route}/change`)).text();
-    assert.ok(next.includes('Generate guided review'), 'new story opens the Generate action');
-    assert.ok(next.includes('a.txt'), 'new story screen shows the changed file');
+    assert.ok(!next.includes('Generate guided review'), 'the scope picker does not duplicate story generation');
+    assert.ok(next.includes(`href="${route}/diff`), 'the scope picker links to the review viewer');
+    assert.ok(next.includes('a.txt'), 'the scope picker shows the changed file');
+
+    const diff = await (await fetch(`${base}${route}/diff`)).text();
+    assert.ok(diff.includes('data-storyless'), '/diff renders the real review page with no story');
+    assert.ok(diff.includes('Generate story'), '/diff Story tab offers Generate story');
+    assert.ok(diff.includes('a.txt'), '/diff shows the changed file');
 
     const again = await (await fetch(`${base}${route}/stories`)).text();
-    assert.ok(again.includes('+ New story'), 'explicit stories route still returns to the chooser');
+    assert.ok(again.includes('New diff scope'), 'explicit stories route still returns to the chooser');
     assert.ok(!again.includes("Couldn't build the review"), 'is not the error page');
   } finally {
     server.close();
@@ -149,7 +155,7 @@ test('starting with a repo lands on story selection before opening the primary s
   const { server, base } = await bootRepo(repo);
   try {
     const html = await (await fetch(`${base}/`)).text();
-    assert.ok(html.includes('+ New story'), 'shows story selection');
+    assert.ok(html.includes('New diff scope'), 'shows story selection');
     assert.ok(html.includes('Saved story'), 'lists the primary saved story');
     const route = repoRoute(repo);
     assert.ok(html.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
@@ -176,7 +182,7 @@ test('starting with a repo lists named stories even without a primary story', as
   const { server, base } = await bootRepo(repo);
   try {
     const html = await (await fetch(`${base}/`)).text();
-    assert.ok(html.includes('+ New story'), 'shows story selection');
+    assert.ok(html.includes('New diff scope'), 'shows story selection');
     assert.ok(html.includes('Named saved story'), 'lists the named saved story');
     const route = repoRoute(repo);
     assert.ok(html.includes(`href="${route}/review?story=stories%2Fnative.json"`), 'named story has its own repo-named review route');
@@ -245,7 +251,7 @@ test('opening a repo with a saved story lets the user select it', async () => {
     });
     const route = repoRoute(repo);
     const chooser = await (await fetch(`${base}${route}/stories`)).text();
-    assert.ok(chooser.includes('+ New story'), 'shows story selection');
+    assert.ok(chooser.includes('New diff scope'), 'shows story selection');
     assert.ok(chooser.includes('Saved story'), 'lists the saved story');
     assert.ok(chooser.includes('data-delete-story'), 'shows a story remove action');
     assert.ok(chooser.includes('Working tree vs HEAD'), 'explains the diff scope');
@@ -256,10 +262,10 @@ test('opening a repo with a saved story lets the user select it', async () => {
     assert.ok(review.includes('Entry point'), 'opens the selected story');
     assert.ok(review.includes('data-close-story'), 'review page exposes a close-story affordance');
     assert.ok(review.includes(`href="${route}/stories"`), 'close-story affordance returns to the repo-named chooser route');
-    assert.ok(!review.includes('+ New story'), 'does not stay on the chooser');
+    assert.ok(!review.includes('New diff scope'), 'does not stay on the chooser');
 
     const chooserAgain = await (await fetch(`${base}${route}/stories`)).text();
-    assert.ok(chooserAgain.includes('+ New story'), 'review route does not consume the chooser route');
+    assert.ok(chooserAgain.includes('New diff scope'), 'review route does not consume the chooser route');
   } finally {
     server.close();
     process.env.HOME = realHome;
@@ -301,7 +307,7 @@ test('story picker can remove a saved story', async () => {
   }
 });
 
-test('a malformed selected story shows the change screen with a notice, not the raw error page', async () => {
+test('a malformed selected story shows the scope picker with a notice, not the raw error page', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -318,7 +324,7 @@ test('a malformed selected story shows the change screen with a notice, not the 
     assert.ok(chooser.includes('story.json'), 'lists the bad story');
     const html = await (await fetch(`${base}${route}/review?story=story.json`)).text();
     assert.ok(html.includes('class="notice"'), 'shows a notice about the bad review');
-    assert.ok(html.includes('Generate guided review'), 'offers regenerate');
+    assert.ok(html.includes('Open diff viewer'), 'points back to the diff viewer');
     assert.ok(!html.includes("Couldn't build the review"), 'is not the raw error page');
   } finally {
     server.close();
@@ -342,7 +348,7 @@ test('legacy story query routes still work for old bookmarks', async () => {
     const changeResponse = await fetch(`${base}/?story=new`);
     assert.ok(changeResponse.url.endsWith(`${repoRoute(repo)}/change`), 'old new-story query redirects to the repo-named change route');
     const change = await changeResponse.text();
-    assert.ok(change.includes('Generate guided review'), 'old new-story query opens the change screen');
+    assert.ok(change.includes('Open diff viewer'), 'old new-story query opens the scope picker');
 
     const reviewResponse = await fetch(`${base}/?story=story.json`);
     assert.ok(reviewResponse.url.endsWith(`${repoRoute(repo)}/review?story=story.json`), 'old story query redirects to the repo-named review route');

@@ -158,21 +158,15 @@ write('.diffstory/story.json', TOUR);
 write('.diffstory/comments.json', COMMENTS);
 
 console.log('\nDemo repo built at: ' + DEMO);
-console.log('— diffstory check —');
-try {
-  execFileSync('node', [CLI, 'check', '--dir', DEMO], { stdio: 'inherit' });
-} catch {
-  /* `check` exits 1 when something is uncovered — that's the point of this demo */
-}
 
 if (process.env.DIFFSTORY_DEMO_NO_SERVE) {
   console.log('\n(skipping serve; DIFFSTORY_DEMO_NO_SERVE set)');
   process.exit(0);
 }
 
-console.log('\nOpening the review page — Ctrl-C to stop.\n');
+console.log('\nOpening the app — pick the saved story or view the diff. Ctrl-C to stop.\n');
 try {
-  execFileSync('node', [CLI, 'serve', '--dir', DEMO], { stdio: 'inherit' });
+  execFileSync('node', [CLI, '--dir', DEMO], { stdio: 'inherit' });
 } catch {
   /* Ctrl-C */
 }

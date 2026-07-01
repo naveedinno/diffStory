@@ -20,41 +20,60 @@ const KEYWORDS = new Set([
 ]);
 // comment | string | number | identifier | whitespace | any-single-char
 const RE = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|`(?:[^`\\]|\\.)*`?)|(0[xX][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)|([A-Za-z_$][\w$]*)|(\s+)|([\s\S])/g;
-function esc(s) {
+export function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+/**
+ * Lex one line into tokens. This is the single source of truth for how a line is
+ * broken up; highlight() renders these, and intra-line.ts diffs them so word-level
+ * change marks land on the same boundaries as the syntax colors.
+ */
+export function tokenize(code) {
+    const tokens = [];
+    if (!code)
+        return tokens;
+    RE.lastIndex = 0;
+    let m;
+    while ((m = RE.exec(code)) !== null) {
+        const [tok, comment, str, num, word] = m;
+        let cls = null;
+        if (comment !== undefined)
+            cls = 'tk-c';
+        else if (str !== undefined)
+            cls = 'tk-s';
+        else if (num !== undefined)
+            cls = 'tk-n';
+        else if (word !== undefined) {
+            if (KEYWORDS.has(tok))
+                cls = 'tk-k';
+            else if (/^[A-Z]/.test(tok))
+                cls = 'tk-t';
+            else if (/^\s*\(/.test(code.slice(RE.lastIndex)))
+                cls = 'tk-f';
+            // else: plain identifier — cls stays null
+        }
+        // whitespace and lone operator chars also stay null
+        tokens.push({ text: tok, cls });
+        if (m.index === RE.lastIndex)
+            RE.lastIndex++; // guard against any zero-width match
+    }
+    return tokens;
+}
+/**
+ * Render one token to HTML. esc() is a no-op on the previously-unescaped cases
+ * (identifiers, keywords, whitespace), so escaping uniformly here reproduces the
+ * old highlight() output byte-for-byte while staying safe for comments/strings.
+ */
+export function renderToken(t, changed = false) {
+    const cls = changed ? (t.cls ? `${t.cls} changed` : 'changed') : t.cls;
+    return cls ? `<span class="${cls}">${esc(t.text)}</span>` : esc(t.text);
 }
 /** Highlight one line of code → HTML-escaped string with token spans. */
 export function highlight(code) {
     if (!code)
         return '';
     let out = '';
-    RE.lastIndex = 0;
-    let m;
-    while ((m = RE.exec(code)) !== null) {
-        const [tok, comment, str, num, word, ws] = m;
-        if (comment !== undefined)
-            out += `<span class="tk-c">${esc(tok)}</span>`;
-        else if (str !== undefined)
-            out += `<span class="tk-s">${esc(tok)}</span>`;
-        else if (num !== undefined)
-            out += `<span class="tk-n">${esc(tok)}</span>`;
-        else if (word !== undefined) {
-            // identifiers can't contain HTML-special chars, so no escaping needed
-            if (KEYWORDS.has(tok))
-                out += `<span class="tk-k">${tok}</span>`;
-            else if (/^[A-Z]/.test(tok))
-                out += `<span class="tk-t">${tok}</span>`;
-            else if (/^\s*\(/.test(code.slice(RE.lastIndex)))
-                out += `<span class="tk-f">${tok}</span>`;
-            else
-                out += tok;
-        }
-        else if (ws !== undefined)
-            out += tok;
-        else
-            out += esc(tok);
-        if (m.index === RE.lastIndex)
-            RE.lastIndex++; // guard against any zero-width match
-    }
+    for (const t of tokenize(code))
+        out += renderToken(t);
     return out;
 }

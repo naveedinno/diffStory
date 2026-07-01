@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import type { Tour, TourStep, StepKind, StoryMode } from './types.js';
 
 const KINDS: StepKind[] = ['changed', 'context', 'new-file'];
-const MODES: StoryMode[] = ['guided', 'detailed'];
+const MODES: StoryMode[] = ['brief', 'guided', 'detailed'];
 
 export class TourError extends Error {}
 
@@ -86,7 +86,7 @@ export function loadTour(path: string): Tour {
   try {
     raw = readFileSync(path, 'utf8');
   } catch {
-    throw new TourError(`No review story found at ${path}. Run "diffstory story" to create one.`);
+    throw new TourError(`No review story found at ${path}. Open the diff in the diffStory app and generate one.`);
   }
   let parsed: unknown;
   try {

@@ -22,7 +22,7 @@ not hide behind a changelog.
 - Never use "deleted" as a step kind. For deleted files, use kind "changed"
   and anchor the range at the post-change deletion location.
 - `range` uses post-change, 1-based inclusive line numbers as the changed-line
-  coverage anchor for `diffstory check`.
+  coverage anchor for the coverage gate.
 - `viewport` uses post-change, 1-based inclusive line numbers as the visible
   review window the diff viewer should show.
 - `highlights` uses post-change, 1-based inclusive line ranges inside
@@ -31,22 +31,30 @@ not hide behind a changelog.
 - `context` is only for unchanged code that helps the reviewer understand a changed path.
 - Do not reproduce code in the story. diffStory pulls code from git.
 
-## Story modes
+## Detail levels
 
-The prompt may ask for `"mode": "guided"` or `"mode": "detailed"`. Write that
-top-level field in `.diffstory/story.json`.
+The prompt may ask for `"mode": "brief"`, `"mode": "guided"`, or
+`"mode": "detailed"`. Write that top-level field in `.diffstory/story.json`.
 
-### Guided review mode
+### Brief mode
 
-Use this unless the prompt explicitly asks for detailed mode. Keep the story
-compact: one stop per review question, grouped by runtime/control/data flow. The
-reviewer should know where to read, what changed, and where to slow down.
+Use this when the prompt asks for a brief, skim, shortest useful, or one-line
+story. Keep the story as short as possible while still covering every changed
+hunk: one compact stop per meaningful change cluster, and exactly one short
+first-person sentence in each `why`.
 
-### Detailed correctness mode
+### Balanced mode
 
-Use this when the prompt asks for detailed, line-by-line, correctness-review, or
-audit-style explanation. The reviewer is checking whether the code is exactly
-what it should be, not just getting oriented.
+This is the default for `"mode": "guided"`. Keep the story compact but useful:
+one stop per review question, grouped by runtime/control/data flow. The reviewer
+should know where to read, what changed, and where to slow down.
+
+### Line-by-line mode
+
+Use this for `"mode": "detailed"` or when the prompt asks for detailed,
+line-by-line, correctness-review, or audit-style explanation. The reviewer is
+checking whether the code is exactly what it should be, not just getting
+oriented.
 
 - Prefer more, smaller stops when a method, component, contract function, test,
   or script has separate decisions.
@@ -58,7 +66,7 @@ what it should be, not just getting oriented.
   fallbacks, persistence, cleanup, external calls, UI states, and tests.
 - Use exact function, variable, parameter, event, field, and assertion names.
   Do not paste code blocks or duplicate the diff.
-- Detailed does not mean noisy. Skip trivial syntax, imports, and mechanical
+- Line-by-line does not mean noisy. Skip trivial syntax, imports, and mechanical
   plumbing unless they change correctness.
 
 ## Workflow
@@ -175,7 +183,7 @@ Coverage anchor contract:
 
 - Prefer a function, method, branch, schema block, test case, or config stanza.
 - Include enough surrounding lines that the hunk makes sense.
-- Keep `range` as the changed-line coverage anchor for `diffstory check`; do
+- Keep `range` as the changed-line coverage anchor for the coverage gate; do
   not use it as the display-window control.
 - For deletion-heavy hunks, anchor to the post-change line where the deletion happened and include the smallest surrounding code that explains the removed behavior.
 - If a hunk spans unrelated behavior, create separate steps.
@@ -198,9 +206,11 @@ Focus pointer contract:
   `viewport` when present, or `range` for legacy stories.
 - The focus can be one or two lines when that is what the sentence is talking
   about; point to the exact guard, call, assertion, state write, or branch, not the whole displayed section.
-- In guided mode, add focus only for the exact line or tiny block the reviewer
+- In brief mode, add focus only for the one exact line or tiny block the
+  reviewer should glance at.
+- In balanced/guided mode, add focus only for the exact line or tiny block the reviewer
   should look at while listening.
-- In detailed mode, prefer narrow focus ranges for guards, branches, state
+- In line-by-line/detailed mode, prefer narrow focus ranges for guards, branches, state
   writes, external calls, assertions, and other line-by-line correctness pivots.
 - If the whole step range is the right thing to point at, omit `focus`;
   diffStory highlights the step range automatically.
@@ -236,9 +246,10 @@ Tests
 Changes in api.ts
 ```
 
-Each `why` should answer a reviewer question. In guided mode, use 1-3 short
-first-person sentences. In detailed correctness mode, 3-7 short sentences are
-fine when needed to walk the range line by line:
+Each `why` should answer a reviewer question. In brief mode, use exactly one
+short first-person sentence. In balanced/guided mode, use 1-3 short first-person
+sentences. In line-by-line/detailed mode, 3-7 short sentences are fine when
+needed to walk the range line by line:
 
 1. Where this stop sits in the designed runtime/control/data flow.
 2. What the old path failed to handle, preserve, reject, or prove.
@@ -292,7 +303,7 @@ them back creates stale pointers and noisy review stops.
   `viewport`, and `highlights`.
 - `changed` and `new-file` ranges must overlap real changed ranges.
 - `context` ranges must be unchanged and must not be used to satisfy coverage.
-- Do not use whole-file or giant ranges just to pass `diffstory check`.
+- Do not use whole-file or giant ranges just to pass the coverage gate.
 - `viewport` should include enough surrounding code that a reviewer who just
   read the requirement understands where the highlighted lines live.
 - `highlights` must stay inside `viewport`.
@@ -361,29 +372,25 @@ them back creates stale pointers and noisy review stops.
 }
 ```
 
-Use `"mode": "detailed"` for the longer correctness-review story.
+Use `"mode": "brief"` for the shortest useful story, and `"mode": "detailed"`
+for the longer line-by-line correctness story.
 
 Omit `head` when the story is for working tree vs base instead of a fixed
 `base..head` range.
 
 ## Save and verify
 
-Write `.diffstory/story.json`, then run:
+Write `.diffstory/story.json`, then verify it against the diff yourself:
 
-```bash
-diffstory check
-```
+- Every changed hunk is covered by a `changed` / `new-file` step. The in-app
+  trust check flags any change no step explains, so leave none uncovered.
+- No step points at unchanged code — correct any stale range, file, or kind.
+- The JSON is valid: ids, `order`, `calls`, and `returnsTo` all resolve.
 
-Fix every issue:
+Fix every issue before handing back. If a clean story is impossible, report the
+blocker instead of pretending it is ready.
 
-- "not in the tour" means add or tighten a `changed` / `new-file` step.
-- Stale pointers mean correct the range, file, or kind.
-- Schema/reference errors mean fix the JSON, ids, order, `calls`, or `returnsTo`.
-
-Run `diffstory check` again until clean. If a clean story is impossible, report
-the blocker instead of pretending it is ready.
-
-Tell the user: "Story ready - run `diffstory serve` to review."
+Tell the user: "Story ready — open the diff in the diffStory app to review."
 
 ## Don't
 
@@ -396,4 +403,4 @@ Tell the user: "Story ready - run `diffstory serve` to review."
 - Don't make one story step bounce between distant lines; split it until the
   visible code and highlighted code stay in one local review moment.
 - Don't make unsupported confidence claims like "this is safe" or "tests cover it" without naming the exact condition or evidence.
-- Don't skip the `diffstory check` gate.
+- Don't skip the coverage gate — every changed hunk needs a covering step.
