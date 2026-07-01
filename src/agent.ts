@@ -10,9 +10,22 @@ import {
 } from './progress.js';
 
 export type Agent = 'claude' | 'codex';
+export type CodexSandbox = 'full-auto' | 'workspace-write' | 'read-only' | 'danger-full-access';
+export type CodexProvider = 'default' | 'lmstudio' | 'ollama';
+
+export interface CodexRunOptions {
+  sandbox?: CodexSandbox;
+  provider?: CodexProvider;
+  profile?: string;
+  config?: string[];
+}
+
+export interface AgentRunOptions {
+  codex?: CodexRunOptions;
+}
 
 export function normalizeStoryMode(mode: unknown): StoryMode {
-  return mode === 'detailed' ? 'detailed' : 'guided';
+  return mode === 'brief' || mode === 'detailed' ? mode : 'guided';
 }
 
 /** Whether `cmd` resolves on PATH (POSIX `command -v`). */
@@ -44,20 +57,31 @@ export function storyPrompt(
   const scopeContract = excludePaths.length
     ? `Scope contract:\n` +
       `- These files are generated or oversized artifacts (regenerated ABIs, lockfiles, built bundles) and are intentionally excluded from this review: ${excludePaths.join(', ')}.\n` +
-      `- Do not read, narrate, or write steps for them. "diffstory check" already excludes them, so the coverage gate will not ask you to cover them — adding them back only bloats the story.\n\n`
+      `- Do not read, narrate, or write steps for them. The coverage gate already excludes them, so it will not ask you to cover them — adding them back only bloats the story.\n\n`
     : '';
-  const whyLength = storyMode === 'detailed' ? '3-7 short sentences' : '1-3 short sentences';
+  const whyLength =
+    storyMode === 'brief'
+      ? 'one short sentence'
+      : storyMode === 'detailed'
+        ? '3-7 short sentences'
+        : '1-3 short sentences';
   const modeContract =
-    storyMode === 'detailed'
-      ? `Story mode contract:\n` +
-        `- Detailed correctness mode: write a longer audit story for a reviewer who wants to verify the code is exactly right.\n` +
+    storyMode === 'brief'
+      ? `Detail level contract:\n` +
+        `- Brief mode: write the shortest useful story for a reviewer who wants the quick shape before reading the diff directly.\n` +
+        `- Use one compact stop per meaningful change cluster. Do not create line-by-line stops unless a single line is the whole risk.\n` +
+        `- Each "why" should be exactly one short sentence in first person: what changed, why it matters, and where to glance.\n` +
+        `- Keep titles concrete and skim-friendly. Skip low-risk mechanical explanation while still covering every changed hunk.\n\n`
+      : storyMode === 'detailed'
+      ? `Detail level contract:\n` +
+        `- Line-by-line mode: write a longer correctness story for a reviewer who wants to verify the code is exactly right.\n` +
         `- Prefer more, smaller stops when a function contains separate decisions; split separate branches, guards, state writes, external calls, and error paths instead of hiding them in one broad paragraph.\n` +
         `- Explain important ranges almost line-by-line: name the method, then describe what the first guard checks, what the next assignment or call prepares, what each branch accepts or rejects, and what state, return value, event, render, or side effect follows.\n` +
         `- Cover all meaningful code paths: happy path, validation guards, failure cases, fallback behavior, persistence, cleanup, tests, and generated artifacts when they matter.\n` +
         `- Use exact function, variable, parameter, event, and field names, but do not paste code blocks or duplicate the diff.\n` +
-        `- Detailed does not mean noisy: skip trivial syntax, imports, and mechanical plumbing unless they change correctness.\n\n`
-      : `Story mode contract:\n` +
-        `- Guided review mode: write the current concise review story, optimized for a human who will read the code after you orient them.\n` +
+        `- Line-by-line does not mean noisy: skip trivial syntax, imports, and mechanical plumbing unless they change correctness.\n\n`
+      : `Detail level contract:\n` +
+        `- Balanced mode: write the current concise review story, optimized for a human who will read the code after you orient them.\n` +
         `- Keep steps grouped by review question and code flow; avoid line-by-line narration unless the line is a correctness hinge.\n\n`;
   return (
     `Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}.\n\n` +
@@ -84,7 +108,7 @@ export function storyPrompt(
     `- Pick highlights second: the exact fee field, parameter, branch, guard, call, state write, assertion, or return path being discussed inside that viewport.\n` +
     `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
     `- Do not make one step jump between far-apart highlight islands. If the story needs distant lines, split it into separate steps so each viewport/highlights pair stays local and scroll-stable.\n` +
-    `- Keep "range" as the changed-line coverage anchor for diffstory check. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
+    `- Keep "range" as the changed-line coverage anchor the coverage gate checks. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
     `Reading order contract:\n` +
     `- Start where someone who just read the requirement should start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes the requirement real.\n` +
     `- Follow the requirement's implementation flow across files, then return to callers when useful.\n` +
@@ -116,9 +140,9 @@ export function storyPrompt(
     `- Before writing ${DATA_DIR}/story.json, build a private coverage ledger: file, changed hunk range, semantic ` +
     `purpose, and planned step id.\n` +
     `- Cover every changed hunk with a changed/new-file step.\n` +
-    `- Never use "deleted" as a step kind. For deleted files, use kind "changed" and anchor the range at the post-change deletion location that "diffstory check" reports.\n` +
+    `- Never use "deleted" as a step kind. For deleted files, use kind "changed" and anchor the range at the post-change deletion location the coverage gate reports.\n` +
     `- Use context steps only for unchanged code that makes the review easier.\n` +
-    `- Run diffstory check and adjust the story until the coverage gate is clean.\n\n` +
+    `- Cover every changed hunk so the coverage gate is clean — the review flags any change no step explains.\n\n` +
     `Range contract:\n` +
     `- Read the post-change file with line numbers before choosing ranges.\n` +
     `- Ranges are review windows, not coverage hacks: use the smallest complete function/block/test/config region ` +
@@ -130,8 +154,9 @@ export function storyPrompt(
     `Focus pointer contract:\n` +
     `- Prefer "highlights" for new stories. "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} is the legacy spelling and should only be used for compatibility.\n` +
     `- Highlight ranges must use post-change line numbers and stay inside that step's "viewport".\n` +
-    `- In guided mode, highlight only the exact line or tiny block the reviewer should look at while listening.\n` +
-    `- In detailed mode, use multiple highlight ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n\n` +
+    `- In brief mode, highlight only the one exact line or tiny block the reviewer should glance at.\n` +
+    `- In balanced mode, highlight only the exact line or tiny block the reviewer should look at while listening.\n` +
+    `- In line-by-line mode, use multiple highlight ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n\n` +
     `Truth contract:\n` +
     `- Only describe behavior you verified in the diff or current source lines you read.\n` +
     `- Do not infer intent from branch names, filenames, or vibes.\n` +
@@ -182,6 +207,7 @@ export function addressPrompt(
   const grounding = base
     ? `Two-sided grounding contract — this review IS a diff; never answer from one side:\n` +
       `- The change under review is "${base}" (the target side) compared against ${curName}. A comment can be about something added, removed, or moved between the two.\n` +
+      `- Each comment may include side: "left" for the target/old side or side: "right" for the current/new side. Use that side to locate the selected text first, then still inspect the opposite side before answering.\n` +
       `- Before you reply to any comment, inspect BOTH sides of its selected text location: ${curRead}, and read the target side with "git show ${base}:<file>". Run "${diffCmd}" to see exactly what changed around that selected snippet.\n` +
       `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
       `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
@@ -191,27 +217,29 @@ export function addressPrompt(
       ? `Historical checkout contract:\n` +
         `- You are running in a temporary checkout of "${head}" so code reads match the story's post-change side, even if the live repository has moved on.\n` +
         (opts.originalRepo ? `- The live repository is ${opts.originalRepo}; use it only as identity context, not as the code state under review.\n` : '') +
-        `- Do not edit source files in this historical checkout. For change or nit requests, answer in "reply" with the exact file/function and change you recommend instead of modifying the live branch.\n` +
+        `- Do not edit source files in this historical checkout. For change or nit requests, answer by appending a new ai turn (per the Conversation contract below) with the exact file/function and change you recommend instead of modifying the live branch.\n` +
         `- For questions, answer from this checkout plus the explicit base/head diff above.\n\n`
       : '';
   const actionRules = opts.historicalCheckout
     ? `Act by type for each one:\n` +
-      `- change → do not edit source files; answer concretely in "reply" with the exact change you would make on the live branch.\n` +
-      `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
-      `- nit → answer with the small adjustment in "reply"; do not edit source files in the temporary checkout.\n\n`
+      `- change → do not edit source files; answer concretely by appending a new ai turn with the exact change you would make on the live branch.\n` +
+      `- question → read both sides of the selected text location, then answer concretely by appending a new ai turn.\n` +
+      `- nit → answer with the small adjustment by appending a new ai turn; do not edit source files in the temporary checkout.\n\n`
     : `Act by type for each one:\n` +
-      `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case in "reply".\n` +
-      `- question → read both sides of the selected text location, then answer concretely in "reply".\n` +
-      `- nit → apply it if quick and reasonable; otherwise explain the trade-off in "reply".\n\n`;
+      `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case by appending an ai turn.\n` +
+      `- question → read both sides of the selected text location, then answer concretely by appending a new ai turn.\n` +
+      `- nit → apply it if quick and reasonable; otherwise explain the trade-off by appending a new ai turn.\n\n`;
   return (
     `Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
     grounding +
     historical +
     actionRules +
-    `For every comment you handle: set "status" to "addressed" and write a specific "reply" — name the ` +
-    `function or file you changed, or give your answer. Preserve every other field and never delete a comment.\n\n` +
+    `Conversation contract:\n` +
+    `- Each comment is a conversation. Its "body" is the reviewer's first message, followed by "turns" — an ordered list of {"role":"user"|"ai","text","at"} messages (a legacy comment may instead have a single "reply" string; treat it as the first ai turn).\n` +
+    `- Read the whole thread and answer the latest "user" message in that context.\n\n` +
+    `For every comment you handle: append a new turn {"role":"ai","text":"<your specific answer — name the function or file you changed, or give your answer>","at":"<ISO 8601 timestamp>"} to its "turns" array (create the array if it is absent). Never overwrite "body" or an existing turn. Then set "status" to "addressed". Preserve every other field and never delete a comment.\n\n` +
     `If your edits moved code, re-run the diffStory review-tour skill so ${DATA_DIR}/story.json line ranges ` +
-    `stay correct, then run "diffstory check" until coverage is clean.\n\n` +
+    `stay correct and the coverage gate stays clean.\n\n` +
     `Do not ask questions. Make the changes directly.`
   );
 }
@@ -219,15 +247,54 @@ export function addressPrompt(
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
 export const DEFAULT_CLAUDE_MODEL = 'sonnet';
 
+export function normalizeCodexRunOptions(input: {
+  codexSandbox?: unknown;
+  codexProvider?: unknown;
+  codexProfile?: unknown;
+  codexConfig?: unknown;
+}): CodexRunOptions {
+  const sandbox = (['full-auto', 'workspace-write', 'read-only', 'danger-full-access'] as const).includes(
+    input.codexSandbox as CodexSandbox,
+  )
+    ? (input.codexSandbox as CodexSandbox)
+    : 'full-auto';
+  const provider = (['default', 'lmstudio', 'ollama'] as const).includes(input.codexProvider as CodexProvider)
+    ? (input.codexProvider as CodexProvider)
+    : 'default';
+  const profile =
+    typeof input.codexProfile === 'string' && input.codexProfile.trim() ? input.codexProfile.trim() : undefined;
+  const rawConfig = Array.isArray(input.codexConfig)
+    ? input.codexConfig
+    : typeof input.codexConfig === 'string'
+      ? input.codexConfig.split('\n')
+      : [];
+  const config = rawConfig
+    .map((line) => String(line).trim())
+    .filter((line) => line && !line.startsWith('#') && line.includes('='))
+    .slice(0, 20);
+  return { sandbox, provider, profile, config };
+}
+
+function codexArgs(prompt: string, model?: string, opts: CodexRunOptions = {}): string[] {
+  const args = ['exec'];
+  const sandbox = opts.sandbox ?? 'full-auto';
+  if (sandbox === 'full-auto') args.push('--full-auto');
+  else if (sandbox === 'danger-full-access') args.push('--dangerously-bypass-approvals-and-sandbox');
+  else args.push('--sandbox', sandbox);
+  if (opts.provider === 'lmstudio' || opts.provider === 'ollama') args.push('--oss', '--local-provider', opts.provider);
+  if (opts.profile) args.push('--profile', opts.profile);
+  for (const cfg of opts.config ?? []) args.push('-c', cfg);
+  if (model) args.push('--model', model);
+  args.push(prompt);
+  return args;
+}
+
 /** The headless command + args for an agent. Flags verified against each CLI's --help. */
-export function agentCommand(agent: Agent, prompt: string, model?: string): [string, string[]] {
+export function agentCommand(agent: Agent, prompt: string, model?: string, options: AgentRunOptions = {}): [string, string[]] {
   if (agent === 'claude') {
     return ['claude', ['-p', prompt, '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL]];
   }
-  const args = ['exec', '--full-auto'];
-  if (model) args.push('--model', model);
-  args.push(prompt);
-  return ['codex', args];
+  return ['codex', codexArgs(prompt, model, options.codex)];
 }
 
 /**
@@ -240,8 +307,9 @@ export function runAgent(
   repo: string,
   prompt: string,
   model?: string,
+  options: AgentRunOptions = {},
 ): Promise<{ ok: boolean; output: string }> {
-  const [cmd, args] = agentCommand(agent, prompt, model);
+  const [cmd, args] = agentCommand(agent, prompt, model, options);
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
@@ -259,7 +327,7 @@ export function runAgent(
 // ---- live address loop: stream the agent's output to the review page ----
 
 /** The streaming command + args for an agent. Flags verified against each CLI's --help. */
-export function streamCommand(agent: Agent, prompt: string, model?: string): [string, string[]] {
+export function streamCommand(agent: Agent, prompt: string, model?: string, options: AgentRunOptions = {}): [string, string[]] {
   if (agent === 'claude') {
     return [
       'claude',
@@ -267,10 +335,7 @@ export function streamCommand(agent: Agent, prompt: string, model?: string): [st
        '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL],
     ];
   }
-  const args = ['exec', '--full-auto'];
-  if (model) args.push('--model', model);
-  args.push(prompt);
-  return ['codex', args];
+  return ['codex', codexArgs(prompt, model, options.codex)];
 }
 
 /** A readable one-line summary of a tool call for the activity feed. */
@@ -376,8 +441,9 @@ export function streamAgent(
   onEvent: (e: ProgressEvent) => void,
   model?: string,
   signal?: AbortSignal,
+  options: AgentRunOptions = {},
 ): Promise<StreamResult> {
-  const [cmd, args] = streamCommand(agent, prompt, model);
+  const [cmd, args] = streamCommand(agent, prompt, model, options);
   const parse = lineParser(agent);
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'], signal });

@@ -11,15 +11,20 @@ back what you did, and leave the file in a state the reviewer can re-review.
 
 ## Steps
 
-1. **Read** `.diffstory/comments.json`. Each comment has `id`, optional `step`, `file`, `line`,
-   optional `selectedText`, optional `selection`, `type` (`change` | `question` | `nit`),
-   `body`, and `status`. Work through every comment whose `status` is `open`.
+1. **Read** `.diffstory/comments.json`. Each comment has `id`, optional `step`, optional
+   `side` (`left` = target/old side, `right` = current/new side), `file`, `line`, optional
+   `selectedText`, optional `selection`, `type` (`change` | `question` | `nit`),
+   `body`, `status`, and an optional `turns` array — an ordered `{role:"user"|"ai",text,at}`
+   conversation that follows `body` (older comments may instead carry a single `reply` string).
+   Work through every comment whose `status` is `open`.
 
 2. **Ground yourself in *both* sides of the change first.** This review is a diff between a
    target side and a current side — a comment can be about something the change *added*,
    *removed*, or *moved*. The address prompt names the refs: always a target ref, and either a
-   current ref (two-ref comparison) or the working tree. Before you act on a comment, look at both
-   sides of its file: read the current side (`git show <current>:<file>`, or the working-tree
+   current ref (two-ref comparison) or the working tree. If a comment has `side: "left"`, locate
+   the selected text on the target/old side first; if it has `side: "right"` or no side, locate it
+   on the current/new side first. Before you act on a comment, look at both sides of its file:
+   read the current side (`git show <current>:<file>`, or the working-tree
    version when there's no current ref) and the target side (`git show <target>:<file>`). Run the
    `git diff` the prompt gives you to see exactly what changed around the selected snippet. **Never decide a
    symbol, field, or branch "doesn't exist" or "isn't here yet" from one side alone** — check the
@@ -28,24 +33,27 @@ back what you did, and leave the file in a state the reviewer can re-review.
 
 3. **Act by type:**
    - **`change`** — make the requested edit. If you genuinely disagree, *don't silently skip
-     it*: make your case in `reply` and leave `status` as `open` so the reviewer decides.
-   - **`question`** — answer it directly and concretely in `reply`. Read *both sides* of the
+     it*: make your case in a new `ai` turn and leave `status` as `open` so the reviewer decides.
+   - **`question`** — answer it directly and concretely in a new `ai` turn. Read *both sides* of the
      selected text location (working tree + target ref) before answering — the answer often lives
      in what the diff did, not in either side by itself.
-   - **`nit`** — apply it if it's quick and reasonable; otherwise explain the trade-off in `reply`.
+   - **`nit`** — apply it if it's quick and reasonable; otherwise explain the trade-off in a new `ai` turn.
 
 4. **Write back** to each comment you handled:
-   - set `status` to `"addressed"`,
-   - add a `reply` string: what you changed (name the function/file) or your answer. Be specific
-     — this is what the reviewer sees on their next pass.
+   - **Append** a new turn to its `turns` array: `{"role":"ai","text":"<what you changed
+     (name the function/file) or your answer>","at":"<ISO timestamp>"}`. Create the array
+     if it is absent. This is the conversation the reviewer sees and can reply to.
+   - Never overwrite `body`, and never rewrite an existing turn — the thread is a running
+     conversation, so answer the **latest `user` message** in the context of the whole thread.
+   - Set `status` to `"addressed"`.
    Preserve every other field. **Never delete a comment** — resolving is the reviewer's call.
    Write the full array back to `.diffstory/comments.json` (valid JSON).
 
 5. **Refresh the tour.** If your edits moved code or added/removed logic, re-run the
    **review-tour** skill so `.diffstory/story.json` reflects the new state (line ranges will
-   have shifted). At minimum, run `diffstory check` and make sure every change is still covered.
+   have shifted). At minimum, make sure every change is still covered by a step.
 
-6. **Hand back.** Tell the user: *"Addressed N comments — refresh `diffstory serve` to see the
+6. **Hand back.** Tell the user: *"Addressed N comments — refresh the diffStory app to see the
    replies and re-review."* Summarize briefly what changed and flag anything you pushed back on.
 
 ## Example
@@ -66,7 +74,11 @@ After you fix the code:
   "selection": { "startLine": 44, "endLine": 44, "startColumn": 3, "endColumn": 34 },
   "type": "change", "body": "This require should be <= not < — the boundary is valid.",
   "status": "addressed", "createdAt": "2026-06-14T13:10:57.533Z",
-  "reply": "Fixed — changed `cap < MAX` to `cap <= MAX` in _capRate(). Added a boundary test in RateMath.t.sol." }
+  "turns": [
+    { "role": "ai",
+      "text": "Fixed — changed `cap < MAX` to `cap <= MAX` in _capRate(). Added a boundary test in RateMath.t.sol.",
+      "at": "2026-06-14T13:22:04.001Z" }
+  ] }
 ```
 
 ## Don't
@@ -75,5 +87,5 @@ After you fix the code:
 - Don't answer from one side of the diff. Reading only the working tree is how you end up telling
   the reviewer a field "doesn't exist" while their screen shows it added two lines down.
 - Don't invent branches or commit hashes to explain a gap — verify against `git diff <target>`.
-- Don't delete or rewrite the reviewer's `body`.
-- Don't forget to refresh the tour / run `diffstory check` after edits — stale ranges and selected snippets make re-review confusing.
+- Don't overwrite `body` or an existing turn — append your answer as a new `ai` turn.
+- Don't forget to refresh the tour and recheck coverage after edits — stale ranges and selected snippets make re-review confusing.

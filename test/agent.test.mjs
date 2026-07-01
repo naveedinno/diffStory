@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
-  streamCommand, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
+  streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -27,7 +27,7 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('first person'));
   assert.ok(p.includes('No long paragraphs'));
   assert.ok(p.includes('No corporate changelog voice'));
-  assert.ok(p.includes('Run diffstory check'));
+  assert.ok(p.includes('the coverage gate is clean'));
 });
 
 test('storyPrompt requires an intent to flow to implementation story arc', () => {
@@ -83,19 +83,27 @@ test('storyPrompt teaches viewport and highlighted line selection', () => {
   assert.ok(p.includes('scroll-stable'));
 });
 
-test('storyPrompt supports a detailed correctness story mode', () => {
+test('storyPrompt supports story detail levels', () => {
+  assert.equal(normalizeStoryMode('brief'), 'brief');
   assert.equal(normalizeStoryMode('detailed'), 'detailed');
   assert.equal(normalizeStoryMode('guided'), 'guided');
   assert.equal(normalizeStoryMode('anything else'), 'guided');
 
   const guided = storyPrompt('main');
   assert.ok(guided.includes('set its "mode" field to "guided"'));
-  assert.ok(!guided.includes('Detailed correctness mode'));
+  assert.ok(guided.includes('Balanced mode'));
+  assert.ok(!guided.includes('Line-by-line mode'));
+
+  const brief = storyPrompt('main', undefined, 'brief');
+  assert.ok(brief.includes('set its "mode" field to "brief"'));
+  assert.ok(brief.includes('Brief mode'));
+  assert.ok(brief.includes('one short sentence'));
+  assert.ok(brief.includes('one compact stop per meaningful change cluster'));
 
   const detailed = storyPrompt('main', undefined, 'detailed');
   assert.ok(detailed.includes('git diff main --'));
   assert.ok(detailed.includes('set its "mode" field to "detailed"'));
-  assert.ok(detailed.includes('Detailed correctness mode'));
+  assert.ok(detailed.includes('Line-by-line mode'));
   assert.ok(detailed.includes('line-by-line'));
   assert.ok(detailed.includes('all meaningful code paths'));
   assert.ok(detailed.includes('3-7 short sentences'));
@@ -154,13 +162,15 @@ test('bundled review-tour skill teaches viewport and highlighted line selection'
   assert.ok(skill.includes('steady camera shot'));
 });
 
-test('bundled review-tour skill teaches guided and detailed story modes', () => {
+test('bundled review-tour skill teaches story detail levels', () => {
   const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
-  assert.ok(skill.includes('Story modes'));
-  assert.ok(skill.includes('Guided review mode'));
-  assert.ok(skill.includes('Detailed correctness mode'));
+  assert.ok(skill.includes('Detail levels'));
+  assert.ok(skill.includes('Brief mode'));
+  assert.ok(skill.includes('Balanced mode'));
+  assert.ok(skill.includes('Line-by-line mode'));
   assert.ok(skill.includes('line-by-line'));
   assert.ok(skill.includes('all meaningful code paths'));
+  assert.ok(skill.includes('"mode": "brief"'));
   assert.ok(skill.includes('"mode": "detailed"'));
 });
 
@@ -202,6 +212,54 @@ test('agentCommand honors an explicit model', () => {
   assert.deepEqual(agentCommand('codex', 'GO', 'gpt-5')[1], ['exec', '--full-auto', '--model', 'gpt-5', 'GO']);
 });
 
+test('agentCommand maps Codex configuration to real exec flags', () => {
+  assert.deepEqual(
+    agentCommand('codex', 'GO', 'gpt-5-codex', {
+      codex: {
+        sandbox: 'workspace-write',
+        provider: 'lmstudio',
+        profile: 'story',
+        config: ['model_reasoning_effort="high"', 'features.web_search=true'],
+      },
+    })[1],
+    [
+      'exec',
+      '--sandbox',
+      'workspace-write',
+      '--oss',
+      '--local-provider',
+      'lmstudio',
+      '--profile',
+      'story',
+      '-c',
+      'model_reasoning_effort="high"',
+      '-c',
+      'features.web_search=true',
+      '--model',
+      'gpt-5-codex',
+      'GO',
+    ],
+  );
+  assert.deepEqual(
+    agentCommand('codex', 'GO', undefined, { codex: { sandbox: 'danger-full-access', provider: 'ollama' } })[1],
+    ['exec', '--dangerously-bypass-approvals-and-sandbox', '--oss', '--local-provider', 'ollama', 'GO'],
+  );
+});
+
+test('normalizeCodexRunOptions keeps only supported story-generation options', () => {
+  assert.deepEqual(normalizeCodexRunOptions({
+    codexSandbox: 'workspace-write',
+    codexProvider: 'ollama',
+    codexProfile: ' review ',
+    codexConfig: '# no\nfoo=true\nnot-a-config\nbar=\"baz\"',
+  }), {
+    sandbox: 'workspace-write',
+    provider: 'ollama',
+    profile: 'review',
+    config: ['foo=true', 'bar="baz"'],
+  });
+});
+
 test('addressPrompt targets specific ids via the address-review skill', () => {
   const p = addressPrompt(['c_a', 'c_b']);
   assert.ok(p.includes('address-review'));
@@ -224,6 +282,8 @@ test('addressPrompt grounds answers in both sides when a base ref is given', () 
   assert.ok(p.includes('git show origin/main:'));     // tells it how to read the other side
   assert.ok(p.includes('git diff origin/main --'));   // and how to see the change itself
   assert.ok(p.includes('working tree'));              // current side stays the working tree
+  assert.ok(p.includes('side: "left"'));
+  assert.ok(p.includes('side: "right"'));
 });
 
 test('addressPrompt grounds on base..head when both refs are committed', () => {
@@ -242,13 +302,21 @@ test('addressPrompt can describe a historical temporary checkout', () => {
   assert.ok(p.includes('temporary checkout of "def456"'));
   assert.ok(p.includes('/repo/live'));
   assert.ok(p.includes('Do not edit source files in this historical checkout'));
-  assert.ok(p.includes('answer in "reply"'));
+  assert.match(p, /appending a new ai turn/);
 });
 
 test('addressPrompt stays single-sided when no base ref is known', () => {
   const p = addressPrompt(['c_a']);
   assert.ok(!p.includes('Two-sided grounding contract'));
   assert.ok(!p.includes('git show'));
+});
+
+test('addressPrompt tells the agent to append an ai turn, not overwrite a reply', () => {
+  const p = addressPrompt(['c_1'], 'main');
+  assert.match(p, /"turns"/);
+  assert.match(p, /append a new turn/i);
+  assert.match(p, /"role":"ai"/);
+  assert.match(p, /latest "user" message/i);
 });
 
 test('streamCommand uses stream-json for claude and exec for codex', () => {
@@ -259,6 +327,14 @@ test('streamCommand uses stream-json for claude and exec for codex', () => {
   ]);
   assert.deepEqual(streamCommand('codex', 'GO'), ['codex', ['exec', '--full-auto', 'GO']]);
   assert.deepEqual(streamCommand('codex', 'GO', 'gpt-5')[1], ['exec', '--full-auto', '--model', 'gpt-5', 'GO']);
+  assert.deepEqual(streamCommand('codex', 'GO', 'gpt-5', { codex: { sandbox: 'read-only' } })[1], [
+    'exec',
+    '--sandbox',
+    'read-only',
+    '--model',
+    'gpt-5',
+    'GO',
+  ]);
 });
 
 test('classifyTool maps tools to the most specific progress event', () => {
