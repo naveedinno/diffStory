@@ -3,17 +3,30 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { commentsPath } from './config.js';
-import type { Comment, CommentSelection, CommentStatus, CommentType } from './types.js';
+import type { Comment, CommentSelection, CommentSide, CommentStatus, CommentType } from './types.js';
 
 const TYPES: CommentType[] = ['change', 'question', 'nit'];
 const STATUSES: CommentStatus[] = ['open', 'addressed', 'resolved'];
+const SIDES: CommentSide[] = ['left', 'right'];
+
+/**
+ * Back-compat: a legacy single `reply` reads as one `ai` turn so every caller can
+ * treat `body` + `turns` as the whole conversation. Non-mutating; leaves `reply` in place.
+ */
+export function normalizeComment(c: Comment): Comment {
+  if (Array.isArray(c.turns) && c.turns.length) return c;
+  if (typeof c.reply === 'string' && c.reply.trim()) {
+    return { ...c, turns: [{ role: 'ai', text: c.reply, at: c.createdAt }] };
+  }
+  return c;
+}
 
 export function loadComments(repo: string): Comment[] {
   const path = commentsPath(repo);
   if (!existsSync(path)) return [];
   try {
     const data = JSON.parse(readFileSync(path, 'utf8'));
-    return Array.isArray(data) ? (data as Comment[]) : [];
+    return Array.isArray(data) ? (data as Comment[]).map(normalizeComment) : [];
   } catch {
     return [];
   }
@@ -29,6 +42,7 @@ export interface NewComment {
   step?: string;
   file: string;
   line: number;
+  side?: string;
   selectedText?: string;
   selection?: Partial<CommentSelection>;
   type: string;
@@ -53,6 +67,8 @@ export function addComment(repo: string, input: NewComment): Comment {
     createdAt: new Date().toISOString(),
   };
   if (typeof input.step === 'string' && input.step) comment.step = input.step;
+  const side = cleanSide(input.side);
+  if (side) comment.side = side;
   const selectedText = cleanSelectedText(input.selectedText);
   if (selectedText) comment.selectedText = selectedText;
   const selection = cleanSelection(input.selection);
@@ -89,6 +105,24 @@ export function setCommentStatus(repo: string, id: string, status: string): Comm
   return target;
 }
 
+/**
+ * Reviewer follow-up: append a `user` turn to a comment's conversation and reopen the
+ * thread so the agent re-engages. Returns the updated comment, or null if no comment has
+ * that id. Throws on empty text.
+ */
+export function appendUserMessage(repo: string, id: string, text: string): Comment | null {
+  const body = typeof text === 'string' ? text.trim() : '';
+  if (!body) throw new Error('message text is required');
+  const comments = loadComments(repo);
+  const target = comments.find((c) => c.id === id);
+  if (!target) return null;
+  if (!Array.isArray(target.turns)) target.turns = [];
+  target.turns.push({ role: 'user', text: body, at: new Date().toISOString() });
+  target.status = 'open';
+  saveComments(repo, comments);
+  return target;
+}
+
 function nextId(): string {
   return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -97,6 +131,10 @@ function cleanSelectedText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.replace(/\r\n?/g, '\n').trim();
   return text ? text : undefined;
+}
+
+function cleanSide(value: unknown): CommentSide | undefined {
+  return SIDES.includes(value as CommentSide) ? (value as CommentSide) : undefined;
 }
 
 function positiveInt(value: unknown): number | undefined {

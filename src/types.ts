@@ -14,8 +14,9 @@ export type StepKind =
 
 /** How much detail the authored story should carry. */
 export type StoryMode =
-  | 'guided' // concise review path: enough context to read the diff in the right order
-  | 'detailed'; // correctness audit: longer, code-path and line-level explanation
+  | 'brief' // quickest skim: one short sentence per meaningful change cluster
+  | 'guided' // balanced review path: enough context to read the diff in the right order
+  | 'detailed'; // line-by-line correctness audit: longer, code-path explanation
 
 /** Optional legacy read-aloud pointer inside a step's wider review window. */
 export interface StepFocusTarget {
@@ -70,10 +71,19 @@ export interface Tour {
 
 export type CommentType = 'change' | 'question' | 'nit';
 export type CommentStatus = 'open' | 'addressed' | 'resolved';
+export type CommentSide = 'left' | 'right';
 
-/** The selected current-side code text a reviewer anchored a comment to. */
+/** One message in a review-thread conversation: the reviewer (`user`) or the AI. */
+export interface Turn {
+  role: 'user' | 'ai';
+  text: string;
+  /** ISO timestamp; set by the server. */
+  at: string;
+}
+
+/** The selected code text a reviewer anchored a comment to. */
 export interface CommentSelection {
-  /** Inclusive post-change line range covered by the selected text. */
+  /** Inclusive line range covered by the selected text, on the selected diff side. */
   startLine: number;
   endLine: number;
   /** Best-effort 1-based column offsets inside the first and last selected lines. */
@@ -86,12 +96,14 @@ export interface Comment {
   id: string;
   /** Optional Story-view placement hint; absent for comments left in the All-files view. */
   step?: string;
+  /** Diff side selected by the reviewer. Absent means the legacy right/current side. */
+  side?: CommentSide;
   file: string;
-  /** First post-change line for placement and backward compatibility. */
+  /** First selected-side line for placement and backward compatibility. */
   line: number;
   /** Reviewer-selected code/text snippet. Absent on legacy line-anchored comments. */
   selectedText?: string;
-  /** Selected post-change line range and optional columns. */
+  /** Selected-side line range and optional columns. */
   selection?: CommentSelection;
   type: CommentType;
   body: string;
@@ -100,6 +112,8 @@ export interface Comment {
   createdAt: string;
   /** Filled in by the AI during /address-review. */
   reply?: string;
+  /** Ordered follow-up conversation after `body`. Absent on legacy single-reply comments. */
+  turns?: Turn[];
 }
 
 // ---- Derived (parsed) diff shapes ----

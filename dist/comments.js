@@ -5,13 +5,26 @@ import { dirname } from 'node:path';
 import { commentsPath } from './config.js';
 const TYPES = ['change', 'question', 'nit'];
 const STATUSES = ['open', 'addressed', 'resolved'];
+const SIDES = ['left', 'right'];
+/**
+ * Back-compat: a legacy single `reply` reads as one `ai` turn so every caller can
+ * treat `body` + `turns` as the whole conversation. Non-mutating; leaves `reply` in place.
+ */
+export function normalizeComment(c) {
+    if (Array.isArray(c.turns) && c.turns.length)
+        return c;
+    if (typeof c.reply === 'string' && c.reply.trim()) {
+        return { ...c, turns: [{ role: 'ai', text: c.reply, at: c.createdAt }] };
+    }
+    return c;
+}
 export function loadComments(repo) {
     const path = commentsPath(repo);
     if (!existsSync(path))
         return [];
     try {
         const data = JSON.parse(readFileSync(path, 'utf8'));
-        return Array.isArray(data) ? data : [];
+        return Array.isArray(data) ? data.map(normalizeComment) : [];
     }
     catch {
         return [];
@@ -41,6 +54,9 @@ export function addComment(repo, input) {
     };
     if (typeof input.step === 'string' && input.step)
         comment.step = input.step;
+    const side = cleanSide(input.side);
+    if (side)
+        comment.side = side;
     const selectedText = cleanSelectedText(input.selectedText);
     if (selectedText)
         comment.selectedText = selectedText;
@@ -77,6 +93,26 @@ export function setCommentStatus(repo, id, status) {
     saveComments(repo, comments);
     return target;
 }
+/**
+ * Reviewer follow-up: append a `user` turn to a comment's conversation and reopen the
+ * thread so the agent re-engages. Returns the updated comment, or null if no comment has
+ * that id. Throws on empty text.
+ */
+export function appendUserMessage(repo, id, text) {
+    const body = typeof text === 'string' ? text.trim() : '';
+    if (!body)
+        throw new Error('message text is required');
+    const comments = loadComments(repo);
+    const target = comments.find((c) => c.id === id);
+    if (!target)
+        return null;
+    if (!Array.isArray(target.turns))
+        target.turns = [];
+    target.turns.push({ role: 'user', text: body, at: new Date().toISOString() });
+    target.status = 'open';
+    saveComments(repo, comments);
+    return target;
+}
 function nextId() {
     return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -85,6 +121,9 @@ function cleanSelectedText(value) {
         return undefined;
     const text = value.replace(/\r\n?/g, '\n').trim();
     return text ? text : undefined;
+}
+function cleanSide(value) {
+    return SIDES.includes(value) ? value : undefined;
 }
 function positiveInt(value) {
     if (!Number.isFinite(value))
