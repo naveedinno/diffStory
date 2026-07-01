@@ -1619,6 +1619,7 @@ export const PAGE_JS = `
   function setBusy(b){
     agentBusy=b;
     $all('[data-thread-send]').forEach(function(s){s.disabled=b;});
+    $all('[data-thread-add]').forEach(function(s){s.disabled=b;});
     $all('[data-thread-ta]').forEach(function(s){s.disabled=b;});
     var aa=$('[data-address-all]');if(aa)aa.disabled=b||collectOpenIds().length===0;
   }
@@ -1644,18 +1645,20 @@ export const PAGE_JS = `
     var box=el('div','ds-thread-composer');
     var ta=el('textarea','ds-thread-ta');ta.placeholder='Reply to '+BRAND+'…';ta.rows=1;
     ta.setAttribute('data-thread-ta','');
-    var send=el('button','ds-btn ds-btn-solid ds-thread-send','Send');
+    var add=el('button','ds-ghost ds-thread-add','Add');
+    add.setAttribute('data-thread-add','');add.title='Save without sending to the agent';
+    var send=el('button','ds-btn ds-btn-solid ds-thread-send','Ask now');
     send.setAttribute('data-thread-send','');
-    if(agentBusy){ta.disabled=true;send.disabled=true;}
-    box.appendChild(ta);box.appendChild(send);
+    if(agentBusy){ta.disabled=true;send.disabled=true;add.disabled=true;}
+    box.appendChild(ta);box.appendChild(add);box.appendChild(send);
     return box;
   }
-  function sendThreadMessage(wrap){
+  function sendThreadMessage(wrap,run){
     if(!wrap)return;
     var id=wrap.getAttribute('data-comment-id');
     var ta=$('[data-thread-ta]',wrap);if(!ta)return;
     var text=ta.value.trim();if(!text)return;
-    if(agentBusy){toast('The agent is already working; wait for it to finish.');return;}
+    if(run&&agentBusy){toast('The agent is already working; wait for it to finish.');return;}
     ta.value='';
     fetch(API+'/'+encodeURIComponent(id)+'/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
       .then(function(r){if(!r.ok)throw 0;return r.json();})
@@ -1664,7 +1667,7 @@ export const PAGE_JS = `
         for(var i=0;i<allComments.length;i++){if(allComments[i].id===id){allComments[i]=updated;found=true;break;}}
         if(!found)allComments.push(updated);
         patchComment(updated);refreshCount();
-        sendToAgent([id]);
+        if(run)sendToAgent([id]);
       }).catch(function(){toast('Could not send your message.');});
   }
   function commentIdsForSend(ids){
@@ -1948,7 +1951,8 @@ export const PAGE_JS = `
     b=closest(t,'.ds-fileitem');if(b){setView('files');selectFile(Number(b.getAttribute('data-file-index')));return;}
     b=closest(t,'[data-resolve]');if(b){resolveComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
-    b=closest(t,'[data-thread-send]');if(b){sendThreadMessage(closest(b,'.ds-comment'));return;}
+    b=closest(t,'[data-thread-add]');if(b){sendThreadMessage(closest(b,'.ds-comment'),false);return;}
+    b=closest(t,'[data-thread-send]');if(b){sendThreadMessage(closest(b,'.ds-comment'),true);return;}
     b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;setReviewMenu(false);sendToAgent('all');return;}
     b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments(b.getAttribute('data-copy-comments'));return;}
     b=closest(t,'[data-change-prev]');if(b){jumpRelativeChange(closest(b,'.ds-filepanel')||closest(b,'.ds-diff'),-1);return;}
@@ -2038,7 +2042,7 @@ export const PAGE_JS = `
     document.addEventListener('keydown',function(e){
       if(e.key!=='Enter'||e.shiftKey)return;
       var ta=closest(e.target,'[data-thread-ta]');if(!ta)return;
-      e.preventDefault();sendThreadMessage(closest(ta,'.ds-comment'));
+      e.preventDefault();sendThreadMessage(closest(ta,'.ds-comment'),true);
     });
     document.addEventListener('mousedown',trackSelectionSide);
     document.addEventListener('mouseup',releaseSelectionSide);

@@ -717,7 +717,8 @@ export function commentHtml(c0) {
       </div>
       <div class="ds-thread-composer">
         <textarea class="ds-thread-ta" data-thread-ta placeholder="Reply to ${esc(APP_BRAND)}…" rows="1"></textarea>
-        <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send>Send</button>
+        <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Add</button>
+        <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send>Ask now</button>
       </div>
     </div>
   </div>`;

@@ -108,3 +108,13 @@ test('agent replies render Markdown as safe chat content', () => {
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /<script>alert/);
 });
+
+test('server-rendered thread composer has Add and Ask now buttons', () => {
+  const html = commentHtml({
+    id: 'c9', file: 'a.ts', line: 1, type: 'question',
+    body: 'q?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
+  });
+  assert.match(html, /data-thread-add/);
+  assert.match(html, /data-thread-send/);
+  assert.match(html, />Ask now</);
+});

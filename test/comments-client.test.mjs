@@ -92,3 +92,17 @@ test('client mounts a persistent chat composer that posts and re-runs the agent'
 test('the composer send is disabled while the agent is busy', () => {
   assert.match(PAGE_JS, /\[data-thread-send\]'\)\.forEach/);
 });
+
+test('the thread composer offers Add (save only) and Ask now (save + run)', () => {
+  assert.match(PAGE_JS, /function buildThreadComposer\(/);
+  assert.match(PAGE_JS, /data-thread-add/);
+  assert.match(PAGE_JS, /'Ask now'/);
+  // sendThreadMessage gates the agent run on the `run` flag:
+  assert.match(PAGE_JS, /function sendThreadMessage\(wrap,run\)/);
+  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\]\)/);
+  // delegation: Add => run=false, Ask now => run=true
+  assert.match(PAGE_JS, /\[data-thread-add\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),false\)/);
+  assert.match(PAGE_JS, /\[data-thread-send\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),true\)/);
+  // Enter sends via the run path
+  assert.match(PAGE_JS, /sendThreadMessage\(closest\(ta,'\.ds-comment'\),true\)/);
+});
