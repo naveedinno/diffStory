@@ -11,14 +11,15 @@ import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
+import { renderDiffFullBody } from './diff-view.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope } from './scope.js';
 import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows } from './view-model.js';
-import { loadComments, addComment, deleteComment, setCommentStatus, } from './comments.js';
+import { loadComments, addComment, deleteComment, setCommentStatus, appendUserMessage, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
-import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, normalizeCodexRunOptions, } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
@@ -89,7 +90,9 @@ function parseRepoRoute(pathname, repo) {
     if (!pathname.startsWith(`${base}/`))
         return null;
     const screen = pathname.slice(base.length + 1);
-    return screen === 'stories' || screen === 'change' || screen === 'review' ? screen : null;
+    return screen === 'stories' || screen === 'change' || screen === 'review' || screen === 'diff'
+        ? screen
+        : null;
 }
 function redirect(res, location) {
     res.writeHead(302, { location });
@@ -127,6 +130,11 @@ function handle(req, res, session) {
             session.chooseStory = false;
             session.selectedStory = null;
             return sendHtml(res, changeScreen(session, url.searchParams));
+        }
+        if (repoScreen === 'diff') {
+            session.chooseStory = false;
+            session.selectedStory = null;
+            return sendHtml(res, diffScreen(session, url.searchParams));
         }
         if (repoScreen === 'review') {
             return sendHtml(res, reviewScreen(session, url.searchParams));
@@ -229,20 +237,19 @@ function handle(req, res, session) {
         if (method === 'GET' && url.pathname === '/api/refs') {
             if (!session.repo)
                 return noRepo(res);
+            const ref = url.searchParams.get('ref')?.trim() || '';
             return sendJson(res, 200, {
+                ...(ref ? { ref } : {}),
                 current: currentBranch(session.repo),
                 branches: listBranchRefs(session.repo),
-                commits: listRecentCommits(session.repo, 0, '--all'),
+                commits: listRecentCommits(session.repo, 0, ref || '--all'),
             });
-        }
-        if (method === 'GET' && url.pathname === '/api/commits') {
-            if (!session.repo)
-                return noRepo(res);
-            const ref = url.searchParams.get('ref')?.trim() || 'HEAD';
-            return sendJson(res, 200, { ref, commits: listRecentCommits(session.repo, 0, ref) });
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
             return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
+        }
+        if (method === 'GET' && url.pathname === '/api/diff/fullfile') {
+            return sendHtml(res, renderDiffFullFileResponse(session, url.searchParams.get('file') ?? ''));
         }
         if (method === 'GET' && url.pathname === '/api/comments') {
             if (!session.repo)
@@ -280,6 +287,25 @@ function handle(req, res, session) {
         }
         if (method === 'GET' && url.pathname.startsWith('/api/tts/kokoro/')) {
             return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length));
+        }
+        if (method === 'POST' && url.pathname.startsWith('/api/comments/') && url.pathname.endsWith('/message')) {
+            if (!session.repo)
+                return noRepo(res);
+            const repo = session.repo;
+            const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length, -'/message'.length));
+            return readBody(req, (body) => {
+                try {
+                    const { text } = JSON.parse(body || '{}');
+                    const updated = appendUserMessage(repo, id, text ?? '');
+                    if (updated)
+                        sendJson(res, 200, updated);
+                    else
+                        sendJson(res, 404, { error: 'no such comment' });
+                }
+                catch (e) {
+                    sendJson(res, 400, { error: e.message });
+                }
+            });
         }
         if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
             if (!session.repo)
@@ -338,7 +364,7 @@ function reviewScreen(session, params) {
     }
     // A built, VALID review uses the story's own base unless the URL explicitly
     // supplies a scope override. A missing or malformed story falls back to the
-    // change screen with a notice, never the raw error page.
+    // scope picker with a notice, never the raw error page.
     const storyFile = selectedStoryPath(session);
     if (existsSync(storyFile)) {
         try {
@@ -387,15 +413,16 @@ function applyScope(session, params) {
         session.head = scope.head;
     }
 }
-/** Resolve scope from the request, stash it on the session, and render the change screen. */
+/** Resolve scope from the request, stash it on the session, render the scope picker. */
 function changeScreen(session, params, notice) {
     const scope = resolveScope(session.repo, params);
     session.base = scope.base;
     session.head = scope.head;
-    return renderChange(session, scope, notice);
+    return renderChange(session, scope, params, notice);
 }
-/** The "Your change" screen for a repo that has no selected valid story yet. */
-function renderChange(session, scope, notice) {
+/** The "Your change" scope picker: choose what to diff, then open it in the
+ *  review viewer (the "Open diff viewer" CTA). */
+function renderChange(session, scope, params, notice) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
         repoName: basename(repo),
@@ -405,6 +432,34 @@ function renderChange(session, scope, notice) {
         scopeLabel: scope.label,
         active: scope.active,
         notice,
+        compareBaseRef: params.get('baseRef') || undefined,
+        compareBaseCommit: params.get('baseCommit') || undefined,
+        compareHeadRef: params.get('headRef') || undefined,
+        compareHeadCommit: params.get('headCommit') || undefined,
+    });
+}
+/** Resolve scope, then render the story-less *review viewer* for it: the real
+ *  review page with no story — All-files (the diff) by default, with the Story
+ *  tab offering "Generate story". This is where "Open the diff" lands. */
+function diffScreen(session, params) {
+    const scope = resolveScope(session.repo, params);
+    session.base = scope.base;
+    session.head = scope.head;
+    const repo = session.repo;
+    const base = resolveBase(repo, session.base);
+    const head = session.head;
+    const files = parseUnifiedDiff(getDiff(repo, base, head));
+    const tour = { version: 1, title: '', summary: '', steps: [], base };
+    return renderPage({
+        repo,
+        tour,
+        files,
+        baseLabel: describeBase(repo, base),
+        headRef: head,
+        comments: loadComments(repo),
+        routeBase: repoRouteBase(repo),
+        repoName: basename(repo),
+        storyless: true,
     });
 }
 /** The recents list, each entry enriched with its current repo state for the picker. */
@@ -446,13 +501,27 @@ function renderReview(session) {
         comments: loadComments(repo),
     });
 }
-/** The lazily-loaded "Full file" side-by-side view for one file. */
+/** The lazily-loaded "Full file" side-by-side view for one file. Works with or
+ *  without a story: story-less, there's no coverage to flag, so it's just the
+ *  diff reconstructed against the working tree. */
 function renderFullFileResponse(session, file) {
     if (!session.repo)
         return `<div class="ds-diffnote">No repo is open.</div>`;
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
     const repo = session.repo;
+    if (session.selectedStory === null) {
+        const head = session.head;
+        const df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), head)).find((f) => f.newPath === file);
+        if (!df)
+            return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+        const newLines = readWholeFile(repo, file, head) ?? [];
+        return renderFullFile(buildFullFileRows(df, newLines, []), {
+            file,
+            oldFile: df.oldPath,
+            newFile: df.status === 'added',
+        });
+    }
     const { tour, head, files } = loadReview(session);
     const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
     if (!allowed.has(file))
@@ -463,7 +532,22 @@ function renderFullFileResponse(session, file) {
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
     const rows = buildFullFileRows(df, newLines, ranges);
-    return renderFullFile(rows, { file, newFile: df?.status === 'added' });
+    return renderFullFile(rows, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
+}
+/** The lazily-loaded "Full file" view for the change-page scope-picker preview
+ *  (its own dv-* diff renderer). No story — just the diff + working tree. */
+function renderDiffFullFileResponse(session, file) {
+    if (!session.repo)
+        return `<div class="dv-note">No repo is open.</div>`;
+    if (!file)
+        return `<div class="dv-note">No file requested.</div>`;
+    const repo = session.repo;
+    const head = session.head;
+    const df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), head)).find((f) => f.newPath === file);
+    if (!df)
+        return `<div class="dv-note">That file isn't part of this change.</div>`;
+    const newLines = readWholeFile(repo, file, head) ?? [];
+    return renderDiffFullBody(buildFullFileRows(df, newLines, []));
 }
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */
 function currentDiff(session) {
@@ -471,6 +555,9 @@ function currentDiff(session) {
         if (!session.repo)
             return '';
         const repo = session.repo;
+        if (session.selectedStory === null) {
+            return getDiff(repo, resolveBase(repo, session.base), session.head);
+        }
         const tour = loadTour(selectedStoryPath(session));
         return reviewDiff(repo, session, tour).diff;
     }
@@ -561,7 +648,7 @@ function runWorkflow(res, repo, spec) {
         const ph = observedPhase(ev, spec.isTargetWrite(ev));
         if (ph)
             advance(ph);
-    }, spec.model, ac.signal)
+    }, spec.model, ac.signal, spec.agentOptions)
         .then((r) => {
         clearInterval(heart);
         if (ac.signal.aborted) {
@@ -737,7 +824,13 @@ function runGenerate(res, session, body) {
         : pre.agent;
     const model = input.model && input.model.trim() ? input.model.trim() : undefined;
     const mode = normalizeStoryMode(input.mode);
+    const agentOptions = agent === 'codex' ? { codex: normalizeCodexRunOptions(input) } : undefined;
     const workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
+    const title = mode === 'brief'
+        ? 'Generating brief story'
+        : mode === 'detailed'
+            ? 'Generating line-by-line story'
+            : 'Generating balanced story';
     const repo = session.repo;
     const base = resolveBase(repo, input.base);
     const promptBase = stableDiffRef(repo, base) ?? base;
@@ -751,9 +844,10 @@ function runGenerate(res, session, body) {
     const excludePaths = noiseFiles(repo, promptBase, promptHead);
     runWorkflow(res, repo, {
         workflow,
-        title: workflow === 'detailed_audit' ? 'Generating detailed audit' : 'Generating guided review',
+        title,
         agent,
         model,
+        agentOptions,
         prompt: storyPrompt(promptBase, promptHead, mode, excludePaths),
         context: {
             repoName: basename(repo), repoPath: repo, workflow, agent, model,
@@ -891,7 +985,7 @@ function errorPage(message) {
 <style>body{background:#0e0f13;color:#e7e8ec;font:15px/1.6 system-ui;padding:60px;max-width:70ch;margin:auto}
 code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</style></head>
 <body><h1>Couldn't build the review</h1><pre><code>${escapeText(message)}</code></pre>
-<p>Fix the issue above and refresh. Most often the story is missing or malformed — re-run <code>diffstory story</code>.</p>
+<p>Fix the issue above and refresh. Most often the story is missing or malformed — open the diff and generate a fresh one.</p>
 </body></html>`;
 }
 function escapeText(s) {

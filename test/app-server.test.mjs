@@ -2,7 +2,7 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -33,6 +33,26 @@ async function boot() {
   await once(server, 'listening');
   const { port } = server.address();
   return { server, base: `http://localhost:${port}` };
+}
+
+function installFakeClaude(binDir) {
+  const path = join(binDir, 'claude');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+printf '\\nagent edit\\n' >> README.md
+printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"README.md"}}]}}'
+`,
+  );
+  chmodSync(path, 0o755);
+}
+
+function ndjsonEvents(text) {
+  return text
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 test('app server drives picker → open → refs → recent → close', async () => {
@@ -134,11 +154,10 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.match(refs.commits[0].committedAtLabel, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'commits expose compact picker time');
     assert.match(refs.commits[0].committedAtRelative, /^(just now|\d+[mhdw] ago|\d+mo ago|\d+y ago)$/, 'commits expose relative picker time');
 
-    const scopedCommits = await (await fetch(`${base}/api/commits?ref=${encodeURIComponent('HEAD')}`)).json();
-    assert.ok(Array.isArray(scopedCommits.commits), 'can fetch commits for a specific ref');
-    assert.ok(scopedCommits.commits.length > 80, 'returns every commit reachable from the selected ref');
-    assert.match(scopedCommits.commits[0].committedAtLabel, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-    assert.match(scopedCommits.commits[0].committedAtRelative, /^(just now|\d+[mhdw] ago|\d+mo ago|\d+y ago)$/);
+    const scopedRefs = await (await fetch(`${base}/api/refs?ref=${encodeURIComponent('HEAD~10')}`)).json();
+    assert.equal(scopedRefs.ref, 'HEAD~10');
+    assert.ok(scopedRefs.commits.length > 0, 'branch-scoped commit picker still returns commits');
+    assert.ok(scopedRefs.commits.length < refs.commits.length, 'branch-scoped commit picker does not return all refs');
 
     const recent = await (await fetch(`${base}/api/repos/recent`)).json();
     assert.ok(recent.some((r) => r.path === repo));
@@ -198,5 +217,100 @@ test('app server drives picker → open → refs → recent → close', async ()
     process.env.HOME = realHome;
     rmSync(repo, { recursive: true, force: true });
     rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/comments/:id/message appends a user turn and reopens the thread', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = gitRepo();
+  addCommits(repo, 1);
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    const created = await (await fetch(`${base}/api/comments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 1, type: 'question', body: 'why?' }),
+    })).json();
+
+    const res = await fetch(`${base}/api/comments/${created.id}/message`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'a follow-up' }),
+    });
+    assert.equal(res.status, 200);
+    const updated = await res.json();
+    assert.equal(updated.status, 'open');
+    assert.equal(updated.turns.at(-1).role, 'user');
+    assert.equal(updated.turns.at(-1).text, 'a follow-up');
+
+    const empty = await fetch(`${base}/api/comments/${created.id}/message`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '  ' }),
+    });
+    assert.equal(empty.status, 400);
+
+    const missing = await fetch(`${base}/api/comments/nope/message`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'x' }),
+    });
+    assert.equal(missing.status, 404);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    process.env.HOME = realHome;
+  }
+});
+
+test('addressing comments from the raw diff viewer reports code edits so the UI can reload', async () => {
+  const realHome = process.env.HOME;
+  const realPath = process.env.PATH;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
+  process.env.HOME = tmpHome;
+  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
+  installFakeClaude(fakeBin);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
+  const { server, base } = await boot();
+  try {
+    const opened = await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    assert.equal(opened.status, 200);
+
+    const route = `/repo/${encodeURIComponent(basename(repo))}`;
+    const diff = await fetch(`${base}${route}/diff`);
+    assert.equal(diff.status, 200);
+    assert.match(await diff.text(), /data-storyless="1"/);
+
+    const comment = await fetch(`${base}/api/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
+    });
+    assert.equal(comment.status, 201);
+
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    });
+    assert.equal(addr.status, 200);
+    const done = ndjsonEvents(await addr.text()).find((e) => e.type === 'run_done');
+    assert.equal(done?.status, 'complete');
+    assert.equal(done?.result?.codeChanged, true);
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    process.env.PATH = realPath;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
   }
 });
