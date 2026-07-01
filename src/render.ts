@@ -863,6 +863,10 @@ export function commentHtml(c0: Comment): string {
         <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
         <button class="ds-ghost ds-del" data-delete>Delete</button>
       </div>
+      <div class="ds-thread-composer">
+        <textarea class="ds-thread-ta" data-thread-ta placeholder="Reply to ${esc(APP_BRAND)}…" rows="1"></textarea>
+        <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send>Send</button>
+      </div>
     </div>
   </div>`;
 }

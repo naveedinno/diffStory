@@ -82,6 +82,11 @@ test('a multi-turn comment renders body then turns in order', () => {
   assert.match(html, /ds-turn-user/);
   assert.match(html, /data-hasreply="1"/);
   assert.doesNotMatch(html, /data-send/);
+  // The in-thread chat composer must be present server-side so existing threads
+  // (loaded at page-load time) have a reply box after reload.
+  assert.match(html, /ds-thread-composer/);
+  assert.match(html, /data-thread-send/);
+  assert.match(html, /data-thread-ta/);
 });
 
 test('agent replies render Markdown as safe chat content', () => {
