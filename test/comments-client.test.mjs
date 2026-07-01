@@ -59,8 +59,6 @@ test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => 
   assert.match(PAGE_JS, /function restoreAgentPanel\(/);
   assert.match(PAGE_JS, /new ProgressPanel\(root,/);
   assert.match(PAGE_JS, /runProgress\(panel,ADDRESS_API,payload,ctrl\)/);
-  // ensureReply is retained as a helper but the turns-based path supersedes it.
-  assert.match(PAGE_JS, /function ensureReply\(/);
   assert.match(PAGE_CSS, /\.ds-ai-badge/);
   // A code-changing run offers a reload through the panel's own footer.
   assert.match(PAGE_JS, /data-reload-diff/);
@@ -78,4 +76,19 @@ test('a freshly loaded full file gets its threads mounted', () => {
 
 test('resolving a comment updates all cross-surfaced copies via patchComment', () => {
   assert.match(PAGE_JS, /patchComment\(c\);refreshCount\(\)/);
+});
+
+test('client mounts a persistent chat composer that posts and re-runs the agent', () => {
+  assert.match(PAGE_JS, /function buildThreadComposer\(/);
+  assert.match(PAGE_JS, /function sendThreadMessage\(/);
+  assert.match(PAGE_JS, /data-thread-send/);
+  assert.match(PAGE_JS, /data-thread-ta/);
+  assert.match(PAGE_JS, /\/message/);
+  assert.match(PAGE_JS, /sendToAgent\(\[id\]\)/);
+  assert.match(PAGE_CSS, /\.ds-thread-composer/);
+  assert.match(PAGE_CSS, /\.ds-thread-ta/);
+});
+
+test('the composer send is disabled while the agent is busy', () => {
+  assert.match(PAGE_JS, /\[data-thread-send\]'\)\.forEach/);
 });

@@ -626,6 +626,11 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-selection-menu button{width:100%;display:block;border:none;border-radius:7px;background:transparent;color:var(--text);font-size:13px;font-weight:700;text-align:left;padding:8px 10px;cursor:pointer}
 .ds-selection-menu button:hover{background:var(--fill-2)}
 .ds-green{color:var(--add)}
+.ds-thread-composer{align-self:stretch;display:flex;gap:8px;align-items:flex-end;margin-top:8px}
+.ds-thread-ta{flex:1;min-width:0;resize:none;font:inherit;font-size:13px;line-height:1.5;color:var(--text);background:var(--panel3);border:1px solid var(--line-soft);border-radius:10px;padding:9px 12px;max-height:160px}
+.ds-thread-ta:focus{outline:none;border-color:var(--accent-blue)}
+.ds-thread-ta:disabled{opacity:0.5}
+.ds-thread-send{flex:none;align-self:flex-end}
 `;
 
 // No backticks and no ${} below — safe to embed in a template literal.
@@ -1548,7 +1553,7 @@ export const PAGE_JS = `
     var actions=el('div','ds-comment-actions');
     var rb=el('button','ds-ghost',c.status==='resolved'?'Reopen':'Resolve');rb.setAttribute('data-resolve','');actions.appendChild(rb);
     var db=el('button','ds-ghost ds-del','Delete');db.setAttribute('data-delete','');actions.appendChild(db);
-    card.appendChild(actions);wrap.appendChild(card);renderConversation(wrap,c);return wrap;
+    card.appendChild(actions);card.appendChild(buildThreadComposer(c));wrap.appendChild(card);renderConversation(wrap,c);return wrap;
   }
   function buildComposer(row,flavor,ctx){
     ctx=ctx||{};
@@ -1615,7 +1620,8 @@ export const PAGE_JS = `
   }
   function setBusy(b){
     agentBusy=b;
-    $all('[data-send]').forEach(function(s){s.disabled=b;});
+    $all('[data-thread-send]').forEach(function(s){s.disabled=b;});
+    $all('[data-thread-ta]').forEach(function(s){s.disabled=b;});
     var aa=$('[data-address-all]');if(aa)aa.disabled=b||collectOpenIds().length===0;
   }
   function turnNode(t){
@@ -1636,21 +1642,32 @@ export const PAGE_JS = `
     var turns=(c&&c.turns)||[];
     for(var i=0;i<turns.length;i++)card.insertBefore(turnNode(turns[i]),anchor||null);
   }
-  function ensureReply(wrap,text){
-    var card=$('.ds-comment-card',wrap);if(!card)return;
-    var r=$('.ds-reply',card);
-    if(!r){
-      r=el('div','ds-reply');
-      r.appendChild(el('span','ds-reply-av','◈'));
-      var main=el('div','ds-reply-main');
-      var who=el('div','ds-reply-who');who.appendChild(el('span','ds-reply-name',BRAND));who.appendChild(el('span','ds-ai-badge','AI'));
-      main.appendChild(who);
-      main.appendChild(markdownBlock('ds-reply-body ds-md',''));
-      r.appendChild(main);
-      var actions=$('.ds-comment-actions',card);
-      card.insertBefore(r,actions||null);
-    }
-    var rb=$('.ds-reply-body',r);if(rb)rb.innerHTML=renderMarkdown(text);
+  function buildThreadComposer(c){
+    var box=el('div','ds-thread-composer');
+    var ta=el('textarea','ds-thread-ta');ta.placeholder='Reply to '+BRAND+'…';ta.rows=1;
+    ta.setAttribute('data-thread-ta','');
+    var send=el('button','ds-btn ds-btn-solid ds-thread-send','Send');
+    send.setAttribute('data-thread-send','');
+    if(agentBusy){ta.disabled=true;send.disabled=true;}
+    box.appendChild(ta);box.appendChild(send);
+    return box;
+  }
+  function sendThreadMessage(wrap){
+    if(!wrap)return;
+    var id=wrap.getAttribute('data-comment-id');
+    var ta=$('[data-thread-ta]',wrap);if(!ta)return;
+    var text=ta.value.trim();if(!text)return;
+    if(agentBusy){toast('The agent is already working; wait for it to finish.');return;}
+    ta.value='';
+    fetch(API+'/'+encodeURIComponent(id)+'/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+      .then(function(r){if(!r.ok)throw 0;return r.json();})
+      .then(function(updated){
+        var found=false;
+        for(var i=0;i<allComments.length;i++){if(allComments[i].id===id){allComments[i]=updated;found=true;break;}}
+        if(!found)allComments.push(updated);
+        patchComment(updated);refreshCount();
+        sendToAgent([id]);
+      }).catch(function(){toast('Could not send your message.');});
   }
   function commentIdsForSend(ids){
     if(ids==='all')return collectOpenIds();
@@ -1933,7 +1950,7 @@ export const PAGE_JS = `
     b=closest(t,'.ds-fileitem');if(b){setView('files');selectFile(Number(b.getAttribute('data-file-index')));return;}
     b=closest(t,'[data-resolve]');if(b){resolveComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
-    b=closest(t,'[data-send]');if(b){if(b.disabled)return;var cm=closest(b,'.ds-comment');if(cm)sendToAgent([cm.getAttribute('data-comment-id')],cm);return;}
+    b=closest(t,'[data-thread-send]');if(b){sendThreadMessage(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;setReviewMenu(false);sendToAgent('all');return;}
     b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments(b.getAttribute('data-copy-comments'));return;}
     b=closest(t,'[data-change-prev]');if(b){jumpRelativeChange(closest(b,'.ds-filepanel')||closest(b,'.ds-diff'),-1);return;}
@@ -2020,6 +2037,11 @@ export const PAGE_JS = `
     document.addEventListener('click',onClick);
     document.addEventListener('contextmenu',openSelectionMenu);
     document.addEventListener('keydown',onKey);
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Enter'||e.shiftKey)return;
+      var ta=closest(e.target,'[data-thread-ta]');if(!ta)return;
+      e.preventDefault();sendThreadMessage(closest(ta,'.ds-comment'));
+    });
     document.addEventListener('mousedown',trackSelectionSide);
     document.addEventListener('mouseup',releaseSelectionSide);
     document.addEventListener('mousedown',startSidebarResize);
