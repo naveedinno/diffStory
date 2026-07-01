@@ -112,8 +112,10 @@ test('submitting a comment sends it to the agent immediately', () => {
   assert.doesNotMatch(html, /Leave a comment on this line/);
   assert.doesNotMatch(html, /ds-addcomment/);
   assert.doesNotMatch(html, /then Ask agent/);
-  assert.match(html, /var submit=el\('button','ds-btn ds-btn-solid','Send'\)/);
-  assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);refreshCount\(\);sendToAgent\(\[c\.id\]\);/);
+  assert.match(html, /'Add comment'/);
+  assert.match(html, /'Ask now'/);
+  assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);refreshCount\(\);/);
+  assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
 });
 
 test('review sidebar can be grabbed, resized, and remembered', () => {
