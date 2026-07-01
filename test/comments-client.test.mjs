@@ -93,6 +93,18 @@ test('the composer send is disabled while the agent is busy', () => {
   assert.match(PAGE_JS, /\[data-thread-send\]'\)\.forEach/);
 });
 
+test('the new-comment composer offers Add comment (save only) and Ask now', () => {
+  assert.match(PAGE_JS, /function buildComposer\(/);
+  assert.match(PAGE_JS, /ds-composer-add/);
+  assert.match(PAGE_JS, /'Add comment'/);
+  assert.match(PAGE_JS, /'Ask now'/);
+  // shared helper gates the run on a flag; Add => false, Ask now => true
+  assert.match(PAGE_JS, /function submitComment\(run\)/);
+  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[c\.id\]\)/);
+  assert.match(PAGE_JS, /submitComment\(false\)/);
+  assert.match(PAGE_JS, /submitComment\(true\)/);
+});
+
 test('the thread composer offers Add (save only) and Ask now (save + run)', () => {
   assert.match(PAGE_JS, /function buildThreadComposer\(/);
   assert.match(PAGE_JS, /data-thread-add/);

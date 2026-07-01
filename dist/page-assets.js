@@ -1572,16 +1572,22 @@ export const PAGE_JS = `
     var ta=el('textarea','ds-composer-ta');ta.placeholder='Comment on the selected text…';ta.rows=3;
     var bar=el('div','ds-composer-actions');
     var cancel=el('button','ds-ghost','Cancel');cancel.onclick=function(){removeComposer(box);};
-    var submit=el('button','ds-btn ds-btn-solid','Send');
-    submit.onclick=function(){
-      var body=ta.value.trim();if(!body)return;submit.disabled=true;
+    function submitComment(run){
+      var body=ta.value.trim();if(!body)return;
+      add.disabled=true;ask.disabled=true;
       fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file,line:Number(line),side:side,step:step,type:state.flavor,body:body,selectedText:selectedText,selection:ctx.selection})})
         .then(function(r){return r.json();}).then(function(c){
-          if(!c||!c.id){submit.disabled=false;return;}
-          allComments.push(c);removeComposer(box);syncThreads();refreshCount();sendToAgent([c.id]);
-        }).catch(function(){submit.disabled=false;});
-    };
-    bar.appendChild(cancel);bar.appendChild(submit);
+          if(!c||!c.id){add.disabled=false;ask.disabled=false;return;}
+          allComments.push(c);removeComposer(box);syncThreads();refreshCount();
+          if(run)sendToAgent([c.id]);
+        }).catch(function(){add.disabled=false;ask.disabled=false;});
+    }
+    var add=el('button','ds-ghost ds-composer-add','Add comment');
+    add.title='Save without sending to the agent';
+    add.onclick=function(){submitComment(false);};
+    var ask=el('button','ds-btn ds-btn-solid','Ask now');
+    ask.onclick=function(){submitComment(true);};
+    bar.appendChild(cancel);bar.appendChild(add);bar.appendChild(ask);
     box.appendChild(tabs);box.appendChild(ta);box.appendChild(bar);return box;
   }
   function removeComposer(box){var b=box||$('.ds-composer');if(b&&b.parentNode)b.parentNode.removeChild(b);}
