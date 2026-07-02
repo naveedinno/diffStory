@@ -102,6 +102,30 @@ function validateBeats(step, containerRange, containerName, where, errors, allow
         validateBeatHighlights(beat, i, containerRange, containerName, where, errors, allowDeletionAnchor);
     });
 }
+function validateIntent(t, errors) {
+    if (t.intent === undefined)
+        return;
+    if (typeof t.intent !== 'object' || t.intent === null || Array.isArray(t.intent)) {
+        errors.push('intent must be an object');
+        return;
+    }
+    const intent = t.intent;
+    if (typeof intent.goal !== 'string' || !intent.goal.trim())
+        errors.push('intent.goal is required');
+    if (intent.design !== undefined && typeof intent.design !== 'string')
+        errors.push('intent.design must be a string');
+    if (intent.sources !== undefined) {
+        if (!Array.isArray(intent.sources) || intent.sources.length === 0) {
+            errors.push('intent.sources must be a non-empty array');
+        }
+        else {
+            intent.sources.forEach((s, i) => {
+                if (typeof s !== 'string' || !s.trim())
+                    errors.push(`intent.sources[${i}] must be a non-empty string`);
+            });
+        }
+    }
+}
 export function loadTour(path) {
     let raw;
     try {
@@ -152,6 +176,7 @@ export function validateTour(obj) {
         errors.push('title is required');
     if (typeof t.summary !== 'string')
         errors.push('summary is required (use "" if none)');
+    validateIntent(t, errors);
     if (!Array.isArray(t.steps) || t.steps.length === 0) {
         errors.push('steps must be a non-empty array');
         return errors;

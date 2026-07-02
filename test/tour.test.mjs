@@ -247,3 +247,53 @@ test('flags references to unknown step ids', () => {
   });
   assert.ok(errs.some((e) => e.includes('unknown step id')));
 });
+
+test('accepts a story intent block with goal, design, and sources', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    intent: {
+      goal: 'We wanted keepers to settle funding without one market draining balances.',
+      design: 'settleFunding() clamps through one shared helper.',
+      sources: ['commit 41af8b7', 'PR #12 body'],
+    },
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  });
+  assert.deepEqual(errs, []);
+});
+
+test('a story without an intent block stays valid', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  });
+  assert.deepEqual(errs, []);
+});
+
+test('intent.goal is required when intent is present', () => {
+  const base = {
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  };
+  assert.ok(validateTour({ ...base, intent: {} }).includes('intent.goal is required'));
+  assert.ok(validateTour({ ...base, intent: { goal: '   ' } }).includes('intent.goal is required'));
+  assert.ok(validateTour({ ...base, intent: 'why' }).includes('intent must be an object'));
+});
+
+test('intent.design and intent.sources are type-checked when present', () => {
+  const base = {
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  };
+  assert.ok(validateTour({ ...base, intent: { goal: 'g', design: 7 } }).includes('intent.design must be a string'));
+  assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: [] } }).includes('intent.sources must be a non-empty array'));
+  assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: 'commit' } }).includes('intent.sources must be a non-empty array'));
+  assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: ['ok', ''] } }).includes('intent.sources[1] must be a non-empty string'));
+});

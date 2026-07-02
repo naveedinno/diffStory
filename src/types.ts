@@ -34,6 +34,16 @@ export interface StoryBeat {
   highlights: Array<[number, number]>;
 }
 
+/** The recovered "why" behind the change — shown before any step. */
+export interface StoryIntent {
+  /** What we wanted to enable: actor + capability, 1-2 sentences. */
+  goal: string;
+  /** The flow designed to achieve it, 1-2 sentences. */
+  design?: string;
+  /** Evidence the goal rests on: "commit 41af8b7", "PR #12 body", "conversation", "docs/plan.md", or "code-derived". */
+  sources?: string[];
+}
+
 /** One stop on the guided tour. */
 export interface TourStep {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
@@ -72,6 +82,8 @@ export interface Tour {
   mode?: StoryMode;
   title: string;
   summary: string;
+  /** Optional recovered intent: the goal, designed flow, and evidence sources. */
+  intent?: StoryIntent;
   /** Optional git ref to diff against; overrides auto-detection. */
   base?: string;
   /** Optional head ref for fixed base..head stories. Omitted means working tree vs base. */
