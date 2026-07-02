@@ -1,7 +1,12 @@
 {
   "version": 1,
   "title": "Add per-market funding-rate cap",
-  "summary": "Read the keeper entry point first, then the helper it now delegates clamping to, then where the cap is stored, and finally the test. The cap is the whole change; everything else supports it.",
+  "summary": "Read the keeper entry point first, then the helper it delegates clamping to, then where the cap is stored, and finally the test that pins it. Slow down on the require in _capRate().",
+  "intent": {
+    "goal": "Stop a runaway funding rate in one market from draining balances during settlement.",
+    "design": "settleFunding() clamps each epoch's rate through one shared _capRate() helper that reads the per-market cap from marketConfig.",
+    "sources": ["commit 3f2a91c", "PR #12 body"]
+  },
   "base": "main",
   "steps": [
     {

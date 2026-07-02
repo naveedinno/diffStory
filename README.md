@@ -137,12 +137,22 @@ ranges line by line. Each step can declare a `viewport` for what the reviewer sh
 `beats`: short read-aloud notes, each with its own highlights, so the voice and glowing code move
 together instead of one long speech drifting across several code blocks.
 
+New stories open with an `intent` block — the goal the change serves, the designed
+flow, and the `sources` the why was recovered from (commits, PR body, the
+conversation, or `code-derived` when no evidence exists). diffStory renders it as
+the "why this change" lede on the overview panel.
+
 ```jsonc
 {
   "version": 1,
   "mode": "guided",
   "title": "Add per-customer spending limit",
-  "summary": "We wanted users to get a clear rejection before an over-cap order reaches placement. I designed the flow so createOrder() stops the request first, then hands the limit math to one helper; read that path, then the proof.",
+  "summary": "Read createOrder() first, then the helper it delegates to; slow down on the boundary check.",
+  "intent": {
+    "goal": "We wanted users to get a clear rejection before an over-cap order reaches placement.",
+    "design": "createOrder() stops the request first, then hands the limit math to one shared helper.",
+    "sources": ["conversation"]
+  },
   "steps": [
     { "id": "s1", "order": 1, "title": "createOrder() now checks the limit", "file": "src/api.ts",
       "range": [4, 7], "viewport": [1, 16], "highlights": [[4, 7]],
