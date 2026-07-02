@@ -1,6 +1,6 @@
 ---
 name: review-tour
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json — a guided, in-order reading path through your own diff — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
+description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json — a guided, in-order reading path through your own diff that opens with the recovered intent (why the change exists) — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
 ---
 
 # Writing a review story
@@ -11,11 +11,13 @@ job is to write `.diffstory/story.json`: order and narrative only, never copied
 code. diffStory renders the real git diff.
 
 The story should feel like a sharp teammate guiding review over your shoulder:
-entry point, flow, helpers, boundaries, tests. It should expose your judgment,
+why the change exists, entry point, flow, helpers, boundaries, tests. It should expose your judgment,
 not hide behind a changelog.
 
 ## Non-Negotiable Contract
 
+- Open the story with an `intent` block whose `goal` cites real `sources`; use
+  `["code-derived"]` when no evidence exists.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
 - Set `base` to the ref you diffed against. Set `head` only for fixed `base..head` stories.
 - Every changed hunk must be claimed by a `changed` or `new-file` step.
@@ -75,6 +77,40 @@ oriented.
 
 ## Workflow
 
+### 0. Recover the why
+
+The story opens with an `intent` block: the goal the change serves, the flow
+designed to achieve it, and where that knowledge came from. Recover it before
+reading the diff.
+
+- You are usually the agent that just made this change in the same session. The
+  goal is the task you were actually given — state it from the conversation and
+  cite `"sources": ["conversation"]`.
+- If the intent is genuinely ambiguous (you inherited the diff, or the task and
+  the code disagree), ask the user up to 2 short questions before writing the
+  story. Only ask when the answer changes the story; never ask from a headless
+  run.
+- If you cannot ask, mine evidence: commit messages in the diff range, the PR
+  title and body (`gh pr view --json title,body`), plan/design docs, CHANGELOG
+  entries, and issue references. Cite each source you used, like
+  `"sources": ["commit 41af8b7", "PR #12 body", "docs/plan.md"]`.
+- Legitimate intent evidence: commit messages, PR bodies, docs, code comments,
+  tests. Not evidence: branch names, filenames, vibes.
+- If no evidence exists, state the goal as what the code demonstrably enables,
+  cite `"sources": ["code-derived"]`, and keep the wording narrow. Never invent product intent.
+- If the evidence contradicts what the code does, say so in the summary instead
+  of silently picking one.
+
+Write the result into the story:
+
+```jsonc
+"intent": {
+  "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
+  "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
+  "sources": ["conversation"]
+}
+```
+
 ### 1. Get the change set
 
 Run the exact diff you are reviewing. If the prompt specifies a diff command, use
@@ -115,14 +151,21 @@ The story should help them distrust the right places.
 ### 2.5. Narrative arc
 
 Write the story as intent -> flow -> implementation, not a list of touched files.
+Before any JSON, write the arc as a short visible note in your working output:
+goal -> design decisions -> implementation chain.
 
 - Start from the goal the diff actually supports: "We wanted to enable
-  <actor> to <capability>." If the change is not user-facing, name the real
-  actor from the code, such as reviewer, operator, keeper, service, or system.
+  <actor> to <capability>." Reuse the `intent` block you recovered in step 0.
 - Then explain the product or runtime shape: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P."
 - Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs."
 - Each step should continue that arc. Explain why this stop exists in the
   designed flow and what it unlocks next.
+- Thread rule: every step's first beat except the first must pick up what the
+  previous step established ("Now that the cap is stored, here is who reads
+  it"), so the steps read as one continuous story.
+- Order test: if sorting your planned steps by filename would not change how
+  the story reads, it is not a story yet — reorder, or state in one line why
+  file order genuinely is the clearest path.
 - Do not invent user intent. If the diff only proves a technical refactor, make
   the goal technical and keep it grounded.
 
@@ -352,10 +395,24 @@ them back creates stale pointers and noisy review stops.
 - Do not claim tests pass unless you ran them.
 - Do not claim a test covers behavior unless the assertion is visible in the story viewport or in code you read.
 - If you are uncertain, narrow the claim to what the code shows.
+- The `intent` block must only claim a why its `sources` actually support.
+
+### Narrative audit
+
+Falsifiable checks — run each one, do not skim:
+
+- Order test: reorder your steps by filename in your head. If the story reads
+  the same, the path is not a story yet.
+- Why test: strike any beat that only restates what the code does. Every step
+  must say why it exists in the designed flow and what it unlocks next.
+- Thread test: read only the beats in order with no code. They must still form
+  one continuous story with no jumps.
 
 ### Reviewability audit
 
-- The summary is the review map: why we wanted the change, what flow was designed, how to read the implementation, and the one or two places where the reviewer should slow down.
+- The `intent` block carries why we wanted the change and the designed flow;
+  the summary is the reading map: how to walk the implementation and the one
+  or two places where the reviewer should slow down.
 - The first step should start at the most useful entry point.
 - Every title should name behavior, risk, contract, or invariant, not a file operation.
 - Every beat should connect previous context, local change, and next implication;
@@ -373,6 +430,11 @@ them back creates stale pointers and noisy review stops.
   "mode": "guided",
   "title": "<short title for the whole change>",
   "summary": "<1-3 short sentences: what we wanted to enable + the designed flow + how to walk the implementation + where to slow down>",
+  "intent": {
+    "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
+    "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
+    "sources": ["commit 41af8b7", "PR #12 body"]
+  },
   "base": "main",
   "head": "feature-branch",
   "steps": [
@@ -457,3 +519,5 @@ Tell the user: "Story ready — open the diff in the diffStory app to review."
   visible code and highlighted code stay in one local review moment.
 - Don't make unsupported confidence claims like "this is safe" or "tests cover it" without naming the exact condition or evidence.
 - Don't skip the coverage gate — every changed hunk needs a covering step.
+- Don't invent intent. Every `goal` claim needs a source; `["code-derived"]` is the honest fallback.
+- Don't ship steps in file order without stating why that order genuinely reads best.

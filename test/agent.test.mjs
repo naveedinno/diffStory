@@ -227,6 +227,26 @@ test('bundled review-tour skill teaches story detail levels', () => {
   assert.ok(skill.includes('"mode": "detailed"'));
 });
 
+test('bundled review-tour skill recovers intent before writing', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Recover the why'));
+  assert.ok(skill.includes('"sources"'));
+  assert.ok(skill.includes('code-derived'));
+  assert.ok(skill.includes('conversation'));
+  assert.ok(skill.includes('up to 2 short questions'));
+  assert.ok(skill.includes('Not evidence: branch names, filenames, vibes'));
+  assert.ok(skill.includes('Never invent product intent'));
+});
+
+test('bundled review-tour skill enforces the narrative audit', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Narrative audit'));
+  assert.ok(skill.includes('Order test'));
+  assert.ok(skill.includes('Thread rule'));
+  assert.ok(skill.includes('Thread test'));
+  assert.ok(skill.includes('one continuous story'));
+});
+
 test('storyPrompt records the head ref for fixed range stories', () => {
   const p = storyPrompt('main', 'feature/liquidation');
   assert.ok(p.includes('git diff main..feature/liquidation --'));
