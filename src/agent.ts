@@ -89,18 +89,23 @@ export function storyPrompt(
     `reviewer, not a changelog.\n\n` +
     modeContract +
     scopeContract +
-    `Reviewer map contract:\n` +
-    `- Before writing JSON, build a private reviewer map. Do not include this map in the file.\n` +
-    `- Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +
-    `- Identify the behavior this change is really about, the first entry point to read, the control/data flow, ` +
-    `the invariants or risks to verify, and which tests/docs/generated files support each behavior.\n\n` +
-    `Narrative arc contract:\n` +
-    `- Write it like an actual story: intent -> flow -> implementation, not a list of touched files.\n` +
-    `- Start the summary from the goal the diff supports: "We wanted to enable <actor> to <capability>". If this is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system.\n` +
-    `- Then explain the product or runtime shape: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P".\n` +
-    `- Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
-    `- Each step should continue that arc. Explain why this stop exists in the designed flow and what it unlocks next.\n` +
-    `- Do not invent user intent. If the diff only proves a technical refactor, make the goal technical and keep it grounded.\n\n` +
+    `Work in three phases, in order. Phases 1 and 2 produce short visible notes in your output before any JSON; only phase 3 writes the file.\n\n` +
+    `Phase 1 — Recover the why (do this before reading the diff):\n` +
+    `- Gather intent evidence: read the commit messages behind this diff (for example git log --oneline -15 over the diffed range or ref), the PR title and body when one exists (gh pr view --json title,body — skip quietly if there is no PR or no gh), and any plan, design, or changelog notes the change touches or references.\n` +
+    `- Legitimate intent evidence: commit messages, PR bodies, docs, code comments, tests. Not evidence: branch names, filenames, vibes.\n` +
+    `- State the goal as actor + capability: "We wanted to enable <actor> to <capability>". If the change is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system. Then state the designed flow that achieves it: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P".\n` +
+    `- Write both into the story as "intent": {"goal": "...", "design": "...", "sources": ["commit abc1234", "PR #12 body", "docs/plan.md"]}. Every entry in "sources" names evidence you actually read.\n` +
+    `- If no evidence exists, set "goal" to what the code demonstrably enables, use "sources": ["code-derived"], and keep the wording narrow. Never invent product intent.\n` +
+    `- If the evidence contradicts what the code does, say so in the summary instead of silently picking one.\n\n` +
+    `Phase 2 — Design the reading path (do this before writing any JSON):\n` +
+    `- Write the narrative arc as a visible note: intent -> flow -> implementation, not a list of touched files. Shape: "To enable <goal> we designed <flow>. To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
+    `- Build a private reviewer map: the behavior this change is really about, the first requirement-backed entry point, the control/data flow across files, the invariants and risks to verify, and which tests/docs prove each behavior. Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +
+    `- Order the stops by that arc — runtime, control, and data flow — never by filename. Start where someone who just read the goal would start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes it real.\n` +
+    `- Order test: if sorting your planned steps by filename would not change how the story reads, it is not a story yet — reorder, or state in one line why file order genuinely is the clearest path.\n` +
+    `- Thread rule: every step's first beat except the first must pick up what the previous step established ("Now that the cap is stored, here is who reads it"), so the steps read as one continuous story.\n` +
+    `- Group related edits into one stop; do not emit one step per file or one step per hunk. Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n` +
+    `- Each step must answer a reviewer question: where does the behavior start; what invariant changed; what is passed, rejected, stored, or rendered; what risk should the reviewer inspect; what proves this path works. Titles should read like falsifiable review claims or risks, not file captions.\n\n` +
+    `Phase 3 — Write the steps. Mechanics checklist:\n\n` +
     `Viewport contract:\n` +
     `- Every step must include "viewport": [startLine, endLine]. This is what the reviewer sees, chosen from the requirement and the code shape, not from the tiny diff hunk.\n` +
     `- Every step must include "highlights": [[startLine, endLine], ...]. These are the lines the story is currently talking about and the rows diffStory should glow while reading.\n` +
@@ -116,19 +121,8 @@ export function storyPrompt(
     `- A beat may point at one small range or a few nearby related ranges, but it must stay inside the step "viewport".\n` +
     `- Do not put one big speech over several highlight groups; split it into beat-by-beat narration.\n` +
     `- Keep "why" as a compact fallback recap for older readers, but put the read-aloud story in "beats".\n\n` +
-    `Reading order contract:\n` +
-    `- Start where someone who just read the requirement should start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes the requirement real.\n` +
-    `- Follow the requirement's implementation flow across files, then return to callers when useful.\n` +
-    `- Group related edits into one stop; do not emit one step per file or one step per hunk.\n` +
-    `- Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n\n` +
-    `Reviewer question contract:\n` +
-    `- Each step must answer a reviewer question.\n` +
-    `- Good questions: where does the behavior start; what invariant changed; what is passed, rejected, stored, ` +
-    `or rendered; what risk should the reviewer inspect; what proves this path works.\n` +
-    `- Titles should read like falsifiable review claims or risks, not file captions.\n\n` +
     `Writing contract:\n` +
-    `- The top-level "summary" is the overview: 1-3 short informal sentences that say what we wanted to enable, ` +
-    `what flow I designed for that, and how the steps walk the implementation.\n` +
+    `- The top-level "summary" is the reading map: 1-3 short informal sentences on how the steps walk the implementation and where the reviewer should slow down. The goal and designed flow live in "intent"; do not repeat them in the summary.\n` +
     `- Step titles should name the exact behavior or risk being reviewed.\n` +
     `- Each "why" is the compact fallback recap for that stop; keep it to ${whyLength} in first person.\n` +
     `- Each beat is the synchronized story note: explain the local code part, why it matters, and what the next caller/helper/path can now do while its highlights glow.\n` +
@@ -168,15 +162,17 @@ export function storyPrompt(
     `- In line-by-line mode, use multiple highlight ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n\n` +
     `Truth contract:\n` +
     `- Only describe behavior you verified in the diff or current source lines you read.\n` +
+    `- The "intent" block must only claim a why its "sources" actually support.\n` +
     `- Do not infer intent from branch names, filenames, or vibes.\n` +
     `- Do not claim tests pass unless you ran them.\n` +
     `- Do not claim a test covers behavior unless the assertion is visible in the story range or in code you read.\n` +
     `- If you are uncertain, narrow the claim to what the code shows.\n\n` +
-    `Dry self-review before finishing:\n` +
-    `- Re-read the story as a skeptical reviewer.\n` +
-    `- Check that every title names behavior/risk, every beat explains old flow -> local change -> next implication, ` +
-    `every why stays compact, and calls/returnsTo reflect real control/data flow.\n` +
-    `- Remove vague filler and unsupported safety claims before saving.\n\n` +
+    `Falsifiable self-review before finishing:\n` +
+    `- Re-run the order test on the final steps: if filename order reads the same, reorder.\n` +
+    `- Why test: strike any beat that only restates what the code does; every step must say why it exists in the designed flow and what it unlocks next.\n` +
+    `- Thread test: read only the beats in order with no code — they must still form one continuous story with no jumps.\n` +
+    `- Check every title names behavior/risk, every "why" stays compact, and calls/returnsTo reflect real control/data flow. Remove vague filler and unsupported safety claims.\n` +
+    `- Coverage: every changed hunk is claimed by a changed/new-file step, no step points at unchanged code, and ids, order, calls, and returnsTo resolve.\n\n` +
     `Do not ask questions. Generate it directly.`
   );
 }

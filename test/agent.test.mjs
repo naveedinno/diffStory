@@ -16,13 +16,12 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
-  assert.ok(p.includes('Reading order contract'));
   assert.ok(p.includes('do not emit one step per file'));
   assert.ok(p.includes('synchronized story note'));
   assert.ok(p.includes('I added this parameter to method X'));
   assert.ok(p.includes('Voice contract'));
   assert.ok(p.includes('lively, specific, and a little fun'));
-  assert.ok(p.includes('top-level "summary" is the overview'));
+  assert.ok(p.includes('top-level "summary" is the reading map'));
   assert.ok(p.includes('1-3 short informal sentences'));
   assert.ok(p.includes('first person'));
   assert.ok(p.includes('No long paragraphs'));
@@ -30,15 +29,39 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('the coverage gate is clean'));
 });
 
-test('storyPrompt requires an intent to flow to implementation story arc', () => {
+test('storyPrompt recovers the why before reading the diff', () => {
   const p = storyPrompt('main');
-  assert.ok(p.includes('Narrative arc contract'));
+  assert.ok(p.includes('Phase 1 — Recover the why'));
+  assert.ok(p.includes('gh pr view --json title,body'));
+  assert.ok(p.includes('git log'));
+  assert.ok(p.includes('Not evidence: branch names, filenames, vibes'));
   assert.ok(p.includes('We wanted to enable'));
   assert.ok(p.includes('designed the flow'));
-  assert.ok(p.includes('To implement that flow, I first'));
-  assert.ok(p.includes('then wired'));
+  assert.ok(p.includes('"intent"'));
+  assert.ok(p.includes('"sources"'));
+  assert.ok(p.includes('code-derived'));
+  assert.ok(p.includes('Never invent product intent'));
+});
+
+test('storyPrompt designs the reading path as a narrative, not a file list', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Phase 2 — Design the reading path'));
   assert.ok(p.includes('intent -> flow -> implementation'));
   assert.ok(p.includes('not a list of touched files'));
+  assert.ok(p.includes('To implement that flow, I first'));
+  assert.ok(p.includes('never by filename'));
+  assert.ok(p.includes('Order test:'));
+  assert.ok(p.includes('Thread rule:'));
+  assert.ok(p.includes('one continuous story'));
+});
+
+test('storyPrompt ends with a falsifiable self-review', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Falsifiable self-review'));
+  assert.ok(p.includes('Why test:'));
+  assert.ok(p.includes('Thread test:'));
+  assert.ok(p.includes('read only the beats'));
+  assert.ok(p.includes('Do not ask questions. Generate it directly.'));
 });
 
 test('storyPrompt asks for a reviewer map and hard quality gates', () => {
