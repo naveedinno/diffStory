@@ -77,6 +77,13 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
         `- Do not make one step jump between far-apart highlight islands. If the story needs distant lines, split it into separate steps so each viewport/highlights pair stays local and scroll-stable.\n` +
         `- Keep "range" as the changed-line coverage anchor the coverage gate checks. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
+        `Beat contract:\n` +
+        `- Every new step must include "beats": [{"text": "short narration", "highlights": [[startLine, endLine]]}, ...].\n` +
+        `- Each beat is a separate speech unit for read-aloud, so the code highlight can move exactly when the voice moves.\n` +
+        `- Use one beat per highlighted code part. If a step has three review points, write three beats instead of one long "why".\n` +
+        `- A beat may point at one small range or a few nearby related ranges, but it must stay inside the step "viewport".\n` +
+        `- Do not put one big speech over several highlight groups; split it into beat-by-beat narration.\n` +
+        `- Keep "why" as a compact fallback recap for older readers, but put the read-aloud story in "beats".\n\n` +
         `Reading order contract:\n` +
         `- Start where someone who just read the requirement should start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes the requirement real.\n` +
         `- Follow the requirement's implementation flow across files, then return to callers when useful.\n` +
@@ -91,8 +98,8 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- The top-level "summary" is the overview: 1-3 short informal sentences that say what we wanted to enable, ` +
         `what flow I designed for that, and how the steps walk the implementation.\n` +
         `- Step titles should name the exact behavior or risk being reviewed.\n` +
-        `- Each "why" is the story paragraph for that stop: explain what changed here, why the old flow was not enough, ` +
-        `how this code fits the designed flow, and what the next caller/helper/path can now do. Keep it to ${whyLength} in first person.\n` +
+        `- Each "why" is the compact fallback recap for that stop; keep it to ${whyLength} in first person.\n` +
+        `- Each beat is the synchronized story note: explain the local code part, why it matters, and what the next caller/helper/path can now do while its highlights glow.\n` +
         `- Prefer causal chains like "I added this parameter to method X so method Y can pass Z, which lets H handle...".\n` +
         `- Include what to verify only inside that story, not as a detached checklist.\n` +
         `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
@@ -109,6 +116,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `purpose, and planned step id.\n` +
         `- Cover every changed hunk with a changed/new-file step.\n` +
         `- Never use "deleted" as a step kind. For deleted files, use kind "changed" and anchor the range at the post-change deletion location the coverage gate reports.\n` +
+        `- For a whole deleted file, use range, viewport, and highlights of [0, 0]. Do not invent line 1 for a file that no longer exists.\n` +
         `- Use context steps only for unchanged code that makes the review easier.\n` +
         `- Cover every changed hunk so the coverage gate is clean — the review flags any change no step explains.\n\n` +
         `Range contract:\n` +
@@ -117,8 +125,9 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `that makes the change understandable.\n` +
         `- Do not use whole-file or giant ranges unless the whole file is new and small, or the entire file is truly ` +
         `the review unit.\n` +
-        `- For pure deletions, anchor the step at the post-change location where the deletion happened and include the ` +
-        `smallest surrounding code that explains the removed behavior.\n\n` +
+        `- For pure deletions with surviving surrounding code, anchor the step at the post-change location where the deletion happened and include the ` +
+        `smallest surrounding code that explains the removed behavior.\n` +
+        `- For whole-file deletions with no post-change lines, use the [0, 0] deletion sentinel for "range", "viewport", and "highlights".\n\n` +
         `Focus pointer contract:\n` +
         `- Prefer "highlights" for new stories. "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} is the legacy spelling and should only be used for compatibility.\n` +
         `- Highlight ranges must use post-change line numbers and stay inside that step's "viewport".\n` +
@@ -133,8 +142,8 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- If you are uncertain, narrow the claim to what the code shows.\n\n` +
         `Dry self-review before finishing:\n` +
         `- Re-read the story as a skeptical reviewer.\n` +
-        `- Check that every title names behavior/risk, every why explains old flow -> local change -> next implication, ` +
-        `and calls/returnsTo reflect real control/data flow.\n` +
+        `- Check that every title names behavior/risk, every beat explains old flow -> local change -> next implication, ` +
+        `every why stays compact, and calls/returnsTo reflect real control/data flow.\n` +
         `- Remove vague filler and unsupported safety claims before saving.\n\n` +
         `Do not ask questions. Generate it directly.`);
 }

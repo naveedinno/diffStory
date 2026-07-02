@@ -20,10 +20,18 @@ export type StoryMode =
 
 /** Optional legacy read-aloud pointer inside a step's wider review window. */
 export interface StepFocusTarget {
-  /** Inclusive post-change line ranges to glow while this step is being read aloud. */
+  /** Inclusive post-change line ranges to glow; [0, 0] means a whole-file deletion. */
   ranges: Array<[number, number]>;
   /** Optional short cue for future reader surfaces. */
   label?: string;
+}
+
+/** One read-aloud unit inside a step. */
+export interface StoryBeat {
+  /** Short narration spoken as one separate speech unit. */
+  text: string;
+  /** Inclusive post-change line ranges this beat points at while it is spoken. */
+  highlights: Array<[number, number]>;
 }
 
 /** One stop on the guided tour. */
@@ -36,12 +44,14 @@ export interface TourStep {
   title: string;
   /** Repo-relative path of the file this step shows. */
   file: string;
-  /** Inclusive changed-line coverage anchor in the *post-change* file, [start, end] (1-based). */
+  /** Inclusive changed-line coverage anchor in the post-change file; [0, 0] means a whole-file deletion. */
   range: [number, number];
   /** Inclusive visible review window the storyteller wants the diff viewer to show. */
   viewport?: [number, number];
-  /** Inclusive post-change line ranges inside viewport that the narration is currently discussing. */
+  /** Inclusive post-change line ranges inside viewport; [0, 0] means a whole-file deletion. */
   highlights?: Array<[number, number]>;
+  /** Optional beat-by-beat narration; each beat is spoken separately with its own highlights. */
+  beats?: StoryBeat[];
   /** Optional legacy narrower post-change line range(s) to point at while reading aloud. */
   focus?: StepFocusTarget;
   kind: StepKind;

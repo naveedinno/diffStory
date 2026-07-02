@@ -18,7 +18,7 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('.diffstory/story.json'));
   assert.ok(p.includes('Reading order contract'));
   assert.ok(p.includes('do not emit one step per file'));
-  assert.ok(p.includes('story paragraph'));
+  assert.ok(p.includes('synchronized story note'));
   assert.ok(p.includes('I added this parameter to method X'));
   assert.ok(p.includes('Voice contract'));
   assert.ok(p.includes('lively, specific, and a little fun'));
@@ -59,6 +59,12 @@ test('storyPrompt makes deleted-file steps use the changed kind', () => {
   assert.ok(p.includes('anchor the range at the post-change deletion location'));
 });
 
+test('storyPrompt teaches the pure deleted-file sentinel anchor', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('For a whole deleted file, use range, viewport, and highlights of [0, 0]'));
+  assert.ok(p.includes('Do not invent line 1 for a file that no longer exists'));
+});
+
 test('storyPrompt teaches explicit read-aloud focus targets', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('Focus pointer contract'));
@@ -81,6 +87,15 @@ test('storyPrompt teaches viewport and highlighted line selection', () => {
   assert.ok(p.includes('from the requirement'));
   assert.ok(p.includes('far-apart highlight islands'));
   assert.ok(p.includes('scroll-stable'));
+});
+
+test('storyPrompt requires beat-by-beat narration for read-aloud sync', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Beat contract'));
+  assert.ok(p.includes('"beats"'));
+  assert.ok(p.includes('separate speech'));
+  assert.ok(p.includes('one beat per highlighted code part'));
+  assert.ok(p.includes('Do not put one big speech over several highlight groups'));
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -139,6 +154,12 @@ test('bundled review-tour skill makes deleted-file steps use the changed kind', 
   assert.ok(skill.includes('anchor the range at the post-change deletion location'));
 });
 
+test('bundled review-tour skill teaches the pure deleted-file sentinel anchor', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`'));
+  assert.ok(skill.includes('Do not invent line 1 for a file that no longer exists'));
+});
+
 test('bundled review-tour skill teaches explicit read-aloud focus targets', () => {
   const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Focus pointer contract'));
@@ -160,6 +181,15 @@ test('bundled review-tour skill teaches viewport and highlighted line selection'
   assert.ok(skill.includes('from the requirement'));
   assert.ok(skill.includes('far-apart highlight islands'));
   assert.ok(skill.includes('steady camera shot'));
+});
+
+test('bundled review-tour skill requires beat-by-beat narration for read-aloud sync', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Beat contract'));
+  assert.ok(skill.includes('`beats`'));
+  assert.ok(skill.includes('separate speech'));
+  assert.ok(skill.includes('one beat per highlighted code part'));
+  assert.ok(skill.includes('Do not put one big speech over several highlight groups'));
 });
 
 test('bundled review-tour skill teaches story detail levels', () => {

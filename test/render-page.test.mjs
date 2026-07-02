@@ -378,15 +378,19 @@ test('generated voice loading is visible in the controls while previews or steps
   assert.match(html, /if\(s\)s\.textContent=speechLoadingLabel\?speechLoadingLabel\+'…':describeVoice\(\)/);
 });
 
-test('generated voice prefetches the next step while the current step is active', () => {
+test('generated voice prefetches the next speech unit while the current unit is active', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /prefetchedSpeech=\{\}/);
   assert.match(html, /speechPrefetchAbort=null/);
   assert.match(html, /function prefetchNextSpeech\(i\)/);
+  assert.match(html, /function prefetchGeneratedSpeechText\(text\)/);
+  assert.match(html, /function prefetchUpcomingSpeech\(stepIndex,units,index,manual\)/);
   assert.match(html, /function prefetchGeneratedSpeech\(engine,text,voice,speechRate\)/);
   assert.match(html, /function cachedGeneratedSpeech\(engine,text,voice,speechRate\)/);
-  assert.match(html, /speakStep\(i\);prefetchNextSpeech\(i\);/);
-  assert.match(html, /if\(cached\)\{playFetchedGeneratedAudio\(engine,text,opts,token,btn,null,cached\);/);
+  assert.match(html, /var spoke=speakStep\(i\);if\(!spoke\)prefetchNextSpeech\(i\);/);
+  assert.match(html, /if\(index\+1<units\.length\)\{prefetchGeneratedSpeechText\(units\[index\+1\]\.text\);return;\}/);
+  assert.match(html, /if\(spoken\)prefetchUpcomingSpeech\(stepIndex,units,index,manual\);return spoken;/);
+  assert.doesNotMatch(html, /prefetchNextSpeech\(active\)/);
 });
 
 test('read aloud visually focuses the code rows for the step being spoken', () => {
@@ -400,11 +404,13 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function updateVoiceFocusForChar\(stepIndex,charIndex,text\)/);
   assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
   assert.match(html, /focusRows\[0\]\.scrollIntoView/);
-  assert.match(html, /speak\(stepText\(p\),\{stepIndex:i\}\)/);
-  assert.match(html, /if\(opts\.stepIndex!=null\)startVoiceFocusSequence\(opts\.stepIndex,text\)/);
+  assert.match(html, /function stepSpeechUnits\(panel\)/);
+  assert.match(html, /function speakStepIndex\(i,manual\)/);
+  assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
+  assert.match(html, /if\(opts\.stepIndex!=null\)\{if\(opts\.focusGroup!=null\)setActiveBeat\(opts\.stepIndex,opts\.focusGroup\);else startVoiceFocusSequence\(opts\.stepIndex,text\);\}/);
   assert.match(html, /u\.onboundary=function\(e\)/);
   assert.match(html, /if\(opts\.stepIndex!=null\)clearVoiceFocus\(\)/);
-  assert.match(html, /speak\(stepText\(pp\),\{stepIndex:sp\}\)/);
+  assert.match(html, /speakStepIndex\(sp,true\)/);
 });
 
 test('explicit story focus narrows which rows are highlighted during read aloud', () => {
@@ -513,6 +519,110 @@ test('story viewport controls visible code while highlights control narration fo
   rmSync(repo, { recursive: true, force: true });
 });
 
+test('story beats render as separate spoken notes with exact focus groups', () => {
+  const beatTour = {
+    version: 1,
+    title: 'Beat tour',
+    summary: 'One step has two spoken beats.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Changed block',
+        file: 'a.ts',
+        range: [1, 3],
+        viewport: [1, 3],
+        highlights: [[1, 3]],
+        beats: [
+          { text: 'First I explain the setup line.', highlights: [[1, 1]] },
+          { text: 'Then I explain the result line.', highlights: [[3, 3]] },
+        ],
+        kind: 'changed',
+        why: 'Fallback recap for older readers.',
+      },
+    ],
+  };
+  const beatFiles = [
+    {
+      oldPath: 'a.ts',
+      newPath: 'a.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 0,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            { type: 'add', content: 'setup', newNo: 1 },
+            { type: 'add', content: 'middle', newNo: 2 },
+            { type: 'add', content: 'result', newNo: 3 },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const html = renderPage({ repo: process.cwd(), tour: beatTour, files: beatFiles, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /class="ds-beat"[^>]*data-speech-beat="0"[^>]*data-focus-group="0"/);
+  assert.match(html, /class="ds-beat"[^>]*data-speech-beat="1"[^>]*data-focus-group="1"/);
+  assert.match(html, /First I explain the setup line\./);
+  assert.match(html, /Then I explain the result line\./);
+  assert.match(html, /data-line="1"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
+  assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
+  assert.match(html, /data-line="3"[^>]*data-step="s1"[^>]*data-step-focus="1"/);
+  assert.match(html, /function stepSpeechUnits\(panel\)/);
+  assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
+  assert.match(html, /setActiveBeat\(stepIndex,group\)/);
+  assert.match(html, /b=closest\(t,'\[data-playstep\]'\);if\(b\)\{var pp=closest\(t,'\.ds-step'\);if\(pp\)\{var sp=parseInt\(pp\.getAttribute\('data-step-panel'\)\|\|'0',10\);speakStepIndex\(sp,true\);\}return;\}/);
+});
+
+test('pure deleted-file sentinel highlights deleted rows', () => {
+  const deletedTour = {
+    version: 1,
+    title: 'Deleted file tour',
+    summary: 'Deleted file cleanup.',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'Old plan is gone',
+        file: 'old-plan.md',
+        range: [0, 0],
+        viewport: [0, 0],
+        highlights: [[0, 0]],
+        kind: 'changed',
+        why: 'This deleted plan is no longer the source of truth.',
+      },
+    ],
+  };
+  const deletedFiles = [
+    {
+      oldPath: 'old-plan.md',
+      newPath: 'old-plan.md',
+      status: 'deleted',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 2,
+          newStart: 0,
+          newLines: 0,
+          lines: [
+            { type: 'del', content: '# Old plan', oldNo: 1 },
+            { type: 'del', content: '- stale step', oldNo: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const html = renderPage({ repo: process.cwd(), tour: deletedTour, files: deletedFiles, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /Old plan/);
+  assert.match(html, /data-step="s1"[^>]*data-step-focus="0"/);
+});
+
 test('multiple story focus ranges are rendered as separate read-aloud groups', () => {
   const focusTour = {
     version: 1,
@@ -609,19 +719,41 @@ test('space pauses and resumes voice without stealing focused controls', () => {
   assert.match(html, /function isTextEntryTarget\(t\)/);
   assert.match(html, /\^\(INPUT\|TEXTAREA\|SELECT\)\$/);
   assert.match(html, /function isKeyboardControlTarget\(t\)/);
+  assert.match(html, /function isReadAloudShortcutTarget\(t\)/);
   assert.match(html, /\^\(BUTTON\|A\)\$/);
   assert.match(html, /function toggleVoicePause\(\)/);
   assert.match(html, /localAudio\.paused/);
   assert.match(html, /localAudio\.pause\(\)/);
   assert.match(html, /if\(synth\.paused\)\{synth\.resume\(\);toast\('Voice resumed'\);/);
   assert.match(html, /if\(synth\.speaking\|\|activeUtterance\)\{synth\.pause\(\);toast\('Voice paused'\);/);
+  assert.match(html, /var wantsSpacePause=e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar';/);
+  assert.match(html, /if\(wantsSpacePause&&!isTextEntryTarget\(e\.target\)&&\(isReadAloudShortcutTarget\(e\.target\)\|\|!isKeyboardControlTarget\(e\.target\)\)\)\{if\(toggleVoicePause\(\)\)\{e\.preventDefault\(\);return;\}\}/);
   assert.match(html, /if\(isTextEntryTarget\(e\.target\)\|\|isKeyboardControlTarget\(e\.target\)\)return;/);
-  assert.match(html, /if\(e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar'\)\{if\(toggleVoicePause\(\)\)e\.preventDefault\(\);return;\}/);
+  assert.doesNotMatch(html, /if\(e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar'\)\{if\(toggleVoicePause\(\)\)e\.preventDefault\(\);return;\}/);
+});
+
+test('arrow keys move through read-aloud beats and auto-advance steps', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false/);
+  assert.match(html, /function activateStep\(i,autoSpeak\)/);
+  assert.match(html, /function setActive\(i\)\{activateStep\(i,true\);\}/);
+  assert.match(html, /function previousSpeakableStep\(i\)/);
+  assert.match(html, /function speechBeatTarget\(stepIndex,unitIndex,delta\)/);
+  assert.match(html, /function moveSpeechBeat\(delta\)/);
+  assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
+  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)\{setActive\(n\);return;\}/);
+  assert.match(html, /if\(delta<0\)\{var p=previousSpeakableStep\(stepIndex\);if\(p>=0\)\{var prevUnits=stepSpeechUnits\(stepPanels\[p\]\);return \{step:p,unit:prevUnits\.length-1\};\}\}/);
+  assert.match(html, /var target=speechBeatTarget\(baseStep,baseUnit,delta\);if\(!target\)return true;/);
+  assert.match(html, /activateStep\(target\.step,false\);/);
+  assert.match(html, /speakStepUnit\(target\.step,units,target\.unit,manual\);/);
+  assert.match(html, /var wantsBeatNav=e\.key==='ArrowRight'\|\|e\.key==='ArrowLeft';/);
+  assert.match(html, /if\(wantsBeatNav&&moveSpeechBeat\(e\.key==='ArrowRight'\?1:-1\)\)\{e\.preventDefault\(\);return;\}/);
+  assert.match(html, /if\(handleChangeShortcut\(e\)\)return;/);
 });
 
 test('arrow keys navigate changes while j/k still navigate the story or file list', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function setActive\(i\)[\s\S]*speakStep\(i\);/);
+  assert.match(html, /function activateStep\(i,autoSpeak\)[\s\S]*var spoke=speakStep\(i\);/);
   assert.match(html, /if\(handleChangeShortcut\(e\)\)return;/);
   assert.match(html, /var next=e\.key==='j',prev=e\.key==='k';/);
   assert.match(html, /if\(next\|\|prev\)\{[\s\S]*if\(isTextEntryTarget\(e\.target\)\)return;/);

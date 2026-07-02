@@ -21,10 +21,14 @@ not hide behind a changelog.
 - Every changed hunk must be claimed by a `changed` or `new-file` step.
 - Never use "deleted" as a step kind. For deleted files, use kind "changed"
   and anchor the range at the post-change deletion location.
+- For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`.
+  Do not invent line 1 for a file that no longer exists.
 - `range` uses post-change, 1-based inclusive line numbers as the changed-line
-  coverage anchor for the coverage gate.
+  coverage anchor for the coverage gate, except `[0, 0]` is the sentinel for a
+  whole-file deletion.
 - `viewport` uses post-change, 1-based inclusive line numbers as the visible
-  review window the diff viewer should show.
+  review window the diff viewer should show, except `[0, 0]` shows the deleted
+  hunk for a whole-file deletion.
 - `highlights` uses post-change, 1-based inclusive line ranges inside
   `viewport`; these are the lines the story is currently talking about.
 - Optional `focus.ranges` is the legacy spelling for `highlights`.
@@ -185,7 +189,9 @@ Coverage anchor contract:
 - Include enough surrounding lines that the hunk makes sense.
 - Keep `range` as the changed-line coverage anchor for the coverage gate; do
   not use it as the display-window control.
-- For deletion-heavy hunks, anchor to the post-change line where the deletion happened and include the smallest surrounding code that explains the removed behavior.
+- For deletion-heavy hunks with surviving surrounding code, anchor to the post-change line where the deletion happened and include the smallest surrounding code that explains the removed behavior.
+- For whole-file deletions with no post-change lines, use the `[0, 0]` deletion
+  sentinel for `range`, `viewport`, and `highlights`.
 - If a hunk spans unrelated behavior, create separate steps.
 
 `viewport` is the review window. `highlights` are what the narrator is pointing
@@ -215,6 +221,23 @@ Focus pointer contract:
 - If the whole step range is the right thing to point at, omit `focus`;
   diffStory highlights the step range automatically.
 
+### 4.6. Split narration into read-aloud beats
+
+Beat contract:
+
+- Every new step must include `beats`: ordered short narration units, each with
+  its own `text` and `highlights`.
+- Each beat is a separate speech unit, so the read-aloud voice and glowing code
+  can move together without guessing timing.
+- Use one beat per highlighted code part. If a step has three review points,
+  write three beats instead of one long `why`.
+- A beat may point at one small range or a few nearby related ranges, but it
+  must stay inside that step's `viewport`.
+- Do not put one big speech over several highlight groups; split it into
+  beat-by-beat narration.
+- Keep `why` as the compact fallback recap for older readers, but put the
+  read-aloud story in `beats`.
+
 ### 5. Write one step per stop
 
 Each step has:
@@ -223,9 +246,11 @@ Each step has:
 - `viewport`: the post-change window the diff viewer should show.
 - `highlights`: the post-change lines inside `viewport` that the narration is
   currently discussing.
+- `beats`: ordered short notes; each note is read as a separate speech and
+  points at its own highlighted code.
 - `kind`: `changed`, `new-file`, or `context`.
 - `title`: a sidebar-readable review claim, behavior, invariant, or risk.
-- `why`: the story note for the stop.
+- `why`: the compact fallback recap for the stop.
 - `calls` / `returnsTo`: optional links for real conceptual jumps.
 
 Step titles should work without the body text. Good titles:
@@ -246,10 +271,12 @@ Tests
 Changes in api.ts
 ```
 
-Each `why` should answer a reviewer question. In brief mode, use exactly one
-short first-person sentence. In balanced/guided mode, use 1-3 short first-person
-sentences. In line-by-line/detailed mode, 3-7 short sentences are fine when
-needed to walk the range line by line:
+Each `why` should be a compact fallback recap for the whole stop. The
+read-aloud explanation belongs in `beats`, and each beat should answer one
+local reviewer question. In brief mode, use exactly one short first-person
+sentence per beat. In balanced/guided mode, use short first-person beats. In
+line-by-line/detailed mode, use more beats instead of turning one beat into a
+long paragraph:
 
 1. Where this stop sits in the designed runtime/control/data flow.
 2. What the old path failed to handle, preserve, reject, or prove.
@@ -259,13 +286,16 @@ needed to walk the range line by line:
 Good shape:
 
 ```text
-Start here: the API receives the order before anything is persisted. I reject over-cap requests before placement because the old flow only noticed the limit after state had already moved. That keeps the helper in the next step focused on the cap math instead of cleanup.
+Beat 1: Start here: the API receives the order before anything is persisted.
+Beat 2: I reject over-cap requests before placement because the old flow only noticed the limit after state had already moved.
+Beat 3: That keeps the helper in the next step focused on the cap math instead of cleanup.
 ```
 
 For tests:
 
 ```text
-Final proof: this test pins the failure mode from the entry point. It should fail if an over-cap order can reach placement again, so it is the guardrail for the behavior above.
+Beat 1: Final proof: this test pins the failure mode from the entry point.
+Beat 2: It should fail if an over-cap order can reach placement again, so it is the guardrail for the behavior above.
 ```
 
 Use attention cues when they help scanning: `Start here`, `Pause here`,
@@ -293,6 +323,8 @@ Every changed hunk must appear in the ledger and must be claimed by a
 `changed` or `new-file` step. Context steps never count as coverage.
 Never use "deleted" as a step kind. For deleted files, use kind "changed" and
 anchor the range at the post-change deletion location.
+For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`.
+Do not invent line 1 for a file that no longer exists.
 Do not add steps for generated or oversized artifacts that the prompt excludes
 from the diff. Those files are intentionally outside the coverage gate; adding
 them back creates stale pointers and noisy review stops.
@@ -326,7 +358,8 @@ them back creates stale pointers and noisy review stops.
 - The summary is the review map: why we wanted the change, what flow was designed, how to read the implementation, and the one or two places where the reviewer should slow down.
 - The first step should start at the most useful entry point.
 - Every title should name behavior, risk, contract, or invariant, not a file operation.
-- Every `why` should connect previous context, local change, and next implication.
+- Every beat should connect previous context, local change, and next implication;
+  every `why` should stay compact.
 - Tests, docs, snapshots, and generated files go after the behavior they verify or explain.
 - Generated or oversized files excluded by the prompt must not appear as story
   steps.
@@ -353,6 +386,16 @@ them back creates stale pointers and noisy review stops.
       "highlights": [[128, 132]],
       "kind": "changed",
       "why": "Start here: the keeper reaches this path each epoch. I clamp the rate before settlement hands off to the math helper because the old path let over-cap values travel too far. Check that this happens before any balance mutation.",
+      "beats": [
+        {
+          "text": "Start here: the keeper reaches this path each epoch.",
+          "highlights": [[128, 128]]
+        },
+        {
+          "text": "I clamp the rate before settlement hands off to the math helper, so over-cap values stop before balance mutation.",
+          "highlights": [[129, 132]]
+        }
+      ],
       "calls": ["s2"],
       "tags": ["entrypoint", "core"]
     },
@@ -366,6 +409,16 @@ them back creates stale pointers and noisy review stops.
       "highlights": [[48, 52]],
       "kind": "new-file",
       "why": "Pause here: settleFunding() lands here after choosing the market cap. I keep the helper small so both callers use the same inclusive boundary; the review focus is the require that makes the unchecked math safe.",
+      "beats": [
+        {
+          "text": "Pause here: settleFunding() lands here after choosing the market cap.",
+          "highlights": [[40, 44]]
+        },
+        {
+          "text": "The require is the review hinge because it makes the later unchecked math safe.",
+          "highlights": [[48, 52]]
+        }
+      ],
       "returnsTo": "s1"
     }
   ]

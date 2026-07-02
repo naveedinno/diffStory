@@ -58,6 +58,8 @@ export interface StepView {
   range: [number, number];
   /** Narrower post-change line ranges that glow while this step is read aloud. */
   focusRanges: Array<[number, number]>;
+  /** Focus ranges grouped by spoken unit. */
+  focusGroups: Array<Array<[number, number]>>;
   /** Whether focusRanges came from story JSON instead of the step range fallback. */
   focusExplicit: boolean;
   kind: StepKind;
@@ -65,11 +67,18 @@ export interface StepView {
   newFile: boolean;
   context: boolean;
   why: string;
+  beats: StepBeatView[];
   /** Plain-English call-flow summary, e.g. "Calls step 3 · returns to 1". */
   flow: string;
   /** Diff rows grouped by hunk (rendered with a ⋯ separator between blocks). */
   blocks: SbsRow[][];
   note?: string;
+}
+
+export interface StepBeatView {
+  text: string;
+  focusGroup: number;
+  highlights: Array<[number, number]>;
 }
 
 export interface FileView {
@@ -166,7 +175,9 @@ function buildStep(
   const diffFile = files.find((f) => f.newPath === step.file);
   const viewport = stepViewport(step);
   const highlights = stepHighlights(step);
-  const focusExplicit = highlights.length > 0;
+  const beats = stepBeats(step);
+  const focusGroups = stepFocusGroups(viewport, highlights, beats);
+  const focusExplicit = beats.length > 0 || highlights.length > 0;
   return {
     id: step.id,
     order: step.order,
@@ -175,13 +186,15 @@ function buildStep(
     oldFile: diffFile?.oldPath ?? step.file,
     viewport,
     range: viewport,
-    focusRanges: focusExplicit ? highlights : [viewport],
+    focusRanges: focusGroups.flat(),
+    focusGroups,
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
     why: step.why,
+    beats,
     flow: flowLabel(step, byId, total),
     blocks,
     note,
@@ -194,6 +207,24 @@ function stepViewport(step: TourStep): [number, number] {
 
 function stepHighlights(step: TourStep): Array<[number, number]> {
   return step.highlights ?? step.focus?.ranges ?? [];
+}
+
+function stepBeats(step: TourStep): StepBeatView[] {
+  return (step.beats ?? []).map((beat, i) => ({
+    text: beat.text,
+    focusGroup: i,
+    highlights: beat.highlights,
+  }));
+}
+
+function stepFocusGroups(
+  viewport: [number, number],
+  highlights: Array<[number, number]>,
+  beats: StepBeatView[],
+): Array<Array<[number, number]>> {
+  if (beats.length) return beats.map((beat) => beat.highlights);
+  if (highlights.length) return highlights.map((range) => [range]);
+  return [[viewport]];
 }
 
 function stepBlocks(

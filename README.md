@@ -133,7 +133,9 @@ flags to memorise.
 Generation has two story modes: **Guided review** keeps the current concise walkthrough, while
 **Detailed audit** writes a longer correctness-review story that walks important code paths and
 ranges line by line. Each step can declare a `viewport` for what the reviewer should see and
-`highlights` for the exact lines the narration is talking about.
+`highlights` for the exact lines the narration is talking about. New stories should also include
+`beats`: short read-aloud notes, each with its own highlights, so the voice and glowing code move
+together instead of one long speech drifting across several code blocks.
 
 ```jsonc
 {
@@ -144,9 +146,18 @@ ranges line by line. Each step can declare a `viewport` for what the reviewer sh
   "steps": [
     { "id": "s1", "order": 1, "title": "createOrder() now checks the limit", "file": "src/api.ts",
       "range": [4, 7], "viewport": [1, 16], "highlights": [[4, 7]],
-      "kind": "changed", "why": "Start here: this is the flow users hit when they place an order. I first put the guard before placement so rejected orders stop at the door, then I pass the cap check to the helper in the next step.", "calls": ["s2"] },
+      "kind": "changed", "why": "createOrder() now rejects over-cap orders before placement and delegates the cap math.",
+      "beats": [
+        { "text": "Start here: this is the flow users hit when they place an order.", "highlights": [[1, 4]] },
+        { "text": "I put the guard before placement so rejected orders stop at the door.", "highlights": [[4, 7]] },
+        { "text": "Then I pass the cap check to the helper in the next step.", "highlights": [[7, 7]] }
+      ], "calls": ["s2"] },
     { "id": "s2", "order": 2, "title": "checkSpendingLimit()", "file": "src/limits.ts",
-      "range": [1, 11], "viewport": [1, 11], "highlights": [[4, 8]], "kind": "new-file", "why": "Pause here: this is the helper that owns the boundary rule. I wired the cap math here so createOrder() can stay focused on flow control while this function answers the one limit question.", "returnsTo": "s1" }
+      "range": [1, 11], "viewport": [1, 11], "highlights": [[4, 8]], "kind": "new-file", "why": "checkSpendingLimit() owns the boundary rule for the entry point.",
+      "beats": [
+        { "text": "Pause here: this helper owns the boundary rule.", "highlights": [[1, 4]] },
+        { "text": "The cap math stays here so createOrder() can stay focused on flow control.", "highlights": [[4, 8]] }
+      ], "returnsTo": "s1" }
   ]
 }
 ```
@@ -154,8 +165,10 @@ ranges line by line. Each step can declare a `viewport` for what the reviewer sh
 `kind` is `changed` (show the real hunk), `new-file`, or `context` (unchanged code the reader needs
 — like a callee you didn't touch). `viewport` is the post-change line window the reviewer should
 see; `highlights` is one or more post-change line ranges inside that viewport that should glow
-while the narration talks about them. `range` remains the changed-line coverage anchor the
-in-page trust check uses to flag any change no step explains.
+while the narration talks about them. `beats` splits a step into separate short speeches, each
+with its own highlights, which keeps read-aloud aligned with the code. `range` remains the changed-line coverage anchor the
+in-page trust check uses to flag any change no step explains. For a whole-file deletion, `[0, 0]`
+is the synthetic `range` / `viewport` / `highlights` anchor because there are no post-change lines.
 `calls` / `returnsTo` render the cross-file jumps. Full schema in
 [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
 

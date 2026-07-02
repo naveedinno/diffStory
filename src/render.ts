@@ -673,7 +673,7 @@ function stepPanel(
     </div>
     <div class="ds-why">
       <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
-      <p class="ds-why-text">${nl(esc(s.why))}</p>
+      ${stepStoryHtml(s)}
     </div>
     <div class="ds-diffscroll">
       <div class="ds-diff" data-diff data-file="${esc(s.file)}"${s.newFile ? ' data-newfile="1"' : ''}>
@@ -691,6 +691,17 @@ function stepPanel(
       </div>
     </div>
   </section>`;
+}
+
+function stepStoryHtml(s: StepView): string {
+  if (!s.beats.length) return `<p class="ds-why-text">${nl(esc(s.why))}</p>`;
+  return `<div class="ds-beats">${s.beats.map(beatHtml).join('')}</div>`;
+}
+
+function beatHtml(beat: StepView['beats'][number]): string {
+  return `<p class="ds-beat" data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(
+    beat.text,
+  )}"><span class="ds-beat-index">${beat.focusGroup + 1}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></p>`;
 }
 
 function diffInner(s: StepView, comments: Comment[]): string {
@@ -766,12 +777,16 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: numbe
 }
 
 function rowVoiceFocusIndex(row: SbsRow, s: StepView, blockIndex: number): number | null {
-  if (row.newNo !== undefined) {
-    const n = row.newNo;
-    const idx = s.focusRanges.findIndex(([start, end]) => n >= start && n <= end);
-    return idx >= 0 ? (s.focusExplicit ? idx : blockIndex) : null;
+  const idx = s.focusGroups.findIndex((ranges) => ranges.some((range) => rowInFocusRange(row, s, range)));
+  if (idx >= 0) {
+    return s.focusExplicit ? idx : blockIndex;
   }
   return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
+}
+
+function rowInFocusRange(row: SbsRow, s: StepView, [start, end]: [number, number]): boolean {
+  if (row.newNo !== undefined) return row.newNo >= start && row.newNo <= end;
+  return s.kind === 'changed' && row.type === 'del' && start === 0 && end === 0;
 }
 
 function cell(side: 'left' | 'right', row: SbsRow, target?: CommentTarget, intra?: string): string {

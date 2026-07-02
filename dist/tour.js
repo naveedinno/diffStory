@@ -9,7 +9,16 @@ export class TourError extends Error {
 function isLineNumber(v) {
     return typeof v === 'number' && Number.isInteger(v) && v > 0;
 }
-function validateLineRange(value, name, errors) {
+function isDeletionAnchor(value) {
+    return Array.isArray(value) && value.length === 2 && value[0] === 0 && value[1] === 0;
+}
+function validateLineRange(value, name, errors, opts = {}) {
+    if (isDeletionAnchor(value)) {
+        if (opts.allowDeletionAnchor)
+            return value;
+        errors.push(`${name} can use [0, 0] only for a pure deleted-file changed step`);
+        return undefined;
+    }
     if (!Array.isArray(value) || value.length !== 2 || !isLineNumber(value[0]) || !isLineNumber(value[1])) {
         errors.push(`${name} must be [startLine, endLine]`);
         return undefined;
@@ -20,7 +29,7 @@ function validateLineRange(value, name, errors) {
     }
     return [value[0], value[1]];
 }
-function validateFocus(step, containerRange, containerName, where, errors) {
+function validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
     if (step.focus === undefined)
         return;
     if (typeof step.focus !== 'object' || step.focus === null || Array.isArray(step.focus)) {
@@ -36,7 +45,7 @@ function validateFocus(step, containerRange, containerName, where, errors) {
         return;
     }
     focus.ranges.forEach((range, j) => {
-        const focusRange = validateLineRange(range, `${where}.focus.ranges[${j}]`, errors);
+        const focusRange = validateLineRange(range, `${where}.focus.ranges[${j}]`, errors, { allowDeletionAnchor });
         if (focusRange &&
             containerRange &&
             (focusRange[0] < containerRange[0] || focusRange[1] > containerRange[1])) {
@@ -44,7 +53,7 @@ function validateFocus(step, containerRange, containerName, where, errors) {
         }
     });
 }
-function validateHighlights(step, containerRange, containerName, where, errors) {
+function validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
     if (step.highlights === undefined)
         return;
     if (!Array.isArray(step.highlights) || step.highlights.length === 0) {
@@ -52,12 +61,45 @@ function validateHighlights(step, containerRange, containerName, where, errors) 
         return;
     }
     step.highlights.forEach((range, j) => {
-        const highlight = validateLineRange(range, `${where}.highlights[${j}]`, errors);
+        const highlight = validateLineRange(range, `${where}.highlights[${j}]`, errors, { allowDeletionAnchor });
         if (highlight &&
             containerRange &&
             (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
             errors.push(`${where}.highlights[${j}] must be inside ${containerName}`);
         }
+    });
+}
+function validateBeatHighlights(beat, beatIndex, containerRange, containerName, where, errors, allowDeletionAnchor) {
+    if (!Array.isArray(beat.highlights) || beat.highlights.length === 0) {
+        errors.push(`${where}.beats[${beatIndex}].highlights must be a non-empty array`);
+        return;
+    }
+    beat.highlights.forEach((range, j) => {
+        const highlight = validateLineRange(range, `${where}.beats[${beatIndex}].highlights[${j}]`, errors, { allowDeletionAnchor });
+        if (highlight &&
+            containerRange &&
+            (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
+            errors.push(`${where}.beats[${beatIndex}].highlights[${j}] must be inside ${containerName}`);
+        }
+    });
+}
+function validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
+    if (step.beats === undefined)
+        return;
+    if (!Array.isArray(step.beats) || step.beats.length === 0) {
+        errors.push(`${where}.beats must be a non-empty array`);
+        return;
+    }
+    step.beats.forEach((rawBeat, i) => {
+        if (typeof rawBeat !== 'object' || rawBeat === null || Array.isArray(rawBeat)) {
+            errors.push(`${where}.beats[${i}] must be an object`);
+            return;
+        }
+        const beat = rawBeat;
+        if (typeof beat.text !== 'string' || !beat.text.trim()) {
+            errors.push(`${where}.beats[${i}].text is required`);
+        }
+        validateBeatHighlights(beat, i, containerRange, containerName, where, errors, allowDeletionAnchor);
     });
 }
 export function loadTour(path) {
@@ -136,17 +178,20 @@ export function validateTour(obj) {
             errors.push(`${where}.file is required`);
         if (typeof step.why !== 'string')
             errors.push(`${where}.why is required`);
-        if (!KINDS.includes(step.kind)) {
+        const stepKind = step.kind;
+        if (!KINDS.includes(stepKind)) {
             errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
         }
-        const stepRange = validateLineRange(step.range, `${where}.range`, errors);
+        const allowDeletionAnchor = stepKind === 'changed';
+        const stepRange = validateLineRange(step.range, `${where}.range`, errors, { allowDeletionAnchor });
         const viewportRange = step.viewport === undefined
             ? undefined
-            : validateLineRange(step.viewport, `${where}.viewport`, errors);
+            : validateLineRange(step.viewport, `${where}.viewport`, errors, { allowDeletionAnchor });
         const containerRange = viewportRange ?? stepRange;
         const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
-        validateFocus(step, containerRange, containerName, where, errors);
-        validateHighlights(step, containerRange, containerName, where, errors);
+        validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+        validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+        validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor);
     });
     // referential integrity for calls / returnsTo
     t.steps.forEach((s, i) => {

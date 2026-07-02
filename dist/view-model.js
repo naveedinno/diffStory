@@ -57,7 +57,9 @@ function buildStep(repo, step, files, byId, total, headRef) {
     const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
     const highlights = stepHighlights(step);
-    const focusExplicit = highlights.length > 0;
+    const beats = stepBeats(step);
+    const focusGroups = stepFocusGroups(viewport, highlights, beats);
+    const focusExplicit = beats.length > 0 || highlights.length > 0;
     return {
         id: step.id,
         order: step.order,
@@ -66,13 +68,15 @@ function buildStep(repo, step, files, byId, total, headRef) {
         oldFile: diffFile?.oldPath ?? step.file,
         viewport,
         range: viewport,
-        focusRanges: focusExplicit ? highlights : [viewport],
+        focusRanges: focusGroups.flat(),
+        focusGroups,
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
         why: step.why,
+        beats,
         flow: flowLabel(step, byId, total),
         blocks,
         note,
@@ -83,6 +87,20 @@ function stepViewport(step) {
 }
 function stepHighlights(step) {
     return step.highlights ?? step.focus?.ranges ?? [];
+}
+function stepBeats(step) {
+    return (step.beats ?? []).map((beat, i) => ({
+        text: beat.text,
+        focusGroup: i,
+        highlights: beat.highlights,
+    }));
+}
+function stepFocusGroups(viewport, highlights, beats) {
+    if (beats.length)
+        return beats.map((beat) => beat.highlights);
+    if (highlights.length)
+        return highlights.map((range) => [range]);
+    return [[viewport]];
 }
 function stepBlocks(repo, step, files, headRef) {
     const viewport = stepViewport(step);

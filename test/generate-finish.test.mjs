@@ -7,7 +7,7 @@ import { finishStoryGeneration } from '../dist/server.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-generate-finish-'));
 
-function writeStory(repo, stepKind) {
+function writeStory(repo, stepKind, stepOverrides = {}) {
   const path = join(repo, '.diffstory', 'story.json');
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(
@@ -26,6 +26,7 @@ function writeStory(repo, stepKind) {
           range: [1, 1],
           kind: stepKind,
           why: 'Start here.',
+          ...stepOverrides,
         },
       ],
     }),
@@ -52,6 +53,26 @@ test('generation finish accepts only a valid written story', () => {
 test('generation finish accepts deleted as a canonical changed step', () => {
   const repo = tmp();
   const storyPath = writeStory(repo, 'deleted');
+  const session = { repo, chooseStory: true };
+
+  const out = finishStoryGeneration({ ok: true, output: '' }, storyPath, session);
+
+  assert.equal(out.status, 'complete');
+  assert.deepEqual(out.result, { storyWritten: true, storyValid: true });
+  assert.deepEqual(out.events, []);
+  assert.equal(session.selectedStory, storyPath);
+  assert.equal(session.chooseStory, false);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('generation finish accepts pure deleted-file sentinel anchors', () => {
+  const repo = tmp();
+  const storyPath = writeStory(repo, 'changed', {
+    range: [0, 0],
+    viewport: [0, 0],
+    highlights: [[0, 0]],
+  });
   const session = { repo, chooseStory: true };
 
   const out = finishStoryGeneration({ ok: true, output: '' }, storyPath, session);

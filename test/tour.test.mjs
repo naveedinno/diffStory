@@ -79,6 +79,54 @@ test('accepts viewport and highlighted lines as the storyteller display contract
   assert.deepEqual(errs, []);
 });
 
+test('accepts story beats with their own highlighted lines', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'x.ts',
+        range: [45, 52],
+        viewport: [37, 66],
+        highlights: [[45, 52]],
+        beats: [
+          { text: 'First I explain the guard.', highlights: [[45, 46]] },
+          { text: 'Then I explain the handoff.', highlights: [[51, 52]] },
+        ],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.deepEqual(errs, []);
+});
+
+test('accepts the pure deleted-file sentinel anchor', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'deleted file',
+        file: 'old-plan.md',
+        range: [0, 0],
+        viewport: [0, 0],
+        highlights: [[0, 0]],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.deepEqual(errs, []);
+});
+
 test('flags wrong version, missing title, and empty steps', () => {
   const errs = validateTour({ version: 2, steps: [] });
   assert.ok(errs.some((e) => e.includes('version')));
@@ -135,6 +183,48 @@ test('flags highlighted lines outside the viewport', () => {
     ],
   });
   assert.ok(errs.some((e) => e.includes('highlights[0] must be inside steps[0].viewport')));
+});
+
+test('flags malformed or out-of-range story beats', () => {
+  const malformed = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'x.ts',
+        range: [45, 46],
+        viewport: [37, 66],
+        beats: [{ text: '', highlights: [[45, 46]] }],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.ok(malformed.some((e) => e.includes('beats[0].text')));
+
+  const outside = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'x.ts',
+        range: [45, 46],
+        viewport: [37, 66],
+        beats: [{ text: 'Too far.', highlights: [[70, 71]] }],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.ok(outside.some((e) => e.includes('beats[0].highlights[0] must be inside steps[0].viewport')));
 });
 
 test('flags an invalid story mode', () => {

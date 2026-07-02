@@ -10,8 +10,24 @@
       "title": "Entry point: settleFunding() now clamps the rate",
       "file": "contracts/Funding.sol",
       "range": [120, 145],
+      "viewport": [120, 145],
+      "highlights": [[128, 132]],
       "kind": "changed",
-      "why": "Start here — this is the function the keeper calls each epoch. The new clamp on line 132 is the core behavior; everything else exists to support it. Verify the clamp happens before the rate is applied, not after.",
+      "why": "settleFunding() now clamps the epoch rate before applying it.",
+      "beats": [
+        {
+          "text": "Start here: this is the function the keeper calls each epoch.",
+          "highlights": [[120, 126]]
+        },
+        {
+          "text": "The clamp is the core behavior, and it needs to happen before the rate is applied.",
+          "highlights": [[128, 132]]
+        },
+        {
+          "text": "When you review this, check that the balance mutation still happens after the capped value is chosen.",
+          "highlights": [[133, 145]]
+        }
+      ],
       "calls": ["s2"],
       "tags": ["entrypoint", "core"]
     },
@@ -21,8 +37,24 @@
       "title": "The helper it delegates to: _capRate() (new)",
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
+      "viewport": [40, 58],
+      "highlights": [[44, 52]],
       "kind": "new-file",
-      "why": "settleFunding() hands the clamping off here. The unchecked block on 50 is safe because cap is guaranteed <= type(uint128).max by the require on line 44 — confirm that invariant holds.",
+      "why": "_capRate() owns the boundary rule that settleFunding() now delegates.",
+      "beats": [
+        {
+          "text": "settleFunding() hands the clamping off here so the entry point stays about flow.",
+          "highlights": [[40, 43]]
+        },
+        {
+          "text": "This require is the safety hinge for the unchecked math below.",
+          "highlights": [[44, 44]]
+        },
+        {
+          "text": "Now check that the returned value is capped without changing under-limit rates.",
+          "highlights": [[48, 58]]
+        }
+      ],
       "returnsTo": "s1",
       "tags": ["helper"]
     },
@@ -32,8 +64,20 @@
       "title": "Where the cap is read from: marketConfig",
       "file": "contracts/storage/MarketConfig.sol",
       "range": [88, 92],
+      "viewport": [88, 92],
+      "highlights": [[88, 92]],
       "kind": "context",
-      "why": "Unchanged, but you need to see it: _capRate() reads fundingRateCap from this struct. It's per-market, so each market can set its own ceiling. Nothing here changed — just orienting you.",
+      "why": "marketConfig is unchanged context for the per-market cap source.",
+      "beats": [
+        {
+          "text": "Unchanged, but you need to see it: _capRate() reads fundingRateCap from this struct.",
+          "highlights": [[88, 90]]
+        },
+        {
+          "text": "Because this is per-market storage, each market can set its own ceiling.",
+          "highlights": [[91, 92]]
+        }
+      ],
       "tags": ["context"]
     },
     {
@@ -42,8 +86,24 @@
       "title": "Test: cap is enforced at the boundary",
       "file": "test/Funding.t.sol",
       "range": [210, 240],
+      "viewport": [210, 240],
+      "highlights": [[210, 240]],
       "kind": "changed",
-      "why": "Confirms the cap clamps an over-limit rate and leaves an under-limit rate untouched. Check that the boundary case (rate == cap) is asserted, since that's the off-by-one risk in _capRate().",
+      "why": "The funding test proves over-limit, under-limit, and boundary behavior.",
+      "beats": [
+        {
+          "text": "Final proof: this test confirms the cap clamps an over-limit rate.",
+          "highlights": [[210, 220]]
+        },
+        {
+          "text": "It also leaves an under-limit rate untouched, which protects the normal path.",
+          "highlights": [[221, 231]]
+        },
+        {
+          "text": "Pause on the rate-equals-cap case because that is the off-by-one risk in _capRate().",
+          "highlights": [[232, 240]]
+        }
+      ],
       "tags": ["test"]
     }
   ]
