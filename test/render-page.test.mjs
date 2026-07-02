@@ -840,3 +840,42 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /codexProfile:/);
   assert.doesNotMatch(html, /codexConfig:/);
 });
+
+test('intro panel leads with the recovered intent and cites its sources', () => {
+  const intentTour = {
+    ...tour,
+    intent: {
+      goal: 'We wanted ops to cap runaway fees before settlement.',
+      design: 'The keeper clamps through one shared helper.',
+      sources: ['commit abc1234', 'PR #7 body'],
+    },
+  };
+  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-intro-lede">We wanted ops to cap runaway fees before settlement\./);
+  assert.match(html, /class="ds-intro-design">The keeper clamps through one shared helper\./);
+  assert.match(html, /class="ds-intro-sources">Why from commit abc1234 · PR #7 body</);
+});
+
+test('intro panel keeps the summary as the reading map when intent exists', () => {
+  const intentTour = { ...tour, intent: { goal: 'Cap runaway fees.' } };
+  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-intro-lede">Cap runaway fees\./);
+  assert.match(html, /class="ds-intro-design">One changed line\./);
+});
+
+test('intro panel falls back to the summary lede without an intent block', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-intro-lede">One changed line\./);
+  // The static stylesheet always carries the .ds-intro-sources rule, so pin
+  // the absence of the rendered *markup* (class attribute), not the bare name.
+  assert.doesNotMatch(html, /class="ds-intro-sources"/);
+  assert.doesNotMatch(html, /class="ds-intro-design"/);
+});
+
+test('intent text is HTML-escaped in the intro panel', () => {
+  const intentTour = { ...tour, intent: { goal: 'Guard <script> tags', sources: ['a & b'] } };
+  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /Guard &lt;script&gt; tags/);
+  assert.match(html, /a &amp; b/);
+  assert.doesNotMatch(html, /Guard <script> tags/);
+});

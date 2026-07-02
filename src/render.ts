@@ -404,10 +404,22 @@ function introPanel(model: ReviewModel, tour: Tour): string {
   const n = model.totalSteps;
   const trust = model.trust.uncovered.length;
   const first = model.steps[0];
-  const summary =
-    tour.summary && tour.summary.trim()
-      ? nl(esc(tour.summary.trim()))
-      : 'Each step builds on the one before it — read them in order, or jump to any file from the list.';
+  const intent = tour.intent;
+  const summaryText = tour.summary && tour.summary.trim() ? nl(esc(tour.summary.trim())) : '';
+  const goalText = intent?.goal?.trim() ? nl(esc(intent.goal.trim())) : '';
+  // With a recovered intent the goal leads and the summary becomes the reading
+  // map; without one the summary (or a generic line) is the lede, as before.
+  const lede =
+    goalText ||
+    summaryText ||
+    'Each step builds on the one before it — read them in order, or jump to any file from the list.';
+  const design =
+    goalText && intent?.design?.trim() ? `<p class="ds-intro-design">${nl(esc(intent.design.trim()))}</p>` : '';
+  const map = goalText && summaryText ? `<p class="ds-intro-design">${summaryText}</p>` : '';
+  const sources =
+    goalText && intent?.sources?.length
+      ? `<p class="ds-intro-sources">Why from ${intent.sources.map((s) => esc(s)).join(' · ')}</p>`
+      : '';
   const filesLabel = `${plural(model.filesChanged, 'file')} changed${
     model.contextFiles ? ` · ${model.contextFiles} for context` : ''
   }`;
@@ -427,7 +439,8 @@ function introPanel(model: ReviewModel, tour: Tour): string {
     <div class="ds-introwrap">
       <span class="ds-intro-eyebrow">${STORY_MARK}<span>The story of this change</span></span>
       <h1 class="ds-intro-title">${esc(tour.title)}</h1>
-      <p class="ds-intro-lede">${summary}</p>
+      <p class="ds-intro-lede">${lede}</p>
+      ${design}${map}${sources}
       <div class="ds-intro-facts">
         <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(
     n,
