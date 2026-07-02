@@ -429,7 +429,7 @@ Falsifiable checks — run each one, do not skim:
   "version": 1,
   "mode": "guided",
   "title": "<short title for the whole change>",
-  "summary": "<1-3 short sentences: what we wanted to enable + the designed flow + how to walk the implementation + where to slow down>",
+  "summary": "<1-3 short sentences: how the steps walk the implementation + where to slow down; the goal and designed flow live in intent, not here>",
   "intent": {
     "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
     "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
