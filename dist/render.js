@@ -9,8 +9,8 @@ import { APP_BRAND } from './config.js';
 import { BRAND_HEAD_LINKS, brandMarkSvg, brandStoryMarkSvg } from './brand.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
-import { highlight } from './highlight.js';
 import { intraLineMap } from './intra-line.js';
+import { renderSplitRow, renderUnifiedRow, renderHunkGap } from './diff-render.js';
 import { normalizeComment } from './comments.js';
 const FLAVOR_LABEL = {
     change: 'Change request',
@@ -25,16 +25,6 @@ const STATUS_LABEL = {
 };
 function commentSide(c) {
     return c.side === 'left' ? 'left' : 'right';
-}
-function targetAttrs(target) {
-    return target
-        ? ` data-comment-code="1" data-comment-side="${target.side}" data-comment-file="${esc(target.file)}" data-comment-line="${target.line}"`
-        : '';
-}
-function rowAttrs(target, step) {
-    return target
-        ? ` data-file="${esc(target.file)}" data-line="${target.line}" data-side="${target.side}"${step ? ` data-step="${esc(step)}"` : ''}`
-        : '';
 }
 function threadForTargets(targets, comments) {
     const here = comments.filter((c) => targets.some((t) => t && commentSide(c) === t.side && c.file === t.file && c.line === t.line));
@@ -591,7 +581,7 @@ function diffInner(s, comments) {
     const body = s.blocks
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return ((bi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
+        return ((bi > 0 ? renderHunkGap() : '') +
             block.map((row) => sbsRow(row, s, comments, bi, intra)).join(''));
     })
         .join('');
@@ -631,17 +621,15 @@ function sbsRow(row, s, comments, blockIndex, intra) {
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : undefined;
     const rightTarget = row.newNo !== undefined ? { side: 'right', file: s.file, line: row.newNo } : undefined;
-    const primaryTarget = rightTarget ?? leftTarget;
-    const attrs = rowAttrs(primaryTarget, primaryTarget ? s.id : undefined);
-    const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
-    const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
-    const sides = intra?.get(row);
-    const cells = s.context || s.newFile
-        ? singleCell(row, rightTarget)
-        : `${cell('left', row, leftTarget, sides?.left)}<span class="ds-celldiv"></span>${cell('right', row, rightTarget, sides?.right)}`;
-    const rowHtml = `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}</div>`;
-    const thread = threadForTargets([leftTarget, rightTarget], comments);
-    return rowHtml + thread;
+    const rowHtml = renderSplitRow(row, {
+        leftTarget,
+        rightTarget,
+        stepId: s.id,
+        focusIndex: rowVoiceFocusIndex(row, s, blockIndex),
+        single: s.context || s.newFile,
+        sides: intra?.get(row),
+    });
+    return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
 }
 function rowVoiceFocusIndex(row, s, blockIndex) {
     const idx = s.focusGroups.findIndex((ranges) => ranges.some((range) => rowInFocusRange(row, s, range)));
@@ -654,48 +642,6 @@ function rowInFocusRange(row, s, [start, end]) {
     if (row.newNo !== undefined)
         return row.newNo >= start && row.newNo <= end;
     return s.kind === 'changed' && row.type === 'del' && start === 0 && end === 0;
-}
-function cell(side, row, target, intra) {
-    const add = row.type === 'add';
-    const del = row.type === 'del';
-    const sideCls = side === 'left' ? ' ds-cell-l' : ' ds-cell-r';
-    // An add has no left counterpart; a del has no right counterpart.
-    if ((side === 'left' && add) || (side === 'right' && del)) {
-        return `<span class="ds-cell ds-cell-empty${sideCls}"></span>`;
-    }
-    let no = '';
-    let sign = '';
-    let signClass = '';
-    if (side === 'left') {
-        no = row.oldNo !== undefined ? String(row.oldNo) : '';
-        if (del) {
-            sign = '−';
-            signClass = ' ds-sign-del';
-        }
-    }
-    else {
-        no = row.newNo !== undefined ? String(row.newNo) : '';
-        if (add) {
-            sign = '+';
-            signClass = ' ds-sign-add';
-        }
-    }
-    let tint = '';
-    if (side === 'right' && add)
-        tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
-    else if (side === 'left' && del)
-        tint = ' ds-cell-del';
-    const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlight(row.content)) || ' '}</span>${flag}</span>`;
-}
-function singleCell(row, target) {
-    const no = row.newNo ?? row.oldNo ?? '';
-    const add = row.type === 'add';
-    const sign = add ? '+' : '';
-    const signCls = add ? ' ds-sign-add' : '';
-    const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
-    const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${highlight(row.content) || ' '}</span>${flag}</span>`;
 }
 function turnHtml(t) {
     if (t.role === 'user') {
@@ -767,7 +713,7 @@ function filePanel(f, i, stepIndexById) {
         ? f.hunks
             .map((hunk, hi) => {
             const intra = intraLineMap(hunk, (r) => r.type, (r) => r.content);
-            return ((hi > 0 ? `<div class="ds-hunkgap"><span>⋯</span></div>` : '') +
+            return ((hi > 0 ? renderHunkGap() : '') +
                 hunk.map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra))).join(''));
         })
             .join('')
@@ -796,8 +742,6 @@ function filePanel(f, i, stepIndexById) {
   </section>`;
 }
 function unifiedRow(row, file, oldFile = file, intra) {
-    const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
-    const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
     const target = row.no === undefined
         ? undefined
         : {
@@ -805,8 +749,7 @@ function unifiedRow(row, file, oldFile = file, intra) {
             file: row.type === 'del' ? oldFile : file,
             line: row.no,
         };
-    const attrs = rowAttrs(target);
-    return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${row.no ?? ''}</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlight(row.content)) || ' '}</span>${flag}</div>`;
+    return renderUnifiedRow(row, target, intra);
 }
 /** Look up a unified row's precomputed intra-line side (del→left, add→right). */
 function unifiedIntra(row, map) {
@@ -884,11 +827,7 @@ function fullRow(row, opts, intra) {
         ? { side: 'left', file: opts.oldFile ?? opts.file, line: row.oldNo }
         : undefined;
     const rightTarget = row.newNo !== undefined ? { side: 'right', file: opts.file, line: row.newNo } : undefined;
-    const primaryTarget = rightTarget ?? leftTarget;
-    const sides = intra?.get(row);
-    const cells = `${cell('left', row, leftTarget, sides?.left)}<span class="ds-celldiv"></span>${cell('right', row, rightTarget, sides?.right)}`;
-    const attrs = rowAttrs(primaryTarget);
-    return `<div class="ds-row ds-row-${row.type}"${attrs}>${cells}</div>`;
+    return renderSplitRow(row, { leftTarget, rightTarget, sides: intra?.get(row) });
 }
 // ---- shared bits ----
 const BRAND_MARK = brandMarkSvg('ds-mark', 24, 24);
