@@ -5,7 +5,8 @@
 
 export type Phase =
   | 'idle' | 'preflight' | 'resolving_context' | 'preparing_prompt'
-  | 'starting_agent' | 'agent_running' | 'reading_changes' | 'writing_output'
+  | 'starting_agent' | 'agent_running' | 'reading_changes'
+  | 'recovering_why' | 'designing_path' | 'writing_output'
   | 'validating_output' | 'applying_results' | 'complete' | 'failed' | 'stopped';
 
 export type ErrorStage =
@@ -54,6 +55,8 @@ export const PHASE_LABELS: Record<Phase, string> = {
   starting_agent: 'Starting the agent',
   agent_running: 'Agent is working',
   reading_changes: 'Reading the change',
+  recovering_why: 'Recovering the why',
+  designing_path: 'Designing the reading path',
   writing_output: 'Writing output',
   validating_output: 'Validating output',
   applying_results: 'Applying results',
@@ -65,8 +68,8 @@ export const PHASE_LABELS: Record<Phase, string> = {
 // Monotonic ordering so the displayed phase never moves backward.
 const PHASE_ORDER: Phase[] = [
   'idle', 'preflight', 'resolving_context', 'preparing_prompt', 'starting_agent',
-  'agent_running', 'reading_changes', 'writing_output', 'validating_output',
-  'applying_results', 'complete',
+  'agent_running', 'reading_changes', 'recovering_why', 'designing_path',
+  'writing_output', 'validating_output', 'applying_results', 'complete',
 ];
 
 export function phaseRank(phase: Phase): number {
@@ -141,6 +144,11 @@ export function observedPhase(event: ProgressEvent, isTargetWrite: boolean): Pha
     if (event.action === 'read') return 'reading_changes';
     if (isTargetWrite) return 'writing_output';
     return null;
+  }
+  // Intent-evidence commands (the story prompt's Phase 1) prove the agent is
+  // recovering the why; keep the pattern narrow so ordinary git use doesn't match.
+  if (event.type === 'command' && /\bgit log\b|\bgh pr view\b/.test(event.command)) {
+    return 'recovering_why';
   }
   if (event.type === 'activity' && event.kind === 'search') return 'reading_changes';
   return null;

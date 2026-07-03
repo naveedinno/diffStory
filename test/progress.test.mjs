@@ -37,7 +37,7 @@ test('phaseEvent fills the default label and keeps detail optional', () => {
 test('PHASE_LABELS covers every phase', () => {
   for (const p of [
     'idle', 'preflight', 'resolving_context', 'preparing_prompt', 'starting_agent',
-    'agent_running', 'reading_changes', 'writing_output', 'validating_output',
+    'agent_running', 'reading_changes', 'recovering_why', 'designing_path', 'writing_output', 'validating_output',
     'applying_results', 'complete', 'failed', 'stopped',
   ]) {
     assert.equal(typeof PHASE_LABELS[p], 'string');
@@ -111,4 +111,19 @@ test('planEvent carries the agent checklist verbatim', () => {
       ],
     },
   );
+});
+
+test('story phases slot between reading and writing, with labels', () => {
+  assert.ok(phaseRank('reading_changes') < phaseRank('recovering_why'));
+  assert.ok(phaseRank('recovering_why') < phaseRank('designing_path'));
+  assert.ok(phaseRank('designing_path') < phaseRank('writing_output'));
+  assert.equal(PHASE_LABELS.recovering_why, 'Recovering the why');
+  assert.equal(PHASE_LABELS.designing_path, 'Designing the reading path');
+});
+
+test('observedPhase proves recovering_why on intent-evidence commands only', () => {
+  assert.equal(observedPhase(commandEvent('git log --oneline -15 main..HEAD'), false), 'recovering_why');
+  assert.equal(observedPhase(commandEvent('gh pr view --json title,body'), false), 'recovering_why');
+  assert.equal(observedPhase(commandEvent('git diff --stat'), false), null);
+  assert.equal(observedPhase(commandEvent('npm test'), false), null);
 });
