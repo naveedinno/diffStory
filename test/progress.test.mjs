@@ -143,6 +143,17 @@ test('parseAgentNoteLine maps exact markers to phases, other notes to narration'
   assert.equal(parseAgentNoteLine(''), null);
 });
 
+test('parseAgentNoteLine ignores trailing punctuation on phase markers', () => {
+  assert.deepEqual(parseAgentNoteLine('>> Designing the reading path.'), phaseEvent('designing_path'));
+  assert.deepEqual(parseAgentNoteLine('>> Recovering the why!'), phaseEvent('recovering_why'));
+  assert.deepEqual(parseAgentNoteLine('>> Writing the steps...'), phaseEvent('writing_output'));
+  // Narration keeps its punctuation untouched.
+  assert.deepEqual(
+    parseAgentNoteLine('>> Found the entry point!'),
+    activityEvent('narration', 'Found the entry point!'),
+  );
+});
+
 test('parseAgentNoteLine clips runaway narration to 300 chars', () => {
   const long = '>> ' + 'x'.repeat(400);
   const e = parseAgentNoteLine(long);
@@ -184,6 +195,19 @@ test('createFileEnricher relativizes paths and counts distinct changed-file read
   // Non-file events pass through by reference.
   const t = textEvent('x');
   assert.equal(enrich(t), t);
+});
+
+test('createFileEnricher suffix-matches a changed tail from another directory (deliberate trade-off)', () => {
+  // matchChanged falls back to a suffix check so agents that report paths
+  // under an unexpected prefix (absolute paths outside repoPath, worktree
+  // copies) still count toward "n of N". The cost, pinned here: reading
+  // vendor/a.ts counts as the changed a.ts even though it is a different file.
+  const enrich = createFileEnricher({ repoPath: '/repo', changedFiles: ['a.ts'] });
+  const e = enrich(fileEvent('read', 'Read', '/repo/vendor/a.ts'));
+  assert.equal(e.rel, 'vendor/a.ts');
+  assert.equal(e.changedIndex, 1);
+  assert.equal(e.changedTotal, 1);
+  assert.equal(e.label, 'Reading changed files · 1 of 1 · vendor/a.ts');
 });
 
 test('createFileEnricher with an empty scope only relativizes', () => {

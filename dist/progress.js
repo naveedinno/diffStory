@@ -99,7 +99,8 @@ export function observedPhase(event, isTargetWrite) {
     return null;
 }
 // Exact phase markers the story prompt tells the agent to print (matched
-// case-insensitively after trimming). Anything else after ">> " is narration.
+// case-insensitively after trimming; trailing `.`/`!` ignored, since agents
+// like to punctuate). Anything else after ">> " is narration.
 const NOTE_MARKERS = [
     ['recovering the why', 'recovering_why'],
     ['designing the reading path', 'designing_path'],
@@ -117,7 +118,7 @@ export function parseAgentNoteLine(line) {
     const text = m[1];
     if (!text.trim())
         return null;
-    const low = text.toLowerCase();
+    const low = text.toLowerCase().replace(/[.!\s]+$/, '');
     for (const [marker, phase] of NOTE_MARKERS) {
         if (low === marker)
             return phaseEvent(phase);
@@ -139,6 +140,10 @@ function relPath(target, repoPath) {
     const root = repoPath.endsWith('/') ? repoPath : repoPath + '/';
     return target.startsWith(root) ? target.slice(root.length) : target;
 }
+// The suffix match tolerates agents that report paths under an unexpected
+// prefix (absolute paths outside repoPath, worktree copies). Deliberate
+// trade-off, pinned in tests: an unrelated deeper file with the same tail
+// (vendor/a.ts when a.ts changed) also counts as a changed-file read.
 function matchChanged(rel, changed) {
     for (const c of changed) {
         if (rel === c || rel.endsWith('/' + c))
