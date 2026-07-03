@@ -48,6 +48,21 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
   assert.ok(s.includes('Writing the story'));
 });
 
+test('finished runs stop the milestone pulse', () => {
+  // Failed/stopped runs leave an is-active milestone behind; the panel marks
+  // the root is-finished so its dot stops pulsing forever.
+  const css = progressPanelStyles();
+  assert.match(css, /\.ds-pp\.is-finished \.ds-pp-mile-dot\{animation:none\}/);
+  const s = progressPanelScript();
+  assert.match(s, /setFinished\(true\)/);
+  assert.match(s, /setFinished\(false\)/);
+});
+
+test("'>>' note lines never echo into the mono activity line", () => {
+  const s = progressPanelScript();
+  assert.ok(s.includes("ln.indexOf('>>')!==0"), 'text handler should skip >> lines');
+});
+
 test('styles target the panel and adapt to dark mode', () => {
   const css = progressPanelStyles();
   assert.match(css, /\.ds-pp\b/);

@@ -69,6 +69,7 @@ export function progressPanelStyles() {
 .ds-pp-mile.is-done .ds-pp-mile-dot{background:var(--pp-ok);border-color:var(--pp-ok)}
 .ds-pp-mile.is-active{color:var(--pp-text);font-weight:600}
 .ds-pp-mile.is-active .ds-pp-mile-dot{background:var(--pp-blue);border-color:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
+.ds-pp.is-finished .ds-pp-mile-dot{animation:none}
 .ds-pp-note{padding:10px 14px 2px;font-size:13px;line-height:1.45;color:var(--pp-text)}
 .ds-pp-note[hidden]{display:none}
 .ds-pp[data-variant="stage"]{margin-top:28px;display:flex;flex-direction:column;max-height:none}
@@ -196,6 +197,10 @@ function ProgressPanel(root, opts){
     var t=clip(text,220); if(!t||!els.note)return;
     els.note.textContent=t; els.note.hidden=false;
   }
+  function setFinished(on){
+    var c=root.className.replace(/\\s*\\bis-finished\\b/g,'');
+    root.className=on?(c+' is-finished'):c;
+  }
   function agentChip(agent,model){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; return model?(a+' · '+model):a; }
   function repoLine(ev){
     var p=ev.repoName||'';
@@ -204,7 +209,7 @@ function ProgressPanel(root, opts){
     return p;
   }
   function start(){
-    root.hidden=false; t0=Date.now();
+    root.hidden=false; t0=Date.now(); setFinished(false);
     workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working';
     miles=null; mileIdx=-1;
     if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
@@ -251,7 +256,9 @@ function ProgressPanel(root, opts){
       case 'tool': setCurrent(ev.label); break;
       case 'text':
         appendRaw(ev.data||'');
-        if(!hasPlan){ var ln=clip(firstLine(ev.data),120); if(ln)setCurrent(ln); } break;
+        // '>>' notes reach the panel as narration/phase events; echoing them
+        // here would duplicate them into the mono activity line.
+        if(!hasPlan){ var ln=clip(firstLine(ev.data),120); if(ln&&ln.indexOf('>>')!==0)setCurrent(ln); } break;
       case 'heartbeat': setLive(curState, ev.quietMs); break;
       case 'warning': appendRaw('[warn] '+(ev.label||'')+NL); break;
       case 'error': appendRaw('[error] '+(ev.label||'')+(ev.detail?(' — '+ev.detail):'')+NL); break;
@@ -259,7 +266,7 @@ function ProgressPanel(root, opts){
     }
   }
   function finish(status, result){
-    stopTimer();
+    stopTimer(); setFinished(true);
     if(els.spin)els.spin.hidden=true;
     if(els.stop)els.stop.hidden=true;
     if(els.close)els.close.hidden=false;
