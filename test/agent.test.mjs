@@ -498,3 +498,11 @@ test('parseCodexStreamLine forwards prose as text and $-lines as commands', () =
   assert.equal(cmd[0].type, 'command');
   assert.equal(cmd[0].command, 'npm test');
 });
+
+test('storyPrompt requires live >> phase markers and notes', () => {
+  const p = storyPrompt('main');
+  assert.match(p, /">> Recovering the why"/);
+  assert.match(p, /">> Designing the reading path"/);
+  assert.match(p, /">> Writing the steps"/);
+  assert.match(p, /starting with ">> "/);
+});
