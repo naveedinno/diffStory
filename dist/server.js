@@ -817,6 +817,19 @@ function runAddress(res, session, body) {
         fileScope: { repoPath: addressCtx.runRepo, changedFiles: [] },
     });
 }
+/**
+ * `git diff --numstat` renders renames as `dir/{old => new}/file` (or bare
+ * `old => new`). Changed-file matching needs the post-rename path — the file
+ * the agent will actually read — else "n of N" carries an unreachable N.
+ */
+export function postRenamePath(path) {
+    if (!path.includes(' => '))
+        return path;
+    if (path.includes('{')) {
+        return path.replace(/\{[^{}]*? => ([^{}]*?)\}/g, '$1').replace(/\/{2,}/g, '/');
+    }
+    return path.slice(path.indexOf(' => ') + 4);
+}
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
 function runGenerate(res, session, body) {
     let input = {};
@@ -856,7 +869,7 @@ function runGenerate(res, session, body) {
     // The exact changed files the review shows (noise subtracted), so file-read
     // progress can honestly say "3 of 8 changed files".
     const changedFiles = numstat(repo, promptBase, promptHead)
-        .map((f) => f.path)
+        .map((f) => postRenamePath(f.path))
         .filter((p) => !excludePaths.includes(p));
     runWorkflow(res, repo, {
         workflow,
