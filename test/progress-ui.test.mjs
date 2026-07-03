@@ -16,6 +16,8 @@ test('markup exposes the plan-centric regions for both variants', () => {
     assert.match(m, /data-pp-stop/);
     assert.match(m, /data-pp-close/);
     assert.match(m, new RegExp(`data-variant="${variant}"`));
+    assert.match(m, /ds-pp-miles/);
+    assert.match(m, /ds-pp-note/);
     // The old noisy regions are gone.
     assert.doesNotMatch(m, /ds-pp-timeline/);
     assert.doesNotMatch(m, /ds-pp-phase-label/);
@@ -39,10 +41,18 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
   // Preserved public surface used by callers.
   assert.match(s, /showFoot/);
   assert.match(s, /ds-pp-reload|reload/);
+  assert.match(s, /ds-pp-mile/);
+  assert.match(s, /'narration'/);
+  assert.ok(s.includes('Recovering the why'));
+  assert.ok(s.includes('Designing the reading path'));
+  assert.ok(s.includes('Writing the story'));
 });
 
 test('styles target the panel and adapt to dark mode', () => {
   const css = progressPanelStyles();
   assert.match(css, /\.ds-pp\b/);
   assert.match(css, /prefers-color-scheme:\s*dark/);
+  assert.match(css, /data-variant="stage"/);
+  assert.match(css, /ds-pp-miles/);
+  assert.match(css, /ds-pp-note/);
 });

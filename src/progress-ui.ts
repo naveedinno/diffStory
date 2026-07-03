@@ -62,6 +62,21 @@ export function progressPanelStyles(): string {
 .ds-pp-foot{padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px}
 .ds-pp-foot[hidden]{display:none}
 .ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--pp-blue);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
+.ds-pp-miles{list-style:none;display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:10px 14px 2px}
+.ds-pp-miles[hidden]{display:none}
+.ds-pp-mile{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pp-faint)}
+.ds-pp-mile-dot{flex:none;width:7px;height:7px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25);box-sizing:border-box}
+.ds-pp-mile.is-done{color:var(--pp-muted)}
+.ds-pp-mile.is-done .ds-pp-mile-dot{background:var(--pp-ok);border-color:var(--pp-ok)}
+.ds-pp-mile.is-active{color:var(--pp-text);font-weight:600}
+.ds-pp-mile.is-active .ds-pp-mile-dot{background:var(--pp-blue);border-color:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
+.ds-pp-note{padding:10px 14px 2px;font-size:13px;line-height:1.45;color:var(--pp-text)}
+.ds-pp-note[hidden]{display:none}
+.ds-pp[data-variant="stage"]{margin-top:28px;display:flex;flex-direction:column;max-height:none}
+.ds-pp[data-variant="stage"] .ds-pp-title{font-size:15px}
+.ds-pp[data-variant="stage"] .ds-pp-miles{padding:12px 16px 4px;gap:8px 16px}
+.ds-pp[data-variant="stage"] .ds-pp-mile{font-size:12.5px}
+.ds-pp[data-variant="stage"] .ds-pp-note{font-size:14px;padding:12px 16px 4px}
 `;
 }
 
@@ -77,6 +92,8 @@ export function progressPanelMarkup(variant: 'inline' | 'floating'): string {
     <button class="ds-pp-close" data-pp-close hidden>Close</button>
   </div>
   <div class="ds-pp-sub"><span class="ds-pp-repo"></span></div>
+  <ol class="ds-pp-miles" hidden></ol>
+  <div class="ds-pp-note" hidden></div>
   <ol class="ds-pp-plan"></ol>
   <div class="ds-pp-now" hidden></div>
   <div class="ds-pp-live" hidden><span class="ds-pp-live-dot" aria-hidden="true"></span><span class="ds-pp-live-tx">Starting…</span><span class="ds-pp-live-count"></span></div>
@@ -97,10 +114,29 @@ function ProgressPanel(root, opts){
     plan:q('.ds-pp-plan'), now:q('.ds-pp-now'), live:q('.ds-pp-live'),
     liveTx:q('.ds-pp-live-tx'), liveCount:q('.ds-pp-live-count'),
     details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
-    stop:q('[data-pp-stop]'), close:q('[data-pp-close]')
+    stop:q('[data-pp-stop]'), close:q('[data-pp-close]'),
+    miles:q('.ds-pp-miles'), note:q('.ds-pp-note')
   };
   var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review',address:'Addressing comments'};
   var DONE={guided_review:'Review ready',detailed_audit:'Review ready',address:'Comments addressed'};
+  var MILES={
+    guided_review:[
+      {label:'Preparing',phases:['idle','preflight','resolving_context','preparing_prompt','starting_agent','agent_running']},
+      {label:'Recovering the why',phases:['reading_changes','recovering_why']},
+      {label:'Designing the reading path',phases:['designing_path']},
+      {label:'Writing the story',phases:['writing_output']},
+      {label:'Checking the result',phases:['validating_output','applying_results']},
+      {label:'Ready',phases:['complete']}
+    ],
+    address:[
+      {label:'Preparing',phases:['idle','preflight','resolving_context','preparing_prompt','starting_agent','agent_running']},
+      {label:'Working the comments',phases:['reading_changes','recovering_why','designing_path','writing_output','applying_results']},
+      {label:'Checking',phases:['validating_output']},
+      {label:'Done',phases:['complete']}
+    ]
+  };
+  MILES.detailed_audit=MILES.guided_review;
+  var miles=null, mileIdx=-1;
   var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working';
   var t0=0, timer=null;
   function elapsed(){ var s=Math.round((Date.now()-t0)/1000); return s<60?(s+'s'):(Math.floor(s/60)+'m '+(s%60)+'s'); }
@@ -141,6 +177,28 @@ function ProgressPanel(root, opts){
     els.plan.scrollTop=els.plan.scrollHeight;
     if(els.liveCount)els.liveCount.textContent=planDone+' of '+planTotal+' done';
   }
+  function renderMiles(){
+    if(!els.miles||!miles)return;
+    els.miles.hidden=false; els.miles.textContent='';
+    for(var i=0;i<miles.length;i++){
+      var li=document.createElement('li');
+      li.className='ds-pp-mile '+(i<mileIdx?'is-done':i===mileIdx?'is-active':'is-pending');
+      var dot=document.createElement('span'); dot.className='ds-pp-mile-dot';
+      var tx=document.createElement('span'); tx.textContent=miles[i].label;
+      li.appendChild(dot); li.appendChild(tx);
+      els.miles.appendChild(li);
+    }
+  }
+  function advanceMiles(phase){
+    if(!miles)return;
+    for(var i=0;i<miles.length;i++){
+      if(miles[i].phases.indexOf(phase)>=0){ if(i>mileIdx){mileIdx=i;renderMiles();} return; }
+    }
+  }
+  function setNote(text){
+    var t=clip(text,220); if(!t||!els.note)return;
+    els.note.textContent=t; els.note.hidden=false;
+  }
   function agentChip(agent,model){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; return model?(a+' · '+model):a; }
   function repoLine(ev){
     var p=ev.repoName||'';
@@ -151,6 +209,9 @@ function ProgressPanel(root, opts){
   function start(){
     root.hidden=false; t0=Date.now();
     workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working';
+    miles=null; mileIdx=-1;
+    if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
+    if(els.note){els.note.textContent='';els.note.hidden=true;}
     if(els.spin)els.spin.hidden=false;
     if(els.stop)els.stop.hidden=false;
     if(els.close)els.close.hidden=true;
@@ -172,11 +233,13 @@ function ProgressPanel(root, opts){
       case 'run_started':
         workflow=ev.workflow||'';
         if(els.title)els.title.textContent=WORK[workflow]||ev.label||'Working…';
+        miles=MILES[workflow]||null; mileIdx=miles?0:-1; if(miles)renderMiles();
         curState='Working'; setLive('Working',0); break;
       case 'context':
         if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model);
         if(els.repo)els.repo.textContent=repoLine(ev); break;
       case 'phase':
+        advanceMiles(ev.phase);
         if(ev.phase==='validating_output'||ev.phase==='applying_results'){
           if(els.title)els.title.textContent='Checking the result…';
           curState='Checking'; setLive('Checking',0);
@@ -184,7 +247,10 @@ function ProgressPanel(root, opts){
       case 'plan': renderPlan(ev.items); break;
       case 'file': setCurrent(ev.label); break;
       case 'command': setCurrent(ev.label); break;
-      case 'activity': setCurrent(ev.label); break;
+      case 'activity':
+        if(ev.kind==='narration')setNote(ev.label);
+        else setCurrent(ev.label);
+        break;
       case 'tool': setCurrent(ev.label); break;
       case 'text':
         appendRaw(ev.data||'');
@@ -201,6 +267,7 @@ function ProgressPanel(root, opts){
     if(els.stop)els.stop.hidden=true;
     if(els.close)els.close.hidden=false;
     var ok=(status==='complete');
+    if(ok&&miles){ mileIdx=miles.length; renderMiles(); }
     if(els.title)els.title.textContent=ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':"Couldn't finish";
     if(els.now)els.now.hidden=true;
     if(els.live){
