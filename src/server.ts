@@ -19,6 +19,7 @@ import {
   emptyTree,
   resolveCommit,
   noiseFiles,
+  numstat,
 } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
@@ -55,8 +56,8 @@ import {
 } from './agent.js';
 import {
   runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent,
-  observedPhase, phaseRank,
-  type ProgressEvent, type Phase, type Workflow, type RunContext, type RunStatus,
+  observedPhase, phaseRank, noteEventsFromText, createFileEnricher,
+  type ProgressEvent, type Phase, type Workflow, type RunContext, type RunStatus, type FileScope,
 } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession, type Session } from './session.js';
@@ -642,6 +643,8 @@ interface WorkflowSpec {
   finish: (r: StreamResult) => { status: RunStatus; result: Record<string, unknown>; events: ProgressEvent[] };
   /** Optional cleanup for temp checkouts created only for this workflow. */
   cleanup?: () => void;
+  /** Optional file scope: relativize file-event paths and count distinct changed-file reads. */
+  fileScope?: FileScope;
 }
 
 export function finishStoryGeneration(
@@ -721,15 +724,24 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     if (!ac.signal.aborted) send(heartbeatEvent(nowMs() - lastActivity));
   }, 5000);
 
+  const enrich = spec.fileScope ? createFileEnricher(spec.fileScope) : (e: ProgressEvent) => e;
+
   streamAgent(
     spec.agent,
     repo,
     spec.prompt,
     (ev) => {
       lastActivity = nowMs();
-      send(ev);
-      const ph = observedPhase(ev, spec.isTargetWrite(ev));
+      const out = enrich(ev);
+      send(out);
+      const ph = observedPhase(out, spec.isTargetWrite(out));
       if (ph) advance(ph);
+      if (out.type === 'text') {
+        for (const note of noteEventsFromText(out.data)) {
+          if (note.type === 'phase') advance(note.phase, note.label);
+          else send(note);
+        }
+      }
     },
     spec.model,
     ac.signal,
@@ -895,6 +907,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
       return { status, result: { codeChanged }, events };
     },
     cleanup: addressCtx.cleanup,
+    fileScope: { repoPath: addressCtx.runRepo, changedFiles: [] },
   });
 }
 
@@ -946,6 +959,11 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   // the agent's diff just as they are from the rendered review and coverage gate,
   // so all three agree and the agent doesn't waste a run narrating a 20k-line ABI.
   const excludePaths = noiseFiles(repo, promptBase, promptHead);
+  // The exact changed files the review shows (noise subtracted), so file-read
+  // progress can honestly say "3 of 8 changed files".
+  const changedFiles = numstat(repo, promptBase, promptHead)
+    .map((f) => f.path)
+    .filter((p) => !excludePaths.includes(p));
 
   runWorkflow(res, repo, {
     workflow,
@@ -962,6 +980,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     // For generate, the output is the story file.
     isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
     finish: (r) => finishStoryGeneration(r, storyPath, session),
+    fileScope: { repoPath: repo, changedFiles },
   });
 }
 

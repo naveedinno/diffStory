@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
 import { loadTour } from './tour.js';
-import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, } from './git.js';
+import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
@@ -20,7 +20,7 @@ import { buildFullFileRows } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, appendUserMessage, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, normalizeCodexRunOptions, } from './agent.js';
-import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, } from './progress.js';
+import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, noteEventsFromText, createFileEnricher, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
@@ -642,12 +642,22 @@ function runWorkflow(res, repo, spec) {
         if (!ac.signal.aborted)
             send(heartbeatEvent(nowMs() - lastActivity));
     }, 5000);
+    const enrich = spec.fileScope ? createFileEnricher(spec.fileScope) : (e) => e;
     streamAgent(spec.agent, repo, spec.prompt, (ev) => {
         lastActivity = nowMs();
-        send(ev);
-        const ph = observedPhase(ev, spec.isTargetWrite(ev));
+        const out = enrich(ev);
+        send(out);
+        const ph = observedPhase(out, spec.isTargetWrite(out));
         if (ph)
             advance(ph);
+        if (out.type === 'text') {
+            for (const note of noteEventsFromText(out.data)) {
+                if (note.type === 'phase')
+                    advance(note.phase, note.label);
+                else
+                    send(note);
+            }
+        }
     }, spec.model, ac.signal, spec.agentOptions)
         .then((r) => {
         clearInterval(heart);
@@ -804,6 +814,7 @@ function runAddress(res, session, body) {
             return { status, result: { codeChanged }, events };
         },
         cleanup: addressCtx.cleanup,
+        fileScope: { repoPath: addressCtx.runRepo, changedFiles: [] },
     });
 }
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
@@ -842,6 +853,11 @@ function runGenerate(res, session, body) {
     // the agent's diff just as they are from the rendered review and coverage gate,
     // so all three agree and the agent doesn't waste a run narrating a 20k-line ABI.
     const excludePaths = noiseFiles(repo, promptBase, promptHead);
+    // The exact changed files the review shows (noise subtracted), so file-read
+    // progress can honestly say "3 of 8 changed files".
+    const changedFiles = numstat(repo, promptBase, promptHead)
+        .map((f) => f.path)
+        .filter((p) => !excludePaths.includes(p));
     runWorkflow(res, repo, {
         workflow,
         title,
@@ -857,6 +873,7 @@ function runGenerate(res, session, body) {
         // For generate, the output is the story file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
         finish: (r) => finishStoryGeneration(r, storyPath, session),
+        fileScope: { repoPath: repo, changedFiles },
     });
 }
 function readBody(req, done) {
