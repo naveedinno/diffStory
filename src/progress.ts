@@ -37,7 +37,8 @@ export type ProgressEvent =
   | { type: 'phase'; phase: Phase; label: string; detail?: string }
   | { type: 'heartbeat'; quietMs: number }
   | { type: 'run_done'; status: RunStatus; result?: Record<string, unknown> }
-  | { type: 'file'; label: string; rawTool: string; target: string; action: FileAction }
+  | { type: 'file'; label: string; rawTool: string; target: string; action: FileAction;
+      rel?: string; changedIndex?: number; changedTotal?: number }
   | { type: 'command'; label: string; command: string }
   | { type: 'activity'; kind: ActivityKind; label: string; detail?: string }
   | { type: 'tool'; label: string; rawTool: string; target?: string }
@@ -189,4 +190,45 @@ export function noteEventsFromText(data: string): ProgressEvent[] {
     if (e) out.push(e);
   }
   return out;
+}
+
+export interface FileScope {
+  repoPath: string;
+  changedFiles: string[];
+}
+
+function relPath(target: string, repoPath: string): string {
+  const root = repoPath.endsWith('/') ? repoPath : repoPath + '/';
+  return target.startsWith(root) ? target.slice(root.length) : target;
+}
+
+function matchChanged(rel: string, changed: string[]): string | null {
+  for (const c of changed) {
+    if (rel === c || rel.endsWith('/' + c)) return c;
+  }
+  return null;
+}
+
+/**
+ * Stateful enricher for file events: rewrites targets repo-relative and counts
+ * distinct changed files the agent has read, so the panel can say "3 of 8"
+ * honestly. Every other event passes through untouched.
+ */
+export function createFileEnricher(scope: FileScope): (ev: ProgressEvent) => ProgressEvent {
+  const seen = new Set<string>();
+  return (ev) => {
+    if (ev.type !== 'file') return ev;
+    const rel = relPath(ev.target, scope.repoPath);
+    const verb = ev.action === 'read' ? 'Reading' : ev.action === 'write' ? 'Writing' : 'Editing';
+    const hit = ev.action === 'read' ? matchChanged(rel, scope.changedFiles) : null;
+    if (!hit) return { ...ev, rel, label: `${verb} ${rel}` };
+    seen.add(hit);
+    return {
+      ...ev,
+      rel,
+      changedIndex: seen.size,
+      changedTotal: scope.changedFiles.length,
+      label: `Reading changed files · ${seen.size} of ${scope.changedFiles.length} · ${rel}`,
+    };
+  };
 }

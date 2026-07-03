@@ -6,7 +6,7 @@ import {
   runStarted, contextEvent, phaseEvent, fileEvent, commandEvent,
   activityEvent, toolEvent, textEvent, heartbeatEvent, warningEvent,
   errorEvent, doneEvent, planEvent,
-  parseAgentNoteLine, noteEventsFromText,
+  parseAgentNoteLine, noteEventsFromText, createFileEnricher,
 } from '../dist/progress.js';
 
 test('runStarted and contextEvent carry workflow + context fields', () => {
@@ -158,4 +158,37 @@ test('noteEventsFromText scans multi-line chunks and skips plain prose', () => {
   assert.equal(evs[0].phase, 'recovering_why');
   assert.deepEqual(evs[1], activityEvent('narration', 'Goal: X'));
   assert.deepEqual(noteEventsFromText('no notes here'), []);
+});
+
+test('createFileEnricher relativizes paths and counts distinct changed-file reads', () => {
+  const enrich = createFileEnricher({ repoPath: '/repo', changedFiles: ['src/a.ts', 'src/b.ts'] });
+  const e1 = enrich(fileEvent('read', 'Read', '/repo/src/a.ts'));
+  assert.equal(e1.rel, 'src/a.ts');
+  assert.equal(e1.changedIndex, 1);
+  assert.equal(e1.changedTotal, 2);
+  assert.equal(e1.label, 'Reading changed files · 1 of 2 · src/a.ts');
+  // Re-reading the same file does not inflate the count.
+  assert.equal(enrich(fileEvent('read', 'Read', '/repo/src/a.ts')).changedIndex, 1);
+  assert.equal(enrich(fileEvent('read', 'Read', '/repo/src/b.ts')).changedIndex, 2);
+  // A read given repo-relative (agent cwd = repo) still matches.
+  const enrich2 = createFileEnricher({ repoPath: '/repo', changedFiles: ['src/a.ts'] });
+  assert.equal(enrich2(fileEvent('read', 'Read', 'src/a.ts')).changedIndex, 1);
+  // Context reads outside the scope stay plain but repo-relative.
+  const ctx = enrich(fileEvent('read', 'Read', '/repo/docs/notes.md'));
+  assert.equal(ctx.label, 'Reading docs/notes.md');
+  assert.equal(ctx.changedIndex, undefined);
+  // Writes are labeled relative but never counted as changed-file reads.
+  const w = enrich(fileEvent('write', 'Write', '/repo/src/a.ts'));
+  assert.equal(w.changedIndex, undefined);
+  assert.equal(w.label, 'Writing src/a.ts');
+  // Non-file events pass through by reference.
+  const t = textEvent('x');
+  assert.equal(enrich(t), t);
+});
+
+test('createFileEnricher with an empty scope only relativizes', () => {
+  const enrich = createFileEnricher({ repoPath: '/repo', changedFiles: [] });
+  const e = enrich(fileEvent('read', 'Read', '/repo/src/a.ts'));
+  assert.equal(e.label, 'Reading src/a.ts');
+  assert.equal(e.changedTotal, undefined);
 });

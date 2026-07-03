@@ -135,3 +135,39 @@ export function noteEventsFromText(data) {
     }
     return out;
 }
+function relPath(target, repoPath) {
+    const root = repoPath.endsWith('/') ? repoPath : repoPath + '/';
+    return target.startsWith(root) ? target.slice(root.length) : target;
+}
+function matchChanged(rel, changed) {
+    for (const c of changed) {
+        if (rel === c || rel.endsWith('/' + c))
+            return c;
+    }
+    return null;
+}
+/**
+ * Stateful enricher for file events: rewrites targets repo-relative and counts
+ * distinct changed files the agent has read, so the panel can say "3 of 8"
+ * honestly. Every other event passes through untouched.
+ */
+export function createFileEnricher(scope) {
+    const seen = new Set();
+    return (ev) => {
+        if (ev.type !== 'file')
+            return ev;
+        const rel = relPath(ev.target, scope.repoPath);
+        const verb = ev.action === 'read' ? 'Reading' : ev.action === 'write' ? 'Writing' : 'Editing';
+        const hit = ev.action === 'read' ? matchChanged(rel, scope.changedFiles) : null;
+        if (!hit)
+            return { ...ev, rel, label: `${verb} ${rel}` };
+        seen.add(hit);
+        return {
+            ...ev,
+            rel,
+            changedIndex: seen.size,
+            changedTotal: scope.changedFiles.length,
+            label: `Reading changed files · ${seen.size} of ${scope.changedFiles.length} · ${rel}`,
+        };
+    };
+}
