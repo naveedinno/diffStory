@@ -319,3 +319,20 @@ test('addressing comments from the raw diff viewer reports code edits so the UI 
     rmSync(fakeBin, { recursive: true, force: true });
   }
 });
+
+test('the dead /api/diff/fullfile endpoint is gone', async () => {
+  const repo = gitRepo();
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    const res = await fetch(`${base}/api/diff/fullfile?file=README.md`);
+    assert.equal(res.status, 404);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});

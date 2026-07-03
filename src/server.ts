@@ -26,7 +26,6 @@ import { computeCoverage } from './coverage.js';
 import { renderPage, renderFullFile } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
-import { renderDiffFullBody } from './diff-view.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope, type Scope } from './scope.js';
@@ -293,9 +292,6 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     }
     if (method === 'GET' && url.pathname === '/api/fullfile') {
       return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
-    }
-    if (method === 'GET' && url.pathname === '/api/diff/fullfile') {
-      return sendHtml(res, renderDiffFullFileResponse(session, url.searchParams.get('file') ?? ''));
     }
     if (method === 'GET' && url.pathname === '/api/comments') {
       if (!session.repo) return noRepo(res);
@@ -588,21 +584,6 @@ function renderFullFileResponse(session: Session, file: string): string {
     .map((u) => u.range);
   const rows = buildFullFileRows(df, newLines, ranges);
   return renderFullFile(rows, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
-}
-
-/** The lazily-loaded "Full file" view for the change-page scope-picker preview
- *  (its own dv-* diff renderer). No story — just the diff + working tree. */
-function renderDiffFullFileResponse(session: Session, file: string): string {
-  if (!session.repo) return `<div class="dv-note">No repo is open.</div>`;
-  if (!file) return `<div class="dv-note">No file requested.</div>`;
-  const repo = session.repo;
-  const head = session.head;
-  const df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), head)).find(
-    (f) => f.newPath === file,
-  );
-  if (!df) return `<div class="dv-note">That file isn't part of this change.</div>`;
-  const newLines = readWholeFile(repo, file, head) ?? [];
-  return renderDiffFullBody(buildFullFileRows(df, newLines, []));
 }
 
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */

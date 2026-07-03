@@ -2,7 +2,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderFullFile } from '../dist/render.js';
-import { renderDiffFullBody } from '../dist/diff-view.js';
 
 const rows = [
   { type: 'del', oldNo: 1, content: 'const total = computeFee(x);' },
@@ -15,13 +14,6 @@ test('side-by-side (render.ts cell) marks only the changed token', () => {
   assert.match(html, /changed">computeFee/); // removed side
   assert.doesNotMatch(html, /changed">total/); // shared prefix untouched
   assert.doesNotMatch(html, /changed">x/); // shared arg untouched
-});
-
-test('unified viewer (diff-view.ts rowHtml) marks only the changed token', () => {
-  const html = renderDiffFullBody(rows);
-  assert.match(html, /changed">computeCost/);
-  assert.match(html, /changed">computeFee/);
-  assert.doesNotMatch(html, /changed">total/);
 });
 
 test('a fully rewritten line falls back to whole-line highlight (no changed marks)', () => {
