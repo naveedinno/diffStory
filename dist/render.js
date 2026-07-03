@@ -77,7 +77,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''}>
+<body${storyless ? ' data-storyless="1"' : ''} data-viewed-scope="${esc(`${repo}|${baseLabel}|${headRef ?? 'worktree'}`)}">
 <header class="ds-top">
   <a class="ds-brand" href="/repos" title="Home — your repositories" aria-label="Home — your repositories">
     ${BRAND_MARK}
@@ -223,7 +223,7 @@ ${BRAND_HEAD_LINKS}
     <div class="ds-readhead" data-rail="files" hidden>
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Files</span>
-        <span class="ds-readhead-count">${model.files.length} ${plural(model.files.length, 'file')}</span>
+        <span class="ds-readhead-count" data-viewed-progress>${model.files.length} ${plural(model.files.length, 'file')}</span>
       </div>
     </div>
     <div class="ds-railscroll">
@@ -502,6 +502,7 @@ function railFileItem(f, i, depth = 0) {
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
     <span class="ds-fileitem-stat">${stat}</span>
+    <span class="ds-viewedmark" data-viewed-toggle role="checkbox" aria-checked="false" title="Mark as viewed (v)">✓</span>
   </button>`;
 }
 function railFileStat(add, del) {

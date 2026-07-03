@@ -879,3 +879,10 @@ test('intent text is HTML-escaped in the intro panel', () => {
   assert.match(html, /a &amp; b/);
   assert.doesNotMatch(html, /Guard <script> tags/);
 });
+
+test('sidebar file items carry a viewed toggle and the body a scope key', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-viewed-scope="/);
+  assert.match(html, /data-viewed-toggle/);
+  assert.match(html, /data-viewed-progress/);
+});

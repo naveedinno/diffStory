@@ -88,6 +88,10 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-cell-del .changed,.ds-urow.ds-row-del .changed{background:rgba(224,68,94,0.36);box-shadow:0 0 0 1px rgba(224,68,94,0.36)}
 .ds-diffnote{padding:14px 16px;color:var(--muted);font-family:var(--sans);font-size:13px}
 .ds-diffnote-soft{color:var(--dim2);font-size:12px;border-bottom:1px solid var(--line-soft)}
+.ds-viewedmark{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;border:1px solid var(--line);color:transparent;font-size:10px;line-height:1;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.ds-viewedmark:hover{border-color:var(--accent)}
+.ds-viewedmark[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat{opacity:.55}
 `;
 export const DIFF_JS = `
   function visibleDiffRoot(holder){
@@ -183,5 +187,29 @@ export const DIFF_JS = `
     fullInner.setAttribute('data-loaded','1');
     fullInner.innerHTML='<div class="ds-diffnote">Loading the full file…</div>';
     fetch('/api/fullfile?file='+encodeURIComponent(file)).then(function(r){return r.text();}).then(function(html){fullInner.innerHTML=html;mountThreads(fullInner);updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));jumpToFirstChange(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));}).catch(function(){fullInner.removeAttribute('data-loaded');fullInner.innerHTML='<div class="ds-diffnote">Could not load the full file.</div>';updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));});
+  }
+  function viewedKey(){return 'ds-viewed:'+(document.body.getAttribute('data-viewed-scope')||'');}
+  var viewedFiles={};
+  function loadViewed(){
+    viewedFiles={};
+    try{(JSON.parse(localStorage.getItem(viewedKey())||'[]')||[]).forEach(function(f){viewedFiles[f]=true;});}catch(e){}
+  }
+  function saveViewed(){try{localStorage.setItem(viewedKey(),JSON.stringify(Object.keys(viewedFiles)));}catch(e){}}
+  function toggleViewed(file){
+    if(!file)return;
+    if(viewedFiles[file])delete viewedFiles[file];else viewedFiles[file]=true;
+    saveViewed();syncViewed();
+  }
+  function syncViewed(){
+    var n=0,total=0;
+    fileItems.forEach(function(it){
+      var f=it.getAttribute('data-goto-file');if(!f)return;
+      total++;
+      var on=!!viewedFiles[f];if(on)n++;
+      it.classList.toggle('is-viewed',on);
+      var mark=$('[data-viewed-toggle]',it);if(mark)mark.setAttribute('aria-checked',on?'true':'false');
+    });
+    var prog=$('[data-viewed-progress]');
+    if(prog)prog.textContent=n?(n+' of '+total+' viewed'):(total+' '+(total===1?'file':'files'));
   }
 `;
