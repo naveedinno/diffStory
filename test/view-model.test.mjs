@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { buildFullFileRows } from '../dist/view-model.js';
+import { buildFullFileRows, hunksToSbsBlocks } from '../dist/view-model.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -41,4 +41,20 @@ test('a context-only file (no diff) renders entirely as unchanged', () => {
   assert.ok(rows.every((r) => r.type === 'ctx'));
   assert.equal(rows[2].oldNo, 3);
   assert.equal(rows[2].newNo, 3);
+});
+
+test('hunksToSbsBlocks maps hunks to split rows and flags uncovered adds', () => {
+  const file = {
+    oldPath: 'a.ts', newPath: 'a.ts', status: 'modified',
+    hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2,
+      lines: [
+        { type: 'ctx', content: 'keep', oldNo: 1, newNo: 1 },
+        { type: 'add', content: 'new line', newNo: 2 },
+      ] }],
+  };
+  const blocks = hunksToSbsBlocks(file, [[2, 2]]);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].length, 2);
+  assert.equal(blocks[0][0].type, 'ctx');
+  assert.equal(blocks[0][1].untoured, true);
 });

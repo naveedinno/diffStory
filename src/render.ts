@@ -871,11 +871,13 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
         .join('')
     : '<div class="ds-diffnote">No diff to show.</div>';
   // The All-files pane is a master/detail viewer: one file at a time (driven by
-  // the sidebar list), defaulting to the complete-file view. The full file is
-  // lazy-loaded into [data-full-inner] when the panel is first shown.
+  // the sidebar list), defaulting to the complete-file view. The full file and
+  // the split view are lazy-loaded when their toggle is first activated.
   const toggle = f.hasFull
-    ? `<div class="ds-modetoggle"><button data-mode="diff">Diff</button><button class="is-active" data-mode="full">Full file</button></div>`
-    : '';
+    ? `<div class="ds-modetoggle"><button data-mode="diff">Unified</button><button data-mode="split">Split</button><button class="is-active" data-mode="full">Full file</button></div>`
+    : f.hunks.length
+      ? `<div class="ds-modetoggle"><button class="is-active" data-mode="diff">Unified</button><button data-mode="split">Split</button></div>`
+      : '';
   return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(
     f.file,
   )}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${i === 0 ? '' : ' hidden'}>
@@ -893,6 +895,7 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
     </div>
     <div class="ds-filepanel-body">
       <div data-diff-inner${f.hasFull ? ' hidden' : ''}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-split-inner hidden></div>
       <div data-full-inner${f.hasFull ? '' : ' hidden'}></div>
     </div>
   </section>`;
@@ -978,13 +981,10 @@ function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string
 
 // ---- full file (used by the lazy /api/fullfile endpoint) ----
 
-export function renderFullFile(rows: SbsRow[], opts: { file: string; oldFile?: string; newFile: boolean }): string {
-  if (!rows.length) {
-    return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
-  }
+function splitHead(opts: { file: string; oldFile?: string; newFile: boolean }): string {
   const leftLabel = opts.newFile ? 'Did not exist' : 'Before';
   const rightLabel = opts.newFile ? 'New file' : 'After';
-  const head = `<div class="ds-diffhead">
+  return `<div class="ds-diffhead">
     <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${
       opts.newFile ? ' ds-dim' : ''
     }">${leftLabel}</span>${opts.newFile ? '' : `<span class="ds-diffhead-path">${esc(opts.oldFile ?? opts.file)}</span>`}</span>
@@ -993,9 +993,34 @@ export function renderFullFile(rows: SbsRow[], opts: { file: string; oldFile?: s
       opts.newFile ? ' ds-green' : ''
     }">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
   </div>`;
+}
+
+export function renderFullFile(rows: SbsRow[], opts: { file: string; oldFile?: string; newFile: boolean }): string {
+  if (!rows.length) {
+    return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
+  }
   const intra = intraLineMap(rows, (r) => r.type, (r) => r.content);
   const body = rows.map((r) => fullRow(r, opts, intra)).join('');
-  return `${head}<div class="ds-diffbody">${body}</div>`;
+  return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
+}
+
+/** The lazily-loaded Split view for one All-files panel: hunks only,
+ *  side-by-side, ⋯ gaps between hunks (expandable after Task 6). */
+export function renderSplitHunks(
+  blocks: SbsRow[][],
+  opts: { file: string; oldFile?: string; newFile: boolean },
+): string {
+  if (!blocks.length) return `<div class="ds-diffnote">No diff to show.</div>`;
+  const body = blocks
+    .map((block, bi) => {
+      const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
+      return (
+        (bi > 0 ? renderHunkGap() : '') +
+        block.map((row) => fullRow(row, opts, intra)).join('')
+      );
+    })
+    .join('');
+  return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
 }
 
 function fullRow(row: SbsRow, opts: { file: string; oldFile?: string; newFile: boolean }, intra?: Map<SbsRow, IntraSides>): string {

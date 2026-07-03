@@ -30,3 +30,10 @@ test('viewed-file tracking is wired: storage, toggle, v key', () => {
   assert.match(PAGE_JS, /data-viewed-toggle/);
   assert.match(PAGE_JS, /e\.key==='v'\|\|e\.key==='V'/);
 });
+
+test('split mode is lazy-loaded and persisted', () => {
+  assert.match(DIFF_JS, /function loadSplit\(/);
+  assert.match(DIFF_JS, /'ds-files-mode'/);
+  assert.match(DIFF_JS, /\/api\/diff\/split\?file=/);
+  assert.match(PAGE_JS, /function applyFilesMode\(/);
+});

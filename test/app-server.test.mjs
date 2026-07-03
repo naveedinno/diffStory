@@ -336,3 +336,30 @@ test('the dead /api/diff/fullfile endpoint is gone', async () => {
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('/api/diff/split serves side-by-side hunks for a changed file', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nsplit me\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    // Opening a repo alone leaves selectedStory undefined; visiting /diff (like the
+    // storyless viewer flow does) is what puts the session into storyless mode.
+    await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`);
+    const res = await fetch(`${base}/api/diff/split?file=README.md`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /ds-diffhead/);
+    assert.match(html, /ds-celldiv/);
+    assert.match(html, /split me/);
+    const miss = await fetch(`${base}/api/diff/split?file=nope.md`);
+    assert.match(await miss.text(), /isn't part of this change/);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});

@@ -1419,12 +1419,19 @@ const PAGE_JS_HEAD = `
     selectedFile=i;
     filePanels.forEach(function(p,idx){p.hidden=idx!==i;});
     fileItems.forEach(function(it){it.classList.toggle('is-active',Number(it.getAttribute('data-file-index'))===i);});
-    var panel=filePanels[i],fullInner=$('[data-full-inner]',panel);
-    if(fullInner&&!fullInner.hidden&&!fullInner.getAttribute('data-loaded')){
-      var file=panel.getAttribute('data-file');if(file)loadFull(fullInner,file);
-    }
+    var panel=filePanels[i];
+    applyFilesMode(panel);
     var detail=$('#ds-file-detail');if(detail)detail.scrollTop=0;
     jumpToFirstChange(panel);
+  }
+  function applyFilesMode(panel){
+    if(!panel)return;
+    var stored=null;try{stored=localStorage.getItem('ds-files-mode');}catch(e){}
+    var active=$('.ds-modetoggle button.is-active',panel);
+    var want=stored||(active?active.getAttribute('data-mode'):null);
+    if(!want)return;
+    var btn=$('.ds-modetoggle button[data-mode="'+want+'"]',panel)||active;
+    if(btn)setMode(btn);
   }
   function selectFileByPath(file){
     for(var k=0;k<filePanels.length;k++){if(filePanels[k].getAttribute('data-file')===file){selectFile(k);return;}}

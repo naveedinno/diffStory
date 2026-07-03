@@ -8,14 +8,14 @@ import { loadTour } from './tour.js';
 import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks } from './render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope } from './scope.js';
 import { basename, dirname, join } from 'node:path';
-import { buildFullFileRows } from './view-model.js';
+import { buildFullFileRows, hunksToSbsBlocks } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, appendUserMessage, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, normalizeStoryMode, normalizeCodexRunOptions, } from './agent.js';
@@ -246,6 +246,9 @@ function handle(req, res, session) {
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
             return sendHtml(res, renderFullFileResponse(session, url.searchParams.get('file') ?? ''));
+        }
+        if (method === 'GET' && url.pathname === '/api/diff/split') {
+            return sendHtml(res, renderSplitResponse(session, url.searchParams.get('file') ?? ''));
         }
         if (method === 'GET' && url.pathname === '/api/comments') {
             if (!session.repo)
@@ -529,6 +532,39 @@ function renderFullFileResponse(session, file) {
         .map((u) => u.range);
     const rows = buildFullFileRows(df, newLines, ranges);
     return renderFullFile(rows, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
+}
+/** The lazily-loaded Split (hunks-only, side-by-side) view for one file. Mirrors
+ *  renderFullFileResponse's scope rules exactly, including allowing context-only
+ *  files (referenced by a context step but absent from the diff itself). */
+function renderSplitResponse(session, file) {
+    if (!session.repo)
+        return `<div class="ds-diffnote">No repo is open.</div>`;
+    if (!file)
+        return `<div class="ds-diffnote">No file requested.</div>`;
+    const repo = session.repo;
+    if (session.selectedStory === null) {
+        const df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), session.head)).find((f) => f.newPath === file);
+        if (!df)
+            return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+        return renderSplitHunks(hunksToSbsBlocks(df, []), {
+            file,
+            oldFile: df.oldPath,
+            newFile: df.status === 'added',
+        });
+    }
+    const { tour, files } = loadReview(session);
+    const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+    if (!allowed.has(file))
+        return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+    const df = files.find((f) => f.newPath === file);
+    const ranges = computeCoverage(tour, files)
+        .uncovered.filter((u) => u.file === file)
+        .map((u) => u.range);
+    return renderSplitHunks(hunksToSbsBlocks(df, ranges), {
+        file,
+        oldFile: df?.oldPath,
+        newFile: df?.status === 'added',
+    });
 }
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */
 function currentDiff(session) {

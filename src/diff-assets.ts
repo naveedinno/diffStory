@@ -96,8 +96,10 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 
 export const DIFF_JS = `
   function visibleDiffRoot(holder){
-    var fullInner=$('[data-full-inner]',holder),diffInner=$('[data-diff-inner]',holder);
-    return fullInner&&!fullInner.hidden?fullInner:diffInner;
+    var fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),diffInner=$('[data-diff-inner]',holder);
+    if(fullInner&&!fullInner.hidden)return fullInner;
+    if(splitInner&&!splitInner.hidden)return splitInner;
+    return diffInner;
   }
   function changeRows(holder){
     var root=visibleDiffRoot(holder);if(!root)return [];
@@ -171,15 +173,22 @@ export const DIFF_JS = `
     var file=holder.getAttribute('data-file');
     var mode=btn.getAttribute('data-mode');
     $all('.ds-modetoggle button',holder).forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-mode')===mode);});
-    var diffInner=$('[data-diff-inner]',holder),fullInner=$('[data-full-inner]',holder),hint=$('[data-difthint]',holder);
-    var needsLoad=mode==='full'&&fullInner&&!fullInner.getAttribute('data-loaded')&&file;
+    var diffInner=$('[data-diff-inner]',holder),fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),hint=$('[data-difthint]',holder);
+    if(holder.classList.contains('ds-filepanel')){try{localStorage.setItem('ds-files-mode',mode);}catch(e){}}
+    var needsLoad=false;
     if(mode==='full'){
       if(hint){if(!hint.getAttribute('data-diffhint'))hint.setAttribute('data-diffhint',hint.textContent);hint.textContent='Complete file';}
+      needsLoad=fullInner&&!fullInner.getAttribute('data-loaded')&&file;
       if(needsLoad)loadFull(fullInner,file);
-      if(diffInner)diffInner.hidden=true;if(fullInner)fullInner.hidden=false;
+      if(diffInner)diffInner.hidden=true;if(splitInner)splitInner.hidden=true;if(fullInner)fullInner.hidden=false;
+    }else if(mode==='split'&&splitInner){
+      if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
+      needsLoad=!splitInner.getAttribute('data-loaded')&&file;
+      if(needsLoad)loadSplit(splitInner,file);
+      if(diffInner)diffInner.hidden=true;if(fullInner)fullInner.hidden=true;splitInner.hidden=false;
     }else{
       if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
-      if(fullInner)fullInner.hidden=true;if(diffInner)diffInner.hidden=false;
+      if(fullInner)fullInner.hidden=true;if(splitInner)splitInner.hidden=true;if(diffInner)diffInner.hidden=false;
     }
     updateChangeNav(holder);
     if(!needsLoad)jumpToFirstChange(holder);
@@ -188,6 +197,20 @@ export const DIFF_JS = `
     fullInner.setAttribute('data-loaded','1');
     fullInner.innerHTML='<div class="ds-diffnote">Loading the full file…</div>';
     fetch('/api/fullfile?file='+encodeURIComponent(file)).then(function(r){return r.text();}).then(function(html){fullInner.innerHTML=html;mountThreads(fullInner);updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));jumpToFirstChange(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));}).catch(function(){fullInner.removeAttribute('data-loaded');fullInner.innerHTML='<div class="ds-diffnote">Could not load the full file.</div>';updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));});
+  }
+  function loadSplit(splitInner,file){
+    splitInner.setAttribute('data-loaded','1');
+    splitInner.innerHTML='<div class="ds-diffnote">Loading the split view…</div>';
+    fetch('/api/diff/split?file='+encodeURIComponent(file)).then(function(r){return r.text();}).then(function(html){
+      splitInner.innerHTML=html;
+      mountThreads(splitInner);
+      var h=closest(splitInner,'.ds-filepanel')||closest(splitInner,'.ds-diff');
+      updateChangeNav(h);jumpToFirstChange(h);
+    }).catch(function(){
+      splitInner.removeAttribute('data-loaded');
+      splitInner.innerHTML='<div class="ds-diffnote">Could not load the split view.</div>';
+      updateChangeNav(closest(splitInner,'.ds-filepanel')||closest(splitInner,'.ds-diff'));
+    });
   }
   function viewedKey(){return 'ds-viewed:'+(document.body.getAttribute('data-viewed-scope')||'');}
   var viewedFiles={};

@@ -276,6 +276,22 @@ export function buildFullFileRows(file, newLines, uncoveredRanges) {
     }
     return rows;
 }
+/** Split-layout blocks for one file's hunks (the All-files Split view):
+ *  each hunk becomes a block of SbsRows, adds flagged when uncovered.
+ *  `file` is optional so context-only files (no entry in the parsed diff,
+ *  only referenced by a context step) degrade to no blocks — same shape as
+ *  buildFullFileRows' handling of an absent DiffFile. */
+export function hunksToSbsBlocks(file, uncoveredRanges) {
+    if (!file)
+        return [];
+    const untoured = (n) => n !== undefined && uncoveredRanges.some((r) => n >= r[0] && n <= r[1]);
+    return file.hunks.map((h) => h.lines.map((l) => {
+        const row = toSbs(l);
+        if (l.type === 'add' && untoured(l.newNo))
+            row.untoured = true;
+        return row;
+    }));
+}
 // ---- helpers ----
 function flowLabel(step, byId, total) {
     const calls = (step.calls ?? []).map((id) => byId.get(id)).filter((t) => !!t);
