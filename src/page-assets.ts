@@ -308,6 +308,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-intro-sources{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);opacity:0.7;margin:16px 0 0}
 .ds-intro-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin-top:34px;border-radius:13px;overflow:hidden;
   background:var(--line-soft);border:1px solid var(--line-soft)}
+.ds-intro-facts[hidden]{display:none}
 .ds-fact{display:flex;flex-direction:column;gap:3px;padding:15px 17px;background:var(--panel)}
 .ds-fact-n{font-size:19px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
 .ds-fact-l{font-size:11.5px;color:var(--dim)}
