@@ -1968,17 +1968,26 @@ export const PAGE_JS = `
     renderStoryChoices(e.agentChoices,'storyAgentSel',list.map(function(a){return [a?a.charAt(0).toUpperCase()+a.slice(1):'No agent found',a];}),current);
     fillStoryModels();
   }
+  var storySkills=null,storySkillHide=null;
   function showStorySkillState(sk){
+    if(sk)storySkills=sk;
+    sk=storySkills;
     var e=storyGenEls();
     if(!e.warn||!e.warnText||!e.updateBtn||!sk)return;
-    if(sk.current){
-      e.warn.hidden=false;e.warnText.textContent='Story-generation skills are up to date.';e.updateBtn.hidden=true;
-      setTimeout(function(){e.warn.hidden=true;},1400);return;
+    if(storySkillHide){clearTimeout(storySkillHide);storySkillHide=null;}
+    var agent=e.agentSel&&e.agentSel.value?e.agentSel.value:'';
+    var st=(agent&&sk.agents&&sk.agents[agent])?sk.agents[agent]:sk;
+    var label=agent?agent.charAt(0).toUpperCase()+agent.slice(1):'the agent';
+    var where=st.dir||'~/.agents, ~/.claude, or ~/.codex';
+    if(st.current){
+      e.warn.hidden=false;e.updateBtn.hidden=true;
+      e.warnText.textContent=agent?'Story-generation skill is up to date for '+label+'.':'Story-generation skills are up to date.';
+      storySkillHide=setTimeout(function(){e.warn.hidden=true;},1400);return;
     }
     e.warn.hidden=false;e.updateBtn.hidden=false;e.updateBtn.disabled=false;e.updateBtn.textContent='Update skills';
-    e.warnText.textContent=sk.installed
-      ? 'Story-generation skill is installed but does not match this app. Update it before generating so the agent sees the current story rules.'
-      : 'Story-generation skill was not found in ~/.agents, ~/.claude, or ~/.codex. Install it before generating so the agent can create the story reliably.';
+    e.warnText.textContent=st.installed
+      ? 'Story-generation skill in '+where+' does not match this app. Update it before generating so '+label+' sees the current story rules.'
+      : 'Story-generation skill was not found in '+where+'. Install it before generating so '+label+' can create the story reliably.';
   }
   function wireStorySkillUpdate(){
     var e=storyGenEls();if(!e.updateBtn)return;
@@ -2114,7 +2123,7 @@ export const PAGE_JS = `
     b=closest(t,'[data-story-choice]');if(b){
       var id=b.getAttribute('data-story-choice'),value=b.getAttribute('data-value')||'';
       setStoryChoice(id,value);
-      if(id==='storyAgentSel')fillStoryModels();
+      if(id==='storyAgentSel'){fillStoryModels();showStorySkillState();}
       return;
     }
     b=closest(t,'[data-generate-story]');if(b){generateStory(b);return;}

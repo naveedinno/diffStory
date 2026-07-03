@@ -16,6 +16,13 @@ export interface SkillCandidate {
   current: boolean;
 }
 
+export type SkillAgent = 'claude' | 'codex';
+
+/** Freshness of the one skill directory a given agent CLI actually reads. */
+export interface AgentSkillStatus extends SkillCandidate {
+  dir: string;
+}
+
 export interface SkillStatus {
   name: 'review-tour';
   expected: string;
@@ -24,6 +31,7 @@ export interface SkillStatus {
   message: string;
   candidates: SkillCandidate[];
   matches: SkillCandidate[];
+  agents: Record<SkillAgent, AgentSkillStatus>;
 }
 
 export interface UpdateSkillsResult {
@@ -51,7 +59,12 @@ export function skillsInstalled(home: string): boolean {
   return skillStatus(home).installed;
 }
 
-/** Check whether the installed producer skill exists and matches this CLI bundle. */
+/**
+ * Check whether the installed producer skill exists and matches this CLI bundle.
+ * The aggregate `installed`/`current` spans every candidate location; `agents`
+ * reports the one directory each agent CLI reads (claude → ~/.claude/skills,
+ * codex → ~/.codex/skills), so callers can warn for the agent actually in use.
+ */
 export function skillStatus(home: string, expected = bundledReviewTourSkill()): SkillStatus {
   const expectedText = readNormalized(expected);
   const candidates = [
@@ -65,6 +78,10 @@ export function skillStatus(home: string, expected = bundledReviewTourSkill()): 
   });
   const matches = candidates.filter((c) => c.installed);
   const current = matches.some((c) => c.current);
+  const agents: Record<SkillAgent, AgentSkillStatus> = {
+    claude: { dir: '~/.claude/skills', ...candidates[1] },
+    codex: { dir: '~/.codex/skills', ...candidates[2] },
+  };
   return {
     name: 'review-tour',
     expected,
@@ -72,6 +89,7 @@ export function skillStatus(home: string, expected = bundledReviewTourSkill()): 
     current,
     candidates,
     matches,
+    agents,
     message:
       matches.length === 0
         ? 'review-tour skill is not installed.'
@@ -91,7 +109,11 @@ function bundledSkillsRoot(): string {
 
 /** Update the local agent skill installs from this app's bundled skills. */
 export function updateSkills(home: string, sourceRoot = bundledSkillsRoot()): UpdateSkillsResult {
-  const targets = [join(home, '.agents', 'skills'), join(home, '.codex', 'skills')];
+  const targets = [
+    join(home, '.agents', 'skills'),
+    join(home, '.claude', 'skills'),
+    join(home, '.codex', 'skills'),
+  ];
   const installed: string[] = [];
   for (const targetRoot of targets) {
     mkdirSync(targetRoot, { recursive: true });

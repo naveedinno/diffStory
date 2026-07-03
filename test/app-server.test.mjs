@@ -80,12 +80,17 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal(agents.skills.installed, false);
     assert.equal(agents.skills.current, false);
     assert.ok(agents.skills.message.includes('not installed'));
+    assert.equal(agents.skills.agents.claude.current, false);
+    assert.equal(agents.skills.agents.codex.current, false);
 
     const updated = await fetch(`${base}/api/skills/update`, { method: 'POST' });
     assert.equal(updated.status, 200);
     const updatedBody = await updated.json();
     assert.equal(updatedBody.skills.current, true);
+    assert.equal(updatedBody.skills.agents.claude.current, true);
+    assert.equal(updatedBody.skills.agents.codex.current, true);
     assert.ok(existsSync(join(tmpHome, '.agents', 'skills', 'review-tour', 'SKILL.md')));
+    assert.ok(existsSync(join(tmpHome, '.claude', 'skills', 'review-tour', 'SKILL.md')));
     assert.ok(existsSync(join(tmpHome, '.codex', 'skills', 'address-review', 'SKILL.md')));
 
     const agentsAfter = await (await fetch(`${base}/api/agents`)).json();

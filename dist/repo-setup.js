@@ -27,7 +27,12 @@ export function setGitignore(repo, mode) {
 export function skillsInstalled(home) {
     return skillStatus(home).installed;
 }
-/** Check whether the installed producer skill exists and matches this CLI bundle. */
+/**
+ * Check whether the installed producer skill exists and matches this CLI bundle.
+ * The aggregate `installed`/`current` spans every candidate location; `agents`
+ * reports the one directory each agent CLI reads (claude → ~/.claude/skills,
+ * codex → ~/.codex/skills), so callers can warn for the agent actually in use.
+ */
 export function skillStatus(home, expected = bundledReviewTourSkill()) {
     const expectedText = readNormalized(expected);
     const candidates = [
@@ -41,6 +46,10 @@ export function skillStatus(home, expected = bundledReviewTourSkill()) {
     });
     const matches = candidates.filter((c) => c.installed);
     const current = matches.some((c) => c.current);
+    const agents = {
+        claude: { dir: '~/.claude/skills', ...candidates[1] },
+        codex: { dir: '~/.codex/skills', ...candidates[2] },
+    };
     return {
         name: 'review-tour',
         expected,
@@ -48,6 +57,7 @@ export function skillStatus(home, expected = bundledReviewTourSkill()) {
         current,
         candidates,
         matches,
+        agents,
         message: matches.length === 0
             ? 'review-tour skill is not installed.'
             : current
@@ -63,7 +73,11 @@ function bundledSkillsRoot() {
 }
 /** Update the local agent skill installs from this app's bundled skills. */
 export function updateSkills(home, sourceRoot = bundledSkillsRoot()) {
-    const targets = [join(home, '.agents', 'skills'), join(home, '.codex', 'skills')];
+    const targets = [
+        join(home, '.agents', 'skills'),
+        join(home, '.claude', 'skills'),
+        join(home, '.codex', 'skills'),
+    ];
     const installed = [];
     for (const targetRoot of targets) {
         mkdirSync(targetRoot, { recursive: true });

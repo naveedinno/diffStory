@@ -88,7 +88,36 @@ test('skillStatus detects Codex installs and stale skill content', () => {
   rmSync(home, { recursive: true, force: true });
 });
 
-test('updateSkills installs bundled skills into agent and Codex skill dirs', () => {
+test('skillStatus reports per-agent freshness, not just the aggregate', () => {
+  const home = tmp();
+  const bundled = join(home, 'bundle', 'review-tour', 'SKILL.md');
+  mkdirSync(join(home, 'bundle', 'review-tour'), { recursive: true });
+  writeFileSync(bundled, 'current skill');
+  mkdirSync(join(home, '.codex', 'skills', 'review-tour'), { recursive: true });
+  writeFileSync(join(home, '.codex', 'skills', 'review-tour', 'SKILL.md'), 'current skill');
+
+  // Codex is current so the aggregate says current — but Claude has no install.
+  const status = skillStatus(home, bundled);
+  assert.equal(status.current, true);
+  assert.equal(status.agents.codex.installed, true);
+  assert.equal(status.agents.codex.current, true);
+  assert.equal(status.agents.claude.installed, false);
+  assert.equal(status.agents.claude.current, false);
+  assert.equal(status.agents.claude.dir, '~/.claude/skills');
+  assert.equal(status.agents.codex.dir, '~/.codex/skills');
+
+  // A stale ~/.claude copy counts as installed but not current.
+  mkdirSync(join(home, '.claude', 'skills', 'review-tour'), { recursive: true });
+  writeFileSync(join(home, '.claude', 'skills', 'review-tour', 'SKILL.md'), 'old skill');
+  const stale = skillStatus(home, bundled);
+  assert.equal(stale.current, true);
+  assert.equal(stale.agents.claude.installed, true);
+  assert.equal(stale.agents.claude.current, false);
+
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('updateSkills installs bundled skills into agent, Claude, and Codex skill dirs', () => {
   const home = tmp();
   const bundle = join(home, 'bundle', 'skills');
   for (const name of ['review-tour', 'address-review']) {
@@ -101,12 +130,18 @@ test('updateSkills installs bundled skills into agent and Codex skill dirs', () 
   assert.deepEqual(result.installed.map((p) => p.replace(home, '<home>')).sort(), [
     '<home>/.agents/skills/address-review',
     '<home>/.agents/skills/review-tour',
+    '<home>/.claude/skills/address-review',
+    '<home>/.claude/skills/review-tour',
     '<home>/.codex/skills/address-review',
     '<home>/.codex/skills/review-tour',
   ]);
   assert.equal(readFileSync(join(home, '.agents', 'skills', 'review-tour', 'SKILL.md'), 'utf8'), 'review-tour current');
+  assert.equal(readFileSync(join(home, '.claude', 'skills', 'review-tour', 'SKILL.md'), 'utf8'), 'review-tour current');
   assert.equal(readFileSync(join(home, '.codex', 'skills', 'address-review', 'SKILL.md'), 'utf8'), 'address-review current');
-  assert.equal(skillStatus(home, join(bundle, 'review-tour', 'SKILL.md')).current, true);
+  const status = skillStatus(home, join(bundle, 'review-tour', 'SKILL.md'));
+  assert.equal(status.current, true);
+  assert.equal(status.agents.claude.current, true);
+  assert.equal(status.agents.codex.current, true);
 
   rmSync(home, { recursive: true, force: true });
 });
