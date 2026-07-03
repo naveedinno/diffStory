@@ -1884,6 +1884,53 @@ export const PAGE_JS = `
       updateBtn:$('#storySkillUpdateBtn')
     };
   }
+  var storyIntroSaved=null;
+  function storyIntroEls(){
+    var wrap=document.querySelector('.ds-step.is-intro .ds-introwrap');
+    if(!wrap)return null;
+    return {
+      wrap:wrap,
+      title:$('.ds-intro-title',wrap),
+      lede:$('.ds-intro-lede',wrap),
+      eyebrow:$('.ds-intro-eyebrow span',wrap),
+      facts:$('.ds-intro-facts',wrap),
+      card:$('.ds-storygen-card',wrap)
+    };
+  }
+  function mountPanelInStage(e){
+    var node=acRoot(); if(!node)return null;
+    node.setAttribute('data-variant','stage');
+    var mount=document.getElementById('ds-storystage');
+    if(!mount){
+      mount=document.createElement('div'); mount.id='ds-storystage';
+      e.wrap.insertBefore(mount,e.card||null);
+    }
+    mount.appendChild(node);
+    return node;
+  }
+  function setStoryGenerating(on){
+    var e=storyIntroEls(); if(!e)return;
+    if(on){
+      if(!storyIntroSaved)storyIntroSaved={
+        title:e.title?e.title.textContent:'',
+        lede:e.lede?e.lede.textContent:'',
+        eyebrow:e.eyebrow?e.eyebrow.textContent:''
+      };
+      if(e.title)e.title.textContent='Writing the story of this change';
+      if(e.eyebrow)e.eyebrow.textContent='Story in progress';
+      if(e.lede)e.lede.textContent='Keep reading the diff under All files — the story will land here when it is ready.';
+      if(e.facts)e.facts.hidden=true;
+      if(e.card)e.card.hidden=true;
+    }else{
+      if(storyIntroSaved){
+        if(e.title)e.title.textContent=storyIntroSaved.title;
+        if(e.lede)e.lede.textContent=storyIntroSaved.lede;
+        if(e.eyebrow)e.eyebrow.textContent=storyIntroSaved.eyebrow;
+      }
+      if(e.facts)e.facts.hidden=false;
+      if(e.card)e.card.hidden=false;
+    }
+  }
   function setStoryChoice(id,value){
     var input=$('#'+id);if(!input)return;
     input.value=value||'';
@@ -1958,7 +2005,11 @@ export const PAGE_JS = `
   }
   function generateStory(btn){
     if(agentBusy){toast('The agent is already working — wait for it to finish.');return;}
-    restoreAgentPanel(); var root=acRoot(); if(!root)return;
+    restoreAgentPanel();
+    var intro=storyIntroEls();
+    var root=intro?mountPanelInStage(intro):acRoot();
+    if(!root)return;
+    if(intro)setStoryGenerating(true);
     var reviewUrl=btn.getAttribute('data-review-url')||'';
     var e=storyGenEls();
     var model=e.modelSel?e.modelSel.value:'';
@@ -1971,12 +2022,21 @@ export const PAGE_JS = `
     };
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
     acAbort=ctrl;
+    function restoreForm(){
+      setStoryGenerating(false); restoreAgentPanel();
+      btn.disabled=false; setBusy(false); acAbort=null;
+    }
     var panel=new ProgressPanel(root,{
       onStop:function(){ if(acAbort)acAbort.abort(); },
-      onClose:function(){ root.hidden=true; btn.disabled=false; setBusy(false); acAbort=null; },
+      onClose:function(){ restoreForm(); },
+      onBlocked:function(){ setBusy(false); acAbort=null; btn.disabled=false; },
       onDone:function(status,result){
         setBusy(false); acAbort=null; btn.disabled=false;
-        if(status==='complete'&&result&&result.storyWritten&&reviewUrl){location.href=reviewUrl;}
+        if(status==='complete'&&result&&result.storyWritten&&reviewUrl){location.href=reviewUrl;return;}
+        if(status==='stopped'){restoreForm();return;}
+        var again=el('button','ds-pp-reload','Try again');
+        again.onclick=function(){ restoreForm(); };
+        panel.showFoot(again);
       }
     });
     btn.disabled=true; setBusy(true); panel.start();
