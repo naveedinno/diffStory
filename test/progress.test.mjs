@@ -6,6 +6,7 @@ import {
   runStarted, contextEvent, phaseEvent, fileEvent, commandEvent,
   activityEvent, toolEvent, textEvent, heartbeatEvent, warningEvent,
   errorEvent, doneEvent, planEvent,
+  parseAgentNoteLine, noteEventsFromText,
 } from '../dist/progress.js';
 
 test('runStarted and contextEvent carry workflow + context fields', () => {
@@ -126,4 +127,35 @@ test('observedPhase proves recovering_why on intent-evidence commands only', () 
   assert.equal(observedPhase(commandEvent('gh pr view --json title,body'), false), 'recovering_why');
   assert.equal(observedPhase(commandEvent('git diff --stat'), false), null);
   assert.equal(observedPhase(commandEvent('npm test'), false), null);
+});
+
+test('parseAgentNoteLine maps exact markers to phases, other notes to narration', () => {
+  assert.deepEqual(parseAgentNoteLine('>> Recovering the why'), phaseEvent('recovering_why'));
+  assert.deepEqual(parseAgentNoteLine('  >> designing the reading path'), phaseEvent('designing_path'));
+  assert.deepEqual(parseAgentNoteLine('>> Writing the steps'), phaseEvent('writing_output'));
+  assert.deepEqual(
+    parseAgentNoteLine('>> Goal: enable keepers to cap the fee'),
+    activityEvent('narration', 'Goal: enable keepers to cap the fee'),
+  );
+  assert.equal(parseAgentNoteLine('Reading src/x.ts'), null);
+  assert.equal(parseAgentNoteLine('>>'), null);
+  assert.equal(parseAgentNoteLine('>>   '), null);
+  assert.equal(parseAgentNoteLine(''), null);
+});
+
+test('parseAgentNoteLine clips runaway narration to 300 chars', () => {
+  const long = '>> ' + 'x'.repeat(400);
+  const e = parseAgentNoteLine(long);
+  assert.equal(e.type, 'activity');
+  assert.equal(e.label.length, 301); // 300 + ellipsis
+  assert.ok(e.label.endsWith('…'));
+});
+
+test('noteEventsFromText scans multi-line chunks and skips plain prose', () => {
+  const evs = noteEventsFromText('thinking about it\n>> Recovering the why\n>> Goal: X\nplain line');
+  assert.equal(evs.length, 2);
+  assert.equal(evs[0].type, 'phase');
+  assert.equal(evs[0].phase, 'recovering_why');
+  assert.deepEqual(evs[1], activityEvent('narration', 'Goal: X'));
+  assert.deepEqual(noteEventsFromText('no notes here'), []);
 });

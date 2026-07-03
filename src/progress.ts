@@ -153,3 +153,40 @@ export function observedPhase(event: ProgressEvent, isTargetWrite: boolean): Pha
   if (event.type === 'activity' && event.kind === 'search') return 'reading_changes';
   return null;
 }
+
+// Exact phase markers the story prompt tells the agent to print (matched
+// case-insensitively after trimming). Anything else after ">> " is narration.
+const NOTE_MARKERS: Array<[string, Phase]> = [
+  ['recovering the why', 'recovering_why'],
+  ['designing the reading path', 'designing_path'],
+  ['writing the steps', 'writing_output'],
+];
+
+const NARRATION_CAP = 300;
+
+/**
+ * Parse one stdout line as an agent note: ">> <marker>" advances a phase,
+ * ">> <anything else>" is live narration for the panel. Non-note lines → null.
+ */
+export function parseAgentNoteLine(line: string): ProgressEvent | null {
+  const m = /^\s*>>\s*(.+?)\s*$/.exec(line);
+  if (!m) return null;
+  const text = m[1];
+  if (!text.trim()) return null;
+  const low = text.toLowerCase();
+  for (const [marker, phase] of NOTE_MARKERS) {
+    if (low === marker) return phaseEvent(phase);
+  }
+  const clipped = text.length > NARRATION_CAP ? text.slice(0, NARRATION_CAP) + '…' : text;
+  return activityEvent('narration', clipped);
+}
+
+/** All note events found in a (possibly multi-line) agent text chunk. */
+export function noteEventsFromText(data: string): ProgressEvent[] {
+  const out: ProgressEvent[] = [];
+  for (const line of data.split('\n')) {
+    const e = parseAgentNoteLine(line);
+    if (e) out.push(e);
+  }
+  return out;
+}
