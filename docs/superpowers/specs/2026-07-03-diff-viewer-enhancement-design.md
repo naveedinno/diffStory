@@ -1,7 +1,7 @@
 # Diff viewer enhancement — unified engine, orientation, comfort, polish — design
 
 **Date:** 2026-07-03
-**Status:** Approved, awaiting implementation plan
+**Status:** Implemented (2026-07-04) — 298 tests passing
 
 ## Problem
 

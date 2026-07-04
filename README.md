@@ -57,7 +57,7 @@ needed.
 
 - 🧭 **A guided reading order** — walk the change step by step in call-flow order, not by filename.
 - 📝 **A "why" for every step** — what to look at, what's subtle, why it's safe.
-- ⚖️ **A plain diff viewer, no story required** — open any repo and read the real `git diff` straight away, file by file, with a "Full file" flip. Generate a guided story from it only if you want one.
+- ⚖️ **A plain diff viewer, no story required** — open any repo and read the real `git diff` straight away, file by file. Flip each file between **Unified**, **Split** (side-by-side), and **Full file** views, click a `⋯` gap to reveal 20 more lines of context (or all of it), and tick files off as **viewed** (`v`) with a progress count in the sidebar. Generate a guided story from it only if you want one.
 - 🧠 **Real side-by-side diffs in the story** — before/after from the actual `git diff`, never reproduced by the AI.
 - 💬 **Comments that loop back, live** — drop a change request, question, or nit, then hit **Ask agent** (or **Address all open**) and watch the agent reply and fix right on the page; you resolve.
 - 🛡️ **A trust check** — any change no step explains gets flagged, so nothing slips in quietly.
