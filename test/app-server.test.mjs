@@ -363,3 +363,42 @@ test('/api/diff/split serves side-by-side hunks for a changed file', async () =>
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('/api/diff/context serves clamped context rows', async () => {
+  const repo = gitRepo();
+  // Commit a 40-line file, then change only the LAST line: lines 1–36ish are
+  // outside the hunk, so the expandable gap consists of real *context* rows.
+  const lines = Array.from({ length: 40 }, (_, i) => 'line ' + (i + 1));
+  writeFileSync(join(repo, 'notes.txt'), lines.join('\n') + '\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add notes'], { cwd: repo });
+  writeFileSync(join(repo, 'notes.txt'), lines.slice(0, 39).join('\n') + '\nline forty\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    // Opening a repo alone leaves selectedStory undefined; visiting /diff (like the
+    // storyless viewer flow does) is what puts the session into storyless mode —
+    // same warm-up the /api/diff/split test above needs.
+    await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`);
+    const res = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=4&layout=unified`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);
+    // The syntax highlighter tokenizes the trailing digit, so "line 3" is served
+    // as 'line <span class="tk-n">3</span>' rather than a literal substring.
+    assert.match(html, /line <span class="tk-n">3<\/span>/);
+    const split = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=3&layout=split`);
+    assert.match(await split.text(), /ds-celldiv/);
+    const empty = await fetch(`${base}/api/diff/context?file=notes.txt&from=9999&to=eof&layout=unified`);
+    assert.match(await empty.text(), /data-from="0" data-to="0"/);
+    const bad = await fetch(`${base}/api/diff/context?file=nope.md&from=1&to=2&layout=unified`);
+    assert.match(await bad.text(), /isn't part of this change/);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});

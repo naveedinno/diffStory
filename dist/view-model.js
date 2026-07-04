@@ -181,6 +181,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
             stepId: step?.id,
             stepOrder: step?.order,
             hunks,
+            hunkRanges: file.hunks.map(hunkNewRange),
             hasFull: file.status !== 'deleted',
         });
     }
@@ -202,6 +203,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
             stepId: step.id,
             stepOrder: step.order,
             hunks: rows.length ? [rows] : [],
+            hunkRanges: r ? [[r.startLine, r.startLine + rows.length - 1]] : [],
             hasFull: r !== null,
         });
     }
@@ -316,7 +318,7 @@ function toUnified(l, uncovered) {
     const untoured = l.newNo !== undefined && uncovered.some((r) => l.newNo >= r[0] && l.newNo <= r[1]);
     return { type: l.type, no: l.newNo ?? l.oldNo, content: l.content, untoured };
 }
-function hunkNewRange(h) {
+export function hunkNewRange(h) {
     return [h.newStart, h.newStart + Math.max(h.newLines, 1) - 1];
 }
 function countLines(file, type) {

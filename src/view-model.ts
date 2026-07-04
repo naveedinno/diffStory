@@ -93,6 +93,9 @@ export interface FileView {
   stepId?: string;
   stepOrder?: number;
   hunks: UnifiedRow[][];
+  /** [newStart, newEnd] per hunk, aligned with .hunks — lets the panel compute
+   *  the gaps between hunks (and after the last one) for expand-context. */
+  hunkRanges: Array<[number, number]>;
   /** Whether a complete-file view can be loaded (file exists in the working tree). */
   hasFull: boolean;
 }
@@ -320,6 +323,7 @@ function buildFiles(
       stepId: step?.id,
       stepOrder: step?.order,
       hunks,
+      hunkRanges: file.hunks.map(hunkNewRange),
       hasFull: file.status !== 'deleted',
     });
   }
@@ -341,6 +345,7 @@ function buildFiles(
       stepId: step.id,
       stepOrder: step.order,
       hunks: rows.length ? [rows] : [],
+      hunkRanges: r ? [[r.startLine, r.startLine + rows.length - 1]] : [],
       hasFull: r !== null,
     });
   }
@@ -473,7 +478,7 @@ function toUnified(l: DiffLine, uncovered: Array<[number, number]>): UnifiedRow 
   return { type: l.type, no: l.newNo ?? l.oldNo, content: l.content, untoured };
 }
 
-function hunkNewRange(h: DiffHunk): [number, number] {
+export function hunkNewRange(h: DiffHunk): [number, number] {
   return [h.newStart, h.newStart + Math.max(h.newLines, 1) - 1];
 }
 

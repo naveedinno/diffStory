@@ -23,14 +23,15 @@ import {
 } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile, renderSplitHunks } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks, renderContextRows } from './render.js';
+import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope, type Scope } from './scope.js';
 import { basename, dirname, join } from 'node:path';
-import { buildFullFileRows, hunksToSbsBlocks } from './view-model.js';
+import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
 import {
   loadComments,
   addComment,
@@ -295,6 +296,9 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session): vo
     }
     if (method === 'GET' && url.pathname === '/api/diff/split') {
       return sendHtml(res, renderSplitResponse(session, url.searchParams.get('file') ?? ''));
+    }
+    if (method === 'GET' && url.pathname === '/api/diff/context') {
+      return sendHtml(res, renderContextResponse(session, url.searchParams));
     }
     if (method === 'GET' && url.pathname === '/api/comments') {
       if (!session.repo) return noRepo(res);
@@ -606,6 +610,8 @@ function renderSplitResponse(session: Session, file: string): string {
       file,
       oldFile: df.oldPath,
       newFile: df.status === 'added',
+      hunkRanges: df.hunks.map(hunkNewRange),
+      canExpand: df.status !== 'deleted',
     });
   }
 
@@ -621,7 +627,41 @@ function renderSplitResponse(session: Session, file: string): string {
     file,
     oldFile: df?.oldPath,
     newFile: df?.status === 'added',
+    hunkRanges: df ? df.hunks.map(hunkNewRange) : [],
+    canExpand: df ? df.status !== 'deleted' : false,
   });
+}
+
+/** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
+ *  file, clamped to [from, to] new-file line numbers. */
+function renderContextResponse(session: Session, params: URLSearchParams): string {
+  if (!session.repo) return `<div class="ds-diffnote">No repo is open.</div>`;
+  const repo = session.repo;
+  const file = params.get('file') ?? '';
+  if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
+  const from = Math.max(1, parseInt(params.get('from') ?? '1', 10) || 1);
+  const toRaw = params.get('to') ?? 'eof';
+  const to = toRaw === 'eof' ? Number.MAX_SAFE_INTEGER : parseInt(toRaw, 10) || 0;
+  const layout = params.get('layout') === 'split' ? ('split' as const) : ('unified' as const);
+  if (to < from) return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
+
+  let df: DiffFile | undefined;
+  if (session.selectedStory === null) {
+    df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), session.head)).find(
+      (f) => f.newPath === file,
+    );
+    if (!df) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  } else {
+    const { files } = loadReview(session);
+    df = files.find((f) => f.newPath === file);
+    if (!df) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  }
+  const newLines = readWholeFile(repo, file, session.head) ?? [];
+  if (!newLines.length) return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
+  const rows = buildFullFileRows(df, newLines, []).filter(
+    (r) => r.type === 'ctx' && r.newNo !== undefined && r.newNo >= from && r.newNo <= to,
+  );
+  return renderContextRows(rows, layout, { file, oldFile: df.oldPath, newFile: df.status === 'added' });
 }
 
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */

@@ -81,6 +81,14 @@ export function renderUnifiedRow(row, target, intra) {
 export function renderHunkGap(gap) {
     if (!gap)
         return `<div class="ds-hunkgap"><span>⋯</span></div>`;
-    // Task 6 fills this branch in; until then it is unreachable.
-    return `<div class="ds-hunkgap"><span>⋯</span></div>`;
+    const up = gap.to === 'eof'
+        ? ''
+        : `<button type="button" class="ds-gapbtn" data-expand="up" title="Show the last 20 hidden lines">↑ 20</button>`;
+    return (`<div class="ds-hunkgap is-expandable" data-gap data-gap-file="${esc(gap.file)}" data-gap-from="${gap.from}" data-gap-to="${gap.to}">` +
+        `<button type="button" class="ds-gapbtn" data-expand="down" title="Show the first 20 hidden lines">↓ 20</button>` +
+        `<span class="ds-gapdots">⋯</span>` +
+        `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines">all</button>` +
+        `<span class="ds-gapdots">⋯</span>` +
+        up +
+        `</div>`);
 }

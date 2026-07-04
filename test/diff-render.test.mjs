@@ -67,3 +67,20 @@ test('attrs helpers escape file paths', () => {
   assert.match(rowAttrs({ side: 'right', file: 'a"b.ts', line: 1 }), /data-file="a&quot;b\.ts"/);
   assert.match(targetAttrs({ side: 'left', file: '<x>.ts', line: 2 }), /data-comment-file="&lt;x&gt;\.ts"/);
 });
+
+test('interactive hunk gap carries range data and expand buttons', () => {
+  const html = renderHunkGap({ file: 'a.ts', from: 10, to: 30 });
+  assert.match(html, /data-gap /);
+  assert.match(html, /data-gap-file="a\.ts"/);
+  assert.match(html, /data-gap-from="10"/);
+  assert.match(html, /data-gap-to="30"/);
+  assert.match(html, /data-expand="down"/);
+  assert.match(html, /data-expand="all"/);
+  assert.match(html, /data-expand="up"/);
+});
+
+test('eof gap omits the up button', () => {
+  const html = renderHunkGap({ file: 'a.ts', from: 50, to: 'eof' });
+  assert.match(html, /data-gap-to="eof"/);
+  assert.doesNotMatch(html, /data-expand="up"/);
+});

@@ -37,3 +37,9 @@ test('split mode is lazy-loaded and persisted', () => {
   assert.match(DIFF_JS, /\/api\/diff\/split\?file=/);
   assert.match(PAGE_JS, /function applyFilesMode\(/);
 });
+
+test('expand-context client is wired', () => {
+  assert.match(DIFF_JS, /function expandGap\(/);
+  assert.match(DIFF_JS, /\/api\/diff\/context\?file=/);
+  assert.match(PAGE_JS, /data-expand/);
+});

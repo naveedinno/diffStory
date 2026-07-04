@@ -710,14 +710,30 @@ function filePanel(f, i, stepIndexById) {
     const stat = f.add || f.del
         ? `${f.add ? `<span class="ds-stat-add">+${f.add}</span>` : ''}${f.del ? `<span class="ds-stat-del">−${f.del}</span>` : ''}`
         : '<span class="ds-dim">unchanged</span>';
+    const canExpand = f.kind !== 'context' && f.hasFull;
+    const gapBefore = (hi) => {
+        if (!canExpand)
+            return hi > 0 ? renderHunkGap() : '';
+        if (hi === 0) {
+            const start = f.hunkRanges[0]?.[0] ?? 1;
+            return start > 1 ? renderHunkGap({ file: f.file, from: 1, to: start - 1 }) : '';
+        }
+        const prevEnd = f.hunkRanges[hi - 1][1];
+        const nextStart = f.hunkRanges[hi][0];
+        return nextStart - prevEnd > 1
+            ? renderHunkGap({ file: f.file, from: prevEnd + 1, to: nextStart - 1 })
+            : renderHunkGap();
+    };
+    const gapAfterLast = canExpand && f.hunks.length
+        ? renderHunkGap({ file: f.file, from: f.hunkRanges[f.hunkRanges.length - 1][1] + 1, to: 'eof' })
+        : '';
     const unified = f.hunks.length
         ? f.hunks
             .map((hunk, hi) => {
             const intra = intraLineMap(hunk, (r) => r.type, (r) => r.content);
-            return ((hi > 0 ? renderHunkGap() : '') +
-                hunk.map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra))).join(''));
+            return gapBefore(hi) + hunk.map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra))).join('');
         })
-            .join('')
+            .join('') + gapAfterLast
         : '<div class="ds-diffnote">No diff to show.</div>';
     // The All-files pane is a master/detail viewer: one file at a time (driven by
     // the sidebar list), defaulting to the complete-file view. The full file and
@@ -833,14 +849,45 @@ export function renderFullFile(rows, opts) {
 export function renderSplitHunks(blocks, opts) {
     if (!blocks.length)
         return `<div class="ds-diffnote">No diff to show.</div>`;
+    const hunkRanges = opts.hunkRanges;
+    const canExpand = !!opts.canExpand && !!hunkRanges;
+    const gapBefore = (bi) => {
+        if (!canExpand || !hunkRanges)
+            return bi > 0 ? renderHunkGap() : '';
+        if (bi === 0) {
+            const start = hunkRanges[0]?.[0] ?? 1;
+            return start > 1 ? renderHunkGap({ file: opts.file, from: 1, to: start - 1 }) : '';
+        }
+        const prevEnd = hunkRanges[bi - 1][1];
+        const nextStart = hunkRanges[bi][0];
+        return nextStart - prevEnd > 1
+            ? renderHunkGap({ file: opts.file, from: prevEnd + 1, to: nextStart - 1 })
+            : renderHunkGap();
+    };
+    const gapAfterLast = canExpand && hunkRanges && blocks.length
+        ? renderHunkGap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: 'eof' })
+        : '';
     const body = blocks
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return ((bi > 0 ? renderHunkGap() : '') +
-            block.map((row) => fullRow(row, opts, intra)).join(''));
+        return gapBefore(bi) + block.map((row) => fullRow(row, opts, intra)).join('');
     })
-        .join('');
+        .join('') + gapAfterLast;
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
+}
+/** Rows served by /api/diff/context, wrapped so the client can read the
+ *  actually-served range. Context rows only. */
+export function renderContextRows(rows, layout, opts) {
+    if (!rows.length)
+        return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
+    const from = rows[0].newNo ?? 0;
+    const to = rows[rows.length - 1].newNo ?? 0;
+    const body = layout === 'split'
+        ? rows.map((r) => fullRow(r, opts)).join('')
+        : rows
+            .map((r) => unifiedRow({ type: 'ctx', no: r.newNo, content: r.content }, opts.file, opts.oldFile ?? opts.file))
+            .join('');
+    return `<div data-ctx-rows data-from="${from}" data-to="${to}">${body}</div>`;
 }
 function fullRow(row, opts, intra) {
     const leftTarget = !opts.newFile && row.oldNo !== undefined
