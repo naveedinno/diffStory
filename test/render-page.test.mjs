@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderFullFile, renderPage } from '../dist/render.js';
+import { renderFullFile, renderPage, renderSplitHunks } from '../dist/render.js';
 
 const tour = {
   version: 1,
@@ -885,4 +885,26 @@ test('sidebar file items carry a viewed toggle and the body a scope key', () => 
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-toggle/);
   assert.match(html, /data-viewed-progress/);
+});
+
+test('adjacent hunks render a bare, non-expandable gap between them', () => {
+  const blocks = [
+    [{ type: 'ctx', oldNo: 1, newNo: 1, content: 'top' }],
+    [{ type: 'ctx', oldNo: 6, newNo: 6, content: 'bottom' }],
+  ];
+  const html = renderSplitHunks(blocks, {
+    file: 'a.ts',
+    newFile: false,
+    hunkRanges: [
+      [1, 5],
+      [6, 9],
+    ],
+    canExpand: true,
+  });
+  // Hunks 1-5 and 6-9 touch (no hidden lines between them): the separator must
+  // be the legacy bare gap, with no expand affordance…
+  assert.match(html, /<div class="ds-hunkgap"><span>⋯<\/span><\/div>/);
+  assert.doesNotMatch(html, /data-gap-from="6"/);
+  // …while the trailing eof gap stays expandable.
+  assert.match(html, /data-gap-from="10" data-gap-to="eof"/);
 });

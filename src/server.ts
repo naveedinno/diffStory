@@ -652,16 +652,24 @@ function renderContextResponse(session: Session, params: URLSearchParams): strin
     );
     if (!df) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
   } else {
-    const { files } = loadReview(session);
+    // Mirror renderFullFileResponse exactly: context-only files (referenced by a
+    // tour step, absent from the diff) are in scope; df stays undefined for them
+    // and buildFullFileRows(undefined, …) renders the whole file as unchanged.
+    const { tour, files } = loadReview(session);
+    const allowed = new Set<string>([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+    if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     df = files.find((f) => f.newPath === file);
-    if (!df) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
   }
   const newLines = readWholeFile(repo, file, session.head) ?? [];
   if (!newLines.length) return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
+  // Clamp to the real file length: the diff parser can leak a phantom empty
+  // ctx row one past EOF (the raw diff's trailing newline), and ranges past
+  // EOF must serve fewer rows, never invented ones.
+  const last = newLines.length;
   const rows = buildFullFileRows(df, newLines, []).filter(
-    (r) => r.type === 'ctx' && r.newNo !== undefined && r.newNo >= from && r.newNo <= to,
+    (r) => r.type === 'ctx' && r.newNo !== undefined && r.newNo >= from && r.newNo <= to && r.newNo <= last,
   );
-  return renderContextRows(rows, layout, { file, oldFile: df.oldPath, newFile: df.status === 'added' });
+  return renderContextRows(rows, layout, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
 }
 
 /** Raw `git diff` text for the current review scope — used to detect agent code edits. */

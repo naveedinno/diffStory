@@ -370,9 +370,13 @@ test('/api/diff/context serves clamped context rows', async () => {
   // outside the hunk, so the expandable gap consists of real *context* rows.
   const lines = Array.from({ length: 40 }, (_, i) => 'line ' + (i + 1));
   writeFileSync(join(repo, 'notes.txt'), lines.join('\n') + '\n');
+  // A second committed file that then vanishes from the working tree: its diff
+  // entry survives (status deleted) but readWholeFile can't serve its lines.
+  writeFileSync(join(repo, 'gone.txt'), 'ghost\n');
   execFileSync('git', ['add', '.'], { cwd: repo });
   execFileSync('git', ['commit', '-qm', 'add notes'], { cwd: repo });
   writeFileSync(join(repo, 'notes.txt'), lines.slice(0, 39).join('\n') + '\nline forty\n');
+  rmSync(join(repo, 'gone.txt'));
   const { server, base } = await boot();
   try {
     await fetch(`${base}/api/repo/open`, {
@@ -395,6 +399,16 @@ test('/api/diff/context serves clamped context rows', async () => {
     assert.match(await split.text(), /ds-celldiv/);
     const empty = await fetch(`${base}/api/diff/context?file=notes.txt&from=9999&to=eof&layout=unified`);
     assert.match(await empty.text(), /data-from="0" data-to="0"/);
+    // Inverted numeric range (to < from) hits the guard, not the row filter.
+    const inverted = await fetch(`${base}/api/diff/context?file=notes.txt&from=10&to=5&layout=unified`);
+    assert.match(await inverted.text(), /^<div data-ctx-rows data-from="0" data-to="0"><\/div>$/);
+    // A numeric range past EOF clamps to the file's last context line — that's
+    // 39 here (line 40 is the added line, not a ctx row) — instead of erroring.
+    const past = await fetch(`${base}/api/diff/context?file=notes.txt&from=38&to=58&layout=unified`);
+    assert.match(await past.text(), /^<div data-ctx-rows data-from="38" data-to="39">/);
+    // A file that's in the diff but unreadable from the working tree gets the note.
+    const unreadable = await fetch(`${base}/api/diff/context?file=gone.txt&from=1&to=5&layout=unified`);
+    assert.match(await unreadable.text(), /Couldn't read gone\.txt from the working tree\./);
     const bad = await fetch(`${base}/api/diff/context?file=nope.md&from=1&to=2&layout=unified`);
     assert.match(await bad.text(), /isn't part of this change/);
   } finally {
