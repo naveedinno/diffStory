@@ -2,7 +2,7 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -411,6 +411,62 @@ test('/api/diff/context serves clamped context rows', async () => {
     assert.match(await unreadable.text(), /Couldn't read gone\.txt from the working tree\./);
     const bad = await fetch(`${base}/api/diff/context?file=nope.md&from=1&to=2&layout=unified`);
     assert.match(await bad.text(), /isn't part of this change/);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('/api/diff/context serves the story head, not the drifted working tree', async () => {
+  const repo = gitRepo();
+  const lines = Array.from({ length: 30 }, (_, i) => 'line ' + (i + 1));
+  writeFileSync(join(repo, 'notes.txt'), lines.join('\n') + '\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add notes'], { cwd: repo });
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim();
+  writeFileSync(join(repo, 'notes.txt'), lines.slice(0, 29).join('\n') + '\nline thirty\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'change tail'], { cwd: repo });
+  const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim();
+  // Drift the working tree past the story's pinned head: line 3 becomes "drifted".
+  writeFileSync(
+    join(repo, 'notes.txt'),
+    ['line 1', 'line 2', 'drifted'].concat(lines.slice(3, 29)).join('\n') + '\nline thirty\n',
+  );
+  // A minimal valid story pinned to base..head — selecting it clears session.head,
+  // so the endpoint must read the file at the story's resolved head, not the tree.
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(
+    join(repo, '.diffstory', 'story.json'),
+    JSON.stringify({
+      version: 1,
+      title: 'Pinned story',
+      summary: '',
+      base: baseSha,
+      head: headSha,
+      steps: [
+        { id: 's1', order: 1, title: 'Tail change', file: 'notes.txt', range: [30, 30], kind: 'changed', why: 'The tail line changed.' },
+      ],
+    }),
+  );
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    // Visiting the review route with ?story= selects the story (and clears session scope).
+    const review = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`);
+    assert.equal(review.status, 200);
+    const res = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=4&layout=unified`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);
+    // Story-head content at line 3 is "line 3" (digit tokenized by the highlighter) —
+    // the drifted working-tree content must NOT leak in.
+    assert.match(html, /line <span class="tk-n">3<\/span>/);
+    assert.doesNotMatch(html, /drifted/);
   } finally {
     server.close();
     rmSync(repo, { recursive: true, force: true });

@@ -178,13 +178,13 @@ export const DIFF_JS = `
     return true;
   }
 
-  function setMode(btn){
+  function setMode(btn,opts){
     var holder=closest(btn,'.ds-filepanel')||closest(btn,'.ds-diff');if(!holder)return;
     var file=holder.getAttribute('data-file');
     var mode=btn.getAttribute('data-mode');
     $all('.ds-modetoggle button',holder).forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-mode')===mode);});
     var diffInner=$('[data-diff-inner]',holder),fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),hint=$('[data-difthint]',holder);
-    if(holder.classList.contains('ds-filepanel')){try{localStorage.setItem('ds-files-mode',mode);}catch(e){}}
+    if(holder.classList.contains('ds-filepanel')&&!(opts&&opts.persist===false)){try{localStorage.setItem('ds-files-mode',mode);}catch(e){}}
     var needsLoad=false;
     if(mode==='full'){
       if(hint){if(!hint.getAttribute('data-diffhint'))hint.setAttribute('data-diffhint',hint.textContent);hint.textContent='Complete file';}

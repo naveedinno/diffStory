@@ -590,8 +590,9 @@ function renderContextResponse(session, params) {
     if (to < from)
         return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
     let df;
+    let head = session.head;
     if (session.selectedStory === null) {
-        df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), session.head)).find((f) => f.newPath === file);
+        df = parseUnifiedDiff(getDiff(repo, resolveBase(repo, session.base), head)).find((f) => f.newPath === file);
         if (!df)
             return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     }
@@ -599,13 +600,19 @@ function renderContextResponse(session, params) {
         // Mirror renderFullFileResponse exactly: context-only files (referenced by a
         // tour step, absent from the diff) are in scope; df stays undefined for them
         // and buildFullFileRows(undefined, …) renders the whole file as unchanged.
-        const { tour, files } = loadReview(session);
+        // Also mirror its revision handling: session.head is cleared while a story is
+        // selected, so the story's resolved head (from loadReview) must be used —
+        // otherwise gap expansion serves working-tree content misaligned with the
+        // story's fixed base..head diff.
+        const loaded = loadReview(session);
+        const { tour, files } = loaded;
+        head = loaded.head;
         const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
         if (!allowed.has(file))
             return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
         df = files.find((f) => f.newPath === file);
     }
-    const newLines = readWholeFile(repo, file, session.head) ?? [];
+    const newLines = readWholeFile(repo, file, head) ?? [];
     if (!newLines.length)
         return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
     // Clamp to the real file length: ranges past EOF must serve fewer rows,

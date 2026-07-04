@@ -1431,7 +1431,7 @@ const PAGE_JS_HEAD = `
     var want=stored||(active?active.getAttribute('data-mode'):null);
     if(!want)return;
     var btn=$('.ds-modetoggle button[data-mode="'+want+'"]',panel)||active;
-    if(btn)setMode(btn);
+    if(btn)setMode(btn,{persist:false});
   }
   function selectFileByPath(file){
     for(var k=0;k<filePanels.length;k++){if(filePanels[k].getAttribute('data-file')===file){selectFile(k);return;}}
@@ -2017,6 +2017,7 @@ const PAGE_JS_TAIL = `
       return;
     }
     if((e.key==='v'||e.key==='V')&&!isTextEntryTarget(e.target)&&filesView&&!filesView.hidden){
+      if(drawer&&!drawer.hidden)return;
       var vp=filePanels[selectedFile];
       if(vp){toggleViewed(vp.getAttribute('data-file'));e.preventDefault();return;}
     }
