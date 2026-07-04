@@ -12,9 +12,9 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:rgba(208,188,255,0.16);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-difftoolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
-.ds-modetoggle{display:flex;gap:2px;padding:2px;border-radius:6px;background:var(--gutter-hi);border:1px solid var(--diff-rule)}
-.ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:6px;border:none;cursor:pointer;background:transparent;color:var(--muted)}
-.ds-modetoggle button.is-active{background:var(--accent-soft);color:var(--accent-text)}
+.ds-modetoggle{display:flex;gap:0;padding:2px;border-radius:7px;background:var(--fill-2);border:none}
+.ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background .15s ease,color .15s ease}
+.ds-modetoggle button.is-active{background:var(--panel4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.28)}
 .ds-diffhead{display:flex;background:#191b20;border-bottom:1px solid var(--diff-rule)}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
 .ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 14px;overflow:hidden}
@@ -29,7 +29,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;
 .ds-diffhead-note{font-size:11px;color:var(--dim2)}
 .ds-diffbody{font-family:var(--mono);font-size:12.5px;line-height:1.48;background:var(--panel3)}
 .ds-diffbody-unified{font-size:12px;line-height:1.5;background:var(--panel3)}
-.ds-hunkgap{padding:2px 14px;background:#15161a;color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--diff-rule);border-bottom:1px solid var(--diff-rule)}
+.ds-hunkgap{padding:2px 14px;background:#15161a;color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .ds-row{display:flex;position:relative;border-bottom:1px solid rgba(255,255,255,0.025);min-height:24px}
 .ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary);animation:dsVoiceFocus 1.35s ease-in-out infinite}
 .ds-row.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px rgba(208,188,255,0.72)}
@@ -98,6 +98,10 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-gapbtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-gapbtn:disabled{opacity:.4;cursor:default}
 .ds-gapdots{color:var(--dim2)}
+/* mode/file switches fade in */
+.ds-filepanel-body>[data-diff-inner]:not([hidden]),.ds-filepanel-body>[data-split-inner]:not([hidden]),.ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in .16s ease}
+@keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-modetoggle button,.ds-viewedmark,.ds-gapbtn{transition:none!important}}
 `;
 
 export const DIFF_JS = `

@@ -5,6 +5,7 @@
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS } from './brand.js';
+import { sharedTokens } from './theme.js';
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -112,10 +113,11 @@ export function renderChangePage(sum, opts) {
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — new review</title>
 <style>
-:root{--bg:#f5f5f7;--elev:#fff;--label:#1d1d1f;--l2:#6e6e73;--l3:#8e8e93;--hair:rgba(0,0,0,.1);--sep:rgba(0,0,0,.07);
-  --blue:#007aff;--blue2:#0067d6;--add:#1d7d3f;--del:#c4271f;--addbar:#34c759;--delbar:#ff453a;--fill:rgba(120,120,128,.12);--subbg:rgba(120,120,128,.06)}
-@media (prefers-color-scheme:dark){:root{--bg:#1c1c1e;--elev:#2c2c2e;--label:#f5f5f7;--l2:#aeaeb2;--l3:#8e8e93;--hair:rgba(255,255,255,.12);
-  --sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--add:#30d158;--del:#ff6961;--addbar:#30d158;--delbar:#ff453a;--fill:rgba(120,120,128,.24);--subbg:rgba(255,255,255,.035)}}
+${sharedTokens()}
+:root{--bg:var(--app-bg);--elev:var(--app-elev);--label:var(--app-label);--l2:var(--app-l2);--l3:var(--app-l3);
+  --hair:var(--app-hair);--sep:var(--app-sep);--blue:var(--app-blue);--blue2:var(--app-blue2);
+  --add:var(--app-add);--del:var(--app-del);--addbar:var(--app-addbar);--delbar:var(--app-delbar);
+  --fill:var(--app-fill);--subbg:var(--app-subbg)}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}

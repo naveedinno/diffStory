@@ -4,6 +4,7 @@
 // or injects server-escaped HTML from /api/fullfile — so there is no injection sink.
 
 import { DIFF_CSS, DIFF_JS } from './diff-assets.js';
+import { sharedTokens } from './theme.js';
 
 const PAGE_CSS_CORE = `
 /* Material 3-inspired tokens. Dark is the default scheme; the light override
@@ -14,16 +15,16 @@ const PAGE_CSS_CORE = `
   /* Apple-HIG palette (dark default): neutral system grays + system blue accent.
      The --md-* role names are kept so existing component CSS keeps resolving; only
      the values changed (purple/Google → gray/blue/SF). */
-  --md-primary:#0A84FF; --md-on-primary:#FFFFFF; --md-primary-container:#0A3A66; --md-on-primary-container:#D6E9FF;
+  --md-primary:var(--app-blue); --md-on-primary:#FFFFFF; --md-primary-container:#0A3A66; --md-on-primary-container:#D6E9FF;
   --md-secondary:#AEAEB2; --md-secondary-container:rgba(10,132,255,0.22); --md-on-secondary-container:#D6E9FF;
   --md-tertiary:#FF375F; --md-error:#FF453A; --md-on-error:#FFFFFF; --md-error-container:rgba(255,69,58,0.22);
-  --md-surface:#1C1C1E; --md-surface-container-low:#1C1C1E; --md-surface-container:#2C2C2E;
+  --md-surface:var(--app-bg); --md-surface-container-low:var(--app-bg); --md-surface-container:var(--app-elev);
   --md-surface-container-high:#3A3A3C; --md-surface-container-highest:#48484A;
-  --md-on-surface:#F5F5F7; --md-on-surface-variant:#AEAEB2; --md-outline:#8E8E93; --md-outline-variant:rgba(255,255,255,0.16);
+  --md-on-surface:var(--app-label); --md-on-surface-variant:#AEAEB2; --md-outline:#8E8E93; --md-outline-variant:rgba(255,255,255,0.16);
   --accent:var(--md-primary); --accent-hi:#409CFF; --accent-soft:rgba(10,132,255,0.16);
   --accent-text:#6CB4FF; --accent-blue:var(--md-primary); --on-accent:var(--md-on-primary);
-  --add:#30D158; --add-bg:rgba(48,209,88,0.14); --add-bd:#30D158; --add-text:#7EE29A;
-  --del:var(--md-error); --del-bg:rgba(255,69,58,0.14); --del-text:#FFB3AC;
+  --add:var(--app-addbar); --add-bg:rgba(48,209,88,0.14); --add-bd:#30D158; --add-text:#7EE29A;
+  --del:var(--app-delbar); --del-bg:rgba(255,69,58,0.14); --del-text:#FFB3AC;
   --amber:#FF9F0A; --amber-soft:rgba(255,159,10,0.14); --amber-text:#FFCC80; --on-amber:#2A1800;
   --green:#30D158; --green-hi:#5EE07F; --on-green:#00250C;
   --bg:var(--md-surface); --panel:var(--md-surface-container-low); --panel2:var(--md-surface-container);
@@ -46,12 +47,11 @@ const PAGE_CSS_CORE = `
 }
 @media (prefers-color-scheme:light){
   :root{
-    --md-primary:#007AFF; --md-on-primary:#FFFFFF; --md-primary-container:#D5E7FF; --md-on-primary-container:#003E80;
+    --md-on-primary:#FFFFFF; --md-primary-container:#D5E7FF; --md-on-primary-container:#003E80;
     --md-secondary:#6E6E73; --md-secondary-container:rgba(0,122,255,0.14); --md-on-secondary-container:#0061CC;
     --md-tertiary:#FF2D55; --md-error:#FF3B30; --md-on-error:#FFFFFF; --md-error-container:rgba(255,59,48,0.12);
-    --md-surface:#F5F5F7; --md-surface-container-low:#F5F5F7; --md-surface-container:#FFFFFF;
     --md-surface-container-high:#ECECF0; --md-surface-container-highest:#E3E3E8;
-    --md-on-surface:#1D1D1F; --md-on-surface-variant:rgba(60,60,67,0.6); --md-outline:#C6C6C8; --md-outline-variant:rgba(60,60,67,0.18);
+    --md-on-surface-variant:rgba(60,60,67,0.6); --md-outline:#C6C6C8; --md-outline-variant:rgba(60,60,67,0.18);
     --accent:var(--md-primary); --accent-hi:#3395FF; --accent-soft:rgba(0,122,255,0.12);
     --accent-text:#0067D6; --accent-blue:var(--md-primary); --on-accent:var(--md-on-primary);
     --add:#248A3D; --add-bg:rgba(52,199,89,0.14); --add-bd:#248A3D; --add-text:#1A6B30;
@@ -561,7 +561,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-composer-add,.ds-thread-add{color:var(--accent-blue);border-color:var(--accent-blue)}
 `;
 
-export const PAGE_CSS = PAGE_CSS_CORE + DIFF_CSS;
+export const PAGE_CSS = sharedTokens() + PAGE_CSS_CORE + DIFF_CSS;
 
 // No backticks and no ${} below — safe to embed in a template literal.
 const PAGE_JS_HEAD = `

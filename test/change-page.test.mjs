@@ -731,3 +731,9 @@ test('change page does not embed the generation progress panel', () => {
   assert.doesNotMatch(html, /new ProgressPanel|ProgressPanel\(/);
   assert.doesNotMatch(html, /run_done/);
 });
+
+test('change page draws from the shared --app-* tokens', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
+  assert.match(html, /--app-bg:/);
+  assert.match(html, /--bg:var\(--app-bg\)/);
+});

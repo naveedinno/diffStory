@@ -43,3 +43,8 @@ test('expand-context client is wired', () => {
   assert.match(DIFF_JS, /\/api\/diff\/context\?file=/);
   assert.match(PAGE_JS, /data-expand/);
 });
+
+test('review page consumes shared tokens and respects reduced motion', () => {
+  assert.match(PAGE_CSS, /--app-bg:/);
+  assert.match(DIFF_CSS, /prefers-reduced-motion/);
+});
