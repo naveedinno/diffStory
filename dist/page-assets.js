@@ -52,6 +52,11 @@ const PAGE_CSS_CORE = `
     --md-on-surface-variant:rgba(60,60,67,0.6); --md-outline:#C6C6C8; --md-outline-variant:rgba(60,60,67,0.18);
     --accent:var(--md-primary); --accent-hi:#3395FF; --accent-soft:rgba(0,122,255,0.12);
     --accent-text:#0067D6; --accent-blue:var(--md-primary); --on-accent:var(--md-on-primary);
+    /* --add/--del are KEPT light overrides on purpose: they are the darker,
+       text-legible hues for light mode and deliberately differ from the shared
+       --app-addbar/--app-delbar (the brighter bar/tint colors). Don't "tidy"
+       these away as redundant with the token unification — that reintroduces
+       color drift on the light-scheme review page. */
     --add:#248A3D; --add-bg:rgba(52,199,89,0.14); --add-bd:#248A3D; --add-text:#1A6B30;
     --del:var(--md-error); --del-bg:rgba(255,59,48,0.10); --del-text:#C4271F;
     --amber:#B25000; --amber-soft:rgba(255,149,0,0.16); --amber-text:#8A5300; --on-amber:#FFFFFF;
@@ -65,6 +70,10 @@ const PAGE_CSS_CORE = `
     --hairline:rgba(0,0,0,0.12);
     --material:var(--md-surface-container); --scrim:rgba(0,0,0,0.32); --shadow:0 1px 2px rgba(0,0,0,0.16),0 2px 6px rgba(0,0,0,0.10);
     --scroll:rgba(60,60,67,0.24); --scroll-hi:rgba(60,60,67,0.38);
+    /* Diff gutter rail: the dark-default values (#161618 …) are near-black and
+       would paint a black line-number column on the light-scheme diff, so give
+       them light equivalents here. */
+    --gutter:#ECECF0; --gutter-hi:#E3E3E8; --diff-rule:rgba(0,0,0,0.10);
     --tk-k:#9A2EBF; --tk-t:#0E7490; --tk-f:#2563EB; --tk-s:#297A3A; --tk-n:#B45309; --tk-c:#6B7785;
   }
 }

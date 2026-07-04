@@ -3,6 +3,10 @@
 // no ${} in the JS. DIFF_JS is function declarations only — page-assets
 // splices it INSIDE the page IIFE, so these share its closure scope.
 export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;padding:18px 30px 26px}
+/* .ds-why (the step narrative, page chrome) rides along in this diff-scoped
+   at-rule because it shares one short-viewport breakpoint with .ds-diffscroll —
+   they trade vertical space together, so the rule stays coupled rather than
+   split across two files. */
 @media (max-height:760px){.ds-why{max-height:120px}.ds-diffscroll{min-height:160px}}
 
 /* ---- diff ---- */
@@ -240,7 +244,8 @@ export const DIFF_JS = `
       total++;
       var on=!!viewedFiles[f];if(on)n++;
       it.classList.toggle('is-viewed',on);
-      var mark=$('[data-viewed-toggle]',it);if(mark)mark.setAttribute('aria-checked',on?'true':'false');
+      var mark=$('[data-viewed-toggle]',it);
+      if(mark){mark.setAttribute('aria-checked',on?'true':'false');mark.title=on?'Viewed — v to unmark':'Mark as viewed (v)';}
     });
     var prog=$('[data-viewed-progress]');
     if(prog)prog.textContent=n?(n+' of '+total+' viewed'):(total+' '+(total===1?'file':'files'));

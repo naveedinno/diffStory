@@ -887,6 +887,54 @@ test('sidebar file items carry a viewed toggle and the body a scope key', () => 
   assert.match(html, /data-viewed-progress/);
 });
 
+test('a new file has no expandable eof gap in the split view', () => {
+  const blocks = [
+    [
+      { type: 'add', newNo: 1, content: 'export const x = 1;' },
+      { type: 'add', newNo: 2, content: 'export const y = 2;' },
+    ],
+  ];
+  // A brand-new file's entire content is the hunk — there are no hidden lines
+  // past it, so the "reveal more" affordance would be a lie.
+  const created = renderSplitHunks(blocks, { file: 'brand.ts', newFile: true, hunkRanges: [[1, 2]], canExpand: true });
+  assert.doesNotMatch(created, /data-gap/);
+  // Control: the same rows as a modified file DO get the eof affordance.
+  const modified = renderSplitHunks(blocks, { file: 'brand.ts', newFile: false, hunkRanges: [[1, 2]], canExpand: true });
+  assert.match(modified, /data-gap-from="3" data-gap-to="eof"/);
+});
+
+test('a new file shows no phantom eof expand-gap in the All-files unified body', () => {
+  const nfTour = {
+    version: 1,
+    title: 'New',
+    summary: '',
+    steps: [
+      { id: 's1', order: 1, title: 'New file', file: 'brand.ts', range: [1, 2], kind: 'new-file', why: 'A brand-new file added whole.' },
+    ],
+  };
+  const nfFiles = [
+    {
+      oldPath: 'brand.ts',
+      newPath: 'brand.ts',
+      status: 'added',
+      hunks: [
+        {
+          oldStart: 0,
+          oldLines: 0,
+          newStart: 1,
+          newLines: 2,
+          lines: [
+            { type: 'add', content: 'export const x = 1;', newNo: 1 },
+            { type: 'add', content: 'export const y = 2;', newNo: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  const html = renderPage({ repo: process.cwd(), tour: nfTour, files: nfFiles, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /data-gap-to="eof"/);
+});
+
 test('adjacent hunks render a bare, non-expandable gap between them', () => {
   const blocks = [
     [{ type: 'ctx', oldNo: 1, newNo: 1, content: 'top' }],

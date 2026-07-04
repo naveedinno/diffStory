@@ -478,6 +478,11 @@ function toUnified(l: DiffLine, uncovered: Array<[number, number]>): UnifiedRow 
   return { type: l.type, no: l.newNo ?? l.oldNo, content: l.content, untoured };
 }
 
+// The new-file line span a hunk occupies, used to size the expandable gaps
+// between hunks. A pure-deletion hunk has newLines === 0; the Math.max(…,1)
+// floor claims one line at newStart so the range is never inverted — a known,
+// harmless one-line seam where the context line beside such a hunk is attributed
+// to the hunk rather than a neighboring gap. Revisit here if gap ranges change.
 export function hunkNewRange(h: DiffHunk): [number, number] {
   return [h.newStart, h.newStart + Math.max(h.newLines, 1) - 1];
 }

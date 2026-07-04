@@ -58,3 +58,9 @@ test('hunksToSbsBlocks maps hunks to split rows and flags uncovered adds', () =>
   assert.equal(blocks[0][0].type, 'ctx');
   assert.equal(blocks[0][1].untoured, true);
 });
+
+test('hunksToSbsBlocks tolerates an absent file (context-only degrade path)', () => {
+  // Split view for a context-only file (referenced by a step, absent from the
+  // diff) has no DiffFile — the endpoint passes undefined and expects [].
+  assert.deepEqual(hunksToSbsBlocks(undefined, []), []);
+});

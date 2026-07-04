@@ -724,7 +724,9 @@ function filePanel(f, i, stepIndexById) {
             ? renderHunkGap({ file: f.file, from: prevEnd + 1, to: nextStart - 1 })
             : renderHunkGap();
     };
-    const gapAfterLast = canExpand && f.hunks.length
+    // A new file's whole content is the hunk — nothing is hidden past it, so the
+    // trailing "reveal more" affordance would promise lines that can't exist.
+    const gapAfterLast = canExpand && f.hunks.length && f.kind !== 'new'
         ? renderHunkGap({ file: f.file, from: f.hunkRanges[f.hunkRanges.length - 1][1] + 1, to: 'eof' })
         : '';
     const unified = f.hunks.length
@@ -864,7 +866,9 @@ export function renderSplitHunks(blocks, opts) {
             ? renderHunkGap({ file: opts.file, from: prevEnd + 1, to: nextStart - 1 })
             : renderHunkGap();
     };
-    const gapAfterLast = canExpand && hunkRanges && blocks.length
+    // A new file's whole content is the hunk — nothing is hidden past it (see
+    // filePanel's matching guard), so it gets no trailing eof expand affordance.
+    const gapAfterLast = canExpand && hunkRanges && blocks.length && !opts.newFile
         ? renderHunkGap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: 'eof' })
         : '';
     const body = blocks

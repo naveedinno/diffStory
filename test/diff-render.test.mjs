@@ -20,6 +20,16 @@ test('unified untoured row is flagged UNEXPLAINED', () => {
   assert.match(html, /UNEXPLAINED/);
 });
 
+test('unified del row carries the minus sign and an old-side anchor', () => {
+  const html = renderUnifiedRow(
+    { type: 'del', no: 7, content: 'gone();' },
+    { side: 'left', file: 'a.ts', line: 7 },
+  );
+  assert.match(html, /^<div class="ds-urow ds-row-del" data-file="a\.ts" data-line="7" data-side="left">/);
+  assert.match(html, /<span class="ds-sign ds-sign-del">−<\/span>/);
+  assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="7"/);
+});
+
 test('split ctx row renders both cells with line numbers', () => {
   const html = renderSplitRow(
     { type: 'ctx', oldNo: 4, newNo: 5, content: 'same' },
