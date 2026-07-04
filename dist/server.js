@@ -608,9 +608,9 @@ function renderContextResponse(session, params) {
     const newLines = readWholeFile(repo, file, session.head) ?? [];
     if (!newLines.length)
         return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
-    // Clamp to the real file length: the diff parser can leak a phantom empty
-    // ctx row one past EOF (the raw diff's trailing newline), and ranges past
-    // EOF must serve fewer rows, never invented ones.
+    // Clamp to the real file length: ranges past EOF must serve fewer rows,
+    // never invented ones. Defense-in-depth — the parser now bounds hunks by
+    // their header counts, so it no longer leaks a phantom row past EOF.
     const last = newLines.length;
     const rows = buildFullFileRows(df, newLines, []).filter((r) => r.type === 'ctx' && r.newNo !== undefined && r.newNo >= from && r.newNo <= to && r.newNo <= last);
     return renderContextRows(rows, layout, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });

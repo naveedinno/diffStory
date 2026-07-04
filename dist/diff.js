@@ -6,6 +6,8 @@ export function parseUnifiedDiff(raw) {
     let hunk = null;
     let oldNo = 0;
     let newNo = 0;
+    let oldRemain = 0;
+    let newRemain = 0;
     const pushFile = () => {
         if (file) {
             if (hunk)
@@ -72,22 +74,38 @@ export function parseUnifiedDiff(raw) {
             hunk = { oldStart, oldLines, newStart, newLines, lines: [] };
             oldNo = oldStart;
             newNo = newStart;
+            oldRemain = oldLines;
+            newRemain = newLines;
             continue;
         }
         if (!hunk)
             continue;
         if (line.startsWith('\\'))
             continue; // "\ No newline at end of file"
+        // The @@ header's counts bound the hunk: once a side's budget is spent,
+        // further lines for it are junk — notably the empty string left by the
+        // raw diff's trailing newline, which would otherwise become a phantom
+        // ctx line one past the last hunk's real range.
         const marker = line[0];
         const content = line.slice(1);
         let dl;
         if (marker === '+') {
+            if (newRemain <= 0)
+                continue;
+            newRemain--;
             dl = { type: 'add', content, newNo: newNo++ };
         }
         else if (marker === '-') {
+            if (oldRemain <= 0)
+                continue;
+            oldRemain--;
             dl = { type: 'del', content, oldNo: oldNo++ };
         }
         else if (marker === ' ' || marker === undefined) {
+            if (oldRemain <= 0 || newRemain <= 0)
+                continue;
+            oldRemain--;
+            newRemain--;
             dl = { type: 'ctx', content, oldNo: oldNo++, newNo: newNo++ };
         }
         else {
