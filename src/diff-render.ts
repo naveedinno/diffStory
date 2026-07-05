@@ -113,22 +113,39 @@ export function renderUnifiedRow(row: UnifiedRow, target?: RowTarget, intra?: st
 }
 
 export interface GapInfo { file: string; from: number; to: number | 'eof' }
+export interface HunkGapOpts { split?: boolean }
 
 /** The ⋯ separator between hunks. Bare (no gap info) matches the legacy markup;
  *  Task 6 passes GapInfo to make it expandable. */
-export function renderHunkGap(gap?: GapInfo): string {
-  if (!gap) return `<div class="ds-hunkgap"><span>⋯</span></div>`;
+export function renderHunkGap(gap?: GapInfo, opts: HunkGapOpts = {}): string {
+  if (!gap) {
+    return opts.split
+      ? `<div class="ds-hunkgap ds-hunkgap-split"><span class="ds-gap-side ds-gap-side-l"></span><span class="ds-gap-mid"><span>⋯</span></span><span class="ds-gap-side ds-gap-side-r"></span></div>`
+      : `<div class="ds-hunkgap"><span>⋯</span></div>`;
+  }
   const up =
     gap.to === 'eof'
       ? ''
       : `<button type="button" class="ds-gapbtn" data-expand="up" title="Show the last 20 hidden lines">↑ 20</button>`;
+  const open = `<div class="ds-hunkgap is-expandable${
+    opts.split ? ' ds-hunkgap-split' : ''
+  }" data-gap data-gap-file="${esc(gap.file)}" data-gap-from="${gap.from}" data-gap-to="${gap.to}">`;
+  if (!opts.split) {
+    return (
+      open +
+      `<button type="button" class="ds-gapbtn" data-expand="down" title="Show the first 20 hidden lines">↓ 20</button>` +
+      `<span class="ds-gapdots">⋯</span>` +
+      `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines">all</button>` +
+      `<span class="ds-gapdots">⋯</span>` +
+      up +
+      `</div>`
+    );
+  }
   return (
-    `<div class="ds-hunkgap is-expandable" data-gap data-gap-file="${esc(gap.file)}" data-gap-from="${gap.from}" data-gap-to="${gap.to}">` +
-    `<button type="button" class="ds-gapbtn" data-expand="down" title="Show the first 20 hidden lines">↓ 20</button>` +
-    `<span class="ds-gapdots">⋯</span>` +
-    `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines">all</button>` +
-    `<span class="ds-gapdots">⋯</span>` +
-    up +
+    open +
+    `<span class="ds-gap-side ds-gap-side-l"><button type="button" class="ds-gapbtn" data-expand="down" title="Show the first 20 hidden lines">↓ 20</button><span class="ds-gapdots">⋯</span></span>` +
+    `<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines">all</button></span>` +
+    `<span class="ds-gap-side ds-gap-side-r"><span class="ds-gapdots">⋯</span>${up}</span>` +
     `</div>`
   );
 }

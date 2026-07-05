@@ -950,9 +950,11 @@ test('adjacent hunks render a bare, non-expandable gap between them', () => {
     canExpand: true,
   });
   // Hunks 1-5 and 6-9 touch (no hidden lines between them): the separator must
-  // be the legacy bare gap, with no expand affordance…
-  assert.match(html, /<div class="ds-hunkgap"><span>⋯<\/span><\/div>/);
+  // be a bare split gap, with no expand affordance…
+  assert.match(html, /<div class="ds-hunkgap ds-hunkgap-split">/);
+  assert.match(html, /<span class="ds-gap-mid"><span>⋯<\/span><\/span>/);
   assert.doesNotMatch(html, /data-gap-from="6"/);
   // …while the trailing eof gap stays expandable.
+  assert.match(html, /<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all"/);
   assert.match(html, /data-gap-from="10" data-gap-to="eof"/);
 });

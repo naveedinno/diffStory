@@ -73,6 +73,21 @@ test('bare hunk gap matches the legacy markup exactly', () => {
   assert.equal(renderHunkGap(), '<div class="ds-hunkgap"><span>⋯</span></div>');
 });
 
+test('split hunk gap keeps the middle control on the split divider', () => {
+  const html = renderHunkGap({ file: 'a.ts', from: 10, to: 30 }, { split: true });
+  assert.match(html, /^<div class="ds-hunkgap is-expandable ds-hunkgap-split"/);
+  assert.match(html, /<span class="ds-gap-side ds-gap-side-l">/);
+  assert.match(html, /<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all"/);
+  assert.match(html, /<span class="ds-gap-side ds-gap-side-r">/);
+});
+
+test('bare split hunk gap uses the split divider scaffold', () => {
+  const html = renderHunkGap(undefined, { split: true });
+  assert.match(html, /^<div class="ds-hunkgap ds-hunkgap-split">/);
+  assert.match(html, /<span class="ds-gap-mid"><span>⋯<\/span><\/span>/);
+  assert.doesNotMatch(html, /data-gap/);
+});
+
 test('attrs helpers escape file paths', () => {
   assert.match(rowAttrs({ side: 'right', file: 'a"b.ts', line: 1 }), /data-file="a&quot;b\.ts"/);
   assert.match(targetAttrs({ side: 'left', file: '<x>.ts', line: 2 }), /data-comment-file="&lt;x&gt;\.ts"/);

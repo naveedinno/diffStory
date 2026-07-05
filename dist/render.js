@@ -579,10 +579,11 @@ function diffInner(s, comments) {
         return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
     }
     const head = diffHead(s);
+    const hunkGap = () => (s.context || s.newFile ? renderHunkGap() : renderHunkGap(undefined, { split: true }));
     const body = s.blocks
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return ((bi > 0 ? renderHunkGap() : '') +
+        return ((bi > 0 ? hunkGap() : '') +
             block.map((row) => sbsRow(row, s, comments, bi, intra)).join(''));
     })
         .join('');
@@ -855,21 +856,21 @@ export function renderSplitHunks(blocks, opts) {
     const canExpand = !!opts.canExpand && !!hunkRanges;
     const gapBefore = (bi) => {
         if (!canExpand || !hunkRanges)
-            return bi > 0 ? renderHunkGap() : '';
+            return bi > 0 ? renderHunkGap(undefined, { split: true }) : '';
         if (bi === 0) {
             const start = hunkRanges[0]?.[0] ?? 1;
-            return start > 1 ? renderHunkGap({ file: opts.file, from: 1, to: start - 1 }) : '';
+            return start > 1 ? renderHunkGap({ file: opts.file, from: 1, to: start - 1 }, { split: true }) : '';
         }
         const prevEnd = hunkRanges[bi - 1][1];
         const nextStart = hunkRanges[bi][0];
         return nextStart - prevEnd > 1
-            ? renderHunkGap({ file: opts.file, from: prevEnd + 1, to: nextStart - 1 })
-            : renderHunkGap();
+            ? renderHunkGap({ file: opts.file, from: prevEnd + 1, to: nextStart - 1 }, { split: true })
+            : renderHunkGap(undefined, { split: true });
     };
     // A new file's whole content is the hunk — nothing is hidden past it (see
     // filePanel's matching guard), so it gets no trailing eof expand affordance.
     const gapAfterLast = canExpand && hunkRanges && blocks.length && !opts.newFile
-        ? renderHunkGap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: 'eof' })
+        ? renderHunkGap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: 'eof' }, { split: true })
         : '';
     const body = blocks
         .map((block, bi) => {

@@ -20,6 +20,7 @@ test('diff assets are composed back into the page assets', () => {
 test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-row\b/);
   assert.match(DIFF_CSS, /\.ds-hunkgap\b/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-split\b/);
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
