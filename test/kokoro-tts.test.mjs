@@ -106,3 +106,23 @@ test('kokoro synthesis can be cancelled while the local process is still running
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('kokoro unavailable message describes optional compatible Python setup', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-kokoro-home-'));
+  try {
+    const fakePython = join(home, 'missing-kokoro-python.sh');
+    writeFileSync(fakePython, '#!/bin/sh\necho "No module named kokoro" >&2\nexit 42\n', 'utf8');
+    chmodSync(fakePython, 0o755);
+    await assert.rejects(
+      synthesizeWithKokoro(home, { text: 'hello', voice: 'af_heart', rate: 1 }, { command: fakePython }),
+      (err) => {
+        assert.match(err.message, /Kokoro AI voice is optional/);
+        assert.match(err.message, /Python 3\.10-3\.12/);
+        assert.doesNotMatch(err.message, /Python 3\.12 venv/);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

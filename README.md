@@ -22,6 +22,8 @@ Requirements:
 - optional: Claude or Codex installed on your PATH for story generation and
   comment handoff
 
+No Python is required for the core app.
+
 Install diffStory once:
 
 ```sh
@@ -150,6 +152,9 @@ npm run dev
 The app opens at `http://localhost:7777/`. If the browser does not open
 automatically, open the printed URL yourself.
 
+That is the whole core setup. You do not need Python, Homebrew, Kokoro, Claude,
+or Codex just to open the app and review diffs.
+
 Useful development commands:
 
 | Command | Use |
@@ -163,15 +168,18 @@ Useful development commands:
 
 ## Optional Local Voice
 
-The read-aloud popup can use Kokoro for local generated speech:
+Kokoro AI voice is optional. The read-aloud popup works with browser voices by
+default, and you only need this setup if you want local generated speech:
 
 ```sh
 npm run setup:kokoro
 ```
 
-The setup script installs `espeak-ng`, creates `~/.diffstory/kokoro-venv`, and
-installs the Python packages diffStory needs. After that, choose **Kokoro AI** in
-the voice settings.
+The setup script reuses a compatible Python if you already have one, creates
+`~/.diffstory/kokoro-venv`, installs `kokoro` and `soundfile`, and installs
+`espeak-ng` through Homebrew on macOS when needed. Kokoro currently supports
+Python 3.10, 3.11, or 3.12. After setup, choose **Kokoro AI** in the voice
+settings.
 
 ## Troubleshooting
 

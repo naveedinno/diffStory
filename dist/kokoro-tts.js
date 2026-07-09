@@ -18,7 +18,7 @@ try:
     import soundfile as sf
 except Exception as exc:
     raise RuntimeError(
-        'Kokoro is not installed. Run: brew install espeak-ng && python3 -m pip install "kokoro>=0.9.4" soundfile'
+        'Kokoro AI voice is optional. Run: npm run setup:kokoro, or install espeak-ng and Python packages into Python 3.10-3.12: python3 -m pip install "kokoro>=0.9.4" soundfile'
     ) from exc
 
 pipeline = KPipeline(lang_code=lang_code)
@@ -140,7 +140,7 @@ function ensureKokoroHelper(dir) {
 }
 function kokoroUnavailable(detail) {
     const suffix = detail ? ` ${detail}` : '';
-    return new Error(`Kokoro is unavailable. Run: npm run setup:kokoro. It creates a Python 3.12 venv and installs espeak-ng, kokoro, and soundfile.${suffix}`);
+    return new Error(`Kokoro AI voice is optional. To enable it, run: npm run setup:kokoro. The setup uses Python 3.10-3.12 plus espeak-ng, kokoro, and soundfile.${suffix}`);
 }
 function speechCancelled() {
     const err = new Error('Speech generation cancelled.');
