@@ -1,5 +1,5 @@
 // Thin wrapper over the `git` CLI. No external deps — just child_process.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_CONTEXT_LINES } from './config.js';
@@ -21,6 +21,19 @@ function tryGit(repo, args) {
     catch {
         return null;
     }
+}
+function gitOutputAllowingDiffExit(repo, args) {
+    const result = spawnSync('git', args, {
+        cwd: repo,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.error)
+        return null;
+    if (result.status === 0 || result.status === 1)
+        return result.stdout ?? '';
+    return null;
 }
 export function isGitRepo(repo) {
     return tryGit(repo, ['rev-parse', '--is-inside-work-tree']) !== null;
@@ -80,11 +93,19 @@ function defaultBranchCandidates(repo) {
  * all agree on the same reduced set without each call site re-deriving it.
  */
 export function getDiff(repo, base, head) {
+    const noise = new Set(noiseFiles(repo, base, head));
     const args = ['diff', '--no-color', '--no-ext-diff', `-U${DIFF_CONTEXT_LINES}`, base];
     if (head)
         args.push(head);
-    args.push('--', ...excludePathspecs(noiseFiles(repo, base, head)));
-    return git(repo, args);
+    args.push('--', ...excludePathspecs([...noise]));
+    const tracked = git(repo, args);
+    if (head)
+        return tracked;
+    const untracked = untrackedFiles(repo)
+        .filter((path) => !noise.has(path))
+        .map((path) => untrackedFileDiff(repo, path))
+        .filter(Boolean);
+    return joinDiffs([tracked, ...untracked]);
 }
 /**
  * Files nobody reviews by hand — generated/vendored by path, or so large they're
@@ -244,9 +265,7 @@ export function numstat(repo, base, head) {
         args.push(head);
     args.push('--');
     const out = tryGit(repo, args);
-    if (!out)
-        return [];
-    return out
+    const tracked = !out ? [] : out
         .split('\n')
         .filter(Boolean)
         .map((line) => {
@@ -255,6 +274,56 @@ export function numstat(repo, base, head) {
         const removed = parts[1] === '-' ? null : Number(parts[1]);
         return { path: parts.slice(2).join('\t'), added, removed };
     });
+    if (head)
+        return tracked;
+    return [...tracked, ...untrackedNumstat(repo)];
+}
+function joinDiffs(parts) {
+    return parts
+        .map((part) => part.trimEnd())
+        .filter(Boolean)
+        .join('\n');
+}
+function untrackedFiles(repo) {
+    const out = tryGit(repo, ['ls-files', '--others', '--exclude-standard', '-z']);
+    if (!out)
+        return [];
+    return out.split('\0').filter(Boolean).sort();
+}
+function untrackedFileDiff(repo, path) {
+    return (gitOutputAllowingDiffExit(repo, [
+        'diff',
+        '--no-color',
+        '--no-ext-diff',
+        '--no-index',
+        `-U${DIFF_CONTEXT_LINES}`,
+        '--',
+        '/dev/null',
+        path,
+    ]) ?? '');
+}
+function untrackedNumstat(repo) {
+    return untrackedFiles(repo).map((path) => {
+        const added = countFileLines(repo, path);
+        return { path, added, removed: 0 };
+    });
+}
+function countFileLines(repo, path) {
+    try {
+        const bytes = readFileSync(join(repo, path));
+        if (bytes.includes(0))
+            return null;
+        if (bytes.length === 0)
+            return 0;
+        let lines = 0;
+        for (const byte of bytes)
+            if (byte === 10)
+                lines++;
+        return bytes[bytes.length - 1] === 10 ? lines : lines + 1;
+    }
+    catch {
+        return null;
+    }
 }
 /**
  * Read an inclusive 1-based line range from a file in the working tree.

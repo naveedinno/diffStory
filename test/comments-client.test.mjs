@@ -147,3 +147,10 @@ test('the Send all button runs the batch and tracks the open count', () => {
   assert.match(PAGE_JS, /\[data-send-all\]'\)/);
   assert.match(PAGE_CSS, /\.ds-send-all/);
 });
+
+test('copying all comments includes every conversation turn, not only legacy replies', () => {
+  assert.match(PAGE_JS, /function commentTurnsToText\(/);
+  assert.match(PAGE_JS, /c\.turns\.forEach/);
+  assert.match(PAGE_JS, /who=t\.role==='ai'\?BRAND\+' reply':'Reviewer'/);
+  assert.match(PAGE_JS, /commentTurnsToText\(c\)\.forEach/);
+});

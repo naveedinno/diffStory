@@ -62,3 +62,16 @@ test('inspectRepo treats named stories as present stories', () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test('inspectRepo counts untracked files as reviewable changes', () => {
+  const d = gitRepo();
+  try {
+    writeFileSync(join(d, 'new-file.ts'), 'export const value = 1;\n');
+
+    const s = inspectRepo(d);
+    assert.equal(s.isGit, true);
+    assert.equal(s.changedFiles, 1);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

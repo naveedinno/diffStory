@@ -68,3 +68,36 @@ test('a small ordinary change is never excluded', () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test('untracked ordinary files appear in the working-tree diff', () => {
+  const { d } = repo();
+  try {
+    writeFileSync(join(d, 'new-note.md'), 'one\nsecond\n');
+
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD'));
+    assert.equal(files.length, 1);
+    assert.equal(files[0].status, 'added');
+    assert.equal(files[0].newPath, 'new-note.md');
+    assert.deepEqual(files[0].hunks[0].lines.filter((l) => l.type === 'add').map((l) => l.content), [
+      'one',
+      'second',
+    ]);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('untracked review-noise files are still excluded', () => {
+  const { d } = repo();
+  try {
+    mkdirSync(join(d, 'abis'));
+    writeFileSync(join(d, 'abis', 'token.json'), '[{"a":1}]\n');
+    writeFileSync(join(d, 'useful.ts'), 'export const useful = true;\n');
+
+    assert.deepEqual(noiseFiles(d, 'HEAD'), ['abis/token.json']);
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD')).map((f) => f.newPath);
+    assert.deepEqual(files, ['useful.ts']);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

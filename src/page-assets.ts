@@ -2020,10 +2020,20 @@ const PAGE_JS_TAIL = `
       out.push(head);
       if(c.selectedText)out.push('   Selected: '+String(c.selectedText).replace(/\\n/g,'\\n   '));
       out.push('   '+String(c.body||'').replace(/\\n/g,'\\n   '));
-      if(withThread&&c.reply)out.push('   '+BRAND+' reply: '+String(c.reply).replace(/\\n/g,'\\n   '));
+      if(withThread)commentTurnsToText(c).forEach(function(line){out.push(line);});
       out.push('');
     });
     return out.join('\\n').replace(/\\s+$/,'');
+  }
+  function commentTurnsToText(c){
+    var lines=[];
+    if(Array.isArray(c.turns))c.turns.forEach(function(t){
+      if(!t||typeof t.text!=='string'||!t.text.trim())return;
+      var who=t.role==='ai'?BRAND+' reply':'Reviewer';
+      lines.push('   '+who+': '+String(t.text).replace(/\\n/g,'\\n   '));
+    });
+    if(!lines.length&&c.reply)lines.push('   '+BRAND+' reply: '+String(c.reply).replace(/\\n/g,'\\n   '));
+    return lines;
   }
   function writeClipboard(text,onOk){
     if(navigator.clipboard&&navigator.clipboard.writeText){

@@ -230,6 +230,7 @@ export function validateTour(obj) {
     }
     const storyFiles = storyScopeIncludedFiles(t);
     const ids = new Set();
+    const orders = new Set();
     t.steps.forEach((s, i) => {
         const where = `steps[${i}]`;
         if (typeof s !== 'object' || s === null) {
@@ -243,14 +244,29 @@ export function validateTour(obj) {
             errors.push(`${where}.id "${step.id}" is duplicated`);
         else
             ids.add(step.id);
-        if (typeof step.order !== 'number')
+        if (typeof step.order !== 'number') {
             errors.push(`${where}.order must be a number`);
+        }
+        else if (!Number.isInteger(step.order) || step.order <= 0) {
+            errors.push(`${where}.order must be a positive integer`);
+        }
+        else if (orders.has(step.order)) {
+            errors.push(`${where}.order ${step.order} is duplicated`);
+        }
+        else {
+            orders.add(step.order);
+        }
         if (typeof step.title !== 'string' || !step.title)
             errors.push(`${where}.title is required`);
         if (typeof step.file !== 'string' || !step.file)
             errors.push(`${where}.file is required`);
         if (typeof step.why !== 'string')
             errors.push(`${where}.why is required`);
+        validateStringArray(step.tags, `${where}.tags`, errors);
+        validateStringArray(step.calls, `${where}.calls`, errors);
+        if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
+            errors.push(`${where}.returnsTo must be a string`);
+        }
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
             errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
@@ -271,8 +287,13 @@ export function validateTour(obj) {
     });
     // referential integrity for calls / returnsTo
     t.steps.forEach((s, i) => {
+        if (typeof s !== 'object' || s === null)
+            return;
         const step = s;
-        const refs = [...(step.calls ?? []), ...(step.returnsTo ? [step.returnsTo] : [])];
+        const refs = [
+            ...(Array.isArray(step.calls) ? step.calls.filter((ref) => typeof ref === 'string') : []),
+            ...(typeof step.returnsTo === 'string' ? [step.returnsTo] : []),
+        ];
         for (const ref of refs) {
             if (!ids.has(ref))
                 errors.push(`steps[${i}] references unknown step id "${ref}"`);

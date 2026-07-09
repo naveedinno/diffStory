@@ -324,6 +324,42 @@ test('flags references to unknown step ids', () => {
   assert.ok(errs.some((e) => e.includes('unknown step id')));
 });
 
+test('flags invalid story step ordering', () => {
+  const duplicate = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [
+      { id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' },
+      { id: 's2', order: 1, title: 'b', file: 'x.ts', range: [3, 4], kind: 'changed', why: 'w' },
+    ],
+  });
+  assert.ok(duplicate.some((e) => e.includes('order 1 is duplicated')));
+
+  for (const badOrder of [0, -1, 1.5]) {
+    const errs = validateTour({
+      version: 1,
+      title: 'T',
+      summary: '',
+      steps: [{ id: 's1', order: badOrder, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+    });
+    assert.ok(errs.some((e) => e.includes('order must be a positive integer')), `order ${badOrder} should be rejected`);
+  }
+});
+
+test('flags malformed optional step metadata without throwing', () => {
+  const base = {
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  };
+
+  assert.ok(validateTour({ ...base, steps: [{ ...base.steps[0], tags: [123] }] }).includes('steps[0].tags[0] must be a non-empty string'));
+  assert.ok(validateTour({ ...base, steps: [{ ...base.steps[0], calls: 123 }] }).includes('steps[0].calls must be an array'));
+  assert.ok(validateTour({ ...base, steps: [{ ...base.steps[0], returnsTo: 123 }] }).includes('steps[0].returnsTo must be a string'));
+});
+
 test('accepts a story intent block with goal, design, and sources', () => {
   const errs = validateTour({
     version: 1,
