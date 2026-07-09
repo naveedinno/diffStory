@@ -1,42 +1,66 @@
 # diffStory
 
-Read an AI-written code change in the order it actually makes sense.
+[![CI](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml/badge.svg)](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@naveedinno/diffstory.svg)](https://www.npmjs.com/package/@naveedinno/diffstory)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+Read a code change in the order it actually makes sense.
+
+![diffStory guided review demo](assets/demo/diffstory-demo.svg)
 
 diffStory is a local browser app for reviewing git diffs. You run one command,
-pick a project from the app, choose what changed, and review the real diff with
-an optional AI-written walkthrough. When something needs work, select the exact
-text, add a comment, and send it back to your agent.
+pick a repo, choose what changed, and review the real diff with an optional
+AI-written walkthrough. When something needs work, select the exact text, add a
+comment, and send it back to your agent.
 
 - Runs locally on your machine.
 - Opens as a browser app, not a terminal review flow.
 - Works with plain git diffs, even without generating a story.
 - Can use Claude or Codex to generate walkthroughs and address comments.
+- Works without AI. Agent features are optional.
 
-## Install
+## Quickstart
 
 Requirements:
 
 - Node.js 20 or newer
 - git
 - a local git repository you want to review
-- optional: Claude or Codex installed on your PATH for story generation and
-  comment handoff
 
 No Python is required for the core app.
 
-Install diffStory once:
+Install diffStory once from npm:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/install.sh | sh
-```
-
-Then open a new terminal if needed and run:
-
-```sh
+npm i -g @naveedinno/diffstory
 diffstory
 ```
 
 That opens the local browser app.
+
+If you prefer the no-global-npm installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/install.sh | sh
+diffstory
+```
+
+Optional: install Claude or Codex on your PATH if you want generated stories or
+agent-handled review comments.
+
+## Demo
+
+Try a realistic throwaway review without touching your own repos:
+
+```sh
+git clone https://github.com/naveedinno/diffStory.git
+cd diffStory
+npm install
+npm run demo
+```
+
+The demo creates a temporary git repo with a saved story, changed files, and a
+couple of comments so you can see the full review loop.
 
 ## First Review
 
@@ -117,10 +141,10 @@ normally local reviewer state.
 ## Team Use
 
 If diffStory is in a private repository, each teammate needs normal GitHub access
-first, the same as cloning the repo. They can install the app launcher with:
+first, the same as cloning the repo. For the public package, install with:
 
 ```sh
-npm i -g github:naveedinno/diffStory
+npm i -g @naveedinno/diffstory
 ```
 
 A teammate can replay a walkthrough when they have:
@@ -223,6 +247,17 @@ service, database, browser extension, or cloud account.
 
 For the story schema and agent contract, see
 [`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, checks, and contribution
+notes. The short version:
+
+```sh
+npm run check
+```
+
+Release maintainers should also read [docs/RELEASE.md](docs/RELEASE.md).
 
 ## License
 

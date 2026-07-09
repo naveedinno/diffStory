@@ -1,0 +1,42 @@
+# Release Guide
+
+Use this guide for public npm releases.
+
+## Preflight
+
+```sh
+git status --short --branch
+npm run release:check
+```
+
+Confirm:
+
+- working tree is clean or contains only intended release changes
+- tests pass
+- npm pack dry-run includes the expected files
+- `CHANGELOG.md` mentions the version being released
+
+## Publish
+
+```sh
+npm login
+npm publish --access public
+```
+
+If npm requires 2FA, complete the prompt in your terminal. After publishing,
+verify:
+
+```sh
+npm view @naveedinno/diffstory version
+npm i -g @naveedinno/diffstory
+diffstory --version
+```
+
+## Tag
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Use the actual package version for future tags.
