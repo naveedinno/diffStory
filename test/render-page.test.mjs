@@ -780,10 +780,41 @@ test('review page embeds the shared progress panel and ProgressPanel script', ()
 });
 
 test('storyless review page puts story generation controls in the Story tab', () => {
+  const storylessFiles = [
+    files[0],
+    {
+      oldPath: 'contracts/Fee.sol',
+      newPath: 'contracts/Fee.sol',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 8,
+          oldLines: 1,
+          newStart: 8,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'fee = capped;', newNo: 8 }],
+        },
+      ],
+    },
+    {
+      oldPath: 'test/Fee.test.ts',
+      newPath: 'test/Fee.test.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 4,
+          oldLines: 1,
+          newStart: 4,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'assert.equal(fee, cap);', newNo: 4 }],
+        },
+      ],
+    },
+  ];
   const html = renderPage({
     repo: process.cwd(),
     tour: { version: 1, title: '', summary: '', steps: [], base: 'abc123' },
-    files,
+    files: storylessFiles,
     baseLabel: 'main',
     headRef: 'def456',
     comments: [],
@@ -797,6 +828,12 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /<select id="storyAgentSel"|<select id="storyModelSel"|<select id="storyMode"/);
   assert.match(html, /id="storyAgentChoices"/);
   assert.match(html, /id="storyModelChoices"/);
+  assert.match(html, /id="storyReviewerNote"/);
+  assert.match(html, /data-story-file value="contracts\/Fee\.sol" checked/);
+  assert.match(html, /data-story-file value="test\/Fee\.test\.ts" checked/);
+  assert.match(html, /data-story-scope-action="all"/);
+  assert.match(html, /data-story-scope-action="tests"/);
+  assert.match(html, /data-story-ext="\.sol"/);
   assert.match(html, />Detail<\/span>/);
   assert.match(html, /aria-label="Story detail"/);
   assert.match(html, /data-story-choice="storyMode" data-value="brief"/);
@@ -835,10 +872,43 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.match(html, /head:btn\.getAttribute\('data-head'\)\|\|undefined/);
   assert.match(html, /agent:e\.agentSel&&e\.agentSel\.value\?e\.agentSel\.value:undefined/);
   assert.match(html, /mode:e\.modeSel&&e\.modeSel\.value\?e\.modeSel\.value:undefined/);
+  assert.match(html, /includedFiles:storySelectedFiles\(\)/);
+  assert.match(html, /reviewerNote:e\.note&&e\.note\.value\?e\.note\.value\.trim\(\):undefined/);
   assert.doesNotMatch(html, /codexProvider:/);
   assert.doesNotMatch(html, /codexSandbox:/);
   assert.doesNotMatch(html, /codexProfile:/);
   assert.doesNotMatch(html, /codexConfig:/);
+});
+
+test('story scope keeps excluded files visible without flagging them as unexplained', () => {
+  const scopedFiles = [
+    files[0],
+    {
+      oldPath: 'b.test.ts',
+      newPath: 'b.test.ts',
+      status: 'modified',
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: [{ type: 'add', content: 'expect(ok).toBe(true)', newNo: 1 }],
+        },
+      ],
+    },
+  ];
+  const scopedTour = {
+    ...tour,
+    storyScope: {
+      includedFiles: ['a.ts'],
+      excludedFiles: ['b.test.ts'],
+    },
+  };
+  const html = renderPage({ repo: process.cwd(), tour: scopedTour, files: scopedFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /b\.test\.ts/);
+  assert.doesNotMatch(html, /<b>1<\/b> unexplained/);
+  assert.doesNotMatch(html, /title="1 unexplained change"/);
 });
 
 test('intro panel leads with the recovered intent and cites its sources', () => {
@@ -880,11 +950,12 @@ test('intent text is HTML-escaped in the intro panel', () => {
   assert.doesNotMatch(html, /Guard <script> tags/);
 });
 
-test('sidebar file items carry a viewed toggle and the body a scope key', () => {
+test('sidebar file items keep viewed state without rendering checkbox controls', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-viewed-scope="/);
-  assert.match(html, /data-viewed-toggle/);
   assert.match(html, /data-viewed-progress/);
+  assert.doesNotMatch(html, /data-viewed-toggle/);
+  assert.doesNotMatch(html, /role="checkbox"/);
 });
 
 test('a new file has no expandable eof gap in the split view', () => {

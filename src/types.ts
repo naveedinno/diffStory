@@ -44,6 +44,16 @@ export interface StoryIntent {
   sources?: string[];
 }
 
+/** The changed files the reviewer intentionally asked the generated story to cover. */
+export interface StoryScope {
+  /** Repo-relative changed files that should receive story steps. */
+  includedFiles: string[];
+  /** Repo-relative changed files intentionally left out of the story. */
+  excludedFiles?: string[];
+  /** Optional reviewer guidance captured from the generation form. */
+  reviewerNote?: string;
+}
+
 /** One stop on the guided tour. */
 export interface TourStep {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
@@ -84,6 +94,8 @@ export interface Tour {
   summary: string;
   /** Optional recovered intent: the goal, designed flow, and evidence sources. */
   intent?: StoryIntent;
+  /** Optional file-level generation scope for focused stories. */
+  storyScope?: StoryScope;
   /** Optional git ref to diff against; overrides auto-detection. */
   base?: string;
   /** Optional head ref for fixed base..head stories. Omitted means working tree vs base. */

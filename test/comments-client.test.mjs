@@ -54,7 +54,7 @@ test('client no longer renders a Send again button', () => {
 test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => {
   // Sending comments to the agent mounts the one shared ProgressPanel inline in the card
   // and streams the run through it — the agent's real plan, active step, and elapsed time.
-  assert.match(PAGE_JS, /function sendToAgent\(ids,fromCard\)/);
+  assert.match(PAGE_JS, /function sendToAgent\(ids,fromCard,agent\)/);
   assert.match(PAGE_JS, /function mountPanelInCard\(/);
   assert.match(PAGE_JS, /function restoreAgentPanel\(/);
   assert.match(PAGE_JS, /new ProgressPanel\(root,/);
@@ -68,6 +68,14 @@ test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => 
   assert.doesNotMatch(PAGE_CSS, /dsLiveTyping/);
   assert.doesNotMatch(PAGE_JS, /function agentDraftText\(/);
   assert.doesNotMatch(PAGE_JS, /function addressProgressPanel\(/);
+});
+
+test('address runs ask which installed agent to use and send that choice', () => {
+  assert.match(PAGE_JS, /function chooseAddressAgent\(/);
+  assert.match(PAGE_JS, /fetch\('\/api\/agents'\)/);
+  assert.match(PAGE_JS, /data-address-agent/);
+  assert.match(PAGE_JS, /payload\.agent=agent/);
+  assert.match(PAGE_JS, /sendToAgent\(ids,fromCard,agent\)/);
 });
 
 test('a freshly loaded full file gets its threads mounted', () => {

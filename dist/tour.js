@@ -126,6 +126,52 @@ function validateIntent(t, errors) {
         }
     }
 }
+function validateStringArray(value, name, errors, opts = {}) {
+    if (value === undefined) {
+        if (opts.required)
+            errors.push(`${name} is required`);
+        return;
+    }
+    if (!Array.isArray(value)) {
+        errors.push(`${name} must be an array`);
+        return;
+    }
+    if (opts.nonEmpty && value.length === 0) {
+        errors.push(`${name} must be a non-empty array`);
+        return;
+    }
+    value.forEach((s, i) => {
+        if (typeof s !== 'string' || !s.trim())
+            errors.push(`${name}[${i}] must be a non-empty string`);
+    });
+}
+function validateStoryScope(t, errors) {
+    if (t.storyScope === undefined)
+        return;
+    if (typeof t.storyScope !== 'object' || t.storyScope === null || Array.isArray(t.storyScope)) {
+        errors.push('storyScope must be an object');
+        return;
+    }
+    const scope = t.storyScope;
+    validateStringArray(scope.includedFiles, 'storyScope.includedFiles', errors, {
+        required: true,
+        nonEmpty: true,
+    });
+    validateStringArray(scope.excludedFiles, 'storyScope.excludedFiles', errors);
+    if (scope.reviewerNote !== undefined && typeof scope.reviewerNote !== 'string') {
+        errors.push('storyScope.reviewerNote must be a string');
+    }
+}
+function storyScopeIncludedFiles(t) {
+    if (typeof t.storyScope !== 'object' || t.storyScope === null || Array.isArray(t.storyScope))
+        return null;
+    const includedFiles = t.storyScope.includedFiles;
+    if (!Array.isArray(includedFiles) || includedFiles.length === 0)
+        return null;
+    if (!includedFiles.every((f) => typeof f === 'string' && f.trim()))
+        return null;
+    return new Set(includedFiles);
+}
 export function loadTour(path) {
     let raw;
     try {
@@ -177,10 +223,12 @@ export function validateTour(obj) {
     if (typeof t.summary !== 'string')
         errors.push('summary is required (use "" if none)');
     validateIntent(t, errors);
+    validateStoryScope(t, errors);
     if (!Array.isArray(t.steps) || t.steps.length === 0) {
         errors.push('steps must be a non-empty array');
         return errors;
     }
+    const storyFiles = storyScopeIncludedFiles(t);
     const ids = new Set();
     t.steps.forEach((s, i) => {
         const where = `steps[${i}]`;
@@ -206,6 +254,9 @@ export function validateTour(obj) {
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
             errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
+        }
+        if (storyFiles && stepKind !== 'context' && typeof step.file === 'string' && !storyFiles.has(step.file)) {
+            errors.push(`${where}.file must be in storyScope.includedFiles`);
         }
         const allowDeletionAnchor = stepKind === 'changed';
         const stepRange = validateLineRange(step.range, `${where}.range`, errors, { allowDeletionAnchor });

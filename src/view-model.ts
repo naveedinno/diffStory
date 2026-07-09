@@ -134,9 +134,10 @@ export function buildReviewModel(
 ): ReviewModel {
   const steps = orderedSteps(tour);
   const byId = new Map(steps.map((s) => [s.id, s]));
+  const coverageFiles = filesForStoryCoverage(tour, files);
   // Story-less (diff-only) view: there's no story to measure the diff against,
   // so nothing is "unexplained" — skip coverage instead of flagging every line.
-  const uncovered = opts?.storyless ? [] : computeCoverage(tour, files).uncovered;
+  const uncovered = opts?.storyless ? [] : computeCoverage(tour, coverageFiles).uncovered;
 
   // Uncovered ranges grouped by file, for line-level "untoured" flagging.
   const uncoveredByFile = new Map<string, Array<[number, number]>>();
@@ -152,7 +153,7 @@ export function buildReviewModel(
 
   const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
   const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
-  const trust = buildTrust(files, uncovered, stepByFile);
+  const trust = buildTrust(coverageFiles, uncovered, stepByFile);
 
   return {
     steps: stepViews,
@@ -164,6 +165,13 @@ export function buildReviewModel(
     totalAdd: fileViews.reduce((a, f) => a + f.add, 0),
     totalDel: fileViews.reduce((a, f) => a + f.del, 0),
   };
+}
+
+function filesForStoryCoverage(tour: Tour, files: DiffFile[]): DiffFile[] {
+  const included = tour.storyScope?.includedFiles;
+  if (!included?.length) return files;
+  const selected = new Set(included);
+  return files.filter((f) => selected.has(f.newPath));
 }
 
 function buildStep(

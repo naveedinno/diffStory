@@ -92,9 +92,6 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-cell-del .changed,.ds-urow.ds-row-del .changed{background:rgba(224,68,94,0.36);box-shadow:0 0 0 1px rgba(224,68,94,0.36)}
 .ds-diffnote{padding:14px 16px;color:var(--muted);font-family:var(--sans);font-size:13px}
 .ds-diffnote-soft{color:var(--dim2);font-size:12px;border-bottom:1px solid var(--line-soft)}
-.ds-viewedmark{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;border:1px solid var(--line);color:transparent;font-size:10px;line-height:1;transition:background .15s ease,border-color .15s ease,color .15s ease}
-.ds-viewedmark:hover{border-color:var(--accent)}
-.ds-viewedmark[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat{opacity:.55}
 .ds-hunkgap.is-expandable:not(.ds-hunkgap-split){display:flex;align-items:center;justify-content:center;gap:10px}
 .ds-hunkgap-split{display:flex;align-items:center;justify-content:stretch;gap:0;padding-left:0;padding-right:0}
@@ -113,7 +110,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 /* mode/file switches fade in */
 .ds-filepanel-body>[data-diff-inner]:not([hidden]),.ds-filepanel-body>[data-split-inner]:not([hidden]),.ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in .16s ease}
 @keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-modetoggle button,.ds-viewedmark,.ds-gapbtn{transition:none!important}}
+@media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-modetoggle button,.ds-gapbtn{transition:none!important}}
 `;
 export const DIFF_JS = `
   function visibleDiffRoot(holder){
@@ -252,8 +249,6 @@ export const DIFF_JS = `
       total++;
       var on=!!viewedFiles[f];if(on)n++;
       it.classList.toggle('is-viewed',on);
-      var mark=$('[data-viewed-toggle]',it);
-      if(mark){mark.setAttribute('aria-checked',on?'true':'false');mark.title=on?'Viewed — v to unmark':'Mark as viewed (v)';}
     });
     var prog=$('[data-viewed-progress]');
     if(prog)prog.textContent=n?(n+' of '+total+' viewed'):(total+' '+(total===1?'file':'files'));

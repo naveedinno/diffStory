@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
+  selectAvailableAgent,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -247,6 +248,13 @@ test('bundled review-tour skill enforces the narrative audit', () => {
   assert.ok(skill.includes('one continuous story'));
 });
 
+test('bundled review-tour skill teaches focused story scopes', () => {
+  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('storyScope'));
+  assert.ok(skill.includes('includedFiles'));
+  assert.ok(skill.includes('excludedFiles'));
+});
+
 test('storyPrompt records the head ref for fixed range stories', () => {
   const p = storyPrompt('main', 'feature/liquidation');
   assert.ok(p.includes('git diff main..feature/liquidation --'));
@@ -263,6 +271,20 @@ test('storyPrompt excludes oversized files from the diff and tells the agent to 
   assert.ok(p.includes('Do not read, narrate, or write steps for them'));
 });
 
+test('storyPrompt supports selected story files and reviewer guidance', () => {
+  const p = storyPrompt('main', 'feature/x', 'guided', ['package-lock.json'], {
+    includedFiles: ['contracts/Fee.sol', 'src/story.ts'],
+    excludedFiles: ['test/story.test.ts', 'package.json'],
+    reviewerNote: 'Pay extra attention to the fee guard.',
+  });
+  assert.ok(p.includes("git diff main..feature/x -- 'contracts/Fee.sol' 'src/story.ts' ':(exclude)package-lock.json'"));
+  assert.ok(p.includes('Story scope contract'));
+  assert.ok(p.includes('Only create changed or new-file story steps for these selected files: contracts/Fee.sol, src/story.ts'));
+  assert.ok(p.includes('These changed files are intentionally outside this story scope: test/story.test.ts, package.json'));
+  assert.ok(p.includes('"storyScope"'));
+  assert.ok(p.includes('Pay extra attention to the fee guard.'));
+});
+
 test('storyPrompt with no exclusions leaves the diff command untouched', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('git diff main --'));
@@ -276,6 +298,20 @@ test('agentCommand builds headless invocations with a safe default model', () =>
     ['-p', 'GO', '--permission-mode', 'acceptEdits', '--model', 'sonnet'],
   ]);
   assert.deepEqual(agentCommand('codex', 'GO'), ['codex', ['exec', '--full-auto', 'GO']]);
+});
+
+test('selectAvailableAgent honors explicit installed choices and rejects unavailable ones', () => {
+  assert.deepEqual(selectAvailableAgent(undefined, ['claude', 'codex'], 'claude'), { ok: true, agent: 'claude' });
+  assert.deepEqual(selectAvailableAgent('codex', ['claude', 'codex'], 'claude'), { ok: true, agent: 'codex' });
+
+  const unavailable = selectAvailableAgent('codex', ['claude'], 'claude');
+  assert.equal(unavailable.ok, false);
+  assert.equal(unavailable.status, 400);
+  assert.match(unavailable.label, /not available/i);
+
+  const invalid = selectAvailableAgent('gemini', ['claude', 'codex'], 'claude');
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.detail, /Claude, Codex/i);
 });
 
 test('agentCommand honors an explicit model', () => {

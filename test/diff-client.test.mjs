@@ -24,11 +24,11 @@ test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
-test('viewed-file tracking is wired: storage, toggle, v key', () => {
+test('viewed-file tracking is wired through storage and the v key', () => {
   assert.match(DIFF_JS, /function toggleViewed\(/);
   assert.match(DIFF_JS, /function syncViewed\(/);
   assert.match(DIFF_JS, /'ds-viewed:'/);
-  assert.match(PAGE_JS, /data-viewed-toggle/);
+  assert.doesNotMatch(PAGE_JS, /data-viewed-toggle/);
   assert.match(PAGE_JS, /e\.key==='v'\|\|e\.key==='V'/);
 });
 

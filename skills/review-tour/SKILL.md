@@ -19,6 +19,8 @@ not hide behind a changelog.
 - Open the story with an `intent` block whose `goal` cites real `sources`; use
   `["code-derived"]` when no evidence exists.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
+- If the prompt gives selected story files, write steps only for those files and
+  persist the same top-level `storyScope` object the prompt provided.
 - Set `base` to the ref you diffed against. Set `head` only for fixed `base..head` stories.
 - Every changed hunk must be claimed by a `changed` or `new-file` step.
 - Never use "deleted" as a step kind. For deleted files, use kind "changed"
@@ -371,6 +373,10 @@ Do not invent line 1 for a file that no longer exists.
 Do not add steps for generated or oversized artifacts that the prompt excludes
 from the diff. Those files are intentionally outside the coverage gate; adding
 them back creates stale pointers and noisy review stops.
+If the prompt provides `storyScope.includedFiles`, the coverage ledger covers
+only those selected files. Files in `storyScope.excludedFiles` are intentionally
+outside this story; do not create steps for them just to satisfy full-diff
+coverage.
 
 ### Range and viewport audit
 
@@ -434,6 +440,11 @@ Falsifiable checks — run each one, do not skim:
     "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
     "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
     "sources": ["commit 41af8b7", "PR #12 body"]
+  },
+  "storyScope": {
+    "includedFiles": ["contracts/Funding.sol", "contracts/lib/RateMath.sol"],
+    "excludedFiles": ["test/Funding.t.sol"],
+    "reviewerNote": "Pay extra attention to the cap guard."
   },
   "base": "main",
   "head": "feature-branch",

@@ -368,6 +368,41 @@ function introPanel(model, tour) {
 }
 // The Story tab when there's no story yet: generation controls live beside the
 // full diff, and the request carries the same base/head scope the viewer opened.
+function fileExtension(path) {
+    const base = path.slice(path.lastIndexOf('/') + 1);
+    const i = base.lastIndexOf('.');
+    return i > 0 ? base.slice(i) : '';
+}
+function storyScopeControls(files) {
+    const changed = files.filter((f) => f.kind !== 'context');
+    const extButtons = [...new Set(changed.map((f) => fileExtension(f.file)).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((ext) => `<button class="ds-scopechip" type="button" data-story-ext="${esc(ext)}">${esc(ext)}</button>`)
+        .join('');
+    const rows = changed
+        .map((file) => `<label class="ds-storyfile" title="${esc(file.file)}">` +
+        `<input type="checkbox" data-story-file value="${esc(file.file)}" checked>` +
+        `<span class="ds-storyfile-path">${esc(file.file)}</span>` +
+        `<span class="ds-storyfile-stat"><span class="ds-stat-add">+${file.add}</span><span class="ds-stat-del">−${file.del}</span></span>` +
+        `</label>`)
+        .join('');
+    return `<div class="ds-storygen-field ds-field-scope">
+      <span class="ds-storygen-label">Story files <b id="storyScopeCount">${changed.length}</b></span>
+      <div class="ds-storyscope-actions" aria-label="Story file selection shortcuts">
+        <button class="ds-scopechip" type="button" data-story-scope-action="all">All</button>
+        <button class="ds-scopechip" type="button" data-story-scope-action="source">Source</button>
+        <button class="ds-scopechip" type="button" data-story-scope-action="tests">Tests</button>
+        <button class="ds-scopechip" type="button" data-story-scope-action="config">Config</button>
+        <button class="ds-scopechip" type="button" data-story-scope-action="none">None</button>
+        ${extButtons}
+      </div>
+      <div class="ds-storyfiles">${rows}</div>
+    </div>
+    <label class="ds-storygen-field ds-field-note">
+      <span class="ds-storygen-label">Guidance</span>
+      <textarea id="storyReviewerNote" rows="4" placeholder="Tell the agent what to pay extra attention to."></textarea>
+    </label>`;
+}
 function generateCta(model, routeBase, baseRef, headRef) {
     const filesLabel = `${plural(model.filesChanged, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
     const dataBase = baseRef ? ` data-base="${esc(baseRef)}"` : '';
@@ -409,6 +444,7 @@ function generateCta(model, routeBase, baseRef, headRef) {
               <button class="ds-choice" type="button" data-story-choice="storyMode" data-value="detailed" aria-pressed="false" title="Walk important ranges line by line">Line-by-line</button>
             </div>
           </div>
+          ${storyScopeControls(model.files)}
         </div>
         <button class="ds-intro-start ds-storygen-button" data-generate-story data-review-url="${esc(routeBase)}/review?story=story.json"${dataBase}${dataHead}>
           <span class="ds-intro-start-main">Generate story <span class="ds-intro-arrow">→</span></span>
@@ -502,7 +538,6 @@ function railFileItem(f, i, depth = 0) {
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
     <span class="ds-fileitem-stat">${stat}</span>
-    <span class="ds-viewedmark" data-viewed-toggle role="checkbox" aria-checked="false" title="Mark as viewed (v)">✓</span>
   </button>`;
 }
 function railFileStat(add, del) {

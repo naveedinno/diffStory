@@ -3,7 +3,7 @@
 // (onPath, storyPrompt, agentCommand) are unit-tested.
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
-import type { StoryMode } from './types.js';
+import type { StoryMode, StoryScope } from './types.js';
 import {
   type ProgressEvent, type PlanItem, type PlanStatus,
   fileEvent, commandEvent, activityEvent, toolEvent, textEvent, planEvent,
@@ -38,9 +38,24 @@ export function availableAgents(): Agent[] {
   return (['claude', 'codex'] as Agent[]).filter(onPath);
 }
 
-/** Git pathspecs that hide generated/oversized files from the agent's own diff. */
-function excludeArgs(excludePaths: string[]): string {
-  return excludePaths.map((p) => ` ':(exclude)${p}'`).join('');
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Git pathspecs that include selected files and hide generated/oversized files from the agent's own diff. */
+function pathspecArgs(includePaths: string[], excludePaths: string[]): string {
+  return [
+    ...includePaths.map((p) => shellQuote(p)),
+    ...excludePaths.map((p) => shellQuote(`:(exclude)${p}`)),
+  ].map((p) => ` ${p}`).join('');
+}
+
+function storyScopeJson(scope: StoryScope): string {
+  return JSON.stringify({
+    includedFiles: scope.includedFiles,
+    ...(scope.excludedFiles?.length ? { excludedFiles: scope.excludedFiles } : {}),
+    ...(scope.reviewerNote?.trim() ? { reviewerNote: scope.reviewerNote.trim() } : {}),
+  });
 }
 
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
@@ -49,11 +64,27 @@ export function storyPrompt(
   headRef?: string,
   mode: unknown = 'guided',
   excludePaths: string[] = [],
+  storyScope?: StoryScope,
 ): string {
   const storyMode = normalizeStoryMode(mode);
-  const excl = excludeArgs(excludePaths);
-  const diff = headRef ? `git diff ${baseRef}..${headRef} --${excl}` : `git diff ${baseRef} --${excl}`;
+  const includePaths = storyScope?.includedFiles ?? [];
+  const pathspecs = pathspecArgs(includePaths, excludePaths);
+  const diff = headRef ? `git diff ${baseRef}..${headRef} --${pathspecs}` : `git diff ${baseRef} --${pathspecs}`;
   const headField = headRef ? ` and its "head" field to "${headRef}"` : '';
+  const storyScopeContract = storyScope
+    ? `Story scope contract:\n` +
+      `- Only create changed or new-file story steps for these selected files: ${storyScope.includedFiles.join(', ')}.\n` +
+      (storyScope.excludedFiles?.length
+        ? `- These changed files are intentionally outside this story scope: ${storyScope.excludedFiles.join(', ')}.\n`
+        : '') +
+      `- Set top-level "storyScope" in ${DATA_DIR}/story.json to exactly this JSON object: ${storyScopeJson(storyScope)}.\n` +
+      `- Do not create coverage steps for files outside "storyScope.includedFiles"; the app treats them as intentionally skipped for this story.\n` +
+      (storyScope.reviewerNote?.trim()
+        ? `- Reviewer guidance: ${storyScope.reviewerNote.trim()}\n` +
+          `- Use the reviewer guidance to decide where to slow down, but keep every claim grounded in code you actually read.\n`
+        : '') +
+      `\n`
+    : '';
   const scopeContract = excludePaths.length
     ? `Scope contract:\n` +
       `- These files are generated or oversized artifacts (regenerated ABIs, lockfiles, built bundles) and are intentionally excluded from this review: ${excludePaths.join(', ')}.\n` +
@@ -88,6 +119,7 @@ export function storyPrompt(
     `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}"${headField} and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
     modeContract +
+    storyScopeContract +
     scopeContract +
     `Work in three phases, in order. Phases 1 and 2 produce short visible notes in your output before any JSON; only phase 3 writes the file.\n\n` +
     `Live progress notes (streamed to the reviewer while you work):\n` +
@@ -481,6 +513,35 @@ export function streamAgent(
 export type Preflight =
   | { ok: true; agent: Agent }
   | { ok: false; status: number; stage: 'preflight'; label: string; detail: string };
+
+export type AgentSelection =
+  | { ok: true; agent: Agent }
+  | { ok: false; status: number; stage: 'preflight'; label: string; detail: string };
+
+function agentLabel(agent: Agent): string {
+  return agent.charAt(0).toUpperCase() + agent.slice(1);
+}
+
+/** Resolve an optional user-selected agent without silently falling back. */
+export function selectAvailableAgent(requested: unknown, agents: Agent[], fallback: Agent): AgentSelection {
+  if (requested === undefined || requested === null || requested === '') return { ok: true, agent: fallback };
+  if (requested !== 'claude' && requested !== 'codex') {
+    return {
+      ok: false, status: 400, stage: 'preflight',
+      label: 'Selected agent is not available',
+      detail: 'Choose an installed agent: Claude, Codex.',
+    };
+  }
+  if (!agents.includes(requested)) {
+    const installed = agents.length ? agents.map(agentLabel).join(', ') : 'none';
+    return {
+      ok: false, status: 400, stage: 'preflight',
+      label: 'Selected agent is not available',
+      detail: `Pick an installed agent before addressing comments. Installed agents: ${installed}.`,
+    };
+  }
+  return { ok: true, agent: requested };
+}
 
 /** Guard a would-be agent run: one-at-a-time, a repo open, an agent installed. */
 export function agentPreflight(a: { repo: string | null; busy: boolean; agents: Agent[] }): Preflight {

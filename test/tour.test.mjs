@@ -57,6 +57,82 @@ test('accepts an optional narrow read-aloud focus target inside the step range',
   assert.deepEqual(errs, []);
 });
 
+test('accepts an optional story generation file scope', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    storyScope: {
+      includedFiles: ['contracts/Fee.sol'],
+      excludedFiles: ['test/Fee.test.ts', 'package.json'],
+      reviewerNote: 'Pay extra attention to the fee guard.',
+    },
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'contracts/Fee.sol',
+        range: [10, 20],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.deepEqual(errs, []);
+});
+
+test('flags malformed story generation file scopes', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    storyScope: {
+      includedFiles: [],
+      excludedFiles: ['test/Fee.test.ts', 12],
+      reviewerNote: 42,
+    },
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'contracts/Fee.sol',
+        range: [10, 20],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.ok(errs.some((e) => e.includes('storyScope.includedFiles')));
+  assert.ok(errs.some((e) => e.includes('storyScope.excludedFiles[1]')));
+  assert.ok(errs.some((e) => e.includes('storyScope.reviewerNote')));
+});
+
+test('flags scoped story steps that point at files outside the selected scope', () => {
+  const errs = validateTour({
+    version: 1,
+    title: 'T',
+    summary: '',
+    storyScope: {
+      includedFiles: ['contracts/Fee.sol'],
+      excludedFiles: ['test/Fee.test.ts'],
+    },
+    steps: [
+      {
+        id: 's1',
+        order: 1,
+        title: 'a',
+        file: 'test/Fee.test.ts',
+        range: [10, 20],
+        kind: 'changed',
+        why: 'w',
+      },
+    ],
+  });
+  assert.ok(errs.some((e) => e.includes('storyScope.includedFiles')));
+});
+
 test('accepts viewport and highlighted lines as the storyteller display contract', () => {
   const errs = validateTour({
     version: 1,

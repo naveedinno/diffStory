@@ -2,9 +2,9 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { serve } from '../dist/server.js';
@@ -42,6 +42,18 @@ function installFakeClaude(binDir) {
     `#!/bin/sh
 printf '\\nagent edit\\n' >> README.md
 printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"README.md"}}]}}'
+`,
+  );
+  chmodSync(path, 0o755);
+}
+
+function installFakeCodex(binDir) {
+  const path = join(binDir, 'codex');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+printf '\\ncodex edit\\n' >> README.md
+printf '%s\\n' '$ printf codex'
 `,
   );
   chmodSync(path, 0o755);
@@ -310,6 +322,97 @@ test('addressing comments from the raw diff viewer reports code edits so the UI 
     const done = ndjsonEvents(await addr.text()).find((e) => e.type === 'run_done');
     assert.equal(done?.status, 'complete');
     assert.equal(done?.result?.codeChanged, true);
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    process.env.PATH = realPath;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/address honors the selected agent instead of first PATH match', async () => {
+  const realHome = process.env.HOME;
+  const realPath = process.env.PATH;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
+  process.env.HOME = tmpHome;
+  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
+  installFakeClaude(fakeBin);
+  installFakeCodex(fakeBin);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    await fetch(`${base}/api/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
+    });
+
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ all: true, agent: 'codex' }),
+    });
+    assert.equal(addr.status, 200);
+    const events = ndjsonEvents(await addr.text());
+    assert.equal(events.find((e) => e.type === 'context')?.agent, 'codex');
+    assert.match(readFileSync(join(repo, 'README.md'), 'utf8'), /codex edit/);
+    assert.doesNotMatch(readFileSync(join(repo, 'README.md'), 'utf8'), /agent edit/);
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    process.env.PATH = realPath;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/address rejects a selected agent that is not available', async () => {
+  const realHome = process.env.HOME;
+  const realPath = process.env.PATH;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
+  const gitBin = dirname(execFileSync('which', ['git']).toString().trim());
+  process.env.HOME = tmpHome;
+  process.env.PATH = `${fakeBin}:${gitBin}:/usr/bin:/bin:/usr/sbin:/sbin`;
+  installFakeClaude(fakeBin);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    await fetch(`${base}/api/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
+    });
+
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ all: true, agent: 'codex' }),
+    });
+    assert.equal(addr.status, 400);
+    const body = await addr.json();
+    assert.equal(body.type, 'error');
+    assert.equal(body.stage, 'preflight');
+    assert.match(body.label, /not available/i);
+    assert.doesNotMatch(readFileSync(join(repo, 'README.md'), 'utf8'), /agent edit/);
   } finally {
     server.close();
     process.env.HOME = realHome;

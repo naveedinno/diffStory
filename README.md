@@ -53,6 +53,75 @@ Everything happens in the page:
 just `git checkout <their-branch> && diffstory` to replay their guided walkthrough — no agent
 needed.
 
+## Run from a fresh clone
+
+Use this path when you have cloned this repository and want to run the web app from source.
+
+```bash
+git clone https://github.com/naveedinno/diffstory.git
+cd diffstory
+npm install
+npm run dev -- --dir /path/to/the/repo-you-want-to-review
+```
+
+That starts the local web app and opens `http://localhost:7777/`. If the browser does not open
+automatically, run:
+
+```bash
+npm run dev -- --dir /path/to/the/repo-you-want-to-review --no-open
+```
+
+Then open `http://localhost:7777/` yourself. You can omit `--dir` if you start diffStory inside the
+git repo you want to review; otherwise the app opens a repo picker.
+
+Useful clone-time commands:
+
+| Command | Use it for |
+| --- | --- |
+| `npm run demo` | Build and open the sample review. Fastest way to see the UI. |
+| `npm run dev -- --dir /path/to/repo` | Run the web app from TypeScript source while developing diffStory. Restart after source edits. |
+| `npm run build` | Compile `src/` into `dist/`. |
+| `npm run start -- --dir /path/to/repo` | Run the built CLI from `dist/cli.js`. |
+| `npm test` | Build and run the test suite. |
+| `npm link` | Optional: after `npm run build`, make `diffstory` available globally from this clone. |
+
+Prerequisites: Node.js 20+, git, and a git repository to review. To generate stories or send
+comments back to an agent, install either the `claude` or `codex` CLI on your PATH and install the
+diffStory skills:
+
+```bash
+./scripts/install-skills.sh
+```
+
+Claude Code users can also install the plugin instead:
+
+```text
+/plugin marketplace add naveedinno/diffStory
+/plugin install diffstory@diffstory
+```
+
+## Working with the app
+
+Once the page is open:
+
+```text
+1.  Pick a repo, or let --dir open one directly
+2.  Choose the diff scope: uncommitted changes, current branch, one commit, or any two refs
+3.  Read the raw diff in "All files", or use "Story" → "Generate story" to have claude/codex write .diffstory/story.json
+4.  Tune the story before generating: Brief/Balanced/Line-by-line, selected files, and reviewer guidance
+5.  Select exact text in the diff, add a comment, then either save it locally or send it to the agent
+6.  Use "Send all" / "Address all open" when you want the agent to answer and patch the repo
+```
+
+diffStory stores its review files inside the repo being reviewed:
+
+```text
+.diffstory/story.json      guided reading order, safe to commit when you want teammates to replay it
+.diffstory/comments.json   your local review threads and agent handoff state
+```
+
+Add `.diffstory/` to the reviewed repo's `.gitignore` when stories should stay local.
+
 ## What you get
 
 - 🧭 **A guided reading order** — walk the change step by step in call-flow order, not by filename.

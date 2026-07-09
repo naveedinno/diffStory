@@ -41,13 +41,14 @@ import {
   type NewComment,
 } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
-import type { DiffFile, Tour } from './types.js';
+import type { DiffFile, StoryScope, Tour } from './types.js';
 import {
   availableAgents,
   streamAgent,
   addressPrompt,
   storyPrompt,
   agentPreflight,
+  selectAvailableAgent,
   normalizeStoryMode,
   normalizeCodexRunOptions,
   type Agent,
@@ -66,7 +67,7 @@ import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
 import { deleteStory, listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
-import { cpSync, createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
@@ -905,7 +906,7 @@ function stableDiffRef(repo: string, ref: string | undefined): string | undefine
 
 /** Drive the user's agent to address review comments, streaming progress NDJSON. */
 function runAddress(res: ServerResponse, session: Session, body: string): void {
-  let input: { commentIds?: string[]; all?: boolean };
+  let input: { commentIds?: string[]; all?: boolean; agent?: string };
   try {
     input = JSON.parse(body || '{}');
   } catch {
@@ -920,9 +921,12 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     return sendJson(res, 400, errorEvent('preflight', 'No comments specified', 'Pick at least one comment to address.'));
   }
 
-  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents: availableAgents() });
+  const agents = availableAgents();
+  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
   if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
-  const agent = pre.agent;
+  const selected = selectAvailableAgent(input.agent, agents, pre.agent);
+  if (!selected.ok) return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
+  const agent = selected.agent;
   const repo = session.repo as string;
 
   const openCount = loadComments(repo).filter((c) => c.status === 'open').length;
@@ -998,6 +1002,67 @@ export function postRenamePath(path: string): string {
   return path.slice(path.indexOf(' => ') + 4);
 }
 
+type ScopeResult =
+  | { ok: true; scope?: StoryScope }
+  | { ok: false; detail: string };
+type NoteResult =
+  | { ok: true; note?: string }
+  | { ok: false; detail: string };
+type IncludedFilesResult =
+  | { ok: true; included: string[] }
+  | { ok: false; detail: string };
+
+function normalizeReviewerNote(value: unknown): NoteResult {
+  if (value === undefined || value === null) return { ok: true };
+  if (typeof value !== 'string') return { ok: false, detail: 'Story guidance must be text.' };
+  const note = value.trim();
+  return { ok: true, ...(note ? { note: note.slice(0, 4000) } : {}) };
+}
+
+function normalizeIncludedFiles(value: unknown, changedFiles: string[]): IncludedFilesResult {
+  if (value === undefined || value === null) return { ok: true, included: changedFiles };
+  if (!Array.isArray(value)) return { ok: false, detail: 'Selected story files must be an array.' };
+  const requested = [...new Set(value.map((v) => (typeof v === 'string' ? v.trim() : '')))].filter(Boolean);
+  if (!requested.length) return { ok: false, detail: 'Pick at least one file for the story.' };
+  const changed = new Set(changedFiles);
+  const unknown = requested.filter((p) => !changed.has(p));
+  if (unknown.length) {
+    return { ok: false, detail: `Selected file is not part of this change: ${unknown[0]}` };
+  }
+  const requestedSet = new Set(requested);
+  return { ok: true, included: changedFiles.filter((p) => requestedSet.has(p)) };
+}
+
+function storyScopeFromInput(input: { includedFiles?: unknown; reviewerNote?: unknown }, changedFiles: string[]): ScopeResult {
+  const note = normalizeReviewerNote(input.reviewerNote);
+  if (!note.ok) return note;
+  const files = normalizeIncludedFiles(input.includedFiles, changedFiles);
+  if (!files.ok) return files;
+  const included = files.included;
+  const excluded = changedFiles.filter((p) => !included.includes(p));
+  if (!excluded.length && !note.note) return { ok: true };
+  return {
+    ok: true,
+    scope: {
+      includedFiles: included,
+      ...(excluded.length ? { excludedFiles: excluded } : {}),
+      ...(note.note ? { reviewerNote: note.note } : {}),
+    },
+  };
+}
+
+function stampStoryScope(storyPath: string, scope?: StoryScope): void {
+  if (!scope || !existsSync(storyPath)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(storyPath, 'utf8')) as Record<string, unknown>;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+    parsed.storyScope = scope;
+    writeFileSync(storyPath, `${JSON.stringify(parsed, null, 2)}\n`);
+  } catch {
+    // Validation will report malformed or missing stories in the normal finish path.
+  }
+}
+
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
 function runGenerate(res: ServerResponse, session: Session, body: string): void {
   let input: {
@@ -1010,6 +1075,8 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     codexProvider?: string;
     codexProfile?: string;
     codexConfig?: string[] | string;
+    includedFiles?: unknown;
+    reviewerNote?: unknown;
   } = {};
   try {
     input = JSON.parse(body || '{}');
@@ -1051,6 +1118,10 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   const changedFiles = numstat(repo, promptBase, promptHead)
     .map((f) => postRenamePath(f.path))
     .filter((p) => !excludePaths.includes(p));
+  const storyScope = storyScopeFromInput(input, changedFiles);
+  if (!storyScope.ok) {
+    return sendJson(res, 400, errorEvent('preflight', 'Invalid story scope', storyScope.detail));
+  }
 
   runWorkflow(res, repo, {
     workflow,
@@ -1058,7 +1129,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     agent,
     model,
     agentOptions,
-    prompt: storyPrompt(promptBase, promptHead, mode, excludePaths),
+    prompt: storyPrompt(promptBase, promptHead, mode, excludePaths, storyScope.scope),
     context: {
       repoName: basename(repo), repoPath: repo, workflow, agent, model,
       base: describeBase(repo, promptBase),
@@ -1066,7 +1137,10 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     },
     // For generate, the output is the story file.
     isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
-    finish: (r) => finishStoryGeneration(r, storyPath, session),
+    finish: (r) => {
+      if (r.ok) stampStoryScope(storyPath, storyScope.scope);
+      return finishStoryGeneration(r, storyPath, session);
+    },
     fileScope: { repoPath: repo, changedFiles },
   });
 }
