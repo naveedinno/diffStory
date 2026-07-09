@@ -27,11 +27,13 @@ test('package exposes release checks and ships demo assets with npm package', ()
   assert.equal(pkg.scripts.check, 'npm run build && node --test test/*.test.mjs');
   assert.equal(pkg.scripts['release:check'], 'npm run check && npm pack --dry-run --json');
   assert.equal(pkg.scripts.prepublishOnly, 'npm run check');
+  assert.equal(pkg.license, 'SEE LICENSE IN LICENSE');
   assert.ok(pkg.files.includes('assets/demo'));
 });
 
 test('public repo hygiene files are present and point contributors at the right checks', () => {
   assert.match(read('CONTRIBUTING.md'), /npm run check/);
+  assert.match(read('CONTRIBUTING.md'), /commercially relicense/i);
   assert.match(read('CHANGELOG.md'), /0\.1\.0/);
   assert.match(read('SECURITY.md'), /local/i);
   assert.match(read('docs/STRANGER_TEST.md'), /npm run dev/);
@@ -39,6 +41,17 @@ test('public repo hygiene files are present and point contributors at the right 
   assert.match(read('.github/workflows/ci.yml'), /npm run check/);
   assert.match(read('.github/ISSUE_TEMPLATE/bug_report.md'), /Steps to reproduce/);
   assert.match(read('.github/ISSUE_TEMPLATE/feature_request.md'), /What problem/);
+});
+
+test('license is source-available for personal use and requires commercial licensing', () => {
+  const readme = read('README.md');
+  const license = read('LICENSE');
+  assert.doesNotMatch(readme, /license-MIT|MIT\]\(LICENSE\)/);
+  assert.match(readme, /PolyForm Noncommercial License 1\.0\.0/);
+  assert.match(readme, /commercial license/i);
+  assert.match(license, /PolyForm Noncommercial License 1\.0\.0/);
+  assert.match(license, /Required Notice: Copyright 2026 naveedinno/);
+  assert.match(license, /Commercial use, embedding, resale, hosted service, or product integration requires a separate commercial license/i);
 });
 
 test('real demo screenshots exist where README references them', () => {

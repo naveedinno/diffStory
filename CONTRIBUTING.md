@@ -41,6 +41,13 @@ build output.
   without AI agents or Kokoro voice setup.
 - Use `npm run demo` when you want a realistic throwaway repo to review.
 
+## Contribution License
+
+By submitting a contribution, you agree that your contribution may be included
+in diffStory under this repository's license, and you grant naveedinno the right
+to use, modify, distribute, and commercially relicense your contribution as part
+of diffStory.
+
 ## Good First Changes
 
 - Improve onboarding text.

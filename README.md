@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml/badge.svg)](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@naveedinno/diffstory.svg)](https://www.npmjs.com/package/@naveedinno/diffstory)
-[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![license: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 Read a code change in the order it actually makes sense.
 
@@ -263,4 +263,13 @@ Release maintainers should also read [docs/RELEASE.md](docs/RELEASE.md).
 
 ## License
 
-[MIT](LICENSE) (c) naveedinno
+diffStory is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE).
+
+Personal, hobby, research, testing, and other noncommercial use is allowed.
+Commercial use requires a separate commercial license from naveedinno
+<naveed.hashim171@gmail.com>. That includes embedding diffStory or a modified
+version in a paid product, proprietary app, hosted service, client project,
+internal company tool, or commercial workflow.
+
+This is not an OSI open-source license because commercial use is reserved.
