@@ -1,7 +1,7 @@
 // Public launch readiness checks for docs, release scripts, and GitHub hygiene.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 function read(rel) {
   return readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
@@ -13,7 +13,9 @@ function exists(rel) {
 
 test('README leads with a visual demo, npm quickstart, and local-first positioning', () => {
   const readme = read('README.md');
-  assert.match(readme, /!\[diffStory guided review demo\]\(assets\/demo\/diffstory-demo\.svg\)/);
+  assert.match(readme, /!\[diffStory saved stories screen\]\(assets\/demo\/diffstory-story-picker\.png\)/);
+  assert.match(readme, /!\[diffStory guided review screen\]\(assets\/demo\/diffstory-review\.png\)/);
+  assert.doesNotMatch(readme, /assets\/demo\/diffstory-demo\.svg/);
   assert.match(readme, /npm i -g @naveedinno\/diffstory/);
   assert.match(readme, /diffstory/);
   assert.match(readme, /Works without AI/);
@@ -39,6 +41,9 @@ test('public repo hygiene files are present and point contributors at the right 
   assert.match(read('.github/ISSUE_TEMPLATE/feature_request.md'), /What problem/);
 });
 
-test('demo asset exists where README references it', () => {
-  assert.ok(exists('assets/demo/diffstory-demo.svg'));
+test('real demo screenshots exist where README references them', () => {
+  for (const asset of ['assets/demo/diffstory-story-picker.png', 'assets/demo/diffstory-review.png']) {
+    assert.ok(exists(asset), `${asset} should exist`);
+    assert.ok(statSync(new URL(`../${asset}`, import.meta.url)).size > 20_000, `${asset} should be a real screenshot`);
+  }
 });

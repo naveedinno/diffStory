@@ -6,7 +6,7 @@
 
 Read a code change in the order it actually makes sense.
 
-![diffStory guided review demo](assets/demo/diffstory-demo.svg)
+![diffStory guided review screen](assets/demo/diffstory-review.png)
 
 diffStory is a local browser app for reviewing git diffs. You run one command,
 pick a repo, choose what changed, and review the real diff with an optional
@@ -61,6 +61,8 @@ npm run demo
 
 The demo creates a temporary git repo with a saved story, changed files, and a
 couple of comments so you can see the full review loop.
+
+![diffStory saved stories screen](assets/demo/diffstory-story-picker.png)
 
 ## First Review
 
