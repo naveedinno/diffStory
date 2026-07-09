@@ -268,7 +268,7 @@ diffStory is source-available under the
 
 Personal, hobby, research, testing, and other noncommercial use is allowed.
 Commercial use requires a separate commercial license from naveedinno
-<naveed.hashim171@gmail.com>. That includes embedding diffStory or a modified
+<naveedinno@proton.me>. That includes embedding diffStory or a modified
 version in a paid product, proprietary app, hosted service, client project,
 internal company tool, or commercial workflow.
 

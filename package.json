@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "diffStory — the agent tells the story of its change: a guided, in-order diff review with a comment loop back to the agent.",
   "type": "module",
-  "author": "naveedinno <naveed.hashim171@gmail.com>",
+  "author": "naveedinno <naveedinno@proton.me>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/naveedinno/diffstory.git"
