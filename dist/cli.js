@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-// diffStory launcher. There is no terminal review flow — everything (picking a
+// diffStory launcher. There is no terminal review flow - everything (picking a
 // repo, reading the diff, generating a story with your agent, replying to review
-// comments) happens in the browser. This just boots the local web app: run it
-// inside a git repo to open that repo, or anywhere to pick one in the browser.
+// comments) happens in the browser. This command only opens the local web app.
 import { resolve } from 'node:path';
 import { isGitRepo } from './git.js';
 import { serve } from './server.js';
 import { APP_NAME, APP_BRAND, DATA_DIR, DEFAULT_PORT } from './config.js';
 const VERSION = '0.1.0';
 function parseArgs(argv) {
-    const a = { cmd: 'serve', dir: process.cwd(), port: DEFAULT_PORT, open: true };
+    const a = { cmd: 'open', dir: null, port: DEFAULT_PORT, open: true };
     for (let i = 0; i < argv.length; i++) {
         const t = argv[i];
         if (t === '--dir')
@@ -18,7 +17,7 @@ function parseArgs(argv) {
             a.port = Number(argv[++i]) || DEFAULT_PORT;
         else if (t === '--no-open')
             a.open = false;
-        else if (t === '--help' || t === '-h')
+        else if (t === '--help' || t === '-h' || t === 'help')
             a.cmd = 'help';
         else if (t === '--version' || t === '-v')
             a.cmd = 'version';
@@ -27,32 +26,15 @@ function parseArgs(argv) {
 }
 function printHelp() {
     console.log(`
-${APP_BRAND} — guided, in-order review of an AI-authored change, in your browser.
+${APP_BRAND} opens in your browser.
 
-The agent that wrote the code emits the reading order; you walk it in a local
-page, comment on the lines, and hand the comments back. Or skip the story
-entirely and just read the diff — your call, in the browser.
+Run \`${APP_NAME}\` to open the local browser app.
 
-USAGE
-  ${APP_NAME}                 Open the app. In a git repo, opens that repo;
-                              otherwise pick one in the browser.
-  ${APP_NAME} --dir <path>    Open a specific repo.
+Pick a project from the list, choose what to diff, generate a story if you want
+one, then read and comment in the page. The command only starts the app; the
+review workflow lives in the browser.
 
-ONCE IT'S OPEN
-  1. Pick a saved story, or "New diff scope" to read the change with no story.
-  2. From the diff, generate a guided story with your agent (claude or codex) —
-     it writes the plan to ${DATA_DIR}/story.json and the review opens.
-  3. Comment on any line; click "Ask agent" (or "Address all open") to have the
-     agent answer and fix inline. Repeat until it's clean.
-
-OPTIONS
-  --dir <path>     Repo to open (default: current directory)
-  --port <n>       Server port (default: ${DEFAULT_PORT})
-  --no-open        Don't open the browser automatically
-  -v, --version    Print version
-  -h, --help       Show this help
-
-Files live in ${DATA_DIR}/: story.json (the plan) and comments.json (the handoff).
+Review files live in ${DATA_DIR}/ inside the repo you open.
 Docs & issues: https://github.com/naveedinno/diffStory
 `);
 }
@@ -64,9 +46,7 @@ function main() {
         console.log(`${APP_NAME} ${VERSION}`);
         return;
     }
-    // A git repo opens directly (its story picker); anywhere else boots the
-    // picker so you can choose one in the browser.
-    const repo = isGitRepo(a.dir) ? a.dir : null;
+    const repo = a.dir && isGitRepo(a.dir) ? a.dir : null;
     serve({ repo, port: a.port, open: a.open });
 }
 main();

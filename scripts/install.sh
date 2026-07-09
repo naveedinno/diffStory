@@ -3,9 +3,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/install.sh | sh
 #
-# Clones diffStory to ~/.diffstory and drops a launcher on your PATH that runs the
-# CLI via `node` (so there is no executable-bit / symlink fragility). Re-run any
-# time to update. Override locations with DIFFSTORY_HOME and DIFFSTORY_BIN.
+# Clones diffStory to ~/.diffstory and drops a launcher on your PATH that opens
+# the browser app via `node`. Re-run any time to update. Override locations with
+# DIFFSTORY_HOME and DIFFSTORY_BIN.
 set -eu
 
 REPO_HTTPS="https://github.com/naveedinno/diffStory.git"
@@ -39,8 +39,9 @@ else
   git clone -q --depth 1 "$REPO" "$SRC"
 fi
 
-# Build from source so the CLI is always current. Non-fatal: if the toolchain or
-# npm cache is unhappy, fall back to the prebuilt dist committed in the repo.
+# Build from source so the browser app launcher is always current. Non-fatal: if
+# the toolchain or npm cache is unhappy, fall back to the prebuilt dist committed
+# in the repo.
 if command -v npm >/dev/null 2>&1; then
   say "› Building (first run fetches the TypeScript compiler)…"
   if ( cd "$SRC" && npm install --no-audit --no-fund --loglevel=error && npm run build ) >/dev/null 2>&1; then
@@ -50,7 +51,7 @@ if command -v npm >/dev/null 2>&1; then
   fi
 fi
 
-[ -f "$SRC/dist/cli.js" ] || die "no CLI build found — try:  cd $SRC && npm install && npm run build"
+[ -f "$SRC/dist/cli.js" ] || die "no app build found — try:  cd $SRC && npm install && npm run build"
 
 mkdir -p "$BIN_DIR"
 LAUNCHER="$BIN_DIR/diffstory"
@@ -80,7 +81,7 @@ say "  Claude Code uses the plugin instead: /plugin marketplace add naveedinno/d
 case ":${PATH}:" in
   *":$BIN_DIR:"*)
     say ""
-    say "✓ Done. Try:  diffstory help"
+    say "✓ Done. Run:  diffstory"
     ;;
   *)
     LINE="export PATH=\"$BIN_DIR:\$PATH\""
@@ -95,6 +96,6 @@ case ":${PATH}:" in
     fi
     say ""
     say "✓ Done. Added $BIN_DIR to your PATH."
-    say "  Open a new terminal (or reload your shell), then:  diffstory help"
+    say "  Open a new terminal (or reload your shell), then run:  diffstory"
     ;;
 esac

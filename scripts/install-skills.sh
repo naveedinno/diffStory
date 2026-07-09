@@ -54,4 +54,4 @@ echo "Done. Skills are live for agents that read those directories:"
 echo "  ~/.agents/skills  ->  Codex (\$review-tour / \$address-review), Cursor, etc."
 echo "  ~/.claude/skills  ->  Claude Code (or just use the plugin)"
 echo
-echo "Don't forget the CLI:  npm i -g github:naveedinno/diffStory"
+echo "Open the app with:  diffstory"
