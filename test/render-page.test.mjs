@@ -86,15 +86,18 @@ test('review page can return to the story chooser', () => {
   assert.match(html, /\.ds-back\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*:root\{--ds-rail-width:240px\}/);
-  assert.match(html, /\.ds-word,\.ds-vsep,\.ds-status,\.ds-settings-wrap,\.ds-actions\{display:none\}/);
+  assert.match(html, /\.ds-settings-wrap\{display:none\}/);
   assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
-test('toolbar consolidates final review actions into one clear menu', () => {
+test('toolbar keeps review status and final actions inside one compact menu', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-review-menu/);
   assert.match(html, /data-review-menu-pop/);
-  assert.match(html, />Review actions</);
+  assert.match(html, />Review</);
+  assert.match(html, /aria-label="Review, 0 open comments"/);
+  assert.match(html, /ds-review-summary/);
+  assert.doesNotMatch(html, /data-send-all/);
   assert.match(html, />Send open comments</);
   assert.match(html, />Ask for fixes</);
   assert.match(html, /Mark approved/);
@@ -137,7 +140,7 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
 
 test('compact review keeps the diff full-width behind an overlay sidebar', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:56px;bottom:0;left:0/);
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:48px;bottom:0;left:0/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-main\{width:100%\}/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-rail-resizer\{display:none\}/);
   assert.match(html, /function compactScreen\(\)/);
@@ -145,7 +148,7 @@ test('compact review keeps the diff full-width behind an overlay sidebar', () =>
   assert.match(html, /localStorage\.setItem\('ds-sidebar-collapsed',collapsed\?'1':'0'\)/);
   assert.match(html, /function collapseCompactSidebar\(\)/);
   assert.match(html, /data-sidebar-scrim/);
-  assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:56px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
+  assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:48px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);

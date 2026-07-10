@@ -137,15 +137,10 @@ test('the thread composer offers Add (save only) and Ask now (save + run)', () =
   assert.match(PAGE_JS, /sendThreadMessage\(closest\(ta,'\.ds-comment'\),true\)/);
 });
 
-test('the Send all button runs the batch and tracks the open count', () => {
-  // click delegation fires the existing batch path
-  assert.match(PAGE_JS, /\[data-send-all\]'\);if\(b\)\{if\(b\.disabled\)return;sendToAgent\('all'\)/);
-  // refreshCount updates the counted label + hidden state
-  assert.match(PAGE_JS, /ds-send-all/);
-  assert.match(PAGE_JS, /sa\.hidden=openN===0/);
-  // setBusy disables it during a run
-  assert.match(PAGE_JS, /\[data-send-all\]'\)/);
-  assert.match(PAGE_CSS, /\.ds-send-all/);
+test('the compact Review menu runs the batch and tracks the open count', () => {
+  assert.match(PAGE_JS, /\[data-address-all\]'\);if\(b\)\{if\(b\.disabled\)return;setReviewMenu\(false\);sendToAgent\('all'\)/);
+  assert.match(PAGE_JS, /ds-review-summary-label/);
+  assert.doesNotMatch(PAGE_JS, /ds-send-all/);
 });
 
 test('copying all comments includes every conversation turn, not only legacy replies', () => {

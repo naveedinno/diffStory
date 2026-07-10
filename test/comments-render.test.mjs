@@ -119,10 +119,12 @@ test('server-rendered thread composer has Add and Ask now buttons', () => {
   assert.match(html, />Ask now</);
 });
 
-test('review header shows a Send all button when there are open comments', () => {
+test('review header folds open comments into the compact Review menu', () => {
   const comments = [{ id: 'c1', file: 'a.ts', line: 1, type: 'change',
     body: 'x', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /data-send-all/);
-  assert.match(html, /Send all/);
+  assert.match(html, /ds-review-menu-count/);
+  assert.match(html, /<b>1<\/b>/);
+  assert.match(html, />Send open comments</);
+  assert.doesNotMatch(html, /data-send-all/);
 });

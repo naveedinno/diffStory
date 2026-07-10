@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
-import { BRAND_HEAD_LINKS, brandMarkSvg, brandStoryMarkSvg } from './brand.js';
+import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
 import { intraLineMap, type IntraSides } from './intra-line.js';
@@ -113,14 +113,9 @@ ${BRAND_HEAD_LINKS}
 </head>
 <body${storyless ? ' data-storyless="1"' : ''} data-viewed-scope="${esc(`${repo}|${baseLabel}|${headRef ?? 'worktree'}`)}">
 <header class="ds-top">
-  <a class="ds-brand" href="/repos" title="Home — your repositories" aria-label="Home — your repositories">
-    ${BRAND_MARK}
-    <span class="ds-word"><span class="ds-word-a">diff</span><span class="ds-word-b">Story</span></span>
-  </a>
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
   </button>
-  <div class="ds-vsep"></div>
   <a class="ds-back" data-close-story href="${esc(routeBase)}/stories" title="Close this story — back to ${esc(
     repoName,
   )}'s saved stories" aria-label="Close story, back to saved stories">
@@ -135,16 +130,8 @@ ${BRAND_HEAD_LINKS}
     </div>
     <div class="ds-title" title="${esc(storyless ? 'The current diff, file by file' : tour.summary || tour.title)}">${esc(pageTitle)}</div>
   </div>
-  <div class="ds-status">
-    <span class="ds-open" id="ds-open-count" title="Review comments still awaiting a reply or resolution"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(
-      openCount,
-      'comment',
-    )}</span>
-    <button class="ds-btn ds-btn-solid ds-send-all" id="ds-send-all" data-send-all title="Send every open comment to the agent in one run"${openCount ? '' : ' hidden'}>Send all (<b>${openCount}</b>)</button>
-    ${trustPill}
-  </div>
   <div class="ds-settings-wrap">
-    <button class="ds-readaloud" data-readaloud title="Read each step's story aloud as you walk the change" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span data-readaloud-label>Read aloud</span></button>
+    <button class="ds-readaloud" data-readaloud title="Read story aloud" aria-label="Read story aloud" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span class="ds-sr-only" data-readaloud-label>Read aloud</span></button>
     <button class="ds-gear" data-settings title="Voice settings" aria-label="Voice settings">⚙</button>
     <div class="ds-settings-pop" id="ds-settings" hidden>
       <div class="ds-voice-head">
@@ -200,7 +187,6 @@ ${BRAND_HEAD_LINKS}
       </div>
     </div>
   </div>
-  <div class="ds-vsep"></div>
   <div class="ds-actions">
     ${
       storyless
@@ -211,13 +197,18 @@ ${BRAND_HEAD_LINKS}
         : ''
     }
     <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu" data-review-menu aria-haspopup="menu" aria-expanded="false" title="Open review actions">
+      <button class="ds-review-menu" data-review-menu aria-haspopup="menu" aria-expanded="false" aria-label="Review, ${openCount} ${plural(openCount, 'open comment')}" title="Open review actions">
         <span class="ds-review-menu-dot" aria-hidden="true"></span>
-        <span>Review actions</span>
+        <span>Review</span>
+        <span class="ds-review-menu-count" id="ds-open-count" title="Open comments"><b>${openCount}</b></span>
         <span class="ds-review-menu-caret" aria-hidden="true">⌄</span>
       </button>
       <div class="ds-review-menu-pop" data-review-menu-pop role="menu" hidden>
-        <div class="ds-review-menu-title">Review actions</div>
+        <div class="ds-review-menu-title">Review</div>
+        <div class="ds-review-summary">
+          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(openCount, 'open comment')}</span>
+          ${trustPill}
+        </div>
         <button class="ds-review-option" data-address-all role="menuitem"${openCount ? '' : ' disabled'} title="Resend every open comment to your agent">
           <span class="ds-review-option-title">Send open comments</span>
           <span class="ds-review-option-desc">For older notes, or if an auto-send failed.</span>
@@ -1136,8 +1127,6 @@ function fullRow(row: SbsRow, opts: { file: string; oldFile?: string; newFile: b
 }
 
 // ---- shared bits ----
-
-const BRAND_MARK = brandMarkSvg('ds-mark', 24, 24);
 
 // The brand mark in miniature, in currentColor so it tints with state.
 const STORY_MARK = brandStoryMarkSvg('ds-storymark', 18, 18);
