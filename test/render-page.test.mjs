@@ -105,6 +105,38 @@ test('toolbar keeps review status and final actions inside one compact menu', ()
   assert.doesNotMatch(html, />Approve</);
 });
 
+test('version-aware review rounds expose full and since-review modes', () => {
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewMode: 'full',
+    reviewState: {
+      scopeKey: 'scope', round: 2, currentDiffHash: 'hash', currentSnapshotId: 'r2',
+      compareFrom: { id: 'r1', round: 1, createdAt: new Date().toISOString() },
+      changedFiles: ['a.ts'], hasChangesSinceReview: true, events: [], snapshots: [],
+    },
+  });
+  assert.match(html, /Round 2/);
+  assert.match(html, /1 file changed since your feedback/);
+  assert.match(html, /data-review-mode="full"/);
+  assert.match(html, /data-review-mode="since"/);
+  assert.match(html, /data-filter-since="1"/);
+});
+
+test('review page renders feedback, timeline, filters, resume, and story repair affordances', () => {
+  const comments = [{
+    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'addressed',
+    createdAt: new Date().toISOString(), selectedText: 'return 1', turns: [{ role: 'ai', text: 'Fixed it', at: new Date().toISOString() }],
+  }];
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
+  assert.match(html, /data-feedback-open="feedback"/);
+  assert.match(html, /data-feedback-view="timeline"/);
+  assert.match(html, /Needs verification/);
+  assert.match(html, /data-file-search/);
+  assert.match(html, /data-resume-review/);
+  assert.match(html, /data-shortcuts-open/);
+  assert.match(html, /data-story-repair="shorten"/);
+  assert.match(html, /data-selection-quick/);
+});
+
 test('submitting a comment sends it to the agent immediately', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-selection-menu/);
@@ -118,7 +150,7 @@ test('submitting a comment sends it to the agent immediately', () => {
   assert.doesNotMatch(html, /then Ask agent/);
   assert.match(html, /'Add comment'/);
   assert.match(html, /'Ask now'/);
-  assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);refreshCount\(\);/);
+  assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
   assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
 });
 
@@ -895,7 +927,7 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /LM Studio/);
   assert.doesNotMatch(html, /Ollama/);
   assert.doesNotMatch(html, /No sandbox/);
-  assert.doesNotMatch(html, /overflow-x:auto/);
+  assert.doesNotMatch(html, /\.ds-choicegroup[^}]*overflow-x:auto/);
   assert.match(html, /data-generate-story data-review-url="\/repo\/demo\/review\?story=story\.json" data-base="abc123" data-head="def456"/);
   assert.match(html, /fetch\('\/api\/agents'\)/);
   assert.match(html, /fetch\('\/api\/skills\/update',\{method:'POST'\}\)/);

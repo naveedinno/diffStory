@@ -4,6 +4,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_CONTEXT_LINES } from './config.js';
 import { isReviewNoise } from './noise.js';
+const APP_DATA_PATHSPEC = ':(exclude).diffstory/**';
+function isAppDataPath(path) {
+    return path === '.diffstory' || path.startsWith('.diffstory/');
+}
 function git(repo, args) {
     return execFileSync('git', args, {
         cwd: repo,
@@ -97,11 +101,12 @@ export function getDiff(repo, base, head) {
     const args = ['diff', '--no-color', '--no-ext-diff', `-U${DIFF_CONTEXT_LINES}`, base];
     if (head)
         args.push(head);
-    args.push('--', ...excludePathspecs([...noise]));
+    args.push('--', APP_DATA_PATHSPEC, ...excludePathspecs([...noise]));
     const tracked = git(repo, args);
     if (head)
         return tracked;
     const untracked = untrackedFiles(repo)
+        .filter((path) => !isAppDataPath(path))
         .filter((path) => !noise.has(path))
         .map((path) => untrackedFileDiff(repo, path))
         .filter(Boolean);
@@ -263,7 +268,7 @@ export function numstat(repo, base, head) {
     const args = ['diff', '--numstat', '--no-color', base];
     if (head)
         args.push(head);
-    args.push('--');
+    args.push('--', APP_DATA_PATHSPEC);
     const out = tryGit(repo, args);
     const tracked = !out ? [] : out
         .split('\n')
@@ -288,7 +293,7 @@ function untrackedFiles(repo) {
     const out = tryGit(repo, ['ls-files', '--others', '--exclude-standard', '-z']);
     if (!out)
         return [];
-    return out.split('\0').filter(Boolean).sort();
+    return out.split('\0').filter(Boolean).filter((path) => !isAppDataPath(path)).sort();
 }
 function untrackedFileDiff(repo, path) {
     return (gitOutputAllowingDiffExit(repo, [

@@ -98,6 +98,26 @@ Inside a repo, diffStory gives you two useful ways to read:
 The story never replaces the diff. It only explains and orders it. The code you
 read comes from git.
 
+## Review Workflow
+
+diffStory keeps long reviews oriented and makes the handoff back from an agent
+explicit:
+
+- **Review rounds** capture the diff when feedback is sent and again when the
+  agent finishes. Use **Since review** to inspect only the follow-up changes.
+- **Feedback verification** collects addressed comments in one inbox. Accept a
+  fix after checking it, or reopen the comment without losing the conversation.
+- **File search and filters** narrow the sidebar to unviewed files, files with
+  comments, unexplained changes, tests, or files changed since your review.
+- **Resume review** returns to the last file, line, and display mode on this
+  device. **Next unviewed** keeps a larger review moving.
+- Select diff text to reveal the quick comment action. Press `C` to comment on
+  the current selection, `/` to search files, or `?` for the command palette.
+- A story step can be repaired in place: ask the agent to explain it, shorten
+  it, or split it without regenerating the rest of the walkthrough.
+- The review timeline records feedback handoffs, agent completions, replies, and
+  verification decisions for the current change.
+
 ## Agent Setup
 
 The installer copies the bundled diffStory skills into the common agent skills
@@ -131,6 +151,7 @@ diffStory stores review state inside the repo you open:
 ```text
 .diffstory/story.json      generated reading order
 .diffstory/comments.json   local review comments and agent replies
+.diffstory/review-state.json review rounds, snapshots, and timeline events
 .diffstory/stories/        optional saved named stories
 ```
 

@@ -101,3 +101,16 @@ test('untracked review-noise files are still excluded', () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test('diffStory review state never appears in the reviewed diff', () => {
+  const { d } = repo();
+  try {
+    mkdirSync(join(d, '.diffstory'));
+    writeFileSync(join(d, '.diffstory', 'review-state.json'), '{"version":1}\n');
+    writeFileSync(join(d, 'useful.ts'), 'export const useful = true;\n');
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD')).map((f) => f.newPath);
+    assert.deepEqual(files, ['useful.ts']);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

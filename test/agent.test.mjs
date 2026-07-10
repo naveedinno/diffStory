@@ -6,6 +6,7 @@ import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
   selectAvailableAgent,
+  storyRepairPrompt,
 } from '../dist/agent.js';
 
 test('onPath finds sh, not a bogus command', () => {
@@ -426,6 +427,14 @@ test('addressPrompt tells the agent to append an ai turn, not overwrite a reply'
   assert.match(p, /append a new turn/i);
   assert.match(p, /"role":"ai"/);
   assert.match(p, /latest "user" message/i);
+});
+
+test('storyRepairPrompt preserves unaffected steps and targets one repair', () => {
+  const prompt = storyRepairPrompt({ action: 'split', stepId: 's2', file: 'src/a.ts', base: 'main' });
+  assert.match(prompt, /Split story step "s2" in src\/a\.ts/);
+  assert.match(prompt, /Preserve every unaffected step/);
+  assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
+  assert.match(prompt, /\.diffstory\/story\.json/);
 });
 
 test('streamCommand uses stream-json for claude and exec for codex', () => {

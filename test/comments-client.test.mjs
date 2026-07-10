@@ -149,3 +149,32 @@ test('copying all comments includes every conversation turn, not only legacy rep
   assert.match(PAGE_JS, /who=t\.role==='ai'\?BRAND\+' reply':'Reviewer'/);
   assert.match(PAGE_JS, /commentTurnsToText\(c\)\.forEach/);
 });
+
+test('selection actions are discoverable without restoring line plus buttons', () => {
+  assert.match(PAGE_JS, /function showSelectionQuick\(/);
+  assert.match(PAGE_JS, /data-selection-quick-action/);
+  assert.match(PAGE_JS, /e\.key==='c'\|\|e\.key==='C'/);
+  assert.match(PAGE_CSS, /\.ds-selection-quick/);
+});
+
+test('review feedback has a verification inbox and timeline', () => {
+  assert.match(PAGE_JS, /function openFeedbackDrawer\(/);
+  assert.match(PAGE_JS, /function updateCommentStatus\(/);
+  assert.match(PAGE_JS, /data-accept-fix/);
+  assert.match(PAGE_JS, /data-reopen-comment/);
+  assert.match(PAGE_CSS, /\.ds-review-timeline/);
+});
+
+test('file filters, resume state, and keyboard commands stay local to the review', () => {
+  assert.match(PAGE_JS, /function applyFileFilters\(/);
+  assert.match(PAGE_JS, /function restoreReviewPosition\(/);
+  assert.match(PAGE_JS, /localStorage\.setItem\(reviewUiKey\(\)/);
+  assert.match(PAGE_JS, /e\.key==='\?'/);
+  assert.match(PAGE_JS, /e\.key==='\/'/);
+});
+
+test('targeted story repair uses the shared progress panel', () => {
+  assert.match(PAGE_JS, /function repairStory\(/);
+  assert.match(PAGE_JS, /runProgress\(panel,'\/api\/story\/repair'/);
+  assert.match(PAGE_JS, /data-story-repair/);
+});

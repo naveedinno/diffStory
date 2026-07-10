@@ -10,7 +10,7 @@ import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
-import type { DiffFile, DiffHunk, DiffLine, Tour, TourStep, StepKind } from './types.js';
+import type { DiffFile, DiffHunk, DiffLine, FileStatus, Tour, TourStep, StepKind } from './types.js';
 
 export type RowType = 'add' | 'del' | 'ctx';
 
@@ -84,6 +84,7 @@ export interface StepBeatView {
 export interface FileView {
   file: string;
   oldFile: string;
+  status: FileStatus;
   kind: FileKind;
   kindLabel: string;
   add: number;
@@ -323,6 +324,7 @@ function buildFiles(
     views.push({
       file: file.newPath,
       oldFile: file.oldPath,
+      status: file.status,
       kind: file.status === 'added' ? 'new' : 'changed',
       kindLabel: file.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
       add,
@@ -345,6 +347,7 @@ function buildFiles(
     views.push({
       file: step.file,
       oldFile: step.file,
+      status: 'modified',
       kind: 'context',
       kindLabel: FILE_KIND_LABEL.context,
       add: 0,

@@ -22,6 +22,8 @@ import type {
 } from './view-model.js';
 import { normalizeComment } from './comments.js';
 import type { Comment, CommentSide, CommentType, DiffFile, Tour, Turn } from './types.js';
+import type { ReviewStateSummary } from './review-state.js';
+import { readWholeFile } from './git.js';
 
 export interface RenderInput {
   repo: string;
@@ -36,6 +38,10 @@ export interface RenderInput {
   repoName?: string;
   /** Render the diff with no story: All-files default, Story tab → Generate. */
   storyless?: boolean;
+  /** Version-aware local review state for rounds, verification, and timeline. */
+  reviewState?: ReviewStateSummary;
+  /** Render the complete change or only the delta since feedback was sent. */
+  reviewMode?: 'full' | 'since';
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -46,7 +52,7 @@ const FLAVOR_LABEL: Record<CommentType, string> = {
 const FLAVOR_ICON: Record<CommentType, string> = { change: '◆', question: '?', nit: '○' };
 const STATUS_LABEL: Record<Comment['status'], string> = {
   open: 'Open',
-  addressed: 'Addressed',
+  addressed: 'Needs verification',
   resolved: 'Resolved',
 };
 
@@ -73,6 +79,16 @@ export function renderPage(input: RenderInput): string {
     }
   })();
   const storyless = input.storyless ?? false;
+  const reviewMode = input.reviewMode ?? 'full';
+  const reviewState = input.reviewState ?? {
+    scopeKey: '',
+    round: 1,
+    currentDiffHash: '',
+    changedFiles: [],
+    hasChangesSinceReview: false,
+    events: [],
+    snapshots: [],
+  };
   const model = buildReviewModel(repo, tour, files, headRef, { storyless });
   const pageTitle = storyless ? 'Reviewing the diff' : tour.title;
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
@@ -92,7 +108,7 @@ export function renderPage(input: RenderInput): string {
       }</button>`;
 
   const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
-  const railFiles = railFileTree(model.files);
+  const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
   const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
   const stepPanels = model.steps
     .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
@@ -111,7 +127,11 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-viewed-scope="${esc(`${repo}|${baseLabel}|${headRef ?? 'worktree'}`)}">
+<body${storyless ? ' data-storyless="1"' : ''} data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
+    reviewState.scopeKey,
+  )}" data-review-round="${reviewState.round}" data-review-snapshot="${esc(
+    reviewState.currentSnapshotId ?? '',
+  )}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
 <header class="ds-top">
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
@@ -221,6 +241,22 @@ ${BRAND_HEAD_LINKS}
           <span class="ds-review-option-title">Copy all comments</span>
           <span class="ds-review-option-desc">The full thread — every status, with replies — for context.</span>
         </button>
+        <button class="ds-review-option" data-feedback-open="feedback" role="menuitem"${comments.length ? '' : ' disabled'}>
+          <span class="ds-review-option-title">Review feedback${comments.length ? ` <span class="ds-option-count">${comments.length}</span>` : ''}</span>
+          <span class="ds-review-option-desc">Verify agent replies, reopen issues, or jump back to the code.</span>
+        </button>
+        <button class="ds-review-option" data-feedback-open="timeline" role="menuitem">
+          <span class="ds-review-option-title">Review timeline</span>
+          <span class="ds-review-option-desc">See review rounds, feedback, agent runs, and verification.</span>
+        </button>
+        <button class="ds-review-option" data-resume-review role="menuitem" hidden>
+          <span class="ds-review-option-title">Resume last position</span>
+          <span class="ds-review-option-desc" data-resume-review-label>Return to where you stopped reading.</span>
+        </button>
+        <button class="ds-review-option" data-shortcuts-open role="menuitem">
+          <span class="ds-review-option-title">Commands and shortcuts <span class="ds-keycap">?</span></span>
+          <span class="ds-review-option-desc">Navigate, filter, comment, and control read-aloud.</span>
+        </button>
         <button class="ds-review-option" data-verdict="request" role="menuitem">
           <span class="ds-review-option-title">Ask for fixes</span>
           <span class="ds-review-option-desc">Use this when the change is not ready to merge.</span>
@@ -239,6 +275,8 @@ ${BRAND_HEAD_LINKS}
 </header>
 
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
+
+${reviewRoundBar(reviewState, reviewMode)}
 
 <div class="ds-layout">
   <aside class="ds-rail" aria-label="Review navigation">
@@ -262,6 +300,18 @@ ${BRAND_HEAD_LINKS}
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Files</span>
         <span class="ds-readhead-count" data-viewed-progress>${model.files.length} ${plural(model.files.length, 'file')}</span>
+      </div>
+      <div class="ds-filetools">
+        <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Filter files" aria-label="Filter changed files"></label>
+        <div class="ds-filefilters" aria-label="File filters">
+          <button class="is-active" data-file-filter="all">All</button>
+          <button data-file-filter="unviewed">Unviewed</button>
+          <button data-file-filter="comments">Comments</button>
+          <button data-file-filter="unexplained">Unexplained</button>
+          <button data-file-filter="tests">Tests</button>
+          ${reviewState.compareFrom ? '<button data-file-filter="since">Since review</button>' : ''}
+        </div>
+        <button class="ds-next-unviewed" data-next-unviewed type="button">Next unviewed <span aria-hidden="true">→</span></button>
       </div>
     </div>
     <div class="ds-railscroll">
@@ -313,10 +363,17 @@ ${BRAND_HEAD_LINKS}
 </div>
 
 ${trustDrawer(model.trust, stepIndexById)}
+${feedbackDrawer(repo, headRef, comments, reviewState)}
+${commandPalette()}
 <div class="ds-selection-menu" data-selection-menu role="menu" hidden>
   <button type="button" role="menuitem" data-selection-action="question">Ask</button>
   <button type="button" role="menuitem" data-selection-action="change">Ask for change</button>
   <button type="button" role="menuitem" data-selection-action="nit">Nit</button>
+</div>
+<div class="ds-selection-quick" data-selection-quick role="toolbar" aria-label="Selected code actions" hidden>
+  <button type="button" data-selection-quick-action="change">Comment</button>
+  <button type="button" data-selection-quick-action="question">Ask</button>
+  <button type="button" data-selection-quick-action="copy">Copy</button>
 </div>
 <div class="ds-toast" id="ds-toast" hidden></div>
 <noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
@@ -334,6 +391,26 @@ function voiceCard(kind: 'kokoro', id: string, label: string, description: strin
           <span class="ds-voice-badge">${esc(badge)}</span>
           <span><span class="ds-voice-name">${esc(label)} <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">${esc(description)}</span></span>
         </button>`;
+}
+
+function reviewRoundBar(state: ReviewStateSummary, mode: 'full' | 'since'): string {
+  if (!state.compareFrom) return '';
+  const changed = state.changedFiles.length;
+  const status = changed
+    ? `${changed} ${plural(changed, 'file')} changed since your feedback`
+    : 'No code changes since your feedback';
+  return `<div class="ds-roundbar" data-roundbar>
+    <div class="ds-roundbar-copy">
+      <span class="ds-roundbadge">Round ${state.round}</span>
+      <span class="ds-roundstatus">${status}</span>
+    </div>
+    <div class="ds-roundmodes" role="group" aria-label="Review comparison">
+      <button type="button" data-review-mode="full" class="${mode === 'full' ? 'is-active' : ''}">Full change</button>
+      <button type="button" data-review-mode="since" class="${mode === 'since' ? 'is-active' : ''}"${
+        changed ? '' : ' disabled'
+      }>Since review</button>
+    </div>
+  </div>`;
 }
 
 // The Overview sits above the numbered steps as navigation index 0 — the calm
@@ -564,11 +641,20 @@ interface FileTreeFile {
   index: number;
 }
 
-function railFileTree(files: FileView[]): string {
+interface FileFilterMeta {
+  comments: Set<string>;
+  since: Set<string>;
+}
+
+function railFileTree(files: FileView[], comments: Comment[], sinceFiles: string[]): string {
   if (!files.length) return '';
   const root = createFileTreeDir('', '');
   files.forEach((file, index) => addFileTreeEntry(root, file, index));
-  return `<div class="ds-filetree">${renderFileTreeChildren(root.children, 0)}</div>`;
+  const meta: FileFilterMeta = {
+    comments: new Set(comments.filter((comment) => comment.status !== 'resolved').map((comment) => comment.file)),
+    since: new Set(sinceFiles),
+  };
+  return `<div class="ds-filetree">${renderFileTreeChildren(root.children, 0, meta)}</div>`;
 }
 
 function createFileTreeDir(name: string, path: string): FileTreeDir {
@@ -604,13 +690,15 @@ function addFileTreeStats(node: FileTreeDir, file: FileView): void {
   node.untoured += file.untoured;
 }
 
-function renderFileTreeChildren(children: FileTreeChild[], depth: number): string {
+function renderFileTreeChildren(children: FileTreeChild[], depth: number, meta: FileFilterMeta): string {
   return children
-    .map((child) => (child.kind === 'dir' ? renderFileTreeDir(child, depth) : railFileItem(child.file, child.index, depth)))
+    .map((child) =>
+      child.kind === 'dir' ? renderFileTreeDir(child, depth, meta) : railFileItem(child.file, child.index, depth, meta),
+    )
     .join('');
 }
 
-function renderFileTreeDir(dir: FileTreeDir, depth: number): string {
+function renderFileTreeDir(dir: FileTreeDir, depth: number, meta: FileFilterMeta): string {
   const stat = railFileStat(dir.add, dir.del);
   const flag = dir.untoured
     ? `<span class="ds-fileitem-flag" title="${dir.untoured} unexplained ${plural(dir.untoured, 'change')}">▲</span>`
@@ -624,20 +712,27 @@ function renderFileTreeDir(dir: FileTreeDir, depth: number): string {
       ${flag}
       <span class="ds-filetree-stat">${stat}</span>
     </summary>
-    <div class="ds-filetree-children">${renderFileTreeChildren(dir.children, depth + 1)}</div>
+    <div class="ds-filetree-children">${renderFileTreeChildren(dir.children, depth + 1, meta)}</div>
   </details>`;
 }
 
-function railFileItem(f: FileView, i: number, depth = 0): string {
+function railFileItem(f: FileView, i: number, depth: number, meta: FileFilterMeta): string {
   const [dir, base] = splitPath(f.file);
   const kindClass = f.kind === 'new' ? 'new' : f.kind;
   const stat = railFileStat(f.add, f.del);
   const flag = f.untoured
     ? `<span class="ds-fileitem-flag" title="${f.untoured} unexplained ${plural(f.untoured, 'change')}">▲</span>`
     : '';
+  const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(test|spec)\.[^.]+$/i.test(f.file);
   return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
     f.file,
-  )}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}">
+  )}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-status="${f.status}" data-filter-test="${
+    isTest ? '1' : '0'
+  }" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${
+    f.untoured ? '1' : '0'
+  }" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${
+    depth * 14
+  }px" title="${esc(f.file)} — ${esc(f.kindLabel)}">
     <span class="ds-fileitem-dot k-${kindClass}"></span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
@@ -700,7 +795,11 @@ function stepPanel(
       </div>
     </div>
     <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><span class="ds-flex"></span><details class="ds-story-tune"><summary title="Tune this story step" aria-label="Tune this story step">•••</summary><div><button type="button" data-story-repair="shorten" data-story-step="${esc(
+        s.id,
+      )}" data-story-file="${esc(s.file)}">Make shorter</button><button type="button" data-story-repair="split" data-story-step="${esc(
+        s.id,
+      )}" data-story-file="${esc(s.file)}">Split this step</button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
       ${stepStoryHtml(s)}
     </div>
     <div class="ds-diffscroll">
@@ -844,7 +943,9 @@ export function commentHtml(c0: Comment): string {
     : '';
   return `<div class="ds-comment status-${c.status}" data-comment-id="${esc(c.id)}" data-status="${
     c.status
-  }"${hasReply ? ' data-hasreply="1"' : ''}>
+  }" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(
+    c.step ?? '',
+  )}"${hasReply ? ' data-hasreply="1"' : ''}>
     <div class="ds-comment-card flavor-${type}">
       <div class="ds-comment-head">
         <span class="ds-flavor-ico">${FLAVOR_ICON[type]}</span>
@@ -967,6 +1068,135 @@ function unifiedIntra(row: UnifiedRow, map: Map<UnifiedRow, IntraSides>): string
   return row.type === 'del' ? sides?.left : sides?.right;
 }
 
+type CommentAnchorState = 'current' | 'moved' | 'changed' | 'old-side' | 'legacy';
+
+function commentAnchorState(repo: string, headRef: string | undefined, c: Comment): CommentAnchorState {
+  if (commentSide(c) === 'left') return 'old-side';
+  if (!c.selectedText) return 'legacy';
+  const lines = readWholeFile(repo, c.file, headRef);
+  if (!lines) return 'changed';
+  const text = lines.join('\n');
+  const index = text.indexOf(c.selectedText);
+  if (index < 0) return 'changed';
+  const currentLine = text.slice(0, index).split('\n').length;
+  return currentLine === c.line ? 'current' : 'moved';
+}
+
+function anchorLabel(state: CommentAnchorState): string {
+  if (state === 'moved') return 'Code moved';
+  if (state === 'changed') return 'Code changed';
+  if (state === 'old-side') return 'Old-side anchor';
+  if (state === 'legacy') return 'Line anchor';
+  return 'Anchor current';
+}
+
+function feedbackCard(repo: string, headRef: string | undefined, raw: Comment): string {
+  const c = normalizeComment(raw);
+  const anchor = commentAnchorState(repo, headRef, c);
+  const latestAgent = [...(c.turns ?? [])].reverse().find((turn) => turn.role === 'ai');
+  const verify = c.status === 'addressed';
+  return `<article class="ds-feedback-card status-${c.status}" data-feedback-card data-feedback-status="${c.status}" data-feedback-anchor="${anchor}" data-comment-id="${esc(
+    c.id,
+  )}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}">
+    <div class="ds-feedback-head">
+      <span class="ds-flavor-ico">${FLAVOR_ICON[c.type] ?? FLAVOR_ICON.change}</span>
+      <span class="ds-feedback-path">${esc(c.file)}<span class="ds-dim">:${c.line}</span></span>
+      <span class="ds-flex"></span>
+      <span class="ds-anchorbadge is-${anchor}">${anchorLabel(anchor)}</span>
+    </div>
+    ${c.selectedText ? `<code class="ds-feedback-selection">${esc(c.selectedText)}</code>` : ''}
+    <div class="ds-feedback-message ds-md">${renderMarkdown(c.body)}</div>
+    ${latestAgent ? `<div class="ds-feedback-reply ds-md"><span>${esc(APP_BRAND)}</span>${renderMarkdown(latestAgent.text)}</div>` : ''}
+    <div class="ds-feedback-actions">
+      <button type="button" class="ds-ghost" data-goto-comment="${esc(c.id)}">Show in diff</button>
+      ${verify ? `<button type="button" class="ds-ghost" data-reopen-comment="${esc(c.id)}">Reopen</button><button type="button" class="ds-btn ds-btn-solid" data-accept-fix="${esc(c.id)}">Accept fix</button>` : ''}
+      ${c.status === 'resolved' ? `<button type="button" class="ds-ghost" data-reopen-comment="${esc(c.id)}">Reopen</button>` : ''}
+    </div>
+  </article>`;
+}
+
+function feedbackDrawer(
+  repo: string,
+  headRef: string | undefined,
+  comments: Comment[],
+  state: ReviewStateSummary,
+): string {
+  const addressed = comments.filter((comment) => comment.status === 'addressed').length;
+  const cards = comments.length
+    ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
+    : '<div class="ds-drawer-empty">No review feedback yet.</div>';
+  const events = state.events.length
+    ? state.events
+        .map(
+          (event) => `<li class="ds-timeline-event"><span class="ds-timeline-dot kind-${event.kind}"></span><div><strong>${esc(
+            event.label,
+          )}</strong>${event.detail ? `<span>${esc(event.detail)}</span>` : ''}<small>Round ${event.round} · ${esc(
+            relativeTime(event.at),
+          )}</small></div></li>`,
+        )
+        .join('')
+    : '<li class="ds-drawer-empty">The timeline starts when this review is opened.</li>';
+  return `<div class="ds-drawer-root" id="ds-feedback-drawer" hidden>
+    <div class="ds-drawer-scrim" data-feedback-close></div>
+    <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-label="Review feedback and timeline">
+      <div class="ds-drawer-head">
+        <div><div class="ds-drawer-title">Review loop</div><div class="ds-drawer-sub">Verify what changed, reopen anything unresolved, and keep the rounds honest.</div></div>
+        <button class="ds-drawer-x" data-feedback-close title="Close">×</button>
+      </div>
+      <div class="ds-drawer-tabs" role="tablist">
+        <button class="is-active" data-feedback-panel="feedback" role="tab">Feedback${addressed ? ` <span>${addressed}</span>` : ''}</button>
+        <button data-feedback-panel="timeline" role="tab">Timeline</button>
+      </div>
+      <div class="ds-feedback-filters" data-feedback-tools>
+        <button class="is-active" data-feedback-filter="all">All</button>
+        <button data-feedback-filter="addressed">Needs verification</button>
+        <button data-feedback-filter="open">Open</button>
+        <button data-feedback-filter="changed">Code changed</button>
+        <button data-feedback-filter="resolved">Resolved</button>
+      </div>
+      <div class="ds-drawer-body ds-feedback-list" data-feedback-view="feedback">${cards}</div>
+      <div class="ds-drawer-body" data-feedback-view="timeline" hidden><ol class="ds-review-timeline">${events}</ol></div>
+    </div>
+  </div>`;
+}
+
+function relativeTime(iso: string): string {
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return 'recently';
+  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function commandPalette(): string {
+  const commands = [
+    ['story', 'Open Story', 'J / K', 'Move through the guided walkthrough'],
+    ['files', 'Open All files', '/', 'Search and filter the changed files'],
+    ['feedback', 'Review feedback', '', 'Verify agent replies and reopen comments'],
+    ['timeline', 'Open review timeline', '', 'See rounds, comments, and agent runs'],
+    ['next-unviewed', 'Next unviewed file', 'V', 'Keep the review moving'],
+    ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],
+  ];
+  return `<div class="ds-command-root" data-command-root hidden>
+    <button class="ds-command-scrim" data-shortcuts-close aria-label="Close commands"></button>
+    <div class="ds-command" role="dialog" aria-label="Commands and keyboard shortcuts">
+      <div class="ds-command-head"><div><strong>Commands</strong><span>Keyboard-first review without hidden magic.</span></div><button data-shortcuts-close>×</button></div>
+      <div class="ds-command-list">${commands
+        .map(
+          ([id, title, key, detail]) => `<button type="button" data-command="${id}"><span><strong>${title}</strong><small>${detail}</small></span>${
+            key ? `<kbd>${key}</kbd>` : ''
+          }</button>`,
+        )
+        .join('')}</div>
+      <div class="ds-command-foot"><span><kbd>←</kbd><kbd>→</kbd> changes / narration</span><span><kbd>C</kbd> comment selection</span><span><kbd>?</kbd> commands</span></div>
+    </div>
+  </div>`;
+}
+
 // ---- trust drawer ----
 
 function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): string {
@@ -1022,7 +1252,7 @@ function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string
     <div class="ds-trust-card-note">This change is in the diff but no story step walks through it — surfaced here so nothing slips in unexplained.</div>
     <div class="ds-trust-card-actions">
       ${jump}
-      <button class="ds-btn ds-btn-ghost" data-explain>Ask ${esc(APP_BRAND)} to explain</button>
+      <button class="ds-btn ds-btn-ghost" data-explain data-story-file="${esc(u.file)}" data-story-line="${u.line}">Ask ${esc(APP_BRAND)} to explain</button>
     </div>
   </div>`;
 }

@@ -222,6 +222,29 @@ export function addressPrompt(target, base, head, opts = {}) {
         `stay correct and the coverage gate stays clean.\n\n` +
         `Do not ask questions. Make the changes directly.`);
 }
+/** A narrow story edit: preserve the good walkthrough and repair only one weak stop. */
+export function storyRepairPrompt(input) {
+    const target = input.stepId
+        ? `story step "${input.stepId}"${input.file ? ` in ${input.file}` : ''}`
+        : input.file
+            ? `${input.file}${input.line ? ` around line ${input.line}` : ''}`
+            : 'the selected story area';
+    const instruction = input.action === 'explain'
+        ? `Add or repair the smallest story step needed to explain the uncovered change at ${target}.`
+        : input.action === 'shorten'
+            ? `Rewrite ${target} to be shorter and sharper without dropping its review risk or causal link.`
+            : `Split ${target} into two or more locally focused steps so no step jumps between distant code islands.`;
+    const diff = input.head ? `${input.base}..${input.head}` : `${input.base}..working tree`;
+    return (`Use the diffStory review-tour skill to make one targeted repair to ${DATA_DIR}/story.json for ${diff}.\n\n` +
+        `${instruction}\n\n` +
+        `Preservation contract:\n` +
+        `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
+        `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
+        `- Keep the story short, informal, causal, and review-oriented.\n` +
+        `- Renumber order fields and repair calls/returnsTo only where the targeted edit requires it.\n` +
+        `- Validate every range, viewport, highlight, beat, id, and full-diff coverage before finishing.\n` +
+        `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n`);
+}
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
 export const DEFAULT_CLAUDE_MODEL = 'sonnet';
 export function normalizeCodexRunOptions(input) {

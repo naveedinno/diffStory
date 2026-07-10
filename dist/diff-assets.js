@@ -210,6 +210,7 @@ export const DIFF_JS = `
     }
     updateChangeNav(holder);
     if(!needsLoad)jumpToFirstChange(holder);
+    if(typeof saveReviewPositionSoon==='function')saveReviewPositionSoon();
   }
   function loadFull(fullInner,file){
     fullInner.setAttribute('data-loaded','1');
@@ -237,6 +238,15 @@ export const DIFF_JS = `
     try{(JSON.parse(localStorage.getItem(viewedKey())||'[]')||[]).forEach(function(f){viewedFiles[f]=true;});}catch(e){}
   }
   function saveViewed(){try{localStorage.setItem(viewedKey(),JSON.stringify(Object.keys(viewedFiles)));}catch(e){}}
+  function invalidateChangedViewed(){
+    var scope=document.body.getAttribute('data-review-scope')||'',round=document.body.getAttribute('data-review-round')||'1';
+    var key='ds-viewed-invalidated:'+scope+':'+round;
+    try{if(localStorage.getItem(key))return;}catch(e){}
+    var changed=false;
+    fileItems.forEach(function(item){if(item.getAttribute('data-filter-since')!=='1')return;var file=item.getAttribute('data-goto-file');if(file&&viewedFiles[file]){delete viewedFiles[file];changed=true;}});
+    if(changed)saveViewed();
+    try{localStorage.setItem(key,'1');}catch(e){}
+  }
   function toggleViewed(file){
     if(!file)return;
     if(viewedFiles[file])delete viewedFiles[file];else viewedFiles[file]=true;

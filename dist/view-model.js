@@ -181,6 +181,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
         views.push({
             file: file.newPath,
             oldFile: file.oldPath,
+            status: file.status,
             kind: file.status === 'added' ? 'new' : 'changed',
             kindLabel: file.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
             add,
@@ -203,6 +204,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
         views.push({
             file: step.file,
             oldFile: step.file,
+            status: 'modified',
             kind: 'context',
             kindLabel: FILE_KIND_LABEL.context,
             add: 0,

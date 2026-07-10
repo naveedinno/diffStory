@@ -10,6 +10,7 @@ export const DATA_DIR = '.diffstory';
 export const STORY_FILENAME = 'story.json';
 export const LEGACY_STORY_FILENAME = 'review-tour.json';
 export const COMMENTS_FILENAME = 'comments.json';
+export const REVIEW_STATE_FILENAME = 'review-state.json';
 export const DEFAULT_PORT = 7777;
 
 /** How many lines of context to ask git for around each change. */
@@ -33,4 +34,7 @@ export function resolveStoryPath(repo: string): string {
 }
 export function commentsPath(repo: string): string {
   return join(repo, DATA_DIR, COMMENTS_FILENAME);
+}
+export function reviewStatePath(repo: string): string {
+  return join(repo, DATA_DIR, REVIEW_STATE_FILENAME);
 }

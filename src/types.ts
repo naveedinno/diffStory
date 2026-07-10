@@ -142,6 +142,12 @@ export interface Comment {
   type: CommentType;
   body: string;
   status: CommentStatus;
+  /** Review round in which the comment was created. */
+  reviewRound?: number;
+  /** Snapshot the selected code belonged to, for version-aware verification. */
+  reviewSnapshotId?: string;
+  /** Stable digest of the selected text and its original anchor. */
+  anchorHash?: string;
   /** ISO timestamp; set by the server. */
   createdAt: string;
   /** Filled in by the AI during /address-review. */

@@ -2,6 +2,7 @@
 // during /address-review, so the shape is deliberately stable and human-readable.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
 import { commentsPath } from './config.js';
 import type { Comment, CommentSelection, CommentSide, CommentStatus, CommentType } from './types.js';
 
@@ -47,6 +48,8 @@ export interface NewComment {
   selection?: Partial<CommentSelection>;
   type: string;
   body: string;
+  reviewRound?: number;
+  reviewSnapshotId?: string;
 }
 
 /** Validate + persist a new comment. Returns the stored comment or throws. */
@@ -73,6 +76,18 @@ export function addComment(repo: string, input: NewComment): Comment {
   if (selectedText) comment.selectedText = selectedText;
   const selection = cleanSelection(input.selection);
   if (selection) comment.selection = selection;
+  if (Number.isFinite(input.reviewRound) && Number(input.reviewRound) > 0) {
+    comment.reviewRound = Math.trunc(Number(input.reviewRound));
+  }
+  if (typeof input.reviewSnapshotId === 'string' && input.reviewSnapshotId.trim()) {
+    comment.reviewSnapshotId = input.reviewSnapshotId.trim();
+  }
+  if (selectedText) {
+    comment.anchorHash = createHash('sha256')
+      .update(`${comment.file}\0${comment.side ?? 'right'}\0${comment.line}\0${selectedText}`)
+      .digest('hex')
+      .slice(0, 20);
+  }
 
   const comments = loadComments(repo);
   comments.push(comment);

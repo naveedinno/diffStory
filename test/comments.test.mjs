@@ -48,6 +48,24 @@ test('addComment persists selected text and selected line range', () => {
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });
 
+test('addComment stores version-aware review metadata and an anchor digest', () => {
+  const repo = tmpRepo();
+  try {
+    const c = addComment(repo, {
+      file: 'a.ts',
+      line: 7,
+      type: 'change',
+      body: 'tighten this',
+      selectedText: 'return value',
+      reviewRound: 2,
+      reviewSnapshotId: 'r_snapshot',
+    });
+    assert.equal(c.reviewRound, 2);
+    assert.equal(c.reviewSnapshotId, 'r_snapshot');
+    assert.match(c.anchorHash, /^[a-f0-9]{20}$/);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
 test('addComment persists which diff side was selected', () => {
   const repo = tmpRepo();
   try {

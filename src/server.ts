@@ -51,6 +51,8 @@ import {
   selectAvailableAgent,
   normalizeStoryMode,
   normalizeCodexRunOptions,
+  storyRepairPrompt,
+  type StoryRepairAction,
   type Agent,
   type AgentRunOptions,
   type StreamResult,
@@ -72,6 +74,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
+import {
+  captureReviewSnapshot,
+  diffSinceReview,
+  recordReviewEvent,
+  reviewStateSummary,
+  type ReviewEventKind,
+  type ReviewSnapshotReason,
+} from './review-state.js';
 
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -365,6 +375,19 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
     if (method === 'GET' && url.pathname === '/api/diff/context') {
       return sendHtml(res, renderContextResponse(session, url.searchParams));
     }
+    if (method === 'GET' && url.pathname === '/api/review-state') {
+      if (!session.repo) return noRepo(res);
+      const data = sessionReviewData(session);
+      return sendJson(res, 200, reviewStateSummary(session.repo, data.base, data.head, data.diff, data.files));
+    }
+    if (method === 'POST' && url.pathname === '/api/review/checkpoint') {
+      if (!session.repo) return noRepo(res);
+      const snapshot = captureSessionReview(session, 'opened');
+      return sendJson(res, 200, {
+        ok: true,
+        snapshot: { id: snapshot.id, round: snapshot.round, createdAt: snapshot.createdAt },
+      });
+    }
     if (method === 'GET' && url.pathname === '/api/comments') {
       if (!session.repo) return noRepo(res);
       return sendJson(res, 200, loadComments(session.repo));
@@ -375,7 +398,12 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       return readBody(req, res, (body) => {
         try {
           const input = JSON.parse(body) as NewComment;
-          sendJson(res, 201, addComment(repo, input));
+          const snapshot = captureSessionReview(session, 'opened');
+          input.reviewRound = snapshot.round;
+          input.reviewSnapshotId = snapshot.id;
+          const comment = addComment(repo, input);
+          recordSessionEvent(session, 'comment-added', 'Comment added', `${comment.file}:${comment.line}`);
+          sendJson(res, 201, comment);
         } catch (e) {
           sendJson(res, 400, { error: (e as Error).message });
         }
@@ -386,6 +414,9 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
     }
     if (method === 'POST' && url.pathname === '/api/generate') {
       return readBody(req, res, (body) => runGenerate(res, session, body));
+    }
+    if (method === 'POST' && url.pathname === '/api/story/repair') {
+      return readBody(req, res, (body) => runStoryRepair(res, session, body));
     }
     if (method === 'POST' && url.pathname === '/api/tts/say') {
       return readBody(req, res, (body) => runLocalSay(res, body, home));
@@ -407,7 +438,10 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
         try {
           const { text } = JSON.parse(body || '{}') as { text?: string };
           const updated = appendUserMessage(repo, id, text ?? '');
-          if (updated) sendJson(res, 200, updated);
+          if (updated) {
+            recordSessionEvent(session, 'comment-reopened', 'Follow-up added', `${updated.file}:${updated.line}`);
+            sendJson(res, 200, updated);
+          }
           else sendJson(res, 404, { error: 'no such comment' });
         } catch (e) {
           sendJson(res, 400, { error: (e as Error).message });
@@ -422,7 +456,15 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
         try {
           const { status } = JSON.parse(body || '{}') as { status?: string };
           const updated = setCommentStatus(repo, id, status ?? '');
-          if (updated) sendJson(res, 200, updated);
+          if (updated) {
+            recordSessionEvent(
+              session,
+              updated.status === 'resolved' ? 'comment-resolved' : 'comment-reopened',
+              updated.status === 'resolved' ? 'Comment verified' : 'Comment reopened',
+              `${updated.file}:${updated.line}`,
+            );
+            sendJson(res, 200, updated);
+          }
           else sendJson(res, 404, { error: 'no such comment' });
         } catch (e) {
           sendJson(res, 400, { error: (e as Error).message });
@@ -476,7 +518,7 @@ function reviewScreen(session: Session, params: URLSearchParams): string {
     try {
       loadTour(storyFile);
       applyScope(session, params);
-      return renderReview(session);
+      return renderReview(session, params);
     } catch (e) {
       return changeScreen(session, params, (e as Error).message);
     }
@@ -557,7 +599,13 @@ function diffScreen(session: Session, params: URLSearchParams): string {
   const repo = session.repo as string;
   const base = resolveBase(repo, session.base);
   const head = session.head;
-  const files = parseUnifiedDiff(getDiff(repo, base, head));
+  const diff = getDiff(repo, base, head);
+  const fullFiles = parseUnifiedDiff(diff);
+  const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles);
+  const reviewMode = params.get('review') === 'since' && reviewState.compareFrom ? 'since' : 'full';
+  const files = reviewMode === 'since'
+    ? parseUnifiedDiff(diffSinceReview(repo, base, head, fullFiles, params.get('from') || reviewState.compareFrom?.id))
+    : fullFiles;
   const tour: Tour = { version: 1, title: '', summary: '', steps: [], base };
   return renderPage({
     repo,
@@ -569,6 +617,8 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     routeBase: repoRouteBase(repo),
     repoName: basename(repo),
     storyless: true,
+    reviewState,
+    reviewMode,
   });
 }
 
@@ -581,6 +631,7 @@ interface ReviewData {
   tour: Tour;
   base: string;
   head?: string;
+  diff: string;
   files: DiffFile[];
 }
 
@@ -605,12 +656,17 @@ function loadReview(session: Session): ReviewData {
   const tour = loadTour(selectedStoryPath(session));
   const { base, head, diff } = reviewDiff(repo, session, tour);
   const files = parseUnifiedDiff(diff);
-  return { tour, base, head, files };
+  return { tour, base, head, diff, files };
 }
 
-function renderReview(session: Session): string {
+function renderReview(session: Session, params = new URLSearchParams()): string {
   const repo = session.repo as string;
-  const { tour, base, head, files } = loadReview(session);
+  const { tour, base, head, files: fullFiles, diff } = loadReview(session);
+  const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles);
+  const reviewMode = params.get('review') === 'since' && reviewState.compareFrom ? 'since' : 'full';
+  const files = reviewMode === 'since'
+    ? parseUnifiedDiff(diffSinceReview(repo, base, head, fullFiles, params.get('from') || reviewState.compareFrom?.id))
+    : fullFiles;
   return renderPage({
     repo,
     routeBase: repoRouteBase(repo),
@@ -620,7 +676,60 @@ function renderReview(session: Session): string {
     baseLabel: describeBase(repo, base),
     headRef: head,
     comments: loadComments(repo),
+    reviewState,
+    reviewMode,
   });
+}
+
+function sessionReviewData(session: Session): ReviewData {
+  if (!session.repo) throw new Error('No repo is open.');
+  if (session.selectedStory !== null) {
+    try {
+      return loadReview(session);
+    } catch {
+      // A broken or missing story must not prevent comments and review checkpoints
+      // from using the real diff underneath it.
+    }
+  }
+  const repo = session.repo;
+  const base = resolveBase(repo, session.base);
+  const head = session.head;
+  const diff = getDiff(repo, base, head);
+  return {
+    tour: { version: 1, title: '', summary: '', steps: [], base },
+    base,
+    head,
+    diff,
+    files: parseUnifiedDiff(diff),
+  };
+}
+
+function captureSessionReview(
+  session: Session,
+  reason: ReviewSnapshotReason,
+  commentIds?: string[],
+) {
+  const repo = session.repo as string;
+  const data = sessionReviewData(session);
+  return captureReviewSnapshot(repo, {
+    base: data.base,
+    head: data.head,
+    diff: data.diff,
+    files: data.files,
+    reason,
+    commentIds,
+  });
+}
+
+function recordSessionEvent(
+  session: Session,
+  kind: ReviewEventKind,
+  label: string,
+  detail?: string,
+): void {
+  if (!session.repo) return;
+  const data = sessionReviewData(session);
+  recordReviewEvent(session.repo, data.base, data.head, { kind, label, ...(detail ? { detail } : {}) });
 }
 
 /** The lazily-loaded "Full file" side-by-side view for one file. Works with or
@@ -995,12 +1104,16 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
 
   const openCount = loadComments(repo).filter((c) => c.status === 'open').length;
   const targetCount = target === 'all' ? openCount : target.length;
+  const targetIds = target === 'all'
+    ? loadComments(repo).filter((comment) => comment.status === 'open').map((comment) => comment.id)
+    : target;
   const title =
     target === 'all'
       ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
       : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
 
   const before = currentDiff(session);
+  captureSessionReview(session, 'feedback-sent', targetIds);
   // The diff's two sides, resolved exactly as the review page rendered them, so the
   // agent grounds its answers in both — not just the tree it has checked out. `head`
   // is set only for two-ref comparisons; otherwise the current side is the working
@@ -1046,6 +1159,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
       } else if (!codeChanged && !addressCtx.historical) {
         events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
       }
+      if (status === 'complete') captureSessionReview(session, 'agent-complete');
       return { status, result: { codeChanged }, events };
     },
     cleanup: addressCtx.cleanup,
@@ -1125,6 +1239,64 @@ function stampStoryScope(storyPath: string, scope?: StoryScope): void {
   } catch {
     // Validation will report malformed or missing stories in the normal finish path.
   }
+}
+
+function runStoryRepair(res: ServerResponse, session: Session, body: string): void {
+  let input: { action?: string; file?: string; line?: number; stepId?: string; agent?: string } = {};
+  try {
+    input = JSON.parse(body || '{}');
+  } catch {
+    return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
+  }
+  const action = input.action as StoryRepairAction;
+  if (!(['explain', 'shorten', 'split'] as StoryRepairAction[]).includes(action)) {
+    return sendJson(res, 400, errorEvent('preflight', 'Invalid story repair', 'Choose explain, shorten, or split.'));
+  }
+  const agents = availableAgents();
+  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
+  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
+  const selected = selectAvailableAgent(input.agent, agents, pre.agent);
+  if (!selected.ok) return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
+  const repo = session.repo as string;
+  const storyPath = selectedStoryPath(session);
+  if (!existsSync(storyPath)) {
+    return sendJson(res, 404, errorEvent('preflight', 'No story to repair', 'Generate a story before tuning a step.'));
+  }
+  try {
+    loadTour(storyPath);
+  } catch (e) {
+    return sendJson(res, 400, errorEvent('validation', 'The current story is invalid', (e as Error).message));
+  }
+  const data = sessionReviewData(session);
+  const title = action === 'explain' ? 'Explaining an uncovered change' : action === 'shorten' ? 'Shortening a story step' : 'Splitting a story step';
+  runWorkflow(res, repo, {
+    workflow: 'guided_review',
+    title,
+    agent: selected.agent,
+    prompt: storyRepairPrompt({
+      action,
+      file: input.file?.trim() || undefined,
+      line: Number.isFinite(input.line) ? Math.trunc(Number(input.line)) : undefined,
+      stepId: input.stepId?.trim() || undefined,
+      base: stableDiffRef(repo, data.base) ?? data.base,
+      head: stableDiffRef(repo, data.head),
+    }),
+    context: {
+      repoName: basename(repo),
+      repoPath: repo,
+      workflow: 'guided_review',
+      agent: selected.agent,
+      base: describeBase(repo, data.base),
+      head: data.head ?? 'working tree',
+    },
+    isTargetWrite: (event) => event.type === 'file' && event.action !== 'read' && event.target.endsWith('story.json'),
+    finish: (result) => {
+      const finished = finishStoryGeneration(result, storyPath, session);
+      if (finished.status === 'complete') captureSessionReview(session, 'story-repaired');
+      return finished;
+    },
+    fileScope: { repoPath: repo, changedFiles: data.files.map((file) => file.newPath) },
+  });
 }
 
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
