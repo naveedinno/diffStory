@@ -36,12 +36,16 @@ import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
+    // Capture the home directory once. Besides making one server session stable,
+    // this keeps parallel test servers from following later HOME mutations into
+    // another test's recents, skills, or voice cache.
+    const home = homedir();
     const session = createSession({
         repo: opts.repo,
         base: opts.baseOverride,
         head: opts.headOverride,
     });
-    const server = createServer((req, res) => handle(req, res, session));
+    const server = createServer((req, res) => handle(req, res, session, home));
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
             console.error(`Port ${opts.port} is in use. Try: ${APP_NAME} --port ${opts.port + 1}`);
@@ -51,7 +55,9 @@ export function serve(opts) {
         }
         process.exit(1);
     });
-    server.listen(opts.port, () => {
+    // This app can read repositories and launch local agents. Keep that surface
+    // on the loopback interface even when the host machine is on a shared network.
+    server.listen(opts.port, '127.0.0.1', () => {
         const addr = server.address();
         const port = typeof addr === 'object' && addr ? addr.port : opts.port;
         const url = `http://localhost:${port}/`;
@@ -98,13 +104,70 @@ function redirect(res, location) {
     res.writeHead(302, { location });
     res.end();
 }
-function handle(req, res, session) {
+function localHostname(value) {
+    const host = value.toLowerCase().replace(/^\[|\]$/g, '');
+    return host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '::1';
+}
+/**
+ * Reject DNS-rebinding hosts and browser cross-site requests. Requests from
+ * curl/Node are still accepted when they address a loopback Host directly.
+ */
+function isTrustedLocalRequest(req) {
+    const host = req.headers.host;
+    if (!host)
+        return false;
+    let expected;
+    try {
+        expected = new URL(`http://${host}`);
+    }
+    catch {
+        return false;
+    }
+    if (!localHostname(expected.hostname))
+        return false;
+    const fetchSite = req.headers['sec-fetch-site'];
+    if (typeof fetchSite === 'string' && fetchSite !== 'same-origin' && fetchSite !== 'none')
+        return false;
+    const origin = req.headers.origin;
+    if (!origin)
+        return true;
+    try {
+        const actual = new URL(origin);
+        return actual.protocol === 'http:' && localHostname(actual.hostname) && actual.host === expected.host;
+    }
+    catch {
+        return false;
+    }
+}
+function setLocalResponseHeaders(res) {
+    res.setHeader('Content-Security-Policy', [
+        "default-src 'none'",
+        "base-uri 'none'",
+        "connect-src 'self'",
+        "font-src 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "img-src 'self' data:",
+        "media-src 'self' blob:",
+        "script-src 'unsafe-inline'",
+        "style-src 'unsafe-inline'",
+    ].join('; '));
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+}
+function handle(req, res, session, home) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
+    setLocalResponseHeaders(res);
+    if (!isTrustedLocalRequest(req)) {
+        return sendJson(res, 403, { error: 'This local app only accepts same-origin localhost requests.' });
+    }
     try {
         if (method === 'GET' && url.pathname === '/') {
             if (session.repo == null)
-                return sendHtml(res, pickerStub());
+                return sendHtml(res, pickerStub(home));
             // Back-compat for URLs emitted by older app builds.
             if (url.searchParams.has('story')) {
                 return redirect(res, url.searchParams.get('story') === 'new'
@@ -141,28 +204,28 @@ function handle(req, res, session) {
         }
         if (method === 'GET' && url.pathname === '/stories') {
             if (session.repo == null)
-                return sendHtml(res, pickerStub());
+                return sendHtml(res, pickerStub(home));
             return redirect(res, repoRoute(session.repo, 'stories'));
         }
         if (method === 'GET' && url.pathname === '/repos') {
             closeSession(session);
-            return sendHtml(res, pickerStub());
+            return sendHtml(res, pickerStub(home));
         }
         if (method === 'GET' && url.pathname === '/change') {
             if (session.repo == null)
-                return sendHtml(res, pickerStub());
+                return sendHtml(res, pickerStub(home));
             return redirect(res, repoRoute(session.repo, 'change', url.search));
         }
         if (method === 'GET' && url.pathname === '/review') {
             if (session.repo == null)
-                return sendHtml(res, pickerStub());
+                return sendHtml(res, pickerStub(home));
             return redirect(res, repoRoute(session.repo, 'review', url.search));
         }
         if (method === 'GET' && url.pathname === '/api/repos/recent') {
-            return sendJson(res, 200, listRecentRepos());
+            return sendJson(res, 200, listRecentRepos(home));
         }
         if (method === 'DELETE' && url.pathname === '/api/repos/recent') {
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 let path = '';
                 try {
                     path = String(JSON.parse(body || '{}').path ?? '');
@@ -172,24 +235,24 @@ function handle(req, res, session) {
                 }
                 if (!path)
                     return sendJson(res, 400, { error: 'Missing repository path.' });
-                const removed = loadRecents(homedir()).some((e) => e.path === path);
-                forgetRecent(homedir(), path);
-                return sendJson(res, 200, { ok: true, removed, recents: listRecentRepos() });
+                const removed = loadRecents(home).some((e) => e.path === path);
+                forgetRecent(home, path);
+                return sendJson(res, 200, { ok: true, removed, recents: listRecentRepos(home) });
             });
         }
         if (method === 'GET' && url.pathname === '/api/agents') {
-            return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(homedir()) });
+            return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(home) });
         }
         if (method === 'POST' && url.pathname === '/api/skills/update') {
-            const updated = updateSkills(homedir());
+            const updated = updateSkills(home);
             return sendJson(res, 200, { ok: true, installed: updated.installed, skills: updated.status });
         }
         if (method === 'GET' && url.pathname === '/api/fs') {
             const p = url.searchParams.get('path');
-            return sendJson(res, 200, listDirs(p && p.trim() ? p : homedir()));
+            return sendJson(res, 200, listDirs(p && p.trim() ? p : home));
         }
         if (method === 'POST' && url.pathname === '/api/repo/open') {
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 let path = '';
                 try {
                     path = String(JSON.parse(body || '{}').path ?? '');
@@ -201,7 +264,7 @@ function handle(req, res, session) {
                     return sendJson(res, 400, { error: 'Not a git repository.' });
                 }
                 openSession(session, path);
-                recordRecent(homedir(), path, nowMs());
+                recordRecent(home, path, nowMs());
                 sendJson(res, 200, { ...inspectRepo(path), route: repoRoute(path, 'stories') });
             });
         }
@@ -213,7 +276,7 @@ function handle(req, res, session) {
             if (!session.repo)
                 return noRepo(res);
             const repo = session.repo;
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 let id = '';
                 try {
                     id = String(JSON.parse(body || '{}').id ?? '');
@@ -263,7 +326,7 @@ function handle(req, res, session) {
             if (!session.repo)
                 return noRepo(res);
             const repo = session.repo;
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 try {
                     const input = JSON.parse(body);
                     sendJson(res, 201, addComment(repo, input));
@@ -274,29 +337,29 @@ function handle(req, res, session) {
             });
         }
         if (method === 'POST' && url.pathname === '/api/address') {
-            return readBody(req, (body) => runAddress(res, session, body));
+            return readBody(req, res, (body) => runAddress(res, session, body));
         }
         if (method === 'POST' && url.pathname === '/api/generate') {
-            return readBody(req, (body) => runGenerate(res, session, body));
+            return readBody(req, res, (body) => runGenerate(res, session, body));
         }
         if (method === 'POST' && url.pathname === '/api/tts/say') {
-            return readBody(req, (body) => runLocalSay(res, body));
+            return readBody(req, res, (body) => runLocalSay(res, body, home));
         }
         if (method === 'GET' && url.pathname.startsWith('/api/tts/say/')) {
-            return sendLocalSayAudio(res, url.pathname.slice('/api/tts/say/'.length));
+            return sendLocalSayAudio(res, url.pathname.slice('/api/tts/say/'.length), home);
         }
         if (method === 'POST' && url.pathname === '/api/tts/kokoro') {
-            return readBody(req, (body) => runLocalKokoro(res, body));
+            return readBody(req, res, (body) => runLocalKokoro(res, body, home));
         }
         if (method === 'GET' && url.pathname.startsWith('/api/tts/kokoro/')) {
-            return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length));
+            return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length), home);
         }
         if (method === 'POST' && url.pathname.startsWith('/api/comments/') && url.pathname.endsWith('/message')) {
             if (!session.repo)
                 return noRepo(res);
             const repo = session.repo;
             const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length, -'/message'.length));
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 try {
                     const { text } = JSON.parse(body || '{}');
                     const updated = appendUserMessage(repo, id, text ?? '');
@@ -315,7 +378,7 @@ function handle(req, res, session) {
                 return noRepo(res);
             const repo = session.repo;
             const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
-            return readBody(req, (body) => {
+            return readBody(req, res, (body) => {
                 try {
                     const { status } = JSON.parse(body || '{}');
                     const updated = setCommentStatus(repo, id, status ?? '');
@@ -345,8 +408,8 @@ function handle(req, res, session) {
         sendHtml(res, errorPage(e.message), 500);
     }
 }
-function pickerStub() {
-    return renderPicker(listRecentRepos(), homedir(), Date.now());
+function pickerStub(home) {
+    return renderPicker(listRecentRepos(home), home, Date.now());
 }
 function storyChooser(session) {
     const repo = session.repo;
@@ -466,8 +529,8 @@ function diffScreen(session, params) {
     });
 }
 /** The recents list, each entry enriched with its current repo state for the picker. */
-function listRecentRepos() {
-    return loadRecents(homedir()).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
+function listRecentRepos(home) {
+    return loadRecents(home).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
 }
 function reviewDiff(repo, session, tour) {
     const sessionHasScope = session.base !== undefined || session.head !== undefined;
@@ -1032,16 +1095,28 @@ function runGenerate(res, session, body) {
         fileScope: { repoPath: repo, changedFiles },
     });
 }
-function readBody(req, done) {
+function readBody(req, res, done) {
     let data = '';
+    let size = 0;
+    let tooLarge = false;
     req.on('data', (chunk) => {
+        if (tooLarge)
+            return;
+        size += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+        if (size > 1_000_000) {
+            tooLarge = true;
+            data = '';
+            sendJson(res, 413, { error: 'Request body is too large.' });
+            return;
+        }
         data += chunk;
-        if (data.length > 1_000_000)
-            req.destroy(); // 1MB guard
     });
-    req.on('end', () => done(data));
+    req.on('end', () => {
+        if (!tooLarge)
+            done(data);
+    });
 }
-function runLocalSay(res, body) {
+function runLocalSay(res, body, home) {
     let input;
     try {
         input = JSON.parse(body || '{}');
@@ -1050,7 +1125,7 @@ function runLocalSay(res, body) {
         return sendJson(res, 400, { error: 'invalid JSON' });
     }
     const abort = speechAbortForResponse(res);
-    synthesizeWithSay(homedir(), {
+    synthesizeWithSay(home, {
         text: input.text ?? '',
         voice: input.voice,
         preset: input.preset,
@@ -1068,7 +1143,7 @@ function runLocalSay(res, body) {
         sendJson(res, 400, { error: err.message });
     });
 }
-function runLocalKokoro(res, body) {
+function runLocalKokoro(res, body, home) {
     let input;
     try {
         input = JSON.parse(body || '{}');
@@ -1077,7 +1152,7 @@ function runLocalKokoro(res, body) {
         return sendJson(res, 400, { error: 'invalid JSON' });
     }
     const abort = speechAbortForResponse(res);
-    synthesizeWithKokoro(homedir(), {
+    synthesizeWithKokoro(home, {
         text: input.text ?? '',
         voice: input.voice,
         rate: input.rate,
@@ -1103,14 +1178,14 @@ function speechAbortForResponse(res) {
     });
     return ctrl;
 }
-function sendLocalSayAudio(res, file) {
+function sendLocalSayAudio(res, file, home) {
     const id = file.endsWith('.m4a') ? file.slice(0, -4) : file;
     if (!isLocalTtsId(id)) {
         res.statusCode = 404;
         res.end('Not found');
         return;
     }
-    const path = join(localTtsCacheDir(homedir()), `${id}.m4a`);
+    const path = join(localTtsCacheDir(home), `${id}.m4a`);
     if (!existsSync(path)) {
         res.statusCode = 404;
         res.end('Not found');
@@ -1123,14 +1198,14 @@ function sendLocalSayAudio(res, file) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     createReadStream(path).pipe(res);
 }
-function sendLocalKokoroAudio(res, file) {
+function sendLocalKokoroAudio(res, file, home) {
     const id = file.endsWith('.wav') ? file.slice(0, -4) : file;
     if (!isKokoroTtsId(id)) {
         res.statusCode = 404;
         res.end('Not found');
         return;
     }
-    const path = join(kokoroTtsCacheDir(homedir()), `${id}.wav`);
+    const path = join(kokoroTtsCacheDir(home), `${id}.wav`);
     if (!existsSync(path)) {
         res.statusCode = 404;
         res.end('Not found');

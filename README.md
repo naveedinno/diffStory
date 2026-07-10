@@ -185,7 +185,7 @@ Useful development commands:
 
 | Command | Use |
 | --- | --- |
-| `npm run dev` | Run the app from TypeScript source. |
+| `npm run dev` | Build the current TypeScript source and run the app. |
 | `npm run build` | Compile `src/` into `dist/`. |
 | `npm run start` | Run the built app. |
 | `npm run demo` | Build and open a sample review. |

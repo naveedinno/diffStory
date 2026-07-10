@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
+import { request } from 'node:http';
 import { serve } from '../dist/server.js';
 
 function gitRepo() {
@@ -31,8 +32,27 @@ function addCommits(repo, count) {
 async function boot() {
   const server = serve({ repo: null, port: 0, open: false });
   await once(server, 'listening');
-  const { port } = server.address();
+  const { address, port } = server.address();
+  assert.equal(address, '127.0.0.1', 'local app server only listens on loopback');
   return { server, base: `http://localhost:${port}` };
+}
+
+function requestStatusWithHost(base, host) {
+  const url = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = request({
+      hostname: '127.0.0.1',
+      port: url.port,
+      path: '/',
+      method: 'GET',
+      headers: { host },
+    }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode));
+    });
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 function installFakeClaude(binDir) {
@@ -77,6 +97,9 @@ test('app server drives picker → open → refs → recent → close', async ()
   try {
     const root = await fetch(`${base}/`);
     assert.equal(root.status, 200);
+    assert.equal(root.headers.get('x-frame-options'), 'DENY');
+    assert.equal(root.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(root.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
     const rootText = (await root.text()).toLowerCase();
     assert.ok(rootText.includes('pick a repo'));
     assert.ok(rootText.includes('open by path'));
@@ -85,6 +108,22 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.ok(rootText.includes('/api/skills/update'));
     assert.ok(rootText.includes('d.route'));
     assert.ok(rootText.includes("'/repo/'+encodeuricomponent"));
+
+    const hostileOrigin = await fetch(`${base}/api/repo/close`, {
+      method: 'POST',
+      headers: { origin: 'https://example.com' },
+    });
+    assert.equal(hostileOrigin.status, 403, 'cross-origin browser writes are rejected');
+
+    assert.equal(await requestStatusWithHost(base, 'example.com'), 403, 'non-loopback Host headers are rejected');
+
+    const oversized = await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: 'x'.repeat(1_000_001) }),
+    });
+    assert.equal(oversized.status, 413, 'oversized request bodies get a useful HTTP response');
+    assert.equal((await oversized.json()).error, 'Request body is too large.');
 
     const agents = await (await fetch(`${base}/api/agents`)).json();
     assert.ok(Array.isArray(agents.agents));

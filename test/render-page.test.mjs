@@ -85,7 +85,8 @@ test('review page can return to the story chooser', () => {
   assert.match(html, /Stories\s*<\/a>/);
   assert.match(html, /\.ds-back\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);
-  assert.match(html, /@media \(max-width:720px\)\{:root\{--ds-rail-width:240px\}\.ds-top\{[^}]+\}\.ds-word,\.ds-vsep,\.ds-status,\.ds-settings-wrap,\.ds-actions\{display:none\}/);
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*:root\{--ds-rail-width:240px\}/);
+  assert.match(html, /\.ds-word,\.ds-vsep,\.ds-status,\.ds-settings-wrap,\.ds-actions\{display:none\}/);
   assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
@@ -132,6 +133,34 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
   assert.match(html, /document\.addEventListener\('mousedown',startSidebarResize\)/);
   assert.match(html, /document\.addEventListener\('mousemove',moveSidebarResize\)/);
   assert.match(html, /document\.addEventListener\('mouseup',endSidebarResize\)/);
+});
+
+test('compact review keeps the diff full-width behind an overlay sidebar', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:56px;bottom:0;left:0/);
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-main\{width:100%\}/);
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-rail-resizer\{display:none\}/);
+  assert.match(html, /function compactScreen\(\)/);
+  assert.match(html, /storedCollapsed==='1'\|\|\(compactScreen\(\)&&storedCollapsed!=='0'\)/);
+  assert.match(html, /localStorage\.setItem\('ds-sidebar-collapsed',collapsed\?'1':'0'\)/);
+  assert.match(html, /function collapseCompactSidebar\(\)/);
+  assert.match(html, /data-sidebar-scrim/);
+  assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:56px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
+  assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
+  assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
+  assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
+  assert.match(html, /\.ds-fileitem\{gap:7px;padding-right:7px;padding-left:calc\(7px \+ var\(--tree-indent,0px\)\)\}/);
+  assert.match(html, /\.ds-filetree-count\{display:none\}/);
+});
+
+test('review view switcher exposes complete keyboard tab semantics', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /id="ds-tab-tour"[^>]*role="tab"[^>]*aria-controls="ds-view-tour"[^>]*aria-selected="true"/);
+  assert.match(html, /id="ds-tab-files"[^>]*role="tab"[^>]*aria-controls="ds-view-files"[^>]*aria-selected="false"[^>]*tabindex="-1"/);
+  assert.match(html, /id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0"/);
+  assert.match(html, /id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0"/);
+  assert.match(html, /t\.setAttribute\('aria-selected',on\?'true':'false'\);t\.tabIndex=on\?0:-1/);
+  assert.match(html, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\)/);
 });
 
 test('sidebar file warnings avoid the awkward amber rail', () => {
@@ -188,7 +217,9 @@ test('all-files sidebar groups changed paths into an expanded tree', () => {
 
   const html = renderPage({ repo: process.cwd(), tour, files: treeFiles, baseLabel: 'main', comments: [], storyless: true });
 
-  assert.match(html, /<div class="ds-filetree" role="tree">/);
+  assert.match(html, /<div class="ds-filetree">/);
+  assert.doesNotMatch(html, /role="tree(?:item)?"/);
+  assert.doesNotMatch(html, /role="group"/);
   assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/" style="--tree-depth:0" open/);
   assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/interfaces\/" style="--tree-depth:1" open/);
   assert.match(html, /data-goto-file="contracts\/DepositVault\.sol"/);

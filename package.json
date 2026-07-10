@@ -27,7 +27,7 @@
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
     "check": "npm run build && node --test test/*.test.mjs",
-    "dev": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "dev": "npm run build && node dist/cli.js",
     "setup:kokoro": "sh scripts/setup-kokoro.sh",
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",

@@ -24,6 +24,7 @@ test('README leads with a visual demo, npm quickstart, and local-first positioni
 
 test('package exposes release checks and ships demo assets with npm package', () => {
   const pkg = JSON.parse(read('package.json'));
+  assert.equal(pkg.scripts.dev, 'npm run build && node dist/cli.js');
   assert.equal(pkg.scripts.check, 'npm run build && node --test test/*.test.mjs');
   assert.equal(pkg.scripts['release:check'], 'npm run check && npm pack --dry-run --json');
   assert.equal(pkg.scripts.prepublishOnly, 'npm run check');

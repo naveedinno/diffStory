@@ -250,11 +250,11 @@ ${BRAND_HEAD_LINKS}
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
 
 <div class="ds-layout">
-  <aside class="ds-rail">
+  <aside class="ds-rail" aria-label="Review navigation">
     <div class="ds-railpad">
       <div class="ds-viewtoggle" role="tablist">
-        <button class="ds-tab is-active" data-view="tour" role="tab">Story</button>
-        <button class="ds-tab" data-view="files" role="tab">All files</button>
+        <button class="ds-tab is-active" id="ds-tab-tour" data-view="tour" role="tab" aria-controls="ds-view-tour" aria-selected="true" tabindex="0">Story</button>
+        <button class="ds-tab" id="ds-tab-files" data-view="files" role="tab" aria-controls="ds-view-files" aria-selected="false" tabindex="-1">All files</button>
       </div>
     </div>
     ${introCard(model)}
@@ -285,13 +285,14 @@ ${BRAND_HEAD_LINKS}
     ${trustRailCard(model.trust)}
     <div class="ds-rail-resizer" data-sidebar-resizer role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0" title="Resize sidebar"></div>
   </aside>
+  <button class="ds-rail-scrim" data-sidebar-scrim type="button" aria-label="Close review navigation" aria-hidden="true" tabindex="-1"></button>
 
   <main class="ds-main">
-    <div class="ds-view" id="ds-view-tour">
+    <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
       ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour)}
       ${storyless ? '' : stepPanels}
     </div>
-    <div class="ds-view" id="ds-view-files" hidden>
+    <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
       <div class="ds-fileshead">
         <div class="ds-fileshead-l">
           <h1 class="ds-fileshead-title">All files in this change</h1>
@@ -576,7 +577,7 @@ function railFileTree(files: FileView[]): string {
   if (!files.length) return '';
   const root = createFileTreeDir('', '');
   files.forEach((file, index) => addFileTreeEntry(root, file, index));
-  return `<div class="ds-filetree" role="tree">${renderFileTreeChildren(root.children, 0)}</div>`;
+  return `<div class="ds-filetree">${renderFileTreeChildren(root.children, 0)}</div>`;
 }
 
 function createFileTreeDir(name: string, path: string): FileTreeDir {
@@ -632,7 +633,7 @@ function renderFileTreeDir(dir: FileTreeDir, depth: number): string {
       ${flag}
       <span class="ds-filetree-stat">${stat}</span>
     </summary>
-    <div class="ds-filetree-children" role="group">${renderFileTreeChildren(dir.children, depth + 1)}</div>
+    <div class="ds-filetree-children">${renderFileTreeChildren(dir.children, depth + 1)}</div>
   </details>`;
 }
 
@@ -645,7 +646,7 @@ function railFileItem(f: FileView, i: number, depth = 0): string {
     : '';
   return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
     f.file,
-  )}" style="--tree-indent:${depth * 14}px" role="treeitem" title="${esc(f.file)} — ${esc(f.kindLabel)}">
+  )}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}">
     <span class="ds-fileitem-dot k-${kindClass}"></span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
