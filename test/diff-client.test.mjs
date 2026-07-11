@@ -24,11 +24,13 @@ test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
-test('viewed-file tracking is wired through storage and the v key', () => {
+test('viewed-file tracking is visible, accessible, and wired through storage and the v key', () => {
   assert.match(DIFF_JS, /function toggleViewed\(/);
   assert.match(DIFF_JS, /function syncViewed\(/);
   assert.match(DIFF_JS, /'ds-viewed:'/);
-  assert.doesNotMatch(PAGE_JS, /data-viewed-toggle/);
+  assert.match(PAGE_JS, /data-viewed-toggle/);
+  assert.match(DIFF_JS, /setAttribute\('aria-pressed',on\?'true':'false'\)/);
+  assert.match(DIFF_JS, /data-viewed-label/);
   assert.match(PAGE_JS, /e\.key==='v'\|\|e\.key==='V'/);
 });
 
@@ -48,4 +50,10 @@ test('expand-context client is wired', () => {
 test('review page consumes shared tokens and respects reduced motion', () => {
   assert.match(PAGE_CSS, /--app-bg:/);
   assert.match(DIFF_CSS, /prefers-reduced-motion/);
+});
+
+test('compact file toolbars wrap identity and review controls onto separate rows', () => {
+  assert.match(DIFF_CSS, /@media \(max-width:720px\)[\s\S]*\.ds-filepanel-head\{flex-wrap:wrap/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head::after\{content:'';order:6;flex-basis:100%/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:9;margin-left:auto\}/);
 });

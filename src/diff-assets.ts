@@ -77,6 +77,12 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-changebtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-changebtn:disabled{opacity:.35;cursor:default}
 .ds-changecount{min-width:40px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.ds-viewed-toggle{height:30px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--diff-rule);border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:650;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.ds-viewed-toggle:hover{background:var(--fill-2);color:var(--text)}
+.ds-viewed-toggle:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}
+.ds-viewed-toggle-icon{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dim2);border-radius:50%;color:transparent;font-size:10px;line-height:1;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.ds-viewed-toggle.is-active{border-color:rgba(48,209,88,.28);background:rgba(48,209,88,.08);color:var(--add-text)}
+.ds-viewed-toggle.is-active .ds-viewed-toggle-icon{border-color:var(--add);background:var(--add);color:var(--on-add)}
 .ds-row.is-change-jump,.ds-urow.is-change-jump{animation:dsChangeJump 1.2s ease}
 @keyframes dsChangeJump{0%,100%{filter:brightness(1)}20%,70%{filter:brightness(1.32)}}
 /* syntax highlighting — the line background still marks add/del */
@@ -92,6 +98,8 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-cell-del .changed,.ds-urow.ds-row-del .changed{background:rgba(224,68,94,0.36);box-shadow:0 0 0 1px rgba(224,68,94,0.36)}
 .ds-diffnote{padding:14px 16px;color:var(--muted);font-family:var(--sans);font-size:13px}
 .ds-diffnote-soft{color:var(--dim2);font-size:12px;border-bottom:1px solid var(--line-soft)}
+.ds-fileitem-viewed{flex:none;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--add);color:var(--on-add);font-size:9px;font-weight:850;opacity:0;transform:scale(.72);transition:opacity .15s ease,transform .15s ease}
+.ds-fileitem.is-viewed .ds-fileitem-viewed{opacity:1;transform:scale(1)}
 .ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat{opacity:.55}
 .ds-hunkgap.is-expandable:not(.ds-hunkgap-split){display:flex;align-items:center;justify-content:center;gap:10px}
 .ds-hunkgap-split{display:flex;align-items:center;justify-content:stretch;gap:0;padding-left:0;padding-right:0}
@@ -110,7 +118,22 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 /* mode/file switches fade in */
 .ds-filepanel-body>[data-diff-inner]:not([hidden]),.ds-filepanel-body>[data-split-inner]:not([hidden]),.ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in .16s ease}
 @keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-modetoggle button,.ds-gapbtn{transition:none!important}}
+@media (max-width:1050px){.ds-viewed-toggle{width:30px;padding:0;justify-content:center}.ds-viewed-toggle-label{display:none}}
+@media (max-width:720px){
+  .ds-filepanel-head{flex-wrap:wrap;gap:7px;padding:10px 12px}
+  .ds-filepanel-head>.ds-cardpath{order:1;flex:1 1 110px}
+  .ds-filepanel-head>.ds-badge{order:2}
+  .ds-filepanel-head>.ds-untoured-badge{order:3}
+  .ds-filepanel-head>.ds-stepchip{order:4}
+  .ds-filepanel-head>.ds-cardstat{order:5}
+  .ds-filepanel-head>.ds-flex{display:none}
+  .ds-filepanel-head::after{content:'';order:6;flex-basis:100%;height:0}
+  .ds-filepanel-head>.ds-changejump{order:7}
+  .ds-filepanel-head>.ds-viewed-toggle{order:8}
+  .ds-filepanel-head>.ds-modetoggle{order:9;margin-left:auto}
+  .ds-filepanel-head .ds-modetoggle button{padding-left:8px;padding-right:8px}
+}
+@media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
 `;
 
 export const DIFF_JS = `
@@ -260,6 +283,14 @@ export const DIFF_JS = `
       total++;
       var on=!!viewedFiles[f];if(on)n++;
       it.classList.toggle('is-viewed',on);
+    });
+    $all('[data-viewed-toggle]').forEach(function(btn){
+      var panel=closest(btn,'.ds-filepanel'),file=panel&&panel.getAttribute('data-file'),on=!!viewedFiles[file];
+      btn.classList.toggle('is-active',on);
+      btn.setAttribute('aria-pressed',on?'true':'false');
+      btn.setAttribute('aria-label','Mark '+(file||'file')+(on?' unviewed':' viewed'));
+      btn.setAttribute('title',(on?'Mark unviewed':'Mark viewed')+' (V)');
+      var label=$('[data-viewed-label]',btn);if(label)label.textContent=on?'Viewed':'Mark viewed';
     });
     var prog=$('[data-viewed-progress]');
     if(prog)prog.textContent=n?(n+' of '+total+' viewed'):(total+' '+(total===1?'file':'files'));

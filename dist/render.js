@@ -603,6 +603,7 @@ function railFileItem(f, i, depth, meta) {
     <span class="ds-fileitem-dot k-${kindClass}"></span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
     ${flag}
+    <span class="ds-fileitem-viewed" aria-hidden="true">✓</span>
     <span class="ds-fileitem-stat">${stat}</span>
   </button>`;
 }
@@ -856,6 +857,7 @@ function filePanel(f, i, stepIndexById) {
       <span class="ds-flex"></span>
       <span class="ds-cardstat">${stat}</span>
       ${changeJumpControls()}
+      <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(f.file)} viewed" title="Mark viewed (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark viewed</span></button>
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
@@ -982,7 +984,8 @@ function commandPalette() {
         ['files', 'Open All files', '/', 'Search and filter the changed files'],
         ['feedback', 'Review feedback', '', 'Verify agent replies and reopen comments'],
         ['timeline', 'Open review timeline', '', 'See rounds, comments, and agent runs'],
-        ['next-unviewed', 'Next unviewed file', 'V', 'Keep the review moving'],
+        ['next-unviewed', 'Next unviewed file', '', 'Keep the review moving'],
+        ['toggle-viewed', 'Toggle current file viewed', 'V', 'Track what you have already checked'],
         ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],
     ];
     return `<div class="ds-command-root" data-command-root hidden>

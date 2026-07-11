@@ -1016,12 +1016,20 @@ test('intent text is HTML-escaped in the intro panel', () => {
   assert.doesNotMatch(html, /Guard <script> tags/);
 });
 
-test('sidebar file items keep viewed state without rendering checkbox controls', () => {
+test('all-files view exposes a visible viewed control and sidebar state', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
-  assert.doesNotMatch(html, /data-viewed-toggle/);
+  assert.match(html, /data-viewed-toggle aria-pressed="false"/);
+  assert.match(html, /data-viewed-label>Mark viewed</);
+  assert.match(html, /class="ds-fileitem-viewed" aria-hidden="true">✓</);
   assert.doesNotMatch(html, /role="checkbox"/);
+});
+
+test('commands describe V as toggling the current file instead of advancing', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-command="toggle-viewed"[\s\S]*Toggle current file viewed[\s\S]*<kbd>V<\/kbd>/);
+  assert.doesNotMatch(html, /data-command="next-unviewed"(?:(?!<\/button>)[\s\S])*<kbd>V<\/kbd>/);
 });
 
 test('a new file has no expandable eof gap in the split view', () => {
