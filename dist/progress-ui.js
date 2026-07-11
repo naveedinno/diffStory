@@ -9,12 +9,12 @@
 /** Self-contained styles (own CSS custom properties so it looks identical on both screens). */
 export function progressPanelStyles() {
     return `
-.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e;--pp-text:#f2f2f7;--pp-muted:#9a9aa3;--pp-faint:#6e6e73;
+.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e;--pp-text:#f2f2f7;--pp-muted:#9a9aa3;--pp-faint:#9a9aa3;
   --pp-line:rgba(255,255,255,.12);--pp-blue:#0a84ff;--pp-warn:#ff9f0a;--pp-err:#ff6961;--pp-ok:#30d158;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--pp-text);
   background:var(--pp-bg);border:.5px solid var(--pp-line);border-radius:14px;overflow:hidden;letter-spacing:-.01em}
 @media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e}}
-@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-muted:#a6a6ad;--pp-faint:#8a8a90}}
+@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-muted:#a6a6ad;--pp-faint:#a6a6ad}}
 .ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(72vh,580px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
 .ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(66vh,580px)}
 .ds-pp[data-variant][hidden]{display:none}
@@ -23,11 +23,13 @@ export function progressPanelStyles() {
 .ds-pp-spin[hidden]{display:none}
 @keyframes ds-pp-spin{to{transform:rotate(360deg)}}
 .ds-pp-title{font-size:14px;font-weight:650}
-.ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:.5px solid var(--pp-line);border-radius:6px;padding:2px 7px}
+.ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:.5px solid var(--pp-line);border-radius:6px;padding:2px 7px;
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-pp-agent:empty{display:none}
 .ds-pp-flex{flex:1}
 .ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:550;color:var(--pp-text);background:transparent;border:.5px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
 .ds-pp-stop[hidden],.ds-pp-close[hidden]{display:none}
+.ds-pp-stop:focus-visible,.ds-pp-close:focus-visible,.ds-pp-foot button:focus-visible{outline:2px solid var(--pp-blue);outline-offset:2px}
 .ds-pp-sub{padding:9px 14px 2px}
 .ds-pp-repo{font-size:11.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace}
 .ds-pp-repo:empty{display:none}
@@ -51,16 +53,28 @@ export function progressPanelStyles() {
 .ds-pp-live[hidden]{display:none}
 .ds-pp-live-dot{width:6px;height:6px;border-radius:50%;background:var(--pp-ok);flex:none;animation:ds-pp-pulse 1.6s ease-in-out infinite}
 .ds-pp-live.is-error .ds-pp-live-dot{background:var(--pp-err);animation:none}
+.ds-pp-live.is-error{color:var(--pp-muted)}
 .ds-pp-live.is-done .ds-pp-live-dot{animation:none}
 .ds-pp-live-count{margin-left:auto}
 @keyframes ds-pp-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ds-pp-error{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;margin:12px 14px 2px;padding:11px 12px;
+  background:rgba(255,105,97,.08);border:.5px solid rgba(255,105,97,.28);border-radius:10px}
+.ds-pp-error[hidden]{display:none}
+.ds-pp-error-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--pp-err);background:rgba(255,105,97,.12);font-size:12px;font-weight:750}
+.ds-pp-error-title{font-size:13px;line-height:1.35;font-weight:650;color:var(--pp-text);overflow-wrap:anywhere}
+.ds-pp-error-detail{margin-top:3px;font-size:12px;line-height:1.45;color:var(--pp-muted);overflow-wrap:anywhere}
+.ds-pp-error-detail:empty{display:none}
 .ds-pp-details{border-top:.5px solid var(--pp-line);padding:8px 14px 10px}
 .ds-pp-details[hidden]{display:none}
-.ds-pp-details>summary{font-size:10.5px;color:var(--pp-faint);cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
+.ds-pp-details>summary{font-size:10.5px;color:var(--pp-muted);cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
 .ds-pp-raw{margin:6px 0 0;max-height:160px;overflow:auto;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--pp-faint);white-space:pre-wrap;word-break:break-word}
-.ds-pp-foot{padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px}
+.ds-pp-foot{padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .ds-pp-foot[hidden]{display:none}
+.ds-pp-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--pp-blue);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
+.ds-pp-foot .ds-pp-secondary{font:inherit;font-size:12px;font-weight:600;color:var(--pp-text);background:transparent;
+  border:.5px solid var(--pp-line);border-radius:8px;padding:6px 11px;cursor:pointer}
 .ds-pp-miles{list-style:none;display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:10px 14px 2px}
 .ds-pp-miles[hidden]{display:none}
 .ds-pp-mile{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pp-faint)}
@@ -69,6 +83,8 @@ export function progressPanelStyles() {
 .ds-pp-mile.is-done .ds-pp-mile-dot{background:var(--pp-ok);border-color:var(--pp-ok)}
 .ds-pp-mile.is-active{color:var(--pp-text);font-weight:600}
 .ds-pp-mile.is-active .ds-pp-mile-dot{background:var(--pp-blue);border-color:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
+.ds-pp-mile.is-error{color:var(--pp-err);font-weight:600}
+.ds-pp-mile.is-error .ds-pp-mile-dot{background:var(--pp-err);border-color:var(--pp-err);animation:none}
 .ds-pp.is-finished .ds-pp-mile-dot{animation:none}
 .ds-pp-note{padding:10px 14px 2px;font-size:13px;line-height:1.45;color:var(--pp-text)}
 .ds-pp-note[hidden]{display:none}
@@ -77,6 +93,14 @@ export function progressPanelStyles() {
 .ds-pp[data-variant="stage"] .ds-pp-miles{padding:12px 16px 4px;gap:8px 16px}
 .ds-pp[data-variant="stage"] .ds-pp-mile{font-size:12.5px}
 .ds-pp[data-variant="stage"] .ds-pp-note{font-size:14px;padding:12px 16px 4px}
+@media (max-width:520px){
+  .ds-pp-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:9px;row-gap:6px;align-items:start}
+  .ds-pp-spin{grid-column:1;grid-row:1}
+  .ds-pp-title{grid-column:2;grid-row:1;align-self:center}
+  .ds-pp-agent{grid-column:2;grid-row:2;justify-self:start;max-width:100%}
+  .ds-pp-flex{display:none}
+  .ds-pp-stop,.ds-pp-close{grid-column:3;grid-row:1 / span 2}
+}
 `;
 }
 /** The panel markup fragment; \`variant\` only sets the outer positioning class. */
@@ -96,7 +120,8 @@ export function progressPanelMarkup(variant) {
   <ol class="ds-pp-plan"></ol>
   <div class="ds-pp-now" hidden></div>
   <div class="ds-pp-live" hidden><span class="ds-pp-live-dot" aria-hidden="true"></span><span class="ds-pp-live-tx">Starting…</span><span class="ds-pp-live-count"></span></div>
-  <details class="ds-pp-details" hidden><summary>Details</summary><pre class="ds-pp-raw"></pre></details>
+  <div class="ds-pp-error" role="alert" aria-atomic="true" hidden><span class="ds-pp-error-icon" aria-hidden="true">!</span><div><div class="ds-pp-error-title"></div><div class="ds-pp-error-detail"></div></div></div>
+  <details class="ds-pp-details" hidden><summary>Technical details</summary><pre class="ds-pp-raw"></pre></details>
   <div class="ds-pp-foot" hidden></div>
 </div>`;
 }
@@ -112,11 +137,13 @@ function ProgressPanel(root, opts){
     plan:q('.ds-pp-plan'), now:q('.ds-pp-now'), live:q('.ds-pp-live'),
     liveTx:q('.ds-pp-live-tx'), liveCount:q('.ds-pp-live-count'),
     details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
+    error:q('.ds-pp-error'), errorTitle:q('.ds-pp-error-title'), errorDetail:q('.ds-pp-error-detail'),
     stop:q('[data-pp-stop]'), close:q('[data-pp-close]'),
     miles:q('.ds-pp-miles'), note:q('.ds-pp-note')
   };
   var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review',address:'Addressing comments'};
   var DONE={guided_review:'Review ready',detailed_audit:'Review ready',address:'Comments addressed'};
+  var FAIL={guided_review:'Generation failed',detailed_audit:'Generation failed',address:"Comments weren't addressed"};
   var MILES={
     guided_review:[
       {label:'Preparing',phases:['idle','preflight','resolving_context','preparing_prompt','starting_agent','agent_running']},
@@ -134,8 +161,8 @@ function ProgressPanel(root, opts){
     ]
   };
   MILES.detailed_audit=MILES.guided_review;
-  var miles=null, mileIdx=-1;
-  var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working';
+  var miles=null, mileIdx=-1, mileFailed=false;
+  var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working', lastError=null;
   var t0=0, timer=null;
   function elapsed(){ var s=Math.round((Date.now()-t0)/1000); return s<60?(s+'s'):(Math.floor(s/60)+'m '+(s%60)+'s'); }
   function setLive(state, quietMs){
@@ -152,6 +179,14 @@ function ProgressPanel(root, opts){
     var t=els.raw.textContent+s;
     if(t.length>RAW_CAP)t='…'+t.slice(t.length-RAW_CAP); // bound memory like the server caps its own capture
     els.raw.textContent=t; els.raw.scrollTop=els.raw.scrollHeight;
+  }
+  function showError(err){
+    lastError=err||{};
+    root.setAttribute('aria-live','off');
+    if(els.error)els.error.hidden=false;
+    if(els.errorTitle)els.errorTitle.textContent=lastError.label||'The run failed';
+    if(els.errorDetail)els.errorDetail.textContent=lastError.detail||'';
+    if(lastError.technicalDetail&&els.raw)els.raw.textContent=String(lastError.technicalDetail);
   }
   function setCurrent(text){
     var t=clip(text,120); if(!t)return;
@@ -180,7 +215,7 @@ function ProgressPanel(root, opts){
     els.miles.hidden=false; els.miles.textContent='';
     for(var i=0;i<miles.length;i++){
       var li=document.createElement('li');
-      li.className='ds-pp-mile '+(i<mileIdx?'is-done':i===mileIdx?'is-active':'is-pending');
+      li.className='ds-pp-mile '+(i<mileIdx?'is-done':i===mileIdx?(mileFailed?'is-error':'is-active'):'is-pending');
       var dot=document.createElement('span'); dot.className='ds-pp-mile-dot';
       var tx=document.createElement('span'); tx.textContent=miles[i].label;
       li.appendChild(dot); li.appendChild(tx);
@@ -210,8 +245,8 @@ function ProgressPanel(root, opts){
   }
   function start(){
     root.hidden=false; t0=Date.now(); setFinished(false);
-    workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working';
-    miles=null; mileIdx=-1;
+    workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working'; lastError=null;
+    miles=null; mileIdx=-1; mileFailed=false; root.setAttribute('aria-live','polite');
     if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
     if(els.note){els.note.textContent='';els.note.hidden=true;}
     if(els.spin)els.spin.hidden=false;
@@ -221,7 +256,10 @@ function ProgressPanel(root, opts){
     if(els.plan)els.plan.textContent='';
     if(els.now){els.now.textContent='';els.now.hidden=true;}
     if(els.raw)els.raw.textContent='';
-    if(els.details)els.details.hidden=true;
+    if(els.details){els.details.hidden=true;els.details.open=false;}
+    if(els.error){els.error.hidden=true;}
+    if(els.errorTitle)els.errorTitle.textContent='';
+    if(els.errorDetail)els.errorDetail.textContent='';
     if(els.foot){els.foot.hidden=true; els.foot.textContent='';}
     if(els.live){els.live.hidden=false; els.live.className='ds-pp-live';}
     if(els.liveCount)els.liveCount.textContent='';
@@ -261,7 +299,7 @@ function ProgressPanel(root, opts){
         if(!hasPlan){ var ln=clip(firstLine(ev.data),120); if(ln&&ln.indexOf('>>')!==0)setCurrent(ln); } break;
       case 'heartbeat': setLive(curState, ev.quietMs); break;
       case 'warning': appendRaw('[warn] '+(ev.label||'')+NL); break;
-      case 'error': appendRaw('[error] '+(ev.label||'')+(ev.detail?(' — '+ev.detail):'')+NL); break;
+      case 'error': showError(ev); break;
       case 'run_done': finish(ev.status, ev.result||{}); break;
     }
   }
@@ -272,13 +310,15 @@ function ProgressPanel(root, opts){
     if(els.close)els.close.hidden=false;
     var ok=(status==='complete');
     if(ok&&miles){ mileIdx=miles.length; renderMiles(); }
-    if(els.title)els.title.textContent=ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':"Couldn't finish";
+    else if(!ok&&status!=='stopped'&&miles){mileFailed=true;renderMiles();}
+    if(els.title)els.title.textContent=ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':(FAIL[workflow]||"Couldn't finish");
     if(els.now)els.now.hidden=true;
     if(els.live){
       els.live.className='ds-pp-live '+(ok?'is-done':'is-error');
       if(els.liveTx)els.liveTx.textContent=(ok?'Done':(status==='stopped')?'Stopped':'Failed')+' · '+elapsed();
     }
-    if(!ok && els.details && els.raw && els.raw.textContent.trim()) els.details.hidden=false;
+    if(!ok&&status!=='stopped'&&!lastError)showError({label:'The connection to the agent ended',detail:'Try again. If it keeps failing, reopen diffStory and check the technical details.'});
+    if(!ok && els.details && els.raw && els.raw.textContent.trim()){els.details.hidden=false;els.details.open=false;}
     if(opts.onDone)opts.onDone(status, result||{});
   }
   function blocked(err){
@@ -289,14 +329,15 @@ function ProgressPanel(root, opts){
     if(els.title)els.title.textContent='Cannot start';
     if(els.live){ els.live.hidden=false; els.live.className='ds-pp-live is-error';
       if(els.liveTx)els.liveTx.textContent=(err&&err.label)||'Blocked'; if(els.liveCount)els.liveCount.textContent=''; }
-    if(els.foot){ els.foot.hidden=false; els.foot.textContent=(err&&err.detail)||(err&&err.label)||'Blocked.'; }
+    showError(err||{label:'Could not start',detail:'Try again.'});
     if(opts.onBlocked)opts.onBlocked(err||{});
   }
   if(els.stop)els.stop.addEventListener('click',function(){ if(opts.onStop)opts.onStop(); });
   if(els.close)els.close.addEventListener('click',function(){ if(opts.onClose)opts.onClose(); else root.hidden=true; });
   return { root:root, els:els, start:start, handle:handle, finish:finish, blocked:blocked,
            /* callers inject a .ds-pp-reload button via showFoot */
-           showFoot:function(node){ if(els.foot){els.foot.hidden=false; els.foot.textContent=''; els.foot.appendChild(node);} } };
+           showFoot:function(node){ if(els.foot){els.foot.hidden=false; els.foot.textContent=''; els.foot.appendChild(node);} },
+           error:function(){return lastError;} };
 }
 
 /** Drive one agent run: POST the payload, stream NDJSON into the panel, stage blocked/stopped/failed. */

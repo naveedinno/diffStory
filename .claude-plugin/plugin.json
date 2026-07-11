@@ -1,6 +1,6 @@
 {
   "name": "diffstory",
-  "description": "Guided, in-order review of AI-authored diffs. Adds the review-tour skill (the agent emits the reading order) and the address-review skill (the agent acts on your comments), driving diffStory's review loop.",
+  "description": "Guided, in-order review of AI-authored diffs. Adds the diffstory-storyteller skill (the agent emits the reading order) and the address-review skill (the agent acts on your comments), driving diffStory's review loop.",
   "version": "0.1.0",
   "author": {
     "name": "naveedinno",

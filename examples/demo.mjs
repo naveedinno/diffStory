@@ -102,15 +102,73 @@ test('rejects an order over the monthly cap', async () => {
 
 const TOUR = `{
   "version": 1,
+  "mode": "guided",
   "title": "Add per-customer monthly spending limit",
-  "summary": "Start at the API entry point, follow the new limit check across files, then see where the spend gets recorded. The jumps mirror the call flow — read top to bottom.",
+  "summary": "Start at the existing POST /orders boundary, follow the new decision into customer state, then return to the placement path and its proof. Slow down on the exact-cap boundary.",
+  "intent": {
+    "goal": "Stop an order from taking a customer past the monthly spending cap.",
+    "design": "The existing POST /orders path still owns placement; this change inserts a limit decision before placeOrder(), reads monthlySpend through the existing customer store, and records accepted spend in the placement path.",
+    "sources": ["commit feat: per-customer monthly spending limit"]
+  },
   "base": "main",
   "steps": [
-    { "id": "s1", "order": 1, "title": "Entry point: createOrder() now checks the limit", "file": "src/api.ts", "range": [1, 16], "kind": "changed", "why": "Start here — the POST /orders handler. The new block on lines 8-12 rejects the order before placing it. Verify the check runs BEFORE placeOrder, not after.", "calls": ["s2"], "tags": ["entrypoint"] },
-    { "id": "s2", "order": 2, "title": "The check it calls: checkSpendingLimit() (new file)", "file": "src/limits.ts", "range": [1, 11], "kind": "new-file", "why": "createOrder delegates here. It reads the customer's spend and compares against the cap. Look hard at line 10 — the boundary condition is the risky bit.", "calls": ["s3"], "returnsTo": "s1", "tags": ["core"] },
-    { "id": "s3", "order": 3, "title": "What it reads: getCustomer() (unchanged)", "file": "src/db.ts", "range": [6, 8], "kind": "context", "why": "Not changed — shown only so the limit check makes sense. monthlySpend is the field the cap compares against; in the demo, c1 has spent 850 of 1000.", "returnsTo": "s2", "tags": ["context"] },
-    { "id": "s4", "order": 4, "title": "Back in the order path: recording the spend", "file": "src/orders.ts", "range": [3, 13], "kind": "changed", "why": "Once the limit passes, placeOrder records the spend via the new recordSpend() helper so the next request sees the updated total.", "returnsTo": "s1", "tags": ["core"] },
-    { "id": "s5", "order": 5, "title": "Test: an over-cap order is rejected", "file": "test/limits.test.ts", "range": [1, 7], "kind": "new-file", "why": "Covers the rejection path. Notice it does NOT test the exact-boundary case (amount equal to remaining) — see the comment on limits.ts:10.", "tags": ["test"] }
+    {
+      "id": "s1", "order": 1, "title": "POST /orders keeps ownership and gains one pre-placement decision",
+      "file": "src/api.ts", "range": [1, 16], "viewport": [1, 16],
+      "highlights": [[4, 6], [8, 12], [14, 15]], "kind": "changed",
+      "why": "I keep the existing order boundary and stop over-cap requests before placeOrder() can mutate anything.",
+      "beats": [
+        { "text": "Start here: this existing handler is where a customer order enters the app.", "highlights": [[4, 6]] },
+        { "text": "The new decision reads the limit and returns before placement when the request would cross it.", "highlights": [[8, 12]] },
+        { "text": "The accepted path still reaches the same placeOrder() call and 201 response.", "highlights": [[14, 15]] }
+      ],
+      "calls": ["s2"], "tags": ["entrypoint"]
+    },
+    {
+      "id": "s2", "order": 2, "title": "checkSpendingLimit() turns stored spend into the gate result",
+      "file": "src/limits.ts", "range": [1, 11], "viewport": [1, 11],
+      "highlights": [[1, 5], [7, 10]], "kind": "new-file",
+      "why": "I isolate the cap math here, with the exact-equality comparison as the review hinge.",
+      "beats": [
+        { "text": "The API hands customerId and amount here, and this helper owns the fixed monthly cap.", "highlights": [[1, 5]] },
+        { "text": "It derives remaining budget from stored spend; pause on amount < remaining because equal-to-remaining is the boundary risk.", "highlights": [[7, 10]] }
+      ],
+      "calls": ["s3"], "returnsTo": "s1", "tags": ["core"]
+    },
+    {
+      "id": "s3", "order": 3, "title": "Existing customer storage supplies monthlySpend",
+      "file": "src/db.ts", "range": [1, 8], "viewport": [1, 8],
+      "highlights": [[2, 4], [6, 8]], "kind": "context",
+      "why": "Unchanged context: this store is the state contract the new helper relies on.",
+      "beats": [
+        { "text": "Unchanged, but essential: customer state already owns monthlySpend.", "highlights": [[2, 4]] },
+        { "text": "checkSpendingLimit() reaches it through this existing getter rather than a new data path.", "highlights": [[6, 8]] }
+      ],
+      "returnsTo": "s2", "tags": ["context"]
+    },
+    {
+      "id": "s4", "order": 4, "title": "Accepted orders feed spend back into the placement path",
+      "file": "src/orders.ts", "range": [1, 13], "viewport": [1, 13],
+      "highlights": [[3, 6], [10, 13]], "kind": "changed",
+      "why": "Back on the accepted path, I record the spend after storing the order so the next limit check can see it.",
+      "beats": [
+        { "text": "Now that the gate passed, the existing placeOrder() path still creates and stores the order.", "highlights": [[3, 5]] },
+        { "text": "The new handoff records that accepted amount before the function returns.", "highlights": [[6, 6]] },
+        { "text": "This demo helper is the downstream effect; its persistence limitation is deliberately visible here.", "highlights": [[10, 13]] }
+      ],
+      "returnsTo": "s1", "tags": ["core"]
+    },
+    {
+      "id": "s5", "order": 5, "title": "Rejection proof leaves the exact boundary exposed",
+      "file": "test/limits.test.ts", "range": [1, 7], "viewport": [1, 7],
+      "highlights": [[1, 7]], "kind": "new-file",
+      "why": "The test proves an over-cap request fails, while leaving equal-to-remaining as the missing case to review.",
+      "beats": [
+        { "text": "Final proof: the test drives the same helper with a customer who only has 150 left.", "highlights": [[1, 3]] },
+        { "text": "It pins the over-cap rejection but does not settle the exact-equality behavior flagged above.", "highlights": [[4, 7]] }
+      ],
+      "tags": ["test"]
+    }
   ]
 }
 `;

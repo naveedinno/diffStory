@@ -12,7 +12,11 @@ test('markup exposes the plan-centric regions for both variants', () => {
     assert.match(m, /ds-pp-plan/);
     assert.match(m, /ds-pp-now/);
     assert.match(m, /ds-pp-live/);
+    assert.match(m, /ds-pp-error-title/);
+    assert.match(m, /ds-pp-error-detail/);
+    assert.match(m, /role="alert" aria-atomic="true"/);
     assert.match(m, /ds-pp-raw/);
+    assert.match(m, /<summary>Technical details<\/summary>/);
     assert.match(m, /data-pp-stop/);
     assert.match(m, /data-pp-close/);
     assert.match(m, new RegExp(`data-variant="${variant}"`));
@@ -49,13 +53,37 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
 });
 
 test('finished runs stop the milestone pulse', () => {
-  // Failed/stopped runs leave an is-active milestone behind; the panel marks
-  // the root is-finished so its dot stops pulsing forever.
   const css = progressPanelStyles();
   assert.match(css, /\.ds-pp\.is-finished \.ds-pp-mile-dot\{animation:none\}/);
   const s = progressPanelScript();
   assert.match(s, /setFinished\(true\)/);
   assert.match(s, /setFinished\(false\)/);
+});
+
+test('failed runs show one human error and keep diagnostics collapsed', () => {
+  const s = progressPanelScript();
+  assert.match(s, /function showError\(err\)/);
+  assert.match(s, /case 'error': showError\(ev\)/);
+  assert.match(s, /lastError\.technicalDetail/);
+  assert.match(s, /error:function\(\)\{return lastError;\}/);
+  assert.match(s, /els\.details\.open=false/);
+  assert.match(s, /FAIL=\{guided_review:'Generation failed'/);
+  assert.match(s, /mileFailed\?'is-error':'is-active'/);
+  assert.match(s, /root\.setAttribute\('aria-live','off'\)/);
+  assert.match(s, /root\.setAttribute\('aria-live','polite'\)/);
+  assert.doesNotMatch(s, /case 'error': appendRaw/);
+
+  const css = progressPanelStyles();
+  assert.match(css, /\.ds-pp-error\{/);
+  assert.match(css, /\.ds-pp-foot\{[^}]*flex-wrap:wrap/);
+  assert.match(css, /\.ds-pp-secondary/);
+  assert.match(css, /\.ds-pp-mile\.is-error/);
+  assert.match(css, /\.ds-pp-live\.is-error\{color:var\(--pp-muted\)\}/);
+  assert.match(css, /\.ds-pp-details>summary\{[^}]*color:var\(--pp-muted\)/);
+  assert.match(css, /--pp-faint:#9a9aa3/);
+  assert.match(css, /focus-visible/);
+  assert.match(css, /@media \(max-width:520px\)\{[\s\S]*\.ds-pp-head\{display:grid/);
+  assert.match(css, /\.ds-pp-agent\{[^}]*text-overflow:ellipsis/);
 });
 
 test("'>>' note lines never echo into the mono activity line", () => {

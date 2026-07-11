@@ -1,9 +1,9 @@
 ---
-name: review-tour
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json — a guided, in-order reading path through your own diff that opens with the recovered intent (why the change exists) — so the reviewer reads the change the way it was meant to be understood instead of alphabetically by filename. Run before handing work back for review.
+name: diffstory-storyteller
+description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json for diffStory — a context-first, guided reading path through your own diff that opens with recovered intent and drives exact viewport and highlight beats. Run before handing work back for review.
 ---
 
-# Writing a review story
+# Writing a diffStory
 
 You just changed code. The reviewer now has to understand it, distrust it in the
 right places, and get through it without reading a raw alphabetical diff. Your
@@ -13,6 +13,12 @@ code. diffStory renders the real git diff.
 The story should feel like a sharp teammate guiding review over your shoulder:
 why the change exists, entry point, flow, helpers, boundaries, tests. It should expose your judgment,
 not hide behind a changelog.
+
+Assume the reviewer remembers the requested outcome but not the app internals:
+module ownership, the existing call path, state flow, or why nearby unchanged
+code matters. The job is to rebuild the smallest useful mental model, then move
+their eyes through the evidence with `viewport`, `highlights`, and `beats`.
+Coverage is the trust floor; restored context is the product.
 
 ## Non-Negotiable Contract
 
@@ -51,11 +57,18 @@ story. Keep the story as short as possible while still covering every changed
 hunk: one compact stop per meaningful change cluster, and exactly one short
 first-person sentence in each `why`.
 
+Rebuild context inside the changed step's viewport when possible. Spend a
+separate context step only when the entry point or dependency contract lives
+elsewhere.
+
 ### Balanced mode
 
 This is the default for `"mode": "guided"`. Keep the story compact but useful:
 one stop per review question, grouped by runtime/control/data flow. The reviewer
 should know where to read, what changed, and where to slow down.
+
+Use only the few context bridges needed to restore the task-local app flow. Do
+not tour unrelated architecture.
 
 ### Line-by-line mode
 
@@ -72,6 +85,8 @@ oriented.
   side effect follows.
 - Cover all meaningful code paths: happy path, validation guards, error paths,
   fallbacks, persistence, cleanup, external calls, UI states, and tests.
+- Trace the relevant inbound trigger and outbound consumer or side effect,
+  including unchanged boundary code when it controls correctness.
 - Use exact function, variable, parameter, event, field, and assertion names.
   Do not paste code blocks or duplicate the diff.
 - Line-by-line does not mean noisy. Skip trivial syntax, imports, and mechanical
@@ -134,7 +149,34 @@ For fixed range stories, use:
 git diff <base>..<head> --
 ```
 
-### 2. Make a reviewer map before JSON
+### 2. Reconstruct the app path
+
+The diff tells you what moved; the surrounding source tells the reviewer where
+it lives. Before planning steps:
+
+- Read the complete post-change function, component, contract, schema, config
+  stanza, or test around every changed hunk.
+- Trace the smallest useful path one hop in both directions. Find the inbound
+  trigger, caller, route, event, or UI action, then find the outbound consumer,
+  state write, render, return, external boundary, or assertion.
+- Search real symbols and call sites. Do not infer a path from filenames.
+- Read the base-side code when the old behavior or a deletion matters to the
+  judgment.
+- Read only relevant module docs, types, config, and tests. This is task-local
+  orientation, not a repo tour.
+
+Privately write the app path as:
+
+```text
+entry -> existing owner -> changed decision -> downstream effect -> proof/risk
+```
+
+For every link, record the exact source span and choose whether it belongs in a
+changed step's wider viewport or needs a dedicated `context` step. Make
+`intent.design` name the existing app path, where this diff attaches, and the
+new outcome.
+
+### 3. Make a reviewer map before JSON
 
 Before writing `.diffstory/story.json`, privately build a reviewer map. Do not
 include this map in the file.
@@ -147,10 +189,13 @@ Identify:
 - the invariants, edge cases, unknowns, or risks the reviewer should keep in mind;
 - which tests, docs, snapshots, or generated files support each behavior.
 
+Also identify the minimum unchanged code the reviewer must see to understand
+who calls the change, what data or state enters it, and what consumes the result.
+
 Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.
 The story should help them distrust the right places.
 
-### 2.5. Narrative arc
+### 3.5. Narrative arc
 
 Write the story as intent -> flow -> implementation, not a list of touched files.
 Before any JSON, write the arc as a short visible note in your working output:
@@ -171,7 +216,7 @@ goal -> design decisions -> implementation chain.
 - Do not invent user intent. If the diff only proves a technical refactor, make
   the goal technical and keep it grounded.
 
-### 3. Plan the reading path
+### 4. Plan the reading path
 
 Make a scratch plan with one row per intended stop:
 
@@ -181,9 +226,9 @@ step | role | file:range | kind | leads to | reason this stop exists
 
 Plan by code logic, not filenames:
 
-- Start where someone who just read the requirement should start: the new field,
-  fee, storage struct, setting, endpoint, UI affordance, or public method that
-  makes the requirement real.
+- Start at the behavioral entry point a developer recognizes, even when it is
+  unchanged and needs a `context` step. Do not start with imports, icons,
+  styling, generated output, or tests unless one of those is itself the feature.
 - Follow runtime/control/data flow across files. When you dive into a helper, return to the caller if that helps the reader.
 - Put definitions before repeated uses when the definition makes later steps readable.
 - Put core behavior before glue, adapters, docs, generated files, snapshots, and tests.
@@ -193,14 +238,27 @@ Plan by code logic, not filenames:
   steady camera shot over one method, struct, test case, or doc section, not a
   teleport between distant highlight islands.
 - Use context stops only for real dependency contracts: unchanged callers, callees, storage/schema/config, feature flags, external API boundaries, or helper preconditions.
+- A small change may need one context-rich changed step. Do not force a fixed
+  number of stops.
 
 A good path reads like: "Start here, jump into the helper this calls, come back
 for the boundary handling, then inspect the tests that pin it."
 
-### 4. Choose viewport and highlighted lines
+### 5. Storyboard the viewport and highlighted lines
 
 Each step must choose what the reviewer sees before choosing the exact lines the
 story is talking about.
+
+Treat this as a guided camera:
+
+- One step is one local shot that fits without manual scrolling.
+- One beat is one exact pointing gesture whose highlighted lines visibly prove
+  its sentence.
+- A changed step should usually move through orientation -> change ->
+  consequence: first the existing signature/caller/route/contract, then the
+  exact changed decision, then the nearby call/state write/return/assertion.
+- Context beats may and should highlight unchanged lines. Say that they are
+  existing context so the reviewer knows what was preserved.
 
 Viewport contract:
 
@@ -208,6 +266,9 @@ Viewport contract:
   code shape, not from the tiny diff hunk.
 - Use the whole method, storage struct, schema block, config stanza, test case,
   or small file section when that is what makes the requirement understandable.
+- The viewport must answer "where am I?" before the highlights ask for judgment.
+- A normal viewport is one screen and at most 60 lines. Split a larger function
+  into overlapping local shots. `[0, 0]` is the whole-file-deletion exception.
 - It is fine for `viewport` to be much wider than the changed lines.
 - Keep the visible window local to the thing being explained. If the story needs
   two distant changed blocks, write two steps instead of one step with scattered
@@ -222,11 +283,15 @@ Highlighted-line contract:
 - Keep every highlight range inside `viewport`.
 - Use one range for a single field/write/guard/call/assertion, and multiple
   ranges when the sentence moves across small related sections.
+- Each beat highlight should point at one fact, normally 1-8 lines and never
+  more than 12. A broad glowing region is not a pointer; split it.
 - Do not make one step jump between far-apart highlight islands. If the
   highlighted ranges would force the viewer to scroll or lose the current
   method/test/doc section, split the step.
 - If the whole viewport is the point, `highlights` may match `viewport`, but do
   that intentionally.
+- For new stories, top-level `highlights` must equal the union of the ordered
+  beat highlights. There should be one camera plan, not two conflicting ones.
 
 Coverage anchor contract:
 
@@ -234,6 +299,8 @@ Coverage anchor contract:
 - Include enough surrounding lines that the hunk makes sense.
 - Keep `range` as the changed-line coverage anchor for the coverage gate; do
   not use it as the display-window control.
+- Keep `range` inside `viewport`. Every changed or new-file step needs at least
+  one beat highlight that overlaps the changed range.
 - For deletion-heavy hunks with surviving surrounding code, anchor to the post-change line where the deletion happened and include the smallest surrounding code that explains the removed behavior.
 - For whole-file deletions with no post-change lines, use the `[0, 0]` deletion
   sentinel for `range`, `viewport`, and `highlights`.
@@ -242,7 +309,7 @@ Coverage anchor contract:
 `viewport` is the review window. `highlights` are what the narrator is pointing
 at. `range` is the coverage hook.
 
-### 4.5. Add precise read-aloud focus when useful
+### 5.5. Add precise read-aloud focus when useful
 
 diffStory can glow the exact code while the story is read aloud. New stories
 should use `highlights`; `focus.ranges` remains accepted for old stories.
@@ -266,7 +333,7 @@ Focus pointer contract:
 - If the whole step range is the right thing to point at, omit `focus`;
   diffStory highlights the step range automatically.
 
-### 4.6. Split narration into read-aloud beats
+### 5.6. Split narration into read-aloud beats
 
 Beat contract:
 
@@ -276,6 +343,9 @@ Beat contract:
   can move together without guessing timing.
 - Use one beat per highlighted code part. If a step has three review points,
   write three beats instead of one long `why`.
+- The first beat locates the reviewer in the existing flow unless the previous
+  context step already did. Later beats point at the changed decision and its
+  consequence.
 - A beat may point at one small range or a few nearby related ranges, but it
   must stay inside that step's `viewport`.
 - Do not put one big speech over several highlight groups; split it into
@@ -283,7 +353,7 @@ Beat contract:
 - Keep `why` as the compact fallback recap for older readers, but put the
   read-aloud story in `beats`.
 
-### 5. Write one step per stop
+### 6. Write one step per stop
 
 Each step has:
 
@@ -347,7 +417,24 @@ Use attention cues when they help scanning: `Start here`, `Pause here`,
 `Skim this`, `Check this invariant`, `Final proof`. They should feel natural,
 not like labels pasted onto every step.
 
-### 6. Link calls sparingly
+### 6.5. Put necessary context in the visible story
+
+Context must not stay trapped in your private reviewer map.
+
+- First try to frame the existing boundary and changed code together in one
+  viewport. Highlight the unchanged signature, caller, branch header, input, or
+  return when it tells the reviewer where they are.
+- Use kind `context` when important unchanged code lives in another file or a
+  distant section: a caller, public route, component owner, storage/schema
+  contract, feature flag, helper precondition, or downstream consumer.
+- Place inbound context before the changed decision and outbound context after
+  it, following the real flow.
+- Context steps do not claim diff coverage. Keep them few and make every title
+  name the contract the reviewer needs.
+- Do not use context for imports, trivia, or architecture that does not change
+  how the reviewer evaluates this task.
+
+### 7. Link calls sparingly
 
 Use `calls` / `returnsTo` only when the reviewer should conceptually jump.
 
@@ -384,6 +471,8 @@ coverage.
   `viewport`, and `highlights`.
 - `changed` and `new-file` ranges must overlap real changed ranges.
 - `context` ranges must be unchanged and must not be used to satisfy coverage.
+- Every `range` must stay inside its step's `viewport`; every changed or
+  new-file step must have at least one beat highlight overlapping its `range`.
 - Do not use whole-file or giant ranges just to pass the coverage gate.
 - `viewport` should include enough surrounding code that a reviewer who just
   read the requirement understands where the highlighted lines live.
@@ -391,6 +480,9 @@ coverage.
 - `viewport` and `highlights` should stay focused on one nearby section. If a
   range covers unrelated islands for coverage, use separate local viewports or
   split the range into separate steps.
+- Non-deletion viewports must be at most 60 lines. Individual beat highlight
+  ranges must be at most 12 lines. Top-level `highlights` must match the union
+  of beat highlights.
 - Use `newPath` for renamed files.
 
 ### Truth audit
@@ -413,6 +505,17 @@ Falsifiable checks — run each one, do not skim:
   must say why it exists in the designed flow and what it unlocks next.
 - Thread test: read only the beats in order with no code. They must still form
   one continuous story with no jumps.
+
+### Context and camera audit
+
+- Memory test: read only `intent`, `summary`, titles, and beats. A reviewer who
+  remembers the request but not the app must be able to answer where the
+  behavior enters, who owns it, what changed, where the result goes, and what
+  proves or threatens it.
+- Camera test: follow only the files, viewports, and highlight groups. Every
+  glow must visibly prove its beat without scrolling or guessing.
+- First-stop test: the story opens at the behavioral entry point, never at
+  incidental imports, icons, styling, generated output, or tests.
 
 ### Reviewability audit
 
@@ -456,17 +559,21 @@ Falsifiable checks — run each one, do not skim:
       "file": "contracts/Funding.sol",
       "range": [128, 132],
       "viewport": [120, 145],
-      "highlights": [[128, 132]],
+      "highlights": [[120, 126], [128, 136]],
       "kind": "changed",
       "why": "Start here: the keeper reaches this path each epoch. I clamp the rate before settlement hands off to the math helper because the old path let over-cap values travel too far. Check that this happens before any balance mutation.",
       "beats": [
         {
           "text": "Start here: the keeper reaches this path each epoch.",
-          "highlights": [[128, 128]]
+          "highlights": [[120, 126]]
         },
         {
           "text": "I clamp the rate before settlement hands off to the math helper, so over-cap values stop before balance mutation.",
-          "highlights": [[129, 132]]
+          "highlights": [[128, 132]]
+        },
+        {
+          "text": "The existing settlement call below still receives one chosen rate; check that the balance mutation stays after the clamp.",
+          "highlights": [[133, 136]]
         }
       ],
       "calls": ["s2"],
@@ -479,7 +586,7 @@ Falsifiable checks — run each one, do not skim:
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
       "viewport": [40, 58],
-      "highlights": [[48, 52]],
+      "highlights": [[40, 44], [48, 52]],
       "kind": "new-file",
       "why": "Pause here: settleFunding() lands here after choosing the market cap. I keep the helper small so both callers use the same inclusive boundary; the review focus is the require that makes the unchecked math safe.",
       "beats": [
@@ -492,7 +599,26 @@ Falsifiable checks — run each one, do not skim:
           "highlights": [[48, 52]]
         }
       ],
+      "calls": ["s3"],
       "returnsTo": "s1"
+    },
+    {
+      "id": "s3",
+      "order": 3,
+      "title": "Existing marketConfig contract supplies the per-market cap",
+      "file": "contracts/storage/MarketConfig.sol",
+      "range": [88, 94],
+      "viewport": [88, 94],
+      "highlights": [[88, 94]],
+      "kind": "context",
+      "why": "Unchanged context: this is the storage contract _capRate() depends on.",
+      "beats": [
+        {
+          "text": "Unchanged, but essential: _capRate() receives the cap from this per-market config field.",
+          "highlights": [[88, 94]]
+        }
+      ],
+      "returnsTo": "s2"
     }
   ]
 }
@@ -510,7 +636,8 @@ Write `.diffstory/story.json`, then verify it against the diff yourself:
 
 - Every changed hunk is covered by a `changed` / `new-file` step. The in-app
   trust check flags any change no step explains, so leave none uncovered.
-- No step points at unchanged code — correct any stale range, file, or kind.
+- Every changed/new-file range overlaps real changed code; every context step
+  deliberately points at unchanged code that changes how the diff is judged.
 - The JSON is valid: ids, `order`, `calls`, and `returnsTo` all resolve.
 
 Fix every issue before handing back. If a clean story is impossible, report the
@@ -525,6 +652,8 @@ Tell the user: "Story ready — open the diff in the diffStory app to review."
 - Don't restate the diff with bland verbs like "adds", "updates", "modifies", or "changes" unless the sentence also names the consequence or review risk.
 - Don't write checklist-only copy. Work the review focus into the story.
 - Don't add context steps as scenery.
+- Don't assume the changed lines explain where the behavior enters or what
+  consumes it; show that task-local context with the camera.
 - Don't bury the core behavior behind docs, tests, generated files, or cleanup.
 - Don't make one story step bounce between distant lines; split it until the
   visible code and highlighted code stay in one local review moment.

@@ -76,6 +76,10 @@ test('heartbeat/warning/error/done helpers carry their fields', () => {
   assert.deepEqual(errorEvent('preflight', 'No repository is open', 'Pick one first.'), {
     type: 'error', stage: 'preflight', label: 'No repository is open', detail: 'Pick one first.',
   });
+  assert.deepEqual(errorEvent('execution', 'Codex failed', 'Choose another model.', 'raw diagnostic'), {
+    type: 'error', stage: 'execution', label: 'Codex failed', detail: 'Choose another model.',
+    technicalDetail: 'raw diagnostic',
+  });
   assert.deepEqual(doneEvent('complete', { storyWritten: true }), {
     type: 'run_done', status: 'complete', result: { storyWritten: true },
   });

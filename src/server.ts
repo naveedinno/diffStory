@@ -4,7 +4,7 @@
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { loadTour } from './tour.js';
+import { loadTour, validateGeneratedTour } from './tour.js';
 import {
   isGitRepo,
   resolveBase,
@@ -51,6 +51,7 @@ import {
   selectAvailableAgent,
   normalizeStoryMode,
   normalizeCodexRunOptions,
+  summarizeAgentFailure,
   storyRepairPrompt,
   type StoryRepairAction,
   type Agent,
@@ -74,6 +75,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
+import {
+  codexTaskBinary,
+  listCodexStoryModels,
+  listCodexTasks,
+  nameCodexTask,
+  validCodexThreadId,
+} from './codex-tasks.js';
 import {
   captureReviewSnapshot,
   diffSinceReview,
@@ -306,6 +314,19 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
     }
     if (method === 'GET' && url.pathname === '/api/agents') {
       return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(home) });
+    }
+    if (method === 'GET' && url.pathname === '/api/codex/tasks') {
+      if (!session.repo) return noRepo(res);
+      listCodexTasks(session.repo)
+        .then((tasks) => sendJson(res, 200, { tasks }))
+        .catch((error) => sendJson(res, 502, { error: (error as Error).message }));
+      return;
+    }
+    if (method === 'GET' && url.pathname === '/api/codex/models') {
+      listCodexStoryModels()
+        .then((models) => sendJson(res, 200, { models }))
+        .catch((error) => sendJson(res, 502, { error: (error as Error).message }));
+      return;
     }
     if (method === 'POST' && url.pathname === '/api/skills/update') {
       const updated = updateSkills(home);
@@ -591,7 +612,7 @@ function renderChange(session: Session, scope: Scope, params: URLSearchParams, n
 
 /** Resolve scope, then render the story-less *review viewer* for it: the real
  *  review page with no story — All-files (the diff) by default, with the Story
- *  tab offering "Generate story". This is where "Open the diff" lands. */
+ *  tab offering the guided-review generator. This is where "Open the diff" lands. */
 function diffScreen(session: Session, params: URLSearchParams): string {
   const scope = resolveScope(session.repo as string, params);
   session.base = scope.base;
@@ -868,12 +889,14 @@ function currentDiff(session: Session): string {
   }
 }
 
-function tailLines(s: string, n: number): string {
-  return s.trimEnd().split('\n').slice(-n).join('\n');
-}
-
 function nowMs(): number {
   return Date.now();
+}
+
+function agentFailureEvent(r: StreamResult): ProgressEvent {
+  const stage = r.failure === 'startup' ? 'startup' : 'execution';
+  const summary = summarizeAgentFailure(r.output, stage);
+  return errorEvent(stage, summary.label, summary.detail, summary.technicalDetail);
 }
 
 /** Everything runWorkflow needs to drive one agent run end to end. */
@@ -899,31 +922,50 @@ export function finishStoryGeneration(
   r: StreamResult,
   storyPath: string,
   session: Pick<Session, 'selectedStory' | 'chooseStory'>,
+  previousStoryContents?: string | null,
+  requireModernStory = true,
 ): { status: RunStatus; result: Record<string, unknown>; events: ProgressEvent[] } {
-  const storyWritten = existsSync(storyPath);
+  const currentStoryContents = existsSync(storyPath) ? readFileSync(storyPath, 'utf8') : null;
+  const storyWritten = currentStoryContents !== null && (
+    previousStoryContents === undefined ||
+    previousStoryContents === null ||
+    currentStoryContents !== previousStoryContents
+  );
   const events: ProgressEvent[] = [];
   let status: RunStatus = 'complete';
   if (storyWritten) {
     try {
-      loadTour(storyPath);
+      const tour = loadTour(storyPath);
+      const qualityErrors = requireModernStory ? validateGeneratedTour(tour) : [];
+      if (qualityErrors.length) {
+        throw new Error(`Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join('\n  - ')}`);
+      }
       session.selectedStory = storyPath;
       session.chooseStory = false;
       return { status, result: { storyWritten, storyValid: true }, events };
     } catch (e) {
-      events.push(errorEvent('validation', 'The generated story is invalid', (e as Error).message));
+      events.push(errorEvent(
+        'validation',
+        'The story did not pass its final check',
+        'The agent wrote a story, but diffStory cannot safely open it yet. Try again or change the story settings.',
+        (e as Error).message,
+      ));
       status = 'failed';
       return { status, result: { storyWritten, storyValid: false }, events };
     }
   }
   if (r.failure === 'startup') {
-    events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
+    events.push(agentFailureEvent(r));
     status = 'failed';
   } else if (!r.ok) {
-    events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
+    events.push(agentFailureEvent(r));
     status = 'failed';
   } else {
-    events.push(errorEvent('output_missing', 'No story was written',
-      'The agent finished but .diffstory/story.json is missing. Check the raw output below.'));
+    events.push(errorEvent(
+      'output_missing',
+      'The agent finished without a story',
+      'No .diffstory/story.json was created. Try again, or open technical details to see what the agent returned.',
+    ));
     status = 'failed';
   }
   return { status, result: { storyWritten, storyValid: false }, events };
@@ -1079,7 +1121,13 @@ function stableDiffRef(repo: string, ref: string | undefined): string | undefine
 
 /** Drive the user's agent to address review comments, streaming progress NDJSON. */
 function runAddress(res: ServerResponse, session: Session, body: string): void {
-  let input: { commentIds?: string[]; all?: boolean; agent?: string };
+  let input: {
+    commentIds?: string[];
+    all?: boolean;
+    agent?: string;
+    codexThreadId?: unknown;
+    newCodexTask?: unknown;
+  };
   try {
     input = JSON.parse(body || '{}');
   } catch {
@@ -1100,6 +1148,14 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   const selected = selectAvailableAgent(input.agent, agents, pre.agent);
   if (!selected.ok) return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
   const agent = selected.agent;
+  const codexThreadId = validCodexThreadId(input.codexThreadId) ? input.codexThreadId : undefined;
+  if (agent === 'codex' && input.codexThreadId !== undefined && !codexThreadId) {
+    return sendJson(res, 400, errorEvent('preflight', 'Invalid Codex task', 'Choose a Codex task from the task picker.'));
+  }
+  const useCodexTask = agent === 'codex' && (codexThreadId !== undefined || input.newCodexTask === true);
+  const agentOptions: AgentRunOptions | undefined = useCodexTask
+    ? { codex: { binary: codexTaskBinary(), threadId: codexThreadId, json: true } }
+    : undefined;
   const repo = session.repo as string;
 
   const openCount = loadComments(repo).filter((c) => c.status === 'open').length;
@@ -1132,6 +1188,14 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   } catch (e) {
     return sendJson(res, 500, errorEvent('preflight', 'Could not prepare historical checkout', (e as Error).message));
   }
+  // A resumed Codex task keeps its original cwd. For a pinned historical diff,
+  // keep it in the live repo and enforce read-only source behavior in the prompt
+  // instead of pretending the resumed task moved into our temporary worktree.
+  const resumedHistoricalTask = !!codexThreadId && addressCtx.historical;
+  if (resumedHistoricalTask) {
+    addressCtx.cleanup?.();
+    addressCtx = { runRepo: repo, historical: true };
+  }
   runWorkflow(res, addressCtx.runRepo, {
     workflow: 'address',
     title,
@@ -1139,7 +1203,9 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     prompt: addressPrompt(target, base, head, {
       historicalCheckout: addressCtx.historical,
       originalRepo: addressCtx.historical ? repo : undefined,
+      resumedCodexTask: resumedHistoricalTask,
     }),
+    agentOptions,
     context: {
       repoName: basename(repo), repoPath: repo, workflow: 'address',
       agent, targetCount,
@@ -1151,16 +1217,28 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
       const events: ProgressEvent[] = [];
       let status: RunStatus = 'complete';
       if (r.failure === 'startup') {
-        events.push(errorEvent('startup', 'The agent failed to start', tailLines(r.output, 30)));
+        events.push(agentFailureEvent(r));
         status = 'failed';
       } else if (!r.ok) {
-        events.push(errorEvent('execution', 'The agent run failed', tailLines(r.output, 30)));
+        events.push(agentFailureEvent(r));
         status = 'failed';
       } else if (!codeChanged && !addressCtx.historical) {
         events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
       }
       if (status === 'complete') captureSessionReview(session, 'agent-complete');
-      return { status, result: { codeChanged }, events };
+      if (status === 'complete' && agent === 'codex' && input.newCodexTask === true && r.threadId) {
+        void nameCodexTask(r.threadId, `diffStory review · ${basename(repo)}`).catch(() => {
+          // Naming is presentation-only; the persisted id still keeps continuity.
+        });
+      }
+      return {
+        status,
+        result: {
+          codeChanged,
+          ...(agent === 'codex' && r.threadId ? { codexThreadId: r.threadId } : {}),
+        },
+        events,
+      };
     },
     cleanup: addressCtx.cleanup,
     fileScope: { repoPath: addressCtx.runRepo, changedFiles: [] },
@@ -1262,11 +1340,13 @@ function runStoryRepair(res: ServerResponse, session: Session, body: string): vo
   if (!existsSync(storyPath)) {
     return sendJson(res, 404, errorEvent('preflight', 'No story to repair', 'Generate a story before tuning a step.'));
   }
+  let storyWasModern = false;
   try {
-    loadTour(storyPath);
+    storyWasModern = validateGeneratedTour(loadTour(storyPath)).length === 0;
   } catch (e) {
     return sendJson(res, 400, errorEvent('validation', 'The current story is invalid', (e as Error).message));
   }
+  const storyBefore = readFileSync(storyPath, 'utf8');
   const data = sessionReviewData(session);
   const title = action === 'explain' ? 'Explaining an uncovered change' : action === 'shorten' ? 'Shortening a story step' : 'Splitting a story step';
   runWorkflow(res, repo, {
@@ -1291,7 +1371,7 @@ function runStoryRepair(res: ServerResponse, session: Session, body: string): vo
     },
     isTargetWrite: (event) => event.type === 'file' && event.action !== 'read' && event.target.endsWith('story.json'),
     finish: (result) => {
-      const finished = finishStoryGeneration(result, storyPath, session);
+      const finished = finishStoryGeneration(result, storyPath, session, storyBefore, storyWasModern);
       if (finished.status === 'complete') captureSessionReview(session, 'story-repaired');
       return finished;
     },
@@ -1333,10 +1413,10 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   const workflow: Workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
   const title =
     mode === 'brief'
-      ? 'Generating brief story'
+      ? 'Generating compact story'
       : mode === 'detailed'
-        ? 'Generating line-by-line story'
-        : 'Generating balanced story';
+        ? 'Generating deep review'
+        : 'Generating guided review';
   const repo = session.repo as string;
 
   const base = resolveBase(repo, input.base);
@@ -1345,6 +1425,7 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   session.base = promptBase;
   session.head = promptHead;
   const storyPath = resolveStoryPath(repo);
+  const storyBefore = existsSync(storyPath) ? readFileSync(storyPath, 'utf8') : null;
   // Generated/oversized files (regenerated ABIs, lockfiles) are subtracted from
   // the agent's diff just as they are from the rendered review and coverage gate,
   // so all three agree and the agent doesn't waste a run narrating a 20k-line ABI.
@@ -1374,8 +1455,11 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     // For generate, the output is the story file.
     isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
     finish: (r) => {
-      if (r.ok) stampStoryScope(storyPath, storyScope.scope);
-      return finishStoryGeneration(r, storyPath, session);
+      const storyChanged = existsSync(storyPath) && (
+        storyBefore === null || readFileSync(storyPath, 'utf8') !== storyBefore
+      );
+      if (r.ok && storyChanged) stampStoryScope(storyPath, storyScope.scope);
+      return finishStoryGeneration(r, storyPath, session, storyBefore);
     },
     fileScope: { repoPath: repo, changedFiles },
   });

@@ -45,7 +45,7 @@ export type ProgressEvent =
   | { type: 'plan'; items: PlanItem[] }
   | { type: 'text'; data: string }
   | { type: 'warning'; stage?: string; label: string; detail?: string }
-  | { type: 'error'; stage: ErrorStage; label: string; detail?: string };
+  | { type: 'error'; stage: ErrorStage; label: string; detail?: string; technicalDetail?: string };
 
 /** Default human labels for each phase; callers may override per emit. */
 export const PHASE_LABELS: Record<Phase, string> = {
@@ -128,8 +128,14 @@ export function warningEvent(label: string, detail?: string, stage?: string): Pr
   return { type: 'warning', label, ...(detail ? { detail } : {}), ...(stage ? { stage } : {}) };
 }
 
-export function errorEvent(stage: ErrorStage, label: string, detail?: string): ProgressEvent {
-  return { type: 'error', stage, label, ...(detail ? { detail } : {}) };
+export function errorEvent(stage: ErrorStage, label: string, detail?: string, technicalDetail?: string): ProgressEvent {
+  return {
+    type: 'error',
+    stage,
+    label,
+    ...(detail ? { detail } : {}),
+    ...(technicalDetail ? { technicalDetail } : {}),
+  };
 }
 
 export function doneEvent(status: RunStatus, result?: Record<string, unknown>): ProgressEvent {

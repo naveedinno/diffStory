@@ -90,19 +90,25 @@ test('review page can return to the story chooser', () => {
   assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
-test('toolbar keeps review status and final actions inside one compact menu', () => {
+test('toolbar separates the persistent agent task from compact review status', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-review-menu/);
   assert.match(html, /data-review-menu-pop/);
   assert.match(html, />Review</);
-  assert.match(html, /aria-label="Review, 0 open comments"/);
+  assert.match(html, /aria-label="Review, 0 unresolved comments(?:, [^"]+)?"/);
+  assert.match(html, /data-unexplained-count="\d+"/);
   assert.match(html, /ds-review-summary/);
+  assert.match(html, /data-agent-target-control/);
+  assert.match(html, /data-agent-target-select/);
+  assert.match(html, /data-agent-target-name>Choose task</);
+  assert.match(html, /data-repo="/);
   assert.doesNotMatch(html, /data-send-all/);
-  assert.match(html, />Send open comments</);
-  assert.match(html, />Ask for fixes</);
-  assert.match(html, /Mark approved/);
-  assert.doesNotMatch(html, />Request changes</);
-  assert.doesNotMatch(html, />Approve</);
+  assert.match(html, />Resend open comments</);
+  assert.match(html, />More review actions/);
+  assert.match(html, /ds-check">✓<\/span> Approve/);
+  assert.doesNotMatch(html, /need coverage/);
+  assert.doesNotMatch(html, />Question destination</);
+  assert.doesNotMatch(html, />Ask for fixes</);
 });
 
 test('version-aware review rounds expose full and since-review modes', () => {
@@ -148,8 +154,9 @@ test('submitting a comment sends it to the agent immediately', () => {
   assert.doesNotMatch(html, /Leave a comment on this line/);
   assert.doesNotMatch(html, /ds-addcomment/);
   assert.doesNotMatch(html, /then Ask agent/);
-  assert.match(html, /'Add comment'/);
-  assert.match(html, /'Ask now'/);
+  assert.match(html, /'Save only'/);
+  assert.match(html, /'Choose task & ask'/);
+  assert.match(html, /data-agent-target-cta/);
   assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
   assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
 });
@@ -469,7 +476,8 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function startVoiceFocusSequence\(stepIndex,text\)/);
   assert.match(html, /function updateVoiceFocusForChar\(stepIndex,charIndex,text\)/);
   assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
-  assert.match(html, /focusRows\[0\]\.scrollIntoView/);
+  assert.match(html, /function centerFocusRows\(rows,instant\)/);
+  assert.match(html, /target\.scrollIntoView\(\{block:'center',inline:'nearest',behavior:instant\?'auto':'smooth'\}\)/);
   assert.match(html, /function stepSpeechUnits\(panel\)/);
   assert.match(html, /function speakStepIndex\(i,manual\)/);
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
@@ -642,6 +650,100 @@ test('story beats render as separate spoken notes with exact focus groups', () =
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
   assert.match(html, /setActiveBeat\(stepIndex,group\)/);
   assert.match(html, /b=closest\(t,'\[data-playstep\]'\);if\(b\)\{var pp=closest\(t,'\.ds-step'\);if\(pp\)\{var sp=parseInt\(pp\.getAttribute\('data-step-panel'\)\|\|'0',10\);speakStepIndex\(sp,true\);\}return;\}/);
+});
+
+test('silent story navigation persistently centers the first authored focus', () => {
+  const focusTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      range: [1, 3],
+      viewport: [1, 3],
+      highlights: [[1, 1], [3, 3]],
+      beats: [
+        { text: 'Start at the setup.', highlights: [[1, 1]] },
+        { text: 'Then inspect the result.', highlights: [[3, 3]] },
+      ],
+    }],
+  };
+  const focusFiles = [{
+    ...files[0],
+    hunks: [{
+      oldStart: 1,
+      oldLines: 0,
+      newStart: 1,
+      newLines: 3,
+      lines: [
+        { type: 'add', content: 'setup', newNo: 1 },
+        { type: 'add', content: 'middle', newNo: 2 },
+        { type: 'add', content: 'result', newNo: 3 },
+      ],
+    }],
+  }];
+  const html = renderPage({ repo: process.cwd(), tour: focusTour, files: focusFiles, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /data-step-panel="1"[^>]*data-story-focus="authored"/);
+  assert.match(html, /storyFocusIndex=-1,storyFocusGroup=-1/);
+  assert.match(html, /function selectStoryFocus\(stepIndex,group,shouldScroll\)/);
+  assert.match(html, /var storyFocused=ap&&i>0\?selectStoryFocus\(i,0,true\):false;/);
+  assert.match(html, /if\(ap&&!storyFocused\)jumpToFirstChange/);
+  assert.match(html, /rows\[Math\.floor\(\(rows\.length-1\)\/2\)\]/);
+  assert.match(html, /\.ds-row\.is-story-focus/);
+  assert.match(html, /content:'Story focus'/);
+  assert.match(html, /\.ds-step\.is-voice-active \.ds-row\.is-story-focus:not\(\.is-voice-focus\)/);
+  assert.doesNotMatch(html, /function clearVoiceFocus\(\)\{(?:(?!function clearActiveBeats)[\s\S])*clearStoryFocus\(\)/);
+});
+
+test('story beats are keyboard controls that select and center their exact rows', () => {
+  const beatTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      highlights: [[1, 1]],
+      beats: [{ text: 'Inspect the changed line.', highlights: [[1, 1]] }],
+    }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: beatTour, files, baseLabel: 'main', comments: [] });
+  const beatTag = html.match(/<button type="button" class="ds-beat"[^>]*>/)?.[0] ?? '';
+
+  assert.match(beatTag, /data-story-beat/);
+  assert.match(beatTag, /aria-pressed="false"/);
+  assert.match(beatTag, /aria-label="Focus beat 1:/);
+  assert.match(beatTag, /aria-controls="ds-story-diff-1"/);
+  assert.match(beatTag, /data-focus-destination="a.ts, line 1"/);
+  assert.doesNotMatch(beatTag, /voice/i);
+  assert.match(html, /id="ds-story-diff-1"[^>]*data-story-diff[^>]*role="region"[^>]*aria-label="a.ts story diff"/);
+  assert.match(html, /data-story-focus-status aria-live="polite" aria-atomic="true"/);
+  assert.match(html, /\.ds-beat:focus-visible/);
+  assert.match(html, /b=closest\(t,'\[data-story-beat\]'\)/);
+  assert.match(html, /selectStoryFocus\(bpi,bpg,true\)/);
+  assert.match(html, /rows\.forEach\(function\(r\)\{r\.classList\.add\('is-story-focus'\);\}\)/);
+  assert.match(html, /announceStoryFocus\(panel,beat\)/);
+  assert.match(html, /status\.textContent='Story beat '/);
+});
+
+test('compact story steps default to a real unified diff while split stays opt-in', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /<button data-mode="diff">Unified<\/button>\s*<button class="is-active" data-mode="split">Split<\/button>/);
+  assert.match(html, /<div data-diff-inner hidden>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
+  assert.match(html, /<div data-split-inner data-loaded="1">[\s\S]*class="ds-diffbody"/);
+  assert.match(html, /function applyResponsiveStoryMode\(panel\)/);
+  assert.match(html, /if\(!panel\|\|!compactScreen\(\)\)return;/);
+  assert.match(html, /holder\.hasAttribute\('data-mode-user-set'\)/);
+  assert.match(html, /setMode\(unified,\{persist:false\}\)/);
+  assert.match(html, /if\(storyFocusIndex===panelIndex\)selectStoryFocus\(panelIndex,storyFocusGroup,true\)/);
+  assert.match(html, /modeHolder\.setAttribute\('data-mode-user-set','1'\)/);
+});
+
+test('arrow keys on a focused story beat move the authored camera instead of the global change cursor', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /function moveStoryBeat\(button,delta\)/);
+  assert.match(html, /selectStoryFocus\(stepIndex,group,true\);target\.focus\(\);return true;/);
+  assert.match(html, /var focusedStoryBeat=closest\(e\.target,'\[data-story-beat\]'\);/);
+  assert.match(html, /if\(focusedStoryBeat&&\(e\.key==='ArrowRight'\|\|e\.key==='ArrowLeft'\)\)\{[\s\S]*e\.preventDefault\(\);moveStoryBeat[\s\S]*var wantsBeatNav=/);
+  assert.match(html, /\.ds-urow\.is-story-focus/);
 });
 
 test('pure deleted-file sentinel highlights deleted rows', () => {
@@ -894,28 +996,59 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /<select id="storyAgentSel"|<select id="storyModelSel"|<select id="storyMode"/);
   assert.match(html, /id="storyAgentChoices"/);
   assert.match(html, /id="storyModelChoices"/);
+  assert.match(html, /data-story-agent-state aria-live="polite" tabindex="-1">Checking available writers…/);
+  assert.match(html, /data-story-quality-field hidden/);
   assert.match(html, /id="storyReviewerNote"/);
+  assert.match(html, />What should this change accomplish\?<\/span>/);
+  assert.match(html, />Optional · recommended<\/span>/);
+  assert.match(html, /placeholder="Paste the request, acceptance criteria, or anything the story must not miss\."/);
+  assert.match(html, /separate intended behavior from accidental changes/);
   assert.match(html, /data-story-file value="contracts\/Fee\.sol" checked/);
   assert.match(html, /data-story-file value="test\/Fee\.test\.ts" checked/);
   assert.match(html, /data-story-scope-action="all"/);
   assert.match(html, /data-story-scope-action="tests"/);
   assert.match(html, /data-story-ext="\.sol"/);
-  assert.match(html, />Detail<\/span>/);
-  assert.match(html, /aria-label="Story detail"/);
+  assert.match(html, /data-story-scope open/);
+  assert.match(html, /data-story-file-search/);
+  assert.match(html, /<b id="storyScopeCount">3<\/b> of 3 selected/);
+  assert.match(html, />Select all<\/button>/);
+  assert.match(html, />Only source<\/button>/);
+  assert.match(html, />Only tests<\/button>/);
+  assert.match(html, />Only \.sol<\/button>/);
+  assert.match(html, /id="storyScopeError" tabindex="-1" hidden/);
+  assert.match(html, />Review depth<\/legend>/);
+  assert.match(html, /Every mode reviews the same selected changes/);
+  assert.match(html, /Choose how much guidance you want, not how much code you are willing to miss/);
+  assert.match(html, /aria-label="Story depth"/);
   assert.match(html, /data-story-choice="storyMode" data-value="brief"/);
-  assert.match(html, />Brief<\/button>/);
+  assert.match(html, />Compact<\/strong>/);
+  assert.match(html, />Shortest<\/span>/);
   assert.match(html, /data-story-choice="storyMode" data-value="guided"/);
-  assert.match(html, />Balanced<\/button>/);
+  assert.match(html, />Guided review<\/strong>/);
+  assert.match(html, />Recommended<\/span>/);
+  assert.match(html, /without narrating every line/);
   assert.match(html, /data-story-choice="storyMode" data-value="detailed"/);
-  assert.match(html, />Line-by-line<\/button>/);
+  assert.match(html, />Deep review<\/strong>/);
+  assert.match(html, />Most detail<\/span>/);
+  assert.match(html, /Trivial syntax stays skipped/);
+  assert.match(html, /role="radio"[^>]*aria-checked="true" tabindex="0"/);
+  assert.match(html, /function updateStoryGenerationSummary/);
+  assert.match(html, /nextChoice\.focus\(\);nextChoice\.click\(\)/);
+  assert.match(html, /emptyState\.scope\.open=true/);
+  assert.match(html, /emptyState\.scopeError\.hidden=false;emptyState\.scopeError\.focus\(\)/);
+  assert.match(html, /if\(e\.scopeError\)e\.scopeError\.hidden=!!n/);
+  assert.match(html, /if\(generate\)generate\.disabled=!n\|\|agentBusy\|\|!storyAgentReady/);
   assert.match(html, /data-reload-diff/);
   assert.match(html, /Reload diff/);
   assert.match(html, /closest\(t,'\[data-reload-diff\]'\)/);
   assert.match(html, /b\.disabled=true;location\.reload\(\);return;/);
-  assert.doesNotMatch(html, />Guided<\/button>/);
-  assert.doesNotMatch(html, />Detailed<\/button>/);
-  assert.match(html, /Best story/);
+  assert.doesNotMatch(html, />Line-by-line<\/button>/);
+  assert.match(html, /Best quality/);
   assert.match(html, /Lower cost/);
+  assert.match(html, /\/api\/codex\/models/);
+  assert.match(html, /loadCodexStoryModels/);
+  assert.match(html, /Use the default model from your installed Codex app/);
+  assert.doesNotMatch(html, /gpt-5-mini/);
   assert.doesNotMatch(html, /id="storyModelInp"/);
   assert.doesNotMatch(html, /id="storyCodexPanel"/);
   assert.doesNotMatch(html, /id="storyCodexProvider"/);
@@ -928,9 +1061,14 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /Ollama/);
   assert.doesNotMatch(html, /No sandbox/);
   assert.doesNotMatch(html, /\.ds-choicegroup[^}]*overflow-x:auto/);
-  assert.match(html, /data-generate-story data-review-url="\/repo\/demo\/review\?story=story\.json" data-base="abc123" data-head="def456"/);
+  assert.match(html, /data-generate-story disabled data-review-url="\/repo\/demo\/review\?story=story\.json" data-base="abc123" data-head="def456"/);
   assert.match(html, /fetch\('\/api\/agents'\)/);
+  assert.match(html, /setStoryAgents\(\[\],'Could not check local writers\. Reload the page to try again\.'\)/);
+  assert.doesNotMatch(html, /setStoryAgents\(\['codex','claude'\]\)/);
+  assert.match(html, /No local writer found\. Install Codex or Claude, then reload this page\./);
   assert.match(html, /fetch\('\/api\/skills\/update',\{method:'POST'\}\)/);
+  assert.match(html, /if\(sk\.legacyInstalled\)/);
+  assert.match(html, /review-tour was renamed to diffstory-storyteller/);
   assert.match(html, /data-story-choice/);
   assert.match(html, /function renderStoryChoices/);
   assert.match(html, /function setStoryChoice/);
@@ -944,6 +1082,62 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.doesNotMatch(html, /codexSandbox:/);
   assert.doesNotMatch(html, /codexProfile:/);
   assert.doesNotMatch(html, /codexConfig:/);
+});
+
+test('story generation failure offers error-specific recovery without overclaiming rollback', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'main' },
+    files,
+    baseLabel: 'main',
+    comments: [],
+    storyless: true,
+  });
+
+  assert.match(html, /function startRun\(\)\{/);
+  assert.match(html, /failed=state==='failed'/);
+  assert.match(html, /failed\?"The story wasn't created":'Writing the story of this change'/);
+  assert.match(html, /failed\?'Story not created':'Story in progress'/);
+  assert.match(html, /No reviewable story is available yet\. Try again, or change the story settings\./);
+  assert.doesNotMatch(html, /Your diff is untouched/);
+  assert.match(html, /if\(intro\)setStoryGenerating\('failed'\)/);
+  assert.match(html, /if\(intro\)setStoryGenerating\(true\);/);
+  assert.match(html, /function showRecovery\(err\)/);
+  assert.match(html, /modelFailure=!!\(err&&\/Codex needs an update for\//);
+  assert.match(html, /ds-pp-reload','Change model'/);
+  assert.match(html, /ds-pp-secondary','Retry after updating'/);
+  assert.match(html, /ds-pp-reload','Try again'/);
+  assert.match(html, /ds-pp-secondary','Review settings'/);
+  assert.match(html, /onBlocked:function\(err\)\{[^}]*showRecovery\(err\)/);
+  assert.match(html, /showRecovery\(panel\.error\(\)\)/);
+  assert.match(html, /panel\.els\.close\.hidden=true/);
+  assert.match(html, /root\.offsetParent&&\(!active\|\|active===document\.body\|\|active===btn\)\)primary\.focus\(\)/);
+  assert.match(html, /data-story-choice="storyModelSel"\]\[aria-checked="true"\]/);
+  assert.match(html, /data-story-choice="storyMode"\]\[aria-checked="true"\]/);
+});
+
+test('large story scopes stay collapsed until the reviewer chooses to edit them', () => {
+  const manyFiles = Array.from({ length: 13 }, (_, i) => ({
+    ...files[0],
+    oldPath: `src/file-${i}.ts`,
+    newPath: `src/file-${i}.ts`,
+  }));
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'main' },
+    files: manyFiles,
+    baseLabel: 'main',
+    comments: [],
+    storyless: true,
+  });
+  const scopeTag = html.match(/<details class="ds-storyscope"[^>]*>/)?.[0] ?? '';
+  assert.match(scopeTag, /data-story-scope/);
+  assert.doesNotMatch(scopeTag, /\sopen/);
+  assert.match(html, /<b id="storyScopeCount">13<\/b> of 13 selected/);
+  assert.match(html, /\.ds-depthchoices\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(html, /\.ds-depthchoice-badge\{[^}]*font-size:10\.5px/);
+  assert.match(html, /\.ds-depthchoice-meta\{[^}]*font-size:10\.5px/);
+  assert.match(html, /@media \(max-width:700px\)\{\.ds-choicegroup\{[^}]+\}\.ds-depthchoices\{grid-template-columns:1fr\}/);
 });
 
 test('story scope keeps excluded files visible without flagging them as unexplained', () => {
@@ -977,7 +1171,7 @@ test('story scope keeps excluded files visible without flagging them as unexplai
   assert.doesNotMatch(html, /title="1 unexplained change"/);
 });
 
-test('intro panel leads with the recovered intent and cites its sources', () => {
+test('intro panel leads with the recovered intent without exposing its sources', () => {
   const intentTour = {
     ...tour,
     intent: {
@@ -987,48 +1181,67 @@ test('intro panel leads with the recovered intent and cites its sources', () => 
     },
   };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede">We wanted ops to cap runaway fees before settlement\./);
-  assert.match(html, /class="ds-intro-design">The keeper clamps through one shared helper\./);
-  assert.match(html, /class="ds-intro-sources">Why from commit abc1234 · PR #7 body</);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview>We wanted ops to cap runaway fees before settlement\./);
+  assert.match(html, /class="ds-intro-design" data-speech-overview>The keeper clamps through one shared helper\./);
+  assert.doesNotMatch(html, /commit abc1234|PR #7 body|ds-intro-sources/);
 });
 
 test('intro panel keeps the summary as the reading map when intent exists', () => {
   const intentTour = { ...tour, intent: { goal: 'Cap runaway fees.' } };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede">Cap runaway fees\./);
-  assert.match(html, /class="ds-intro-design">One changed line\./);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview>Cap runaway fees\./);
+  assert.match(html, /class="ds-intro-design" data-speech-overview>One changed line\./);
 });
 
 test('intro panel falls back to the summary lede without an intent block', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede">One changed line\./);
-  // The static stylesheet always carries the .ds-intro-sources rule, so pin
-  // the absence of the rendered *markup* (class attribute), not the bare name.
-  assert.doesNotMatch(html, /class="ds-intro-sources"/);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview>One changed line\./);
+  assert.doesNotMatch(html, /ds-intro-sources/);
   assert.doesNotMatch(html, /class="ds-intro-design"/);
+});
+
+test('read aloud starts with overview context before advancing to step one', () => {
+  const intentTour = {
+    ...tour,
+    intent: {
+      goal: 'Let reviewers understand the original task.',
+      design: 'Frame the flow before opening the implementation.',
+    },
+  };
+  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+
+  assert.equal((html.match(/<p class="ds-intro-(?:lede|design)" data-speech-overview/g) ?? []).length, 3);
+  assert.match(html, /var overview=\$all\('\[data-speech-overview\]',panel\)/);
+  assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechClean\(node\.textContent\|\|''\),group:null\};\}\)/);
+  assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
+  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)\{setActive\(n\);return;\}/);
 });
 
 test('intent text is HTML-escaped in the intro panel', () => {
   const intentTour = { ...tour, intent: { goal: 'Guard <script> tags', sources: ['a & b'] } };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /Guard &lt;script&gt; tags/);
-  assert.match(html, /a &amp; b/);
+  assert.doesNotMatch(html, /a &amp; b|ds-intro-sources/);
   assert.doesNotMatch(html, /Guard <script> tags/);
 });
 
-test('all-files view exposes a visible viewed control and sidebar state', () => {
+test('all-files view exposes seen and unseen controls with visible sidebar state', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
   assert.match(html, /data-viewed-toggle aria-pressed="false"/);
-  assert.match(html, /data-viewed-label>Mark viewed</);
+  assert.match(html, /data-viewed-label>Mark seen</);
   assert.match(html, /class="ds-fileitem-viewed" aria-hidden="true">✓</);
+  assert.match(html, /data-file-filter="seen">Seen<\/button>/);
+  assert.match(html, /data-file-filter="unseen">Unseen<\/button>/);
+  assert.match(html, /data-next-unviewed[^>]*>Next unseen/);
+  assert.doesNotMatch(html, />Unviewed<\/button>/);
   assert.doesNotMatch(html, /role="checkbox"/);
 });
 
 test('commands describe V as toggling the current file instead of advancing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-command="toggle-viewed"[\s\S]*Toggle current file viewed[\s\S]*<kbd>V<\/kbd>/);
+  assert.match(html, /data-command="toggle-viewed"[\s\S]*Toggle current file seen[\s\S]*<kbd>V<\/kbd>/);
   assert.doesNotMatch(html, /data-command="next-unviewed"(?:(?!<\/button>)[\s\S])*<kbd>V<\/kbd>/);
 });
 

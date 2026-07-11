@@ -307,6 +307,11 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   function showSkillState(sk){
     var sw=document.getElementById('skillWarn'),txt=document.getElementById('skillWarnText'),btn=document.getElementById('skillUpdateBtn');
     if(!sw||!txt||!btn||!sk)return;
+    if(sk.legacyInstalled){
+      sw.hidden=false;btn.hidden=false;btn.disabled=false;btn.textContent='Update skills';
+      txt.textContent='review-tour was renamed to diffstory-storyteller. Update skills to remove the retired copy and finish migration.';
+      return;
+    }
     if(sk.current){
       sw.hidden=true;btn.hidden=true;return;
     }

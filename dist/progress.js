@@ -71,8 +71,14 @@ export function heartbeatEvent(quietMs) {
 export function warningEvent(label, detail, stage) {
     return { type: 'warning', label, ...(detail ? { detail } : {}), ...(stage ? { stage } : {}) };
 }
-export function errorEvent(stage, label, detail) {
-    return { type: 'error', stage, label, ...(detail ? { detail } : {}) };
+export function errorEvent(stage, label, detail, technicalDetail) {
+    return {
+        type: 'error',
+        stage,
+        label,
+        ...(detail ? { detail } : {}),
+        ...(technicalDetail ? { technicalDetail } : {}),
+    };
 }
 export function doneEvent(status, result) {
     return { type: 'run_done', status, ...(result ? { result } : {}) };

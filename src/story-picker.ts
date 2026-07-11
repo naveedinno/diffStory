@@ -30,10 +30,10 @@ function storyRow(s: StorySummary, now: number, routeBase: string): string {
   const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
   const mode =
     s.mode === 'brief'
-      ? 'Brief story'
+      ? 'Compact story'
       : s.mode === 'detailed'
-        ? 'Line-by-line story'
-        : 'Balanced story';
+        ? 'Deep review'
+        : 'Guided review';
 
   const badges =
     (s.current ? `<span class="badge badge-cur">Current</span>` : '') +

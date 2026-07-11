@@ -54,7 +54,7 @@ test('client no longer renders a Send again button', () => {
 test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => {
   // Sending comments to the agent mounts the one shared ProgressPanel inline in the card
   // and streams the run through it — the agent's real plan, active step, and elapsed time.
-  assert.match(PAGE_JS, /function sendToAgent\(ids,fromCard,agent\)/);
+  assert.match(PAGE_JS, /function sendToAgent\(ids,fromCard,target\)/);
   assert.match(PAGE_JS, /function mountPanelInCard\(/);
   assert.match(PAGE_JS, /function restoreAgentPanel\(/);
   assert.match(PAGE_JS, /new ProgressPanel\(root,/);
@@ -70,12 +70,17 @@ test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => 
   assert.doesNotMatch(PAGE_JS, /function addressProgressPanel\(/);
 });
 
-test('address runs ask which installed agent to use and send that choice', () => {
+test('address runs bind to a reusable Codex task and send that choice', () => {
   assert.match(PAGE_JS, /function chooseAddressAgent\(/);
   assert.match(PAGE_JS, /fetch\('\/api\/agents'\)/);
-  assert.match(PAGE_JS, /data-address-agent/);
-  assert.match(PAGE_JS, /payload\.agent=agent/);
-  assert.match(PAGE_JS, /sendToAgent\(ids,fromCard,agent\)/);
+  assert.match(PAGE_JS, /fetch\(CODEX_TASK_API\)/);
+  assert.match(PAGE_JS, /New Codex task/);
+  assert.match(PAGE_JS, /data-agent-task-option/);
+  assert.match(PAGE_JS, /payload\.agent=target\.agent/);
+  assert.match(PAGE_JS, /payload\.codexThreadId=target\.threadId/);
+  assert.match(PAGE_JS, /payload\.newCodexTask=true/);
+  assert.match(PAGE_JS, /readAgentTarget\(\)/);
+  assert.match(PAGE_JS, /saveAgentTarget\(target\)/);
 });
 
 test('a freshly loaded full file gets its threads mounted', () => {
@@ -111,26 +116,29 @@ test('comment counts are by unique id, so cross-surfaced comments are not double
   assert.doesNotMatch(PAGE_JS, /\$all\('\.ds-comment'\)\.length-\$all\('\.ds-comment\.status-resolved'\)\.length/);
 });
 
-test('the new-comment composer offers Add comment (save only) and Ask now', () => {
+test('the new-comment composer shows its agent task and separates save from send', () => {
   assert.match(PAGE_JS, /function buildComposer\(/);
+  assert.match(PAGE_JS, /function buildAgentRoute\(/);
   assert.match(PAGE_JS, /ds-composer-add/);
-  assert.match(PAGE_JS, /'Add comment'/);
-  assert.match(PAGE_JS, /'Ask now'/);
-  // shared helper gates the run on a flag; Add => false, Ask now => true
+  assert.match(PAGE_JS, /'Save only'/);
+  assert.match(PAGE_JS, /'Choose task & ask'/);
+  assert.match(PAGE_JS, /data-agent-target-cta/);
+  // shared helper gates the run on a flag; Save only => false, Ask agent => true
   assert.match(PAGE_JS, /function submitComment\(run\)/);
   assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[c\.id\]\)/);
   assert.match(PAGE_JS, /submitComment\(false\)/);
   assert.match(PAGE_JS, /submitComment\(true\)/);
 });
 
-test('the thread composer offers Add (save only) and Ask now (save + run)', () => {
+test('the thread composer shows its agent task and separates save from send', () => {
   assert.match(PAGE_JS, /function buildThreadComposer\(/);
   assert.match(PAGE_JS, /data-thread-add/);
-  assert.match(PAGE_JS, /'Ask now'/);
+  assert.match(PAGE_JS, /'Save reply'/);
+  assert.match(PAGE_JS, /'Choose task & ask'/);
   // sendThreadMessage gates the agent run on the `run` flag:
   assert.match(PAGE_JS, /function sendThreadMessage\(wrap,run\)/);
   assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\]\)/);
-  // delegation: Add => run=false, Ask now => run=true
+  // delegation: Save reply => run=false, Ask agent => run=true
   assert.match(PAGE_JS, /\[data-thread-add\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),false\)/);
   assert.match(PAGE_JS, /\[data-thread-send\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),true\)/);
   // Enter sends via the run path
@@ -141,6 +149,31 @@ test('the compact Review menu runs the batch and tracks the open count', () => {
   assert.match(PAGE_JS, /\[data-address-all\]'\);if\(b\)\{if\(b\.disabled\)return;setReviewMenu\(false\);sendToAgent\('all'\)/);
   assert.match(PAGE_JS, /ds-review-summary-label/);
   assert.doesNotMatch(PAGE_JS, /ds-send-all/);
+});
+
+test('agent target labels update every sending surface and mark the current task', () => {
+  assert.match(PAGE_JS, /function applyAgentTargetTo\(scope,target\)/);
+  assert.match(PAGE_JS, /\$all\('\[data-agent-target-name\]',scope\)\.forEach/);
+  assert.match(PAGE_JS, /button\.textContent=has\?'Ask agent':'Choose task & ask'/);
+  assert.match(PAGE_JS, /selected\?'Current':target\.meta/);
+  assert.match(PAGE_JS, /target\.agent==='codex'&&target\.mode==='new'/);
+});
+
+test('agent and review controls stay distinct at compact widths', () => {
+  assert.match(PAGE_CSS, /@media \(max-width:900px\)[\s\S]*?\.ds-agent-target\{width:36px/);
+  assert.match(PAGE_CSS, /\.ds-review-menu-dot::before\{content:'!'/);
+  assert.match(PAGE_CSS, /\.ds-review-menu\.is-clean \.ds-review-menu-dot::before\{content:'✓'/);
+  assert.doesNotMatch(PAGE_CSS, /\.ds-review-menu-dot::before\{content:'…'/);
+  assert.match(PAGE_CSS, /@media \(max-width:620px\)[\s\S]*?\.ds-agent-chooser\{align-items:flex-end/);
+  assert.match(PAGE_CSS, /@media \(max-width:620px\)\{\.ds-thread-composer-foot\{align-items:stretch\}\}/);
+});
+
+test('agent and review dialogs restore focus and trap task-picker tabbing', () => {
+  assert.match(PAGE_JS, /reviewMenuReturnFocus/);
+  assert.match(PAGE_JS, /pop\.contains\(activeElement\)/);
+  assert.match(PAGE_JS, /agentChooserReturnFocus/);
+  assert.match(PAGE_JS, /root\.addEventListener\('keydown'/);
+  assert.match(PAGE_JS, /if\(e\.key!=='Tab'\)return/);
 });
 
 test('copying all comments includes every conversation turn, not only legacy replies', () => {
@@ -169,6 +202,8 @@ test('file filters, resume state, and keyboard commands stay local to the review
   assert.match(PAGE_JS, /function applyFileFilters\(/);
   assert.match(PAGE_JS, /function restoreReviewPosition\(/);
   assert.match(PAGE_JS, /localStorage\.setItem\(reviewUiKey\(\)/);
+  assert.match(PAGE_JS, /btn\.hidden=!text\|\|!inFiles/);
+  assert.match(PAGE_JS, /function setView\(v\)[\s\S]*?revealResumeReview\(\)/);
   assert.match(PAGE_JS, /e\.key==='\?'/);
   assert.match(PAGE_JS, /e\.key==='\/'/);
 });

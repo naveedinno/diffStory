@@ -127,7 +127,7 @@ test('app server drives picker → open → refs → recent → close', async ()
 
     const agents = await (await fetch(`${base}/api/agents`)).json();
     assert.ok(Array.isArray(agents.agents));
-    assert.equal(agents.skills.name, 'review-tour');
+    assert.equal(agents.skills.name, 'diffstory-storyteller');
     assert.equal(agents.skills.installed, false);
     assert.equal(agents.skills.current, false);
     assert.ok(agents.skills.message.includes('not installed'));
@@ -140,8 +140,8 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal(updatedBody.skills.current, true);
     assert.equal(updatedBody.skills.agents.claude.current, true);
     assert.equal(updatedBody.skills.agents.codex.current, true);
-    assert.ok(existsSync(join(tmpHome, '.agents', 'skills', 'review-tour', 'SKILL.md')));
-    assert.ok(existsSync(join(tmpHome, '.claude', 'skills', 'review-tour', 'SKILL.md')));
+    assert.ok(existsSync(join(tmpHome, '.agents', 'skills', 'diffstory-storyteller', 'SKILL.md')));
+    assert.ok(existsSync(join(tmpHome, '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md')));
     assert.ok(existsSync(join(tmpHome, '.codex', 'skills', 'address-review', 'SKILL.md')));
 
     const agentsAfter = await (await fetch(`${base}/api/agents`)).json();
@@ -374,12 +374,14 @@ test('addressing comments from the raw diff viewer reports code edits so the UI 
 test('POST /api/address honors the selected agent instead of first PATH match', async () => {
   const realHome = process.env.HOME;
   const realPath = process.env.PATH;
+  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
   process.env.HOME = tmpHome;
   process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
   installFakeClaude(fakeBin);
   installFakeCodex(fakeBin);
+  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
@@ -410,6 +412,8 @@ test('POST /api/address honors the selected agent instead of first PATH match', 
     server.close();
     process.env.HOME = realHome;
     process.env.PATH = realPath;
+    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
+    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
     rmSync(repo, { recursive: true, force: true });
     rmSync(tmpHome, { recursive: true, force: true });
     rmSync(fakeBin, { recursive: true, force: true });
@@ -419,11 +423,13 @@ test('POST /api/address honors the selected agent instead of first PATH match', 
 test('POST /api/address rejects a selected agent that is not available', async () => {
   const realHome = process.env.HOME;
   const realPath = process.env.PATH;
+  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
   const gitBin = dirname(execFileSync('which', ['git']).toString().trim());
   process.env.HOME = tmpHome;
   process.env.PATH = `${fakeBin}:${gitBin}:/usr/bin:/bin:/usr/sbin:/sbin`;
+  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'missing-codex');
   installFakeClaude(fakeBin);
 
   const repo = gitRepo();
@@ -456,6 +462,8 @@ test('POST /api/address rejects a selected agent that is not available', async (
     server.close();
     process.env.HOME = realHome;
     process.env.PATH = realPath;
+    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
+    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
     rmSync(repo, { recursive: true, force: true });
     rmSync(tmpHome, { recursive: true, force: true });
     rmSync(fakeBin, { recursive: true, force: true });

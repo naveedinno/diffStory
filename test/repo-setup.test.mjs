@@ -1,7 +1,7 @@
 // Unit tests for repo setup (gitignore modes + skills check). Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setGitignore, skillsInstalled, skillStatus, updateSkills } from '../dist/repo-setup.js';
@@ -38,19 +38,25 @@ test('switching modes leaves exactly one diffstory line', () => {
   rmSync(d, { recursive: true, force: true });
 });
 
-test('skillsInstalled detects ~/.agents/skills/review-tour', () => {
+test('skillsInstalled detects ~/.agents/skills/diffstory-storyteller', () => {
   const home = tmp();
   assert.equal(skillsInstalled(home), false);
   mkdirSync(join(home, '.agents', 'skills', 'review-tour'), { recursive: true });
-  writeFileSync(join(home, '.agents', 'skills', 'review-tour', 'SKILL.md'), '');
+  writeFileSync(join(home, '.agents', 'skills', 'review-tour', 'SKILL.md'), 'retired skill');
+  assert.equal(skillsInstalled(home), false, 'the retired skill name must not satisfy the new install check');
+  const legacy = skillStatus(home);
+  assert.equal(legacy.legacyInstalled, true);
+  assert.match(legacy.message, /renamed to diffstory-storyteller/);
+  mkdirSync(join(home, '.agents', 'skills', 'diffstory-storyteller'), { recursive: true });
+  writeFileSync(join(home, '.agents', 'skills', 'diffstory-storyteller', 'SKILL.md'), '');
   assert.equal(skillsInstalled(home), true);
   rmSync(home, { recursive: true, force: true });
 });
 
-test('skillStatus reports a missing review-tour skill', () => {
+test('skillStatus reports a missing diffstory-storyteller skill', () => {
   const home = tmp();
-  const bundled = join(home, 'bundle', 'review-tour', 'SKILL.md');
-  mkdirSync(join(home, 'bundle', 'review-tour'), { recursive: true });
+  const bundled = join(home, 'bundle', 'diffstory-storyteller', 'SKILL.md');
+  mkdirSync(join(home, 'bundle', 'diffstory-storyteller'), { recursive: true });
   writeFileSync(bundled, 'current skill');
 
   const status = skillStatus(home, bundled);
@@ -64,10 +70,10 @@ test('skillStatus reports a missing review-tour skill', () => {
 
 test('skillStatus detects Codex installs and stale skill content', () => {
   const home = tmp();
-  const bundled = join(home, 'bundle', 'review-tour', 'SKILL.md');
-  const installed = join(home, '.codex', 'skills', 'review-tour', 'SKILL.md');
-  mkdirSync(join(home, 'bundle', 'review-tour'), { recursive: true });
-  mkdirSync(join(home, '.codex', 'skills', 'review-tour'), { recursive: true });
+  const bundled = join(home, 'bundle', 'diffstory-storyteller', 'SKILL.md');
+  const installed = join(home, '.codex', 'skills', 'diffstory-storyteller', 'SKILL.md');
+  mkdirSync(join(home, 'bundle', 'diffstory-storyteller'), { recursive: true });
+  mkdirSync(join(home, '.codex', 'skills', 'diffstory-storyteller'), { recursive: true });
   writeFileSync(bundled, 'current skill');
   writeFileSync(installed, 'old skill');
 
@@ -83,18 +89,26 @@ test('skillStatus detects Codex installs and stale skill content', () => {
   const current = skillStatus(home, bundled);
   assert.equal(current.installed, true);
   assert.equal(current.current, true);
-  assert.equal(current.message, 'review-tour skill is installed and up to date.');
+  assert.equal(current.message, 'diffstory-storyteller skill is installed and up to date.');
+
+  const retired = join(home, '.agents', 'skills', 'review-tour');
+  mkdirSync(retired, { recursive: true });
+  writeFileSync(join(retired, 'SKILL.md'), 'retired skill');
+  const needsMigration = skillStatus(home, bundled);
+  assert.equal(needsMigration.current, false);
+  assert.equal(needsMigration.agents.codex.current, false);
+  assert.match(needsMigration.message, /finish the migration/);
 
   rmSync(home, { recursive: true, force: true });
 });
 
 test('skillStatus reports per-agent freshness, not just the aggregate', () => {
   const home = tmp();
-  const bundled = join(home, 'bundle', 'review-tour', 'SKILL.md');
-  mkdirSync(join(home, 'bundle', 'review-tour'), { recursive: true });
+  const bundled = join(home, 'bundle', 'diffstory-storyteller', 'SKILL.md');
+  mkdirSync(join(home, 'bundle', 'diffstory-storyteller'), { recursive: true });
   writeFileSync(bundled, 'current skill');
-  mkdirSync(join(home, '.codex', 'skills', 'review-tour'), { recursive: true });
-  writeFileSync(join(home, '.codex', 'skills', 'review-tour', 'SKILL.md'), 'current skill');
+  mkdirSync(join(home, '.codex', 'skills', 'diffstory-storyteller'), { recursive: true });
+  writeFileSync(join(home, '.codex', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'current skill');
 
   // Codex is current so the aggregate says current — but Claude has no install.
   const status = skillStatus(home, bundled);
@@ -107,8 +121,8 @@ test('skillStatus reports per-agent freshness, not just the aggregate', () => {
   assert.equal(status.agents.codex.dir, '~/.codex/skills');
 
   // A stale ~/.claude copy counts as installed but not current.
-  mkdirSync(join(home, '.claude', 'skills', 'review-tour'), { recursive: true });
-  writeFileSync(join(home, '.claude', 'skills', 'review-tour', 'SKILL.md'), 'old skill');
+  mkdirSync(join(home, '.claude', 'skills', 'diffstory-storyteller'), { recursive: true });
+  writeFileSync(join(home, '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'old skill');
   const stale = skillStatus(home, bundled);
   assert.equal(stale.current, true);
   assert.equal(stale.agents.claude.installed, true);
@@ -120,25 +134,33 @@ test('skillStatus reports per-agent freshness, not just the aggregate', () => {
 test('updateSkills installs bundled skills into agent, Claude, and Codex skill dirs', () => {
   const home = tmp();
   const bundle = join(home, 'bundle', 'skills');
-  for (const name of ['review-tour', 'address-review']) {
+  for (const name of ['diffstory-storyteller', 'address-review']) {
     mkdirSync(join(bundle, name), { recursive: true });
     writeFileSync(join(bundle, name, 'SKILL.md'), `${name} current`);
+  }
+  for (const root of ['.agents', '.claude', '.codex']) {
+    const retired = join(home, root, 'skills', 'review-tour');
+    mkdirSync(retired, { recursive: true });
+    writeFileSync(join(retired, 'SKILL.md'), 'retired skill');
   }
 
   const result = updateSkills(home, bundle);
 
   assert.deepEqual(result.installed.map((p) => p.replace(home, '<home>')).sort(), [
     '<home>/.agents/skills/address-review',
-    '<home>/.agents/skills/review-tour',
+    '<home>/.agents/skills/diffstory-storyteller',
     '<home>/.claude/skills/address-review',
-    '<home>/.claude/skills/review-tour',
+    '<home>/.claude/skills/diffstory-storyteller',
     '<home>/.codex/skills/address-review',
-    '<home>/.codex/skills/review-tour',
+    '<home>/.codex/skills/diffstory-storyteller',
   ]);
-  assert.equal(readFileSync(join(home, '.agents', 'skills', 'review-tour', 'SKILL.md'), 'utf8'), 'review-tour current');
-  assert.equal(readFileSync(join(home, '.claude', 'skills', 'review-tour', 'SKILL.md'), 'utf8'), 'review-tour current');
+  assert.equal(readFileSync(join(home, '.agents', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'utf8'), 'diffstory-storyteller current');
+  assert.equal(readFileSync(join(home, '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'utf8'), 'diffstory-storyteller current');
   assert.equal(readFileSync(join(home, '.codex', 'skills', 'address-review', 'SKILL.md'), 'utf8'), 'address-review current');
-  const status = skillStatus(home, join(bundle, 'review-tour', 'SKILL.md'));
+  for (const root of ['.agents', '.claude', '.codex']) {
+    assert.equal(existsSync(join(home, root, 'skills', 'review-tour')), false);
+  }
+  const status = skillStatus(home, join(bundle, 'diffstory-storyteller', 'SKILL.md'));
   assert.equal(status.current, true);
   assert.equal(status.agents.claude.current, true);
   assert.equal(status.agents.codex.current, true);

@@ -11,6 +11,9 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;
 
 /* ---- diff ---- */
 .ds-diff{position:relative;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
+.ds-step.is-story-active:not(.is-voice-active) .ds-diff{border-color:rgba(10,132,255,0.52);box-shadow:0 0 0 1px rgba(10,132,255,0.16),inset 0 1px 0 rgba(255,255,255,0.035)}
+.ds-step.is-story-active:not(.is-voice-active) .ds-difthint{color:var(--accent-blue);font-weight:700}
+.ds-step.is-story-active:not(.is-voice-active) .ds-difthint::before{content:'Story focus';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent-blue);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-step.is-voice-active .ds-diff{border-color:rgba(208,188,255,0.72);box-shadow:0 0 0 1px rgba(208,188,255,0.34),0 12px 34px rgba(80,64,140,0.18),inset 0 1px 0 rgba(255,255,255,0.035)}
 .ds-step.is-voice-active .ds-difthint{color:var(--md-primary);font-weight:700}
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:rgba(208,188,255,0.16);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
@@ -35,10 +38,23 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;
 .ds-diffbody-unified{font-size:12px;line-height:1.5;background:var(--panel3)}
 .ds-hunkgap{padding:2px 14px;background:#15161a;color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .ds-row{display:flex;position:relative;border-bottom:1px solid rgba(255,255,255,0.025);min-height:24px}
+.ds-row.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue)}
+.ds-row.is-story-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
+.ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
+.ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
+.ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
+.ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
+.ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-cell:not(.ds-cell-empty){background-image:none}
+.ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
+.ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus){box-shadow:none;background-image:none}
+.ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
 .ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary);animation:dsVoiceFocus 1.35s ease-in-out infinite}
 .ds-row.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px rgba(208,188,255,0.72)}
 .ds-row.is-voice-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,rgba(208,188,255,0.24),rgba(208,188,255,0.07))}
 .ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:800}
+.ds-urow.is-voice-focus{position:relative;box-shadow:inset 3px 0 0 var(--md-primary);background-image:linear-gradient(90deg,rgba(208,188,255,0.24),rgba(208,188,255,0.07));animation:dsVoiceFocus 1.35s ease-in-out infinite}
+.ds-urow.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px rgba(208,188,255,0.72)}
+.ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:800}
 @keyframes dsVoiceFocus{0%,100%{filter:brightness(1)}50%{filter:brightness(1.16)}}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
 .ds-cell-single{flex:1}
@@ -288,12 +304,12 @@ export const DIFF_JS = `
       var panel=closest(btn,'.ds-filepanel'),file=panel&&panel.getAttribute('data-file'),on=!!viewedFiles[file];
       btn.classList.toggle('is-active',on);
       btn.setAttribute('aria-pressed',on?'true':'false');
-      btn.setAttribute('aria-label','Mark '+(file||'file')+(on?' unviewed':' viewed'));
-      btn.setAttribute('title',(on?'Mark unviewed':'Mark viewed')+' (V)');
-      var label=$('[data-viewed-label]',btn);if(label)label.textContent=on?'Viewed':'Mark viewed';
+      btn.setAttribute('aria-label','Mark '+(file||'file')+(on?' unseen':' seen'));
+      btn.setAttribute('title',(on?'Mark unseen':'Mark seen')+' (V)');
+      var label=$('[data-viewed-label]',btn);if(label)label.textContent=on?'Seen':'Mark seen';
     });
     var prog=$('[data-viewed-progress]');
-    if(prog)prog.textContent=n?(n+' of '+total+' viewed'):(total+' '+(total===1?'file':'files'));
+    if(prog)prog.textContent=n?(n+' of '+total+' seen'):(total+' '+(total===1?'file':'files'));
   }
   function expandGap(btn){
     var gap=closest(btn,'[data-gap]');if(!gap)return;

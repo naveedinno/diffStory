@@ -3,6 +3,7 @@
 // (onPath, storyPrompt, agentCommand) are unit-tested.
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
+import { codexTaskBinary } from './codex-tasks.js';
 import { fileEvent, commandEvent, activityEvent, toolEvent, textEvent, planEvent, } from './progress.js';
 export function normalizeStoryMode(mode) {
     return mode === 'brief' || mode === 'detailed' ? mode : 'guided';
@@ -13,7 +14,12 @@ export function onPath(cmd) {
 }
 /** Which agent CLIs are installed, in preference order. */
 export function availableAgents() {
-    return ['claude', 'codex'].filter(onPath);
+    const agents = [];
+    if (onPath('claude'))
+        agents.push('claude');
+    if (onPath(codexTaskBinary()))
+        agents.push('codex');
+    return agents;
 }
 function shellQuote(value) {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -49,7 +55,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
             `- Do not create coverage steps for files outside "storyScope.includedFiles"; the app treats them as intentionally skipped for this story.\n` +
             (storyScope.reviewerNote?.trim()
                 ? `- Reviewer guidance: ${storyScope.reviewerNote.trim()}\n` +
-                    `- Use the reviewer guidance to decide where to slow down, but keep every claim grounded in code you actually read.\n`
+                    `- Treat this user-supplied guidance as task evidence when it describes the original request; cite "reviewer guidance" in intent.sources, verify it against the code, and surface any mismatch. Also use it to decide where to slow down.\n`
                 : '') +
             `\n`
         : '';
@@ -68,6 +74,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
             `- Brief mode: write the shortest useful story for a reviewer who wants the quick shape before reading the diff directly.\n` +
             `- Use one compact stop per meaningful change cluster. Do not create line-by-line stops unless a single line is the whole risk.\n` +
             `- Each "why" should be exactly one short sentence in first person: what changed, why it matters, and where to glance.\n` +
+            `- Rebuild context inside the changed step's viewport when possible; spend a separate context step only when the entry point or contract lives elsewhere.\n` +
             `- Keep titles concrete and skim-friendly. Skip low-risk mechanical explanation while still covering every changed hunk.\n\n`
         : storyMode === 'detailed'
             ? `Detail level contract:\n` +
@@ -75,53 +82,74 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
                 `- Prefer more, smaller stops when a function contains separate decisions; split separate branches, guards, state writes, external calls, and error paths instead of hiding them in one broad paragraph.\n` +
                 `- Explain important ranges almost line-by-line: name the method, then describe what the first guard checks, what the next assignment or call prepares, what each branch accepts or rejects, and what state, return value, event, render, or side effect follows.\n` +
                 `- Cover all meaningful code paths: happy path, validation guards, failure cases, fallback behavior, persistence, cleanup, tests, and generated artifacts when they matter.\n` +
+                `- Trace the relevant inbound trigger and outbound consumer or side effect, including unchanged boundary code when it controls correctness.\n` +
                 `- Use exact function, variable, parameter, event, and field names, but do not paste code blocks or duplicate the diff.\n` +
                 `- Line-by-line does not mean noisy: skip trivial syntax, imports, and mechanical plumbing unless they change correctness.\n\n`
             : `Detail level contract:\n` +
                 `- Balanced mode: write the current concise review story, optimized for a human who will read the code after you orient them.\n` +
+                `- Use only the few context bridges needed to restore the task-local app flow; do not tour unrelated architecture.\n` +
                 `- Keep steps grouped by review question and code flow; avoid line-by-line narration unless the line is a correctness hinge.\n\n`;
-    return (`Use the diffStory review-tour skill to create a review story for exactly this change: ${diff}.\n\n` +
+    return (`Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
         `Write ${DATA_DIR}/story.json and set its "base" field to "${baseRef}"${headField} and set its "mode" field to "${storyMode}". The story is for a human ` +
         `reviewer, not a changelog.\n\n` +
         modeContract +
         storyScopeContract +
         scopeContract +
-        `Work in three phases, in order. Phases 1 and 2 produce short visible notes in your output before any JSON; only phase 3 writes the file.\n\n` +
+        `Assume the reviewer remembers the requested outcome but not the app internals: module ownership, the existing call path, state flow, or why nearby unchanged code matters. Rebuild the smallest useful mental model before asking them to judge the changed lines.\n\n` +
+        `Work in four phases, in order. Phases 1 through 3 produce short visible notes in your output before any JSON; only phase 4 writes the file.\n\n` +
         `Live progress notes (streamed to the reviewer while you work):\n` +
-        `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Designing the reading path", then ">> Writing the steps".\n` +
+        `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Reconstructing the app path", then ">> Storyboarding the camera", then ">> Writing the steps".\n` +
         `- Print every phase note as its own line starting with ">> " — for example ">> Goal: enable keepers to cap the fee" or ">> Arc: the cap is stored, then enforced, then tested".\n` +
         `- Keep each note to one short, concrete sentence. These lines are shown live in the review UI, so no filler and no markdown.\n\n` +
         `Phase 1 — Recover the why (do this before reading the diff):\n` +
         `- Gather intent evidence: read the commit messages behind this diff (for example git log --oneline -15 over the diffed range or ref), the PR title and body when one exists (gh pr view --json title,body — skip quietly if there is no PR or no gh), and any plan, design, or changelog notes the change touches or references.\n` +
         `- Legitimate intent evidence: commit messages, PR bodies, docs, code comments, tests. Not evidence: branch names, filenames, vibes.\n` +
-        `- State the goal as actor + capability: "We wanted to enable <actor> to <capability>". If the change is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system. Then state the designed flow that achieves it: "To make that work, we designed the flow so X reaches Y, Y asks Z, and Z returns/stores/renders P".\n` +
+        `- State the goal as actor + capability: "We wanted to enable <actor> to <capability>". If the change is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system. Then state the designed flow that achieves it: "To make that work, the existing app path reaches X, this change attaches at Y, and Z now returns/stores/renders P".\n` +
         `- Write both into the story as "intent": {"goal": "...", "design": "...", "sources": ["commit abc1234", "PR #12 body", "docs/plan.md"]}. Every entry in "sources" names evidence you actually read.\n` +
         `- If no evidence exists, set "goal" to what the code demonstrably enables, use "sources": ["code-derived"], and keep the wording narrow. Never invent product intent.\n` +
         `- If the evidence contradicts what the code does, say so in the summary instead of silently picking one.\n\n` +
-        `Phase 2 — Design the reading path (do this before writing any JSON):\n` +
+        `Phase 2 — Reconstruct the app path (do this before storyboarding):\n` +
+        `- Read the exact diff, then read the complete post-change function, component, contract, schema, or test around every hunk. The diff says what moved; the surrounding source says where it lives.\n` +
+        `- Trace the smallest useful path one hop in both directions: find the inbound trigger, caller, route, event, or UI action; then find the outbound consumer, state write, render, return, external boundary, or assertion. Use symbol search and actual call sites, not filenames or guesses.\n` +
+        `- Inspect the base-side code when the reviewer needs to understand the previous behavior or a deletion. Read only relevant module docs, types, config, and tests; do not turn this into a repo tour.\n` +
+        `- Build a private context map: entry -> existing owner -> changed decision -> downstream effect -> proof or risk. For each link, record the exact source span and whether it belongs in the same viewport or needs a dedicated "context" step.\n` +
+        `- Make "intent.design" name the existing app path, the attachment point for this diff, and the new outcome. If reviewer guidance contains the original task, treat it as intent evidence, cite "reviewer guidance", and call out any mismatch with the code.\n\n` +
+        `Phase 3 — Storyboard the camera (do this before writing any JSON):\n` +
         `- Write the narrative arc as a visible note: intent -> flow -> implementation, not a list of touched files. Shape: "To enable <goal> we designed <flow>. To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
-        `- Build a private reviewer map: the behavior this change is really about, the first requirement-backed entry point, the control/data flow across files, the invariants and risks to verify, and which tests/docs prove each behavior. Assume the reviewer is auditing AI-authored code and needs a falsifiable mental model fast.\n` +
-        `- Order the stops by that arc — runtime, control, and data flow — never by filename. Start where someone who just read the goal would start: the new field, fee, struct, setting, endpoint, UI affordance, or public method that makes it real.\n` +
+        `- Turn the context map into a reviewer-visible path: app orientation -> behavioral entry -> changed decision -> downstream consequence -> proof. The first stop is the behavioral entry point, even when that requires a context step. Do not start with imports, icons, styling, generated output, or tests unless one of those is itself the feature.\n` +
+        `- Use viewport and highlights as a guided camera. One step is one local shot that fits without manual scrolling. One beat is one exact pointing gesture whose highlighted lines visibly prove its sentence.\n` +
+        `- For a changed step, prefer three quick camera beats when the code supports them: an orientation beat on the existing signature/caller/route/contract, a change beat on the exact new decision, and a consequence beat on the return/state write/call/assertion affected next. Context beats may and should highlight unchanged lines.\n` +
+        `- Add a dedicated context step when the caller, owner contract, stored field, feature flag, or downstream consumer is outside the changed hunk and the reviewer cannot judge the change without it. Say explicitly that it is unchanged; never add context as scenery.\n` +
+        `- Order the stops by runtime, control, and data flow — never by filename. Small changes may need one context-rich changed step; do not force a fixed number of stops.\n` +
         `- Order test: if sorting your planned steps by filename would not change how the story reads, it is not a story yet — reorder, or state in one line why file order genuinely is the clearest path.\n` +
         `- Thread rule: every step's first beat except the first must pick up what the previous step established ("Now that the cap is stored, here is who reads it"), so the steps read as one continuous story.\n` +
         `- Group related edits into one stop; do not emit one step per file or one step per hunk. Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n` +
         `- Each step must answer a reviewer question: where does the behavior start; what invariant changed; what is passed, rejected, stored, or rendered; what risk should the reviewer inspect; what proves this path works. Titles should read like falsifiable review claims or risks, not file captions.\n\n` +
-        `Phase 3 — Write the steps. Mechanics checklist:\n\n` +
+        `Phase 4 — Write the steps. Mechanics checklist:\n\n` +
         `Viewport contract:\n` +
         `- Every step must include "viewport": [startLine, endLine]. This is what the reviewer sees, chosen from the requirement and the code shape, not from the tiny diff hunk.\n` +
         `- Every step must include "highlights": [[startLine, endLine], ...]. These are the lines the story is currently talking about and the rows diffStory should glow while reading.\n` +
-        `- Pick the viewport first: usually the whole method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement.\n` +
-        `- Pick highlights second: the exact fee field, parameter, branch, guard, call, state write, assertion, or return path being discussed inside that viewport.\n` +
+        `- Pick the viewport first: usually the whole local method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement. It must answer "where am I?" before the glow asks for judgment.\n` +
+        `- A normal viewport is one screen and at most 60 lines. Split a larger function into overlapping local shots instead of asking the reviewer to hunt inside it. The [0, 0] deletion sentinel is the exception.\n` +
+        `- Pick highlights second: the existing signature/caller/route that orients the reviewer, the exact changed decision, and the nearby call/state write/assertion/return that shows its consequence. Unchanged lines are valid highlights when they restore context.\n` +
+        `- Each beat highlight should point at one fact, normally 1-8 lines and never more than 12. A broad glowing region is not a pointer; split it.\n` +
         `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
+        `- Keep "range" and every beat highlight inside "viewport". For new stories, top-level "highlights" must match the union of the beat highlights so there is one camera plan, not two conflicting ones.\n` +
         `- Do not make one step jump between far-apart highlight islands. If the story needs distant lines, split it into separate steps so each viewport/highlights pair stays local and scroll-stable.\n` +
         `- Keep "range" as the changed-line coverage anchor the coverage gate checks. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
         `Beat contract:\n` +
         `- Every new step must include "beats": [{"text": "short narration", "highlights": [[startLine, endLine]]}, ...].\n` +
         `- Each beat is a separate speech unit for read-aloud, so the code highlight can move exactly when the voice moves.\n` +
         `- Use one beat per highlighted code part. If a step has three review points, write three beats instead of one long "why".\n` +
+        `- The first beat must locate the reviewer in the existing flow unless the preceding context step already did; then point at the changed decision and its consequence in later beats.\n` +
         `- A beat may point at one small range or a few nearby related ranges, but it must stay inside the step "viewport".\n` +
         `- Do not put one big speech over several highlight groups; split it into beat-by-beat narration.\n` +
         `- Keep "why" as a compact fallback recap for older readers, but put the read-aloud story in "beats".\n\n` +
+        `Context contract:\n` +
+        `- Context belongs in the visible story, not only in your private notes. First try to frame the existing boundary and changed code together in one viewport.\n` +
+        `- Use kind "context" for important unchanged code in another file or distant section: a caller, public route, component owner, schema/storage contract, feature flag, or downstream consumer. Context steps do not claim diff coverage.\n` +
+        `- Brief mode normally avoids dedicated context steps; balanced mode uses only the few bridges needed to restore the flow; detailed mode may follow additional correctness boundaries.\n` +
+        `- Never use context for imports, nearby trivia, or architecture that does not change how the reviewer evaluates this task.\n\n` +
         `Writing contract:\n` +
         `- The top-level "summary" is the reading map: 1-3 short informal sentences on how the steps walk the implementation and where the reviewer should slow down. The goal and designed flow live in "intent"; do not repeat them in the summary.\n` +
         `- Step titles should name the exact behavior or risk being reviewed.\n` +
@@ -148,8 +176,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Cover every changed hunk so the coverage gate is clean — the review flags any change no step explains.\n\n` +
         `Range contract:\n` +
         `- Read the post-change file with line numbers before choosing ranges.\n` +
-        `- Ranges are review windows, not coverage hacks: use the smallest complete function/block/test/config region ` +
-        `that makes the change understandable.\n` +
+        `- "range" is only the changed-line coverage anchor; "viewport" is the review window. Keep the range inside its viewport and split distant hunks into separate steps.\n` +
         `- Do not use whole-file or giant ranges unless the whole file is new and small, or the entire file is truly ` +
         `the review unit.\n` +
         `- For pure deletions with surviving surrounding code, anchor the step at the post-change location where the deletion happened and include the ` +
@@ -169,11 +196,13 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Do not claim a test covers behavior unless the assertion is visible in the story range or in code you read.\n` +
         `- If you are uncertain, narrow the claim to what the code shows.\n\n` +
         `Falsifiable self-review before finishing:\n` +
+        `- Memory test: read only intent, summary, titles, and beats. A reviewer who remembers the request but not the app must be able to answer where the behavior enters, who owns it, what changed, where the result goes, and what proves or threatens it.\n` +
+        `- Camera test: follow only the files, viewports, and highlighted groups. Every beat's glow must visibly prove that sentence without scrolling or guessing; no viewport may exceed 60 lines and no beat highlight may exceed 12.\n` +
         `- Re-run the order test on the final steps: if filename order reads the same, reorder.\n` +
         `- Why test: strike any beat that only restates what the code does; every step must say why it exists in the designed flow and what it unlocks next.\n` +
         `- Thread test: read only the beats in order with no code — they must still form one continuous story with no jumps.\n` +
         `- Check every title names behavior/risk, every "why" stays compact, and calls/returnsTo reflect real control/data flow. Remove vague filler and unsupported safety claims.\n` +
-        `- Coverage: every changed hunk is claimed by a changed/new-file step, no step points at unchanged code, and ids, order, calls, and returnsTo resolve.\n\n` +
+        `- Coverage: every changed hunk is claimed by a changed/new-file step; every changed/new-file step has a beat overlapping its range; range and highlights stay inside viewport; context steps alone point at wholly unchanged code; ids, order, calls, and returnsTo resolve.\n\n` +
         `Do not ask questions. Generate it directly.`);
 }
 export function addressPrompt(target, base, head, opts = {}) {
@@ -194,13 +223,19 @@ export function addressPrompt(target, base, head, opts = {}) {
             `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
             `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
         : '';
-    const historical = opts.historicalCheckout && head
-        ? `Historical checkout contract:\n` +
-            `- You are running in a temporary checkout of "${head}" so code reads match the story's post-change side, even if the live repository has moved on.\n` +
-            (opts.originalRepo ? `- The live repository is ${opts.originalRepo}; use it only as identity context, not as the code state under review.\n` : '') +
-            `- Do not edit source files in this historical checkout. For change or nit requests, answer by appending a new ai turn (per the Conversation contract below) with the exact file/function and change you recommend instead of modifying the live branch.\n` +
-            `- For questions, answer from this checkout plus the explicit base/head diff above.\n\n`
-        : '';
+    const historical = opts.historicalCheckout && head && opts.resumedCodexTask
+        ? `Pinned historical review contract:\n` +
+            `- This resumed Codex task stays in the live repository, but the reviewed current side is the pinned commit "${head}", not today's working tree.\n` +
+            `- Do not edit source files. Read the reviewed code with "git show ${head}:<file>" and the exact change with "git diff ${base}..${head} -- <file>".\n` +
+            `- You may update ${DATA_DIR}/comments.json in the live repository so the review conversation receives your answer.\n` +
+            `- For change or nit requests, append a new ai turn with the exact file/function and change you recommend instead of modifying the live branch.\n\n`
+        : opts.historicalCheckout && head
+            ? `Historical checkout contract:\n` +
+                `- You are running in a temporary checkout of "${head}" so code reads match the story's post-change side, even if the live repository has moved on.\n` +
+                (opts.originalRepo ? `- The live repository is ${opts.originalRepo}; use it only as identity context, not as the code state under review.\n` : '') +
+                `- Do not edit source files in this historical checkout. For change or nit requests, answer by appending a new ai turn (per the Conversation contract below) with the exact file/function and change you recommend instead of modifying the live branch.\n` +
+                `- For questions, answer from this checkout plus the explicit base/head diff above.\n\n`
+            : '';
     const actionRules = opts.historicalCheckout
         ? `Act by type for each one:\n` +
             `- change → do not edit source files; answer concretely by appending a new ai turn with the exact change you would make on the live branch.\n` +
@@ -218,7 +253,7 @@ export function addressPrompt(target, base, head, opts = {}) {
         `- Each comment is a conversation. Its "body" is the reviewer's first message, followed by "turns" — an ordered list of {"role":"user"|"ai","text","at"} messages (a legacy comment may instead have a single "reply" string; treat it as the first ai turn).\n` +
         `- Read the whole thread and answer the latest "user" message in that context.\n\n` +
         `For every comment you handle: append a new turn {"role":"ai","text":"<your specific answer — name the function or file you changed, or give your answer>","at":"<ISO 8601 timestamp>"} to its "turns" array (create the array if it is absent). Never overwrite "body" or an existing turn. Then set "status" to "addressed". Preserve every other field and never delete a comment.\n\n` +
-        `If your edits moved code, re-run the diffStory review-tour skill so ${DATA_DIR}/story.json line ranges ` +
+        `If your edits moved code, re-run the diffstory-storyteller skill so ${DATA_DIR}/story.json line ranges ` +
         `stay correct and the coverage gate stays clean.\n\n` +
         `Do not ask questions. Make the changes directly.`);
 }
@@ -235,7 +270,7 @@ export function storyRepairPrompt(input) {
             ? `Rewrite ${target} to be shorter and sharper without dropping its review risk or causal link.`
             : `Split ${target} into two or more locally focused steps so no step jumps between distant code islands.`;
     const diff = input.head ? `${input.base}..${input.head}` : `${input.base}..working tree`;
-    return (`Use the diffStory review-tour skill to make one targeted repair to ${DATA_DIR}/story.json for ${diff}.\n\n` +
+    return (`Use the diffstory-storyteller skill to make one targeted repair to ${DATA_DIR}/story.json for ${diff}.\n\n` +
         `${instruction}\n\n` +
         `Preservation contract:\n` +
         `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
@@ -267,22 +302,34 @@ export function normalizeCodexRunOptions(input) {
     return { sandbox, provider, profile, config };
 }
 function codexArgs(prompt, model, opts = {}) {
-    const args = ['exec'];
+    const args = opts.threadId ? ['exec', 'resume'] : ['exec'];
     const sandbox = opts.sandbox ?? 'full-auto';
-    if (sandbox === 'full-auto')
-        args.push('--full-auto');
-    else if (sandbox === 'danger-full-access')
+    // `exec resume` inherits the task's cwd and permission settings. Its CLI does
+    // not accept the normal --sandbox/--profile/provider flags, so only apply
+    // those when creating a new task.
+    if (!opts.threadId) {
+        if (sandbox === 'full-auto')
+            args.push('--full-auto');
+        else if (sandbox === 'danger-full-access')
+            args.push('--dangerously-bypass-approvals-and-sandbox');
+        else
+            args.push('--sandbox', sandbox);
+        if (opts.provider === 'lmstudio' || opts.provider === 'ollama')
+            args.push('--oss', '--local-provider', opts.provider);
+        if (opts.profile)
+            args.push('--profile', opts.profile);
+    }
+    else if (sandbox === 'danger-full-access') {
         args.push('--dangerously-bypass-approvals-and-sandbox');
-    else
-        args.push('--sandbox', sandbox);
-    if (opts.provider === 'lmstudio' || opts.provider === 'ollama')
-        args.push('--oss', '--local-provider', opts.provider);
-    if (opts.profile)
-        args.push('--profile', opts.profile);
+    }
     for (const cfg of opts.config ?? [])
         args.push('-c', cfg);
     if (model)
         args.push('--model', model);
+    if (opts.json)
+        args.push('--json');
+    if (opts.threadId)
+        args.push(opts.threadId);
     args.push(prompt);
     return args;
 }
@@ -291,7 +338,10 @@ export function agentCommand(agent, prompt, model, options = {}) {
     if (agent === 'claude') {
         return ['claude', ['-p', prompt, '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL]];
     }
-    return ['codex', codexArgs(prompt, model, options.codex)];
+    // Discovery and execution must use the same runtime. On macOS the Desktop
+    // app can bundle a newer Codex than the one on PATH; detecting the former
+    // and launching the latter makes valid Desktop models fail at run time.
+    return [options.codex?.binary ?? codexTaskBinary(), codexArgs(prompt, model, options.codex)];
 }
 /**
  * Run the agent in `repo`, capturing its (often noisy) output instead of dumping
@@ -324,7 +374,7 @@ export function streamCommand(agent, prompt, model, options = {}) {
                 '--permission-mode', 'acceptEdits', '--model', model ?? DEFAULT_CLAUDE_MODEL],
         ];
     }
-    return ['codex', codexArgs(prompt, model, options.codex)];
+    return [options.codex?.binary ?? codexTaskBinary(), codexArgs(prompt, model, options.codex)];
 }
 /** A readable one-line summary of a tool call for the activity feed. */
 export function toolSummary(name, input) {
@@ -398,15 +448,115 @@ export function parseClaudeStreamLine(line) {
     }
     return out;
 }
-/** Codex exec streams human-readable text; forward prose, promote `$ cmd` lines. */
+/** Extract a useful message from one Codex CLI error line, including `ERROR: {json}`. */
+export function codexErrorMessage(line) {
+    const raw = line.trim();
+    if (!raw)
+        return undefined;
+    const prefixed = /^ERROR:\s*/i.test(raw);
+    const candidate = prefixed ? raw.replace(/^ERROR:\s*/i, '') : raw;
+    try {
+        const parsed = JSON.parse(candidate);
+        if (!parsed || typeof parsed !== 'object')
+            return undefined;
+        const nested = parsed.error;
+        const message = (nested && typeof nested === 'object' && typeof nested.message === 'string' && nested.message) ||
+            (typeof nested === 'string' && nested) ||
+            (typeof parsed.message === 'string' && parsed.message);
+        return message ? String(message).trim() : undefined;
+    }
+    catch {
+        return prefixed && candidate.trim() ? candidate.trim() : undefined;
+    }
+}
+function unique(values) {
+    const seen = new Set();
+    return values.filter((value) => {
+        const clean = value.trim();
+        if (!clean || seen.has(clean))
+            return false;
+        seen.add(clean);
+        return true;
+    });
+}
+function compactFailureText(value, max = 420) {
+    const clean = value.replace(/\s+/g, ' ').trim();
+    return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+}
+/** Turn noisy stdout/stderr into one actionable failure plus deduplicated diagnostics. */
+export function summarizeAgentFailure(output, failure = 'execution') {
+    const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const messages = unique(lines.map(codexErrorMessage).filter((message) => !!message));
+    const upgradeMessage = messages.find((message) => /\bmodel requires a newer version of Codex\b/i.test(message));
+    if (upgradeMessage) {
+        const model = /The ['"]([^'"]+)['"] model requires a newer version of Codex/i.exec(upgradeMessage)?.[1];
+        return {
+            label: model ? `Codex needs an update for ${model}` : 'Codex needs an update for this model',
+            detail: 'The Codex runtime diffStory started cannot use this model. Update Codex, or choose another model and try again.',
+            technicalDetail: upgradeMessage,
+        };
+    }
+    const diagnosticLines = messages.length ? messages : unique(lines).slice(-12);
+    const lastMessage = diagnosticLines.at(-1);
+    return {
+        label: failure === 'startup' ? 'The agent could not start' : 'The agent stopped before finishing',
+        detail: lastMessage
+            ? compactFailureText(lastMessage)
+            : failure === 'startup'
+                ? 'Check that the selected agent is installed, then try again.'
+                : 'Try again. If it fails again, open the technical details below.',
+        technicalDetail: diagnosticLines.join('\n'),
+    };
+}
+/** Codex exec streams human-readable text or JSONL when a reusable task is requested. */
 export function parseCodexStreamLine(line) {
     const s = line.replace(/\s+$/, '');
     if (!s.trim())
         return [];
+    // Terminal JSON errors are summarized once after the process exits. Sending
+    // them as live text too produces the duplicated raw wall the user saw.
+    if (codexErrorMessage(s))
+        return [];
+    try {
+        const event = JSON.parse(s);
+        const item = event?.item;
+        if (event?.type !== 'item.completed' || !item)
+            return [];
+        if (item.type === 'agent_message' && item.text)
+            return [textEvent(String(item.text))];
+        if (item.type === 'command_execution' && item.command)
+            return [commandEvent(String(item.command))];
+        if (item.type === 'web_search')
+            return [activityEvent('web', String(item.query ?? 'Searching the web'))];
+        if (item.type === 'mcp_tool_call')
+            return [toolEvent(String(item.tool ?? item.name ?? 'MCP tool'), 'MCP')];
+        if (item.type === 'file_change')
+            return [activityEvent('other', 'Updating files')];
+        return [];
+    }
+    catch {
+        // Human-readable Codex output follows the legacy path below.
+    }
     const m = s.match(/^\s*\$\s+(.+)$/);
     if (m)
         return [commandEvent(m[1])];
     return [textEvent(s)];
+}
+export function codexThreadIdFromOutput(output) {
+    for (const line of output.split('\n')) {
+        if (!line.trim().startsWith('{'))
+            continue;
+        try {
+            const event = JSON.parse(line);
+            const id = event?.thread_id ?? event?.threadId;
+            if (event?.type === 'thread.started' && typeof id === 'string')
+                return id;
+        }
+        catch {
+            // Ignore non-JSON output mixed into the stream.
+        }
+    }
+    return undefined;
 }
 function lineParser(agent) {
     return agent === 'claude' ? parseClaudeStreamLine : parseCodexStreamLine;
@@ -442,7 +592,8 @@ export function streamAgent(agent, repo, prompt, onEvent, model, signal, options
             if (buf)
                 for (const e of parse(buf))
                     onEvent(e); // flush the last partial line
-            resolve(code === 0 ? { ok: true, output } : { ok: false, output, failure: 'execution' });
+            const threadId = agent === 'codex' ? codexThreadIdFromOutput(output) : undefined;
+            resolve(code === 0 ? { ok: true, output, threadId } : { ok: false, output, failure: 'execution', threadId });
         });
     });
 }

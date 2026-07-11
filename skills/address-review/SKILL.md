@@ -50,7 +50,7 @@ back what you did, and leave the file in a state the reviewer can re-review.
    Write the full array back to `.diffstory/comments.json` (valid JSON).
 
 5. **Refresh the tour.** If your edits moved code or added/removed logic, re-run the
-   **review-tour** skill so `.diffstory/story.json` reflects the new state (line ranges will
+   **diffstory-storyteller** skill so `.diffstory/story.json` reflects the new state (line ranges will
    have shifted). At minimum, make sure every change is still covered by a step.
 
 6. **Hand back.** Tell the user: *"Addressed N comments — refresh the diffStory app to see the

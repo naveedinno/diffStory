@@ -24,13 +24,17 @@ test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
-test('viewed-file tracking is visible, accessible, and wired through storage and the v key', () => {
+test('seen-file tracking is visible, accessible, and wired through existing storage and the v key', () => {
   assert.match(DIFF_JS, /function toggleViewed\(/);
   assert.match(DIFF_JS, /function syncViewed\(/);
   assert.match(DIFF_JS, /'ds-viewed:'/);
   assert.match(PAGE_JS, /data-viewed-toggle/);
   assert.match(DIFF_JS, /setAttribute\('aria-pressed',on\?'true':'false'\)/);
-  assert.match(DIFF_JS, /data-viewed-label/);
+  assert.match(DIFF_JS, /on\?' unseen':' seen'/);
+  assert.match(DIFF_JS, /on\?'Seen':'Mark seen'/);
+  assert.match(DIFF_JS, /n\+' of '\+total\+' seen'/);
+  assert.match(PAGE_JS, /activeFileFilter==='seen'/);
+  assert.match(PAGE_JS, /activeFileFilter==='unseen'/);
   assert.match(PAGE_JS, /e\.key==='v'\|\|e\.key==='V'/);
 });
 

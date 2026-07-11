@@ -26,10 +26,10 @@ const TRASH = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" strok
 function storyRow(s, now, routeBase) {
     const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
     const mode = s.mode === 'brief'
-        ? 'Brief story'
+        ? 'Compact story'
         : s.mode === 'detailed'
-            ? 'Line-by-line story'
-            : 'Balanced story';
+            ? 'Deep review'
+            : 'Guided review';
     const badges = (s.current ? `<span class="badge badge-cur">Current</span>` : '') +
         (s.valid ? '' : `<span class="badge badge-bad">Needs fix</span>`);
     const meta = s.valid

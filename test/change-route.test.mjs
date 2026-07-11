@@ -132,7 +132,7 @@ test('opening a repo lands on story selection before generating a new story', as
 
     const diff = await (await fetch(`${base}${route}/diff`)).text();
     assert.ok(diff.includes('data-storyless'), '/diff renders the real review page with no story');
-    assert.ok(diff.includes('Generate story'), '/diff Story tab offers Generate story');
+    assert.ok(diff.includes('Generate guided review'), '/diff Story tab offers the recommended guided review');
     assert.ok(diff.includes('a.txt'), '/diff shows the changed file');
 
     const again = await (await fetch(`${base}${route}/stories`)).text();

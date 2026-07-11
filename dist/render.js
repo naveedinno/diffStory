@@ -61,14 +61,15 @@ export function renderPage(input) {
     // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
     const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));
     const openCount = comments.filter((c) => c.status !== 'resolved').length;
+    const sendableCount = comments.filter((c) => c.status === 'open').length;
     const uncoveredCount = model.trust.uncovered.length;
     const approveReady = openCount === 0 && uncoveredCount === 0;
-    // No story → no coverage to report, so the trust pill is meaningless; hide it.
+    // No story → no coverage to report, so the coverage row is meaningless; hide it.
     const trustPill = storyless
         ? ''
         : `<button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${uncoveredCount
-            ? `<span class="ds-tri">▲</span><b>${uncoveredCount}</b> unexplained`
-            : `<span class="ds-check">✓</span> all changes explained`}</button>`;
+            ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
+            : `<span class="ds-check">✓</span><span>Story covers every change</span><span class="ds-review-row-arrow">›</span>`}</button>`;
     const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
     const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
     const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
@@ -88,7 +89,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-review-round="${reviewState.round}" data-review-snapshot="${esc(reviewState.currentSnapshotId ?? '')}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
+<body${storyless ? ' data-storyless="1"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-review-round="${reviewState.round}" data-review-snapshot="${esc(reviewState.currentSnapshotId ?? '')}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
 <header class="ds-top">
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
@@ -106,6 +107,7 @@ ${BRAND_HEAD_LINKS}
   <div class="ds-settings-wrap">
     <button class="ds-readaloud" data-readaloud title="Read story aloud" aria-label="Read story aloud" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span class="ds-sr-only" data-readaloud-label>Read aloud</span></button>
     <button class="ds-gear" data-settings title="Voice settings" aria-label="Voice settings">⚙</button>
+    <button class="ds-gear ds-help" data-shortcuts-open title="Commands and shortcuts" aria-label="Commands and shortcuts">?</button>
     <div class="ds-settings-pop" id="ds-settings" hidden>
       <div class="ds-voice-head">
         <div>
@@ -167,57 +169,65 @@ ${BRAND_HEAD_LINKS}
         <span>Reload diff</span>
       </button>`
         : ''}
+    <button class="ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions" aria-label="Choose agent task">
+      <span class="ds-agent-target-icon" aria-hidden="true">◈</span>
+      <span class="ds-agent-target-prefix">Agent</span>
+      <span class="ds-agent-target-sep" aria-hidden="true">·</span>
+      <span class="ds-agent-target-name" data-agent-target-name>Choose task</span>
+      <span class="ds-agent-target-caret" aria-hidden="true">⌄</span>
+    </button>
     <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu" data-review-menu aria-haspopup="menu" aria-expanded="false" aria-label="Review, ${openCount} ${plural(openCount, 'open comment')}" title="Open review actions">
+      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : ''}" title="Open review status">
         <span class="ds-review-menu-dot" aria-hidden="true"></span>
         <span>Review</span>
-        <span class="ds-review-menu-count" id="ds-open-count" title="Open comments"><b>${openCount}</b></span>
+        ${uncoveredCount ? `<span class="ds-review-menu-coverage" title="Changes not explained by the story">${uncoveredCount} unexplained</span>` : ''}
+        <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
         <span class="ds-review-menu-caret" aria-hidden="true">⌄</span>
       </button>
-      <div class="ds-review-menu-pop" data-review-menu-pop role="menu" hidden>
+      <div class="ds-review-menu-pop" data-review-menu-pop role="dialog" aria-label="Review status and actions" tabindex="-1" hidden>
         <div class="ds-review-menu-title">Review</div>
         <div class="ds-review-summary">
-          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><b>${openCount}</b> ${plural(openCount, 'open comment')}</span>
+          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'comment')}</span></span>
           ${trustPill}
         </div>
-        <button class="ds-review-option" data-address-all role="menuitem"${openCount ? '' : ' disabled'} title="Resend every open comment to your agent">
-          <span class="ds-review-option-title">Send open comments</span>
-          <span class="ds-review-option-desc">For older notes, or if an auto-send failed.</span>
+        <div class="ds-review-section">
+        <button class="ds-review-option" data-feedback-open="feedback"${comments.length ? '' : ' disabled'}>
+          <span class="ds-review-option-title">Feedback <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span></span>
+          <span class="ds-review-option-desc">Verify replies and resolve comments.</span>
         </button>
-        <button class="ds-review-option" data-copy-comments="open" role="menuitem"${openCount ? '' : ' disabled'} title="Copy open comments as text to paste into your own agent chat">
-          <span class="ds-review-option-title">Copy open comments</span>
-          <span class="ds-review-option-desc">Grab the open comments as text to paste into any agent chat yourself.</span>
+        <button class="ds-review-option" data-feedback-open="timeline">
+          <span class="ds-review-option-title">Timeline</span>
+          <span class="ds-review-option-desc">Review rounds, comments, and agent runs.</span>
         </button>
-        <button class="ds-review-option" data-copy-comments="all" role="menuitem"${comments.length ? '' : ' disabled'} title="Copy every comment, including resolved ones and diffStory's replies">
-          <span class="ds-review-option-title">Copy all comments</span>
-          <span class="ds-review-option-desc">The full thread — every status, with replies — for context.</span>
-        </button>
-        <button class="ds-review-option" data-feedback-open="feedback" role="menuitem"${comments.length ? '' : ' disabled'}>
-          <span class="ds-review-option-title">Review feedback${comments.length ? ` <span class="ds-option-count">${comments.length}</span>` : ''}</span>
-          <span class="ds-review-option-desc">Verify agent replies, reopen issues, or jump back to the code.</span>
-        </button>
-        <button class="ds-review-option" data-feedback-open="timeline" role="menuitem">
-          <span class="ds-review-option-title">Review timeline</span>
-          <span class="ds-review-option-desc">See review rounds, feedback, agent runs, and verification.</span>
-        </button>
-        <button class="ds-review-option" data-resume-review role="menuitem" hidden>
-          <span class="ds-review-option-title">Resume last position</span>
-          <span class="ds-review-option-desc" data-resume-review-label>Return to where you stopped reading.</span>
-        </button>
-        <button class="ds-review-option" data-shortcuts-open role="menuitem">
-          <span class="ds-review-option-title">Commands and shortcuts <span class="ds-keycap">?</span></span>
-          <span class="ds-review-option-desc">Navigate, filter, comment, and control read-aloud.</span>
-        </button>
-        <button class="ds-review-option" data-verdict="request" role="menuitem">
-          <span class="ds-review-option-title">Ask for fixes</span>
-          <span class="ds-review-option-desc">Use this when the change is not ready to merge.</span>
-        </button>
-        <button class="ds-review-option ds-review-option-approve" data-verdict="approve" role="menuitem"${approveReady ? '' : ' disabled'} title="${approveReady
+        </div>
+        <div class="ds-review-decision">
+          <div class="ds-review-section-label">Decision</div>
+        <button class="ds-review-option ds-review-option-approve" data-verdict="approve"${approveReady ? '' : ' disabled'} title="${approveReady
         ? 'Everything is covered and there are no open comments'
         : 'Resolve open comments and make sure every change is explained first'}">
-          <span class="ds-review-option-title"><span class="ds-check">✓</span> Mark approved</span>
-          <span class="ds-review-option-desc">Available when comments are resolved and the story covers the diff.</span>
+          <span class="ds-review-option-title"><span class="ds-check">✓</span> Approve</span>
+          <span class="ds-review-option-desc" data-approve-desc>${approveReady
+        ? 'Everything is covered and resolved.'
+        : openCount
+            ? `Resolve ${openCount} ${plural(openCount, 'comment')} first.`
+            : `Explain ${uncoveredCount} more ${plural(uncoveredCount, 'change')} in the story first.`}</span>
         </button>
+        </div>
+        <details class="ds-review-more">
+          <summary>More review actions <span aria-hidden="true">⌄</span></summary>
+          <div class="ds-review-more-list">
+            <button class="ds-review-option" data-address-all${sendableCount ? '' : ' disabled'} title="Resend every open comment to your agent">
+              <span class="ds-review-option-title">Resend open comments</span>
+              <span class="ds-review-option-desc" data-agent-target-batch>Choose an agent task first.</span>
+            </button>
+            <button class="ds-review-option" data-copy-comments="open"${sendableCount ? '' : ' disabled'} title="Copy open comments as text">
+              <span class="ds-review-option-title">Copy open comments</span>
+            </button>
+            <button class="ds-review-option" data-copy-comments="all"${comments.length ? '' : ' disabled'} title="Copy every comment, including resolved ones and replies">
+              <span class="ds-review-option-title">Copy full review</span>
+            </button>
+          </div>
+        </details>
       </div>
     </div>
   </div>
@@ -234,6 +244,7 @@ ${reviewRoundBar(reviewState, reviewMode)}
         <button class="ds-tab is-active" id="ds-tab-tour" data-view="tour" role="tab" aria-controls="ds-view-tour" aria-selected="true" tabindex="0">Story</button>
         <button class="ds-tab" id="ds-tab-files" data-view="files" role="tab" aria-controls="ds-view-files" aria-selected="false" tabindex="-1">All files</button>
       </div>
+      <button class="ds-resume-review" data-resume-review type="button" hidden><span aria-hidden="true">↩</span><span data-resume-review-label>Resume where you stopped</span></button>
     </div>
     ${introCard(model)}
     <div class="ds-readhead" data-rail="tour">
@@ -252,13 +263,14 @@ ${reviewRoundBar(reviewState, reviewMode)}
         <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Filter files" aria-label="Filter changed files"></label>
         <div class="ds-filefilters" aria-label="File filters">
           <button class="is-active" data-file-filter="all">All</button>
-          <button data-file-filter="unviewed">Unviewed</button>
+          <button data-file-filter="seen">Seen</button>
+          <button data-file-filter="unseen">Unseen</button>
           <button data-file-filter="comments">Comments</button>
           <button data-file-filter="unexplained">Unexplained</button>
           <button data-file-filter="tests">Tests</button>
           ${reviewState.compareFrom ? '<button data-file-filter="since">Since review</button>' : ''}
         </div>
-        <button class="ds-next-unviewed" data-next-unviewed type="button">Next unviewed <span aria-hidden="true">→</span></button>
+        <button class="ds-next-unviewed" data-next-unviewed type="button">Next unseen <span aria-hidden="true">→</span></button>
       </div>
     </div>
     <div class="ds-railscroll">
@@ -396,11 +408,10 @@ function introPanel(model, tour) {
     const lede = goalText ||
         summaryText ||
         'Each step builds on the one before it — read them in order, or jump to any file from the list.';
-    const design = goalText && intent?.design?.trim() ? `<p class="ds-intro-design">${nl(esc(intent.design.trim()))}</p>` : '';
-    const map = goalText && summaryText ? `<p class="ds-intro-design">${summaryText}</p>` : '';
-    const sources = goalText && intent?.sources?.length
-        ? `<p class="ds-intro-sources">Why from ${intent.sources.map((s) => esc(s)).join(' · ')}</p>`
+    const design = goalText && intent?.design?.trim()
+        ? `<p class="ds-intro-design" data-speech-overview>${nl(esc(intent.design.trim()))}</p>`
         : '';
+    const map = goalText && summaryText ? `<p class="ds-intro-design" data-speech-overview>${summaryText}</p>` : '';
     const filesLabel = `${plural(model.filesChanged, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
     const trustFact = trust
         ? `<div class="ds-fact ds-fact-warn"><span class="ds-fact-n">▲ ${trust}</span><span class="ds-fact-l">unexplained ${plural(trust, 'change')}</span></div>`
@@ -415,8 +426,8 @@ function introPanel(model, tour) {
     <div class="ds-introwrap">
       <span class="ds-intro-eyebrow">${STORY_MARK}<span>The story of this change</span></span>
       <h1 class="ds-intro-title">${esc(tour.title)}</h1>
-      <p class="ds-intro-lede">${lede}</p>
-      ${design}${map}${sources}
+      <p class="ds-intro-lede" data-speech-overview>${lede}</p>
+      ${design}${map}
       <div class="ds-intro-facts">
         <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(n, 'step')} to read in order</span></div>
         <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
@@ -436,9 +447,10 @@ function fileExtension(path) {
 }
 function storyScopeControls(files) {
     const changed = files.filter((f) => f.kind !== 'context');
+    const scopeOpen = changed.length <= 12 ? ' open' : '';
     const extButtons = [...new Set(changed.map((f) => fileExtension(f.file)).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b))
-        .map((ext) => `<button class="ds-scopechip" type="button" data-story-ext="${esc(ext)}">${esc(ext)}</button>`)
+        .map((ext) => `<button class="ds-scopechip" type="button" data-story-ext="${esc(ext)}">Only ${esc(ext)}</button>`)
         .join('');
     const rows = changed
         .map((file) => `<label class="ds-storyfile" title="${esc(file.file)}">` +
@@ -447,22 +459,43 @@ function storyScopeControls(files) {
         `<span class="ds-storyfile-stat"><span class="ds-stat-add">+${file.add}</span><span class="ds-stat-del">−${file.del}</span></span>` +
         `</label>`)
         .join('');
-    return `<div class="ds-storygen-field ds-field-scope">
-      <span class="ds-storygen-label">Story files <b id="storyScopeCount">${changed.length}</b></span>
-      <div class="ds-storyscope-actions" aria-label="Story file selection shortcuts">
-        <button class="ds-scopechip" type="button" data-story-scope-action="all">All</button>
-        <button class="ds-scopechip" type="button" data-story-scope-action="source">Source</button>
-        <button class="ds-scopechip" type="button" data-story-scope-action="tests">Tests</button>
-        <button class="ds-scopechip" type="button" data-story-scope-action="config">Config</button>
-        <button class="ds-scopechip" type="button" data-story-scope-action="none">None</button>
-        ${extButtons}
+    return `<label class="ds-storygen-field ds-field-note">
+      <span class="ds-storygen-labelrow">
+        <span class="ds-storygen-label">What should this change accomplish?</span>
+        <span class="ds-storygen-optional">Optional · recommended</span>
+      </span>
+      <textarea id="storyReviewerNote" rows="4" placeholder="Paste the request, acceptance criteria, or anything the story must not miss."></textarea>
+      <small class="ds-storygen-help">This helps the agent separate intended behavior from accidental changes.</small>
+    </label>
+    <details class="ds-storyscope" data-story-scope${scopeOpen}>
+      <summary>
+        <span class="ds-storyscope-copy">
+          <span class="ds-storygen-label">Files to cover</span>
+          <small>Every selected file gets the same coverage check.</small>
+        </span>
+        <span class="ds-storyscope-summary">
+          <strong aria-live="polite"><b id="storyScopeCount">${changed.length}</b> of ${changed.length} selected</strong>
+          <span class="ds-storyscope-edit">Change</span>
+          <span class="ds-storyscope-caret" aria-hidden="true">⌄</span>
+        </span>
+      </summary>
+      <div class="ds-storyscope-body">
+        <label class="ds-storyfile-search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" data-story-file-search placeholder="Find a file" aria-label="Find a story file">
+        </label>
+        <div class="ds-storyscope-actions" aria-label="Story file selection shortcuts">
+          <button class="ds-scopechip" type="button" data-story-scope-action="all">Select all</button>
+          <button class="ds-scopechip" type="button" data-story-scope-action="source">Only source</button>
+          <button class="ds-scopechip" type="button" data-story-scope-action="tests">Only tests</button>
+          <button class="ds-scopechip" type="button" data-story-scope-action="config">Only config</button>
+          <button class="ds-scopechip" type="button" data-story-scope-action="none">Clear</button>
+          ${extButtons}
+        </div>
+        <div class="ds-storyfiles">${rows}</div>
+        <p class="ds-storyscope-error" id="storyScopeError" tabindex="-1" hidden>Select at least one file before generating the story.</p>
       </div>
-      <div class="ds-storyfiles">${rows}</div>
-    </div>
-    <label class="ds-storygen-field ds-field-note">
-      <span class="ds-storygen-label">Guidance</span>
-      <textarea id="storyReviewerNote" rows="4" placeholder="Tell the agent what to pay extra attention to."></textarea>
-    </label>`;
+    </details>`;
 }
 function generateCta(model, routeBase, baseRef, headRef) {
     const filesLabel = `${plural(model.filesChanged, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
@@ -480,36 +513,50 @@ function generateCta(model, routeBase, baseRef, headRef) {
       <div class="ds-storygen-card">
         <div class="ds-storygen-head">
           <div>
-            <span class="ds-storygen-eyebrow">Generate a story</span>
-            <strong>${model.filesChanged} ${plural(model.filesChanged, 'file')}</strong>
+            <span class="ds-storygen-eyebrow">Story setup</span>
+            <strong>Choose how the story should guide your review</strong>
+            <p>Every mode reviews the same selected changes. Depth changes the grouping, context, and explanation—not the coverage.</p>
           </div>
-          <span class="ds-storygen-stat"><span class="ds-stat-add">+${model.totalAdd}</span><span class="ds-stat-del">−${model.totalDel}</span></span>
         </div>
         <div class="ds-storygen-grid">
-          <div class="ds-storygen-field ds-field-agent">
-            <span class="ds-storygen-label">Agent</span>
-            <input id="storyAgentSel" type="hidden" value="codex" />
-            <div class="ds-choicegroup" id="storyAgentChoices" role="radiogroup" aria-label="Agent"></div>
-          </div>
-          <div class="ds-storygen-field ds-field-model">
-            <span class="ds-storygen-label">Model</span>
-            <input id="storyModelSel" type="hidden" value="" />
-            <div class="ds-choicegroup" id="storyModelChoices" role="radiogroup" aria-label="Model"></div>
-          </div>
-          <div class="ds-storygen-field ds-field-detail">
-            <span class="ds-storygen-label">Detail</span>
+          <fieldset class="ds-storygen-field ds-field-detail">
+            <legend class="ds-storygen-label">Review depth</legend>
+            <p class="ds-storygen-help" id="storyDepthHelp">Choose how much guidance you want, not how much code you are willing to miss.</p>
             <input id="storyMode" type="hidden" value="guided" />
-            <div class="ds-choicegroup" role="radiogroup" aria-label="Story detail">
-              <button class="ds-choice" type="button" data-story-choice="storyMode" data-value="brief" aria-pressed="false" title="One short sentence per meaningful change cluster">Brief</button>
-              <button class="ds-choice is-active" type="button" data-story-choice="storyMode" data-value="guided" aria-pressed="true" title="Enough context to review the change in order">Balanced</button>
-              <button class="ds-choice" type="button" data-story-choice="storyMode" data-value="detailed" aria-pressed="false" title="Walk important ranges line by line">Line-by-line</button>
+            <div class="ds-depthchoices" role="radiogroup" aria-label="Story depth" aria-describedby="storyDepthHelp">
+              <button class="ds-depthchoice" type="button" role="radio" data-story-choice="storyMode" data-value="brief" aria-checked="false" tabindex="-1">
+                <span class="ds-depthchoice-top"><span class="ds-depthchoice-radio" aria-hidden="true"></span><strong>Compact</strong><span class="ds-depthchoice-badge">Shortest</span></span>
+                <span class="ds-depthchoice-desc">Groups related edits into the fewest useful stops and keeps low-risk mechanical detail brief.</span>
+                <span class="ds-depthchoice-meta">Same selected changes</span>
+              </button>
+              <button class="ds-depthchoice is-active" type="button" role="radio" data-story-choice="storyMode" data-value="guided" aria-checked="true" tabindex="0">
+                <span class="ds-depthchoice-top"><span class="ds-depthchoice-radio" aria-hidden="true"></span><strong>Guided review</strong><span class="ds-depthchoice-badge is-recommended">Recommended</span></span>
+                <span class="ds-depthchoice-desc">Follows intent, behavior, and code flow with the context that matters—without narrating every line.</span>
+                <span class="ds-depthchoice-meta">Same selected changes</span>
+              </button>
+              <button class="ds-depthchoice" type="button" role="radio" data-story-choice="storyMode" data-value="detailed" aria-checked="false" tabindex="-1">
+                <span class="ds-depthchoice-top"><span class="ds-depthchoice-radio" aria-hidden="true"></span><strong>Deep review</strong><span class="ds-depthchoice-badge">Most detail</span></span>
+                <span class="ds-depthchoice-desc">Adds smaller stops for guards, branches, state writes, errors, side effects, and tests.</span>
+                <span class="ds-depthchoice-meta">Trivial syntax stays skipped</span>
+              </button>
             </div>
+          </fieldset>
+          <div class="ds-storygen-field ds-field-agent is-wide">
+            <span class="ds-storygen-label">Writer</span>
+            <input id="storyAgentSel" type="hidden" value="" />
+            <div class="ds-choicegroup" id="storyAgentChoices" role="radiogroup" aria-label="Story writer"></div>
+            <p class="ds-storygen-agent-state" data-story-agent-state aria-live="polite" tabindex="-1">Checking available writers…</p>
+          </div>
+          <div class="ds-storygen-field ds-field-model" data-story-quality-field hidden>
+            <span class="ds-storygen-label">Quality</span>
+            <input id="storyModelSel" type="hidden" value="" />
+            <div class="ds-choicegroup" id="storyModelChoices" role="radiogroup" aria-label="Story quality"></div>
           </div>
           ${storyScopeControls(model.files)}
         </div>
-        <button class="ds-intro-start ds-storygen-button" data-generate-story data-review-url="${esc(routeBase)}/review?story=story.json"${dataBase}${dataHead}>
-          <span class="ds-intro-start-main">Generate story <span class="ds-intro-arrow">→</span></span>
-          <span class="ds-intro-start-sub">The agent writes the walkthrough for this diff scope</span>
+        <button class="ds-intro-start ds-storygen-button" data-generate-story disabled data-review-url="${esc(routeBase)}/review?story=story.json"${dataBase}${dataHead}>
+          <span class="ds-intro-start-main"><span data-storygen-cta-label>Generate guided review</span> <span class="ds-intro-arrow">→</span></span>
+          <span class="ds-intro-start-sub" data-storygen-cta-sub>${plural(model.filesChanged, 'file')} selected · gaps are flagged as Unexplained</span>
         </button>
         <p class="ds-storygen-warn" id="storySkillWarn" hidden><span id="storySkillWarnText"></span><button class="ds-storygen-fix" id="storySkillUpdateBtn" type="button">Update skills</button></p>
       </div>
@@ -622,13 +669,14 @@ function changeJumpControls() {
 // ---- story tour ----
 function stepPanel(repo, s, i, total, comments) {
     const editor = vscodeLink(repo, s.file, 1);
+    const diffRegionId = `ds-story-diff-${i + 1}`;
     const nextDisabled = i === total - 1 ? ' disabled' : '';
     // Call-flow lives here now (not on every rail card). Only show the meaningful
     // cross-references — "Standalone"/"Final step" carry no navigation cue.
     const flow = /^(Calls|Returns)/.test(s.flow)
         ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
         : '';
-    return `<section class="ds-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
+    return `<section class="ds-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
@@ -649,32 +697,78 @@ function stepPanel(repo, s, i, total, comments) {
     </div>
     <div class="ds-why">
       <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><span class="ds-flex"></span><details class="ds-story-tune"><summary title="Tune this story step" aria-label="Tune this story step">•••</summary><div><button type="button" data-story-repair="shorten" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}">Make shorter</button><button type="button" data-story-repair="split" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}">Split this step</button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
-      ${stepStoryHtml(s)}
+      ${stepStoryHtml(s, diffRegionId)}
     </div>
     <div class="ds-diffscroll">
-      <div class="ds-diff" data-diff data-file="${esc(s.file)}"${s.newFile ? ' data-newfile="1"' : ''}>
+      <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
           <span class="ds-difthint" data-difthint>Showing storyteller-selected viewport</span>
           <span class="ds-flex"></span>
           ${changeJumpControls()}
           <div class="ds-modetoggle">
-            <button class="is-active" data-mode="diff">Diff</button>
+            <button data-mode="diff">Unified</button>
+            <button class="is-active" data-mode="split">Split</button>
             <button data-mode="full">Full file</button>
           </div>
         </div>
-        <div data-diff-inner>${diffInner(s, comments)}</div>
+        <div data-diff-inner hidden>${storyUnifiedDiffInner(s, comments)}</div>
+        <div data-split-inner data-loaded="1">${diffInner(s, comments)}</div>
         <div data-full-inner hidden></div>
       </div>
     </div>
   </section>`;
 }
-function stepStoryHtml(s) {
+function stepStoryHtml(s, diffRegionId) {
     if (!s.beats.length)
         return `<p class="ds-why-text">${nl(esc(s.why))}</p>`;
-    return `<div class="ds-beats">${s.beats.map(beatHtml).join('')}</div>`;
+    return `<div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div><div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>`;
 }
-function beatHtml(beat) {
-    return `<p class="ds-beat" data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(beat.text)}"><span class="ds-beat-index">${beat.focusGroup + 1}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></p>`;
+function beatHtml(beat, file, diffRegionId) {
+    const destination = beatDestination(file, beat.highlights);
+    return `<button type="button" class="ds-beat" data-story-beat data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(beat.text)}" data-focus-destination="${esc(destination)}" aria-controls="${diffRegionId}" aria-pressed="false" aria-label="Focus beat ${beat.focusGroup + 1}: ${esc(beat.text)}"><span class="ds-beat-index">${beat.focusGroup + 1}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></button>`;
+}
+function beatDestination(file, highlights) {
+    const ranges = highlights.map(([start, end]) => {
+        if (start === 0 && end === 0)
+            return 'deleted lines';
+        return start === end ? `line ${start}` : `lines ${start} to ${end}`;
+    });
+    return `${file}, ${ranges.join(' and ')}`;
+}
+function storyUnifiedDiffInner(s, comments) {
+    if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
+        return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
+    }
+    const body = s.blocks
+        .map((block, bi) => {
+        const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
+        return ((bi > 0 ? renderHunkGap() : '') +
+            block.map((row) => storyUnifiedRow(row, s, comments, bi, intra)).join(''));
+    })
+        .join('');
+    const note = s.note && s.blocks.some((b) => b.length)
+        ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
+        : '';
+    return `${storyUnifiedHead(s)}${note}<div class="ds-diffbody ds-diffbody-unified">${body}</div>`;
+}
+function storyUnifiedHead(s) {
+    const label = s.context ? 'Context' : s.newFile ? 'New file' : 'Unified';
+    const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
+    return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ''}</div>`;
+}
+function storyUnifiedRow(row, s, comments, blockIndex, intra) {
+    const target = row.type === 'del' && row.oldNo !== undefined
+        ? { side: 'left', file: s.oldFile, line: row.oldNo }
+        : row.newNo !== undefined
+            ? { side: 'right', file: s.file, line: row.newNo }
+            : undefined;
+    const unified = { type: row.type, no: target?.line, content: row.content, untoured: row.untoured };
+    const side = row.type === 'del' ? intra?.get(row)?.left : row.type === 'add' ? intra?.get(row)?.right : undefined;
+    const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
+    const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
+    const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
+    const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
+    return rowHtml + threadForTargets([target], comments);
 }
 function diffInner(s, comments) {
     if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
@@ -791,8 +885,13 @@ export function commentHtml(c0) {
       </div>
       <div class="ds-thread-composer">
         <textarea class="ds-thread-ta" data-thread-ta placeholder="Reply to ${esc(APP_BRAND)}…" rows="1"></textarea>
-        <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Add</button>
-        <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send>Ask now</button>
+        <div class="ds-thread-composer-foot">
+          <div class="ds-agent-route"><span class="ds-agent-route-icon" aria-hidden="true">◈</span><span>Agent task</span><strong data-agent-target-name>Choose task</strong><button data-agent-target-select type="button">Change</button></div>
+          <div class="ds-thread-actions">
+            <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Save reply</button>
+            <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send data-agent-target-cta>Choose task &amp; ask</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>`;
@@ -857,7 +956,7 @@ function filePanel(f, i, stepIndexById) {
       <span class="ds-flex"></span>
       <span class="ds-cardstat">${stat}</span>
       ${changeJumpControls()}
-      <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(f.file)} viewed" title="Mark viewed (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark viewed</span></button>
+      <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(f.file)} seen" title="Mark seen (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark seen</span></button>
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
@@ -984,8 +1083,8 @@ function commandPalette() {
         ['files', 'Open All files', '/', 'Search and filter the changed files'],
         ['feedback', 'Review feedback', '', 'Verify agent replies and reopen comments'],
         ['timeline', 'Open review timeline', '', 'See rounds, comments, and agent runs'],
-        ['next-unviewed', 'Next unviewed file', '', 'Keep the review moving'],
-        ['toggle-viewed', 'Toggle current file viewed', 'V', 'Track what you have already checked'],
+        ['next-unviewed', 'Next unseen file', '', 'Keep the review moving'],
+        ['toggle-viewed', 'Toggle current file seen', 'V', 'Track what you have already checked'],
         ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],
     ];
     return `<div class="ds-command-root" data-command-root hidden>

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadTour, validateTour } from '../dist/tour.js';
+import { loadTour, validateGeneratedTour, validateTour } from '../dist/tour.js';
 
 test('a well-formed tour has no errors', () => {
   const errs = validateTour({
@@ -15,6 +15,115 @@ test('a well-formed tour has no errors', () => {
     steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
   });
   assert.deepEqual(errs, []);
+});
+
+test('generated-story validation requires context, camera framing, and narrated highlights', () => {
+  const legacyCompatible = {
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [4, 5], kind: 'changed', why: 'w' }],
+  };
+  assert.deepEqual(validateTour(legacyCompatible), []);
+
+  const generatedErrors = validateGeneratedTour(legacyCompatible);
+  assert.ok(generatedErrors.includes('mode is required for a generated story'));
+  assert.ok(generatedErrors.includes('intent is required for a generated story'));
+  assert.ok(generatedErrors.includes('steps[0].viewport is required for a generated story'));
+  assert.ok(generatedErrors.includes('steps[0].highlights are required for a generated story'));
+  assert.ok(generatedErrors.includes('steps[0].beats are required for a generated story'));
+});
+
+test('generated-story validation keeps the changed range in frame and in at least one beat', () => {
+  const base = {
+    version: 1,
+    mode: 'guided',
+    title: 'T',
+    summary: 'Follow the request into the changed decision.',
+    intent: {
+      goal: 'Let the reviewer verify the new decision.',
+      design: 'The existing route reaches the changed branch and returns the result.',
+      sources: ['conversation'],
+    },
+    steps: [{
+      id: 's1',
+      order: 1,
+      title: 'Changed decision',
+      file: 'x.ts',
+      range: [20, 22],
+      viewport: [10, 18],
+      highlights: [[10, 12]],
+      beats: [{ text: 'This only points at the caller.', highlights: [[10, 12]] }],
+      kind: 'changed',
+      why: 'The changed branch sits downstream.',
+    }],
+  };
+
+  const errors = validateGeneratedTour(base);
+  assert.ok(errors.includes('steps[0].range must be inside steps[0].viewport'));
+  assert.ok(errors.includes('steps[0].beats must include a highlight that overlaps the changed range'));
+
+  const valid = {
+    ...base,
+    steps: [{
+      ...base.steps[0],
+      viewport: [10, 26],
+      highlights: [[10, 12], [20, 22], [24, 26]],
+      beats: [
+        { text: 'The existing route puts us here.', highlights: [[10, 12]] },
+        { text: 'This is the changed decision.', highlights: [[20, 22]] },
+        { text: 'The result leaves through this return.', highlights: [[24, 26]] },
+      ],
+    }],
+  };
+  assert.deepEqual(validateGeneratedTour(valid), []);
+});
+
+test('generated-story validation keeps each camera shot and pointing gesture local', () => {
+  const story = {
+    version: 1,
+    mode: 'guided',
+    title: 'T',
+    summary: 'Walk the existing route into the changed branch.',
+    intent: {
+      goal: 'Explain the changed route.',
+      design: 'The existing route reaches a changed branch and returns a result.',
+      sources: ['conversation'],
+    },
+    steps: [{
+      id: 's1',
+      order: 1,
+      title: 'Changed branch',
+      file: 'x.ts',
+      range: [70, 72],
+      viewport: [20, 80],
+      highlights: [[20, 35], [70, 72]],
+      beats: [
+        { text: 'This gesture is too broad.', highlights: [[20, 35]] },
+        { text: 'This points at the change.', highlights: [[70, 72]] },
+      ],
+      kind: 'changed',
+      why: 'The branch controls the result.',
+    }],
+  };
+
+  const errors = validateGeneratedTour(story);
+  assert.ok(errors.includes('steps[0].viewport must stay within one 60-line camera shot'));
+  assert.ok(errors.includes('steps[0].beats[0].highlights[0] must point at at most 12 lines'));
+
+  const mismatched = {
+    ...story,
+    steps: [{
+      ...story.steps[0],
+      viewport: [20, 79],
+      highlights: [[20, 31], [70, 72], [75, 76]],
+      beats: [
+        { text: 'This locates the route.', highlights: [[20, 31]] },
+        { text: 'This points at the change.', highlights: [[70, 72]] },
+      ],
+    }],
+  };
+  assert.ok(validateGeneratedTour(mismatched).includes('steps[0].highlights must match the union of steps[0].beats highlights'));
 });
 
 test('loadTour canonicalizes deleted step kind to changed', () => {

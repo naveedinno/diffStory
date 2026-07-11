@@ -5,9 +5,12 @@ import { readFileSync } from 'node:fs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
+  codexErrorMessage, summarizeAgentFailure,
+  codexThreadIdFromOutput,
   selectAvailableAgent,
   storyRepairPrompt,
 } from '../dist/agent.js';
+import { codexTaskBinary } from '../dist/codex-tasks.js';
 
 test('onPath finds sh, not a bogus command', () => {
   assert.equal(onPath('sh'), true);
@@ -18,6 +21,8 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
+  assert.ok(p.includes('Use the diffstory-storyteller skill'));
+  assert.ok(!p.includes('diffStory review-tour skill'));
   assert.ok(p.includes('do not emit one step per file'));
   assert.ok(p.includes('synchronized story note'));
   assert.ok(p.includes('I added this parameter to method X'));
@@ -38,7 +43,7 @@ test('storyPrompt recovers the why before reading the diff', () => {
   assert.ok(p.includes('git log'));
   assert.ok(p.includes('Not evidence: branch names, filenames, vibes'));
   assert.ok(p.includes('We wanted to enable'));
-  assert.ok(p.includes('designed the flow'));
+  assert.ok(p.includes('the existing app path reaches'));
   assert.ok(p.includes('"intent"'));
   assert.ok(p.includes('"sources"'));
   assert.ok(p.includes('code-derived'));
@@ -47,7 +52,7 @@ test('storyPrompt recovers the why before reading the diff', () => {
 
 test('storyPrompt designs the reading path as a narrative, not a file list', () => {
   const p = storyPrompt('main');
-  assert.ok(p.includes('Phase 2 — Design the reading path'));
+  assert.ok(p.includes('Phase 3 — Storyboard the camera'));
   assert.ok(p.includes('intent -> flow -> implementation'));
   assert.ok(p.includes('not a list of touched files'));
   assert.ok(p.includes('To implement that flow, I first'));
@@ -66,15 +71,39 @@ test('storyPrompt ends with a falsifiable self-review', () => {
   assert.ok(p.includes('Do not ask questions. Generate it directly.'));
 });
 
-test('storyPrompt asks for a reviewer map and hard quality gates', () => {
+test('storyPrompt asks for a context map and hard quality gates', () => {
   const p = storyPrompt('main');
-  assert.ok(p.includes('private reviewer map'));
-  assert.ok(p.includes('falsifiable mental model'));
+  assert.ok(p.includes('private context map'));
+  assert.ok(p.includes('entry -> existing owner -> changed decision -> downstream effect -> proof or risk'));
   assert.ok(p.includes('Each step must answer a reviewer question'));
   assert.ok(p.includes('coverage ledger'));
-  assert.ok(p.includes('Ranges are review windows, not coverage hacks'));
+  assert.ok(p.includes('"range" is only the changed-line coverage anchor'));
   assert.ok(p.includes('Truth contract'));
   assert.ok(p.includes('Do not claim tests pass unless you ran them'));
+});
+
+test('storyPrompt rebuilds the app context a forgetful reviewer needs', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('reviewer remembers the requested outcome but not the app internals'));
+  assert.ok(p.includes('Phase 2 — Reconstruct the app path'));
+  assert.ok(p.includes('inbound trigger'));
+  assert.ok(p.includes('outbound consumer'));
+  assert.ok(p.includes('existing app path, the attachment point for this diff, and the new outcome'));
+  assert.ok(p.includes('app orientation -> behavioral entry -> changed decision -> downstream consequence -> proof'));
+  assert.ok(p.includes('The first stop is the behavioral entry point'));
+  assert.ok(p.includes('Do not start with imports, icons, styling, generated output, or tests'));
+});
+
+test('storyPrompt choreographs viewport and highlights as a guided camera', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('viewport and highlights as a guided camera'));
+  assert.ok(p.includes('orientation beat'));
+  assert.ok(p.includes('Context beats may and should highlight unchanged lines'));
+  assert.ok(p.includes('at most 60 lines'));
+  assert.ok(p.includes('never more than 12'));
+  assert.ok(p.includes('top-level "highlights" must match the union of the beat highlights'));
+  assert.ok(p.includes('Memory test:'));
+  assert.ok(p.includes('Camera test:'));
 });
 
 test('storyPrompt makes deleted-file steps use the changed kind', () => {
@@ -150,8 +179,8 @@ test('storyPrompt supports story detail levels', () => {
   assert.ok(detailed.includes('split separate branches, guards, state writes, external calls, and error paths'));
 });
 
-test('bundled review-tour skill teaches reviewer-first story generation', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches reviewer-first story generation', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Make a reviewer map before JSON'));
   assert.ok(skill.includes('falsifiable mental model'));
   assert.ok(skill.includes('Hard quality gates'));
@@ -162,8 +191,31 @@ test('bundled review-tour skill teaches reviewer-first story generation', () => 
   assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
 });
 
-test('bundled review-tour skill requires the narrative story arc', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill restores app context before judging the diff', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('reviewer remembers the requested outcome but not the app internals'));
+  assert.ok(skill.includes('Reconstruct the app path'));
+  assert.ok(skill.includes('inbound'));
+  assert.ok(skill.includes('outbound'));
+  assert.ok(skill.includes('entry -> existing owner -> changed decision -> downstream effect -> proof/risk'));
+  assert.ok(skill.includes('behavioral entry point'));
+  assert.ok(skill.includes('Do not start with imports, icons'));
+  assert.ok(skill.includes('Context beats may and should highlight unchanged lines'));
+});
+
+test('bundled diffstory-storyteller skill makes the camera contract falsifiable', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('guided camera'));
+  assert.ok(skill.includes('orientation -> change ->'));
+  assert.ok(skill.includes('at most 60 lines'));
+  assert.ok(skill.includes('at most 12 lines'));
+  assert.ok(skill.includes('Memory test'));
+  assert.ok(skill.includes('Camera test'));
+  assert.ok(skill.includes('First-stop test'));
+});
+
+test('bundled diffstory-storyteller skill requires the narrative story arc', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Narrative arc'));
   assert.ok(skill.includes('We wanted to enable'));
   assert.ok(skill.includes('designed the flow'));
@@ -172,21 +224,21 @@ test('bundled review-tour skill requires the narrative story arc', () => {
   assert.ok(skill.includes('not a list of touched files'));
 });
 
-test('bundled review-tour skill makes deleted-file steps use the changed kind', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill makes deleted-file steps use the changed kind', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Never use "deleted" as a step kind'));
   assert.ok(skill.includes('For deleted files, use kind "changed"'));
   assert.ok(skill.includes('anchor the range at the post-change deletion location'));
 });
 
-test('bundled review-tour skill teaches the pure deleted-file sentinel anchor', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches the pure deleted-file sentinel anchor', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`'));
   assert.ok(skill.includes('Do not invent line 1 for a file that no longer exists'));
 });
 
-test('bundled review-tour skill teaches explicit read-aloud focus targets', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches explicit read-aloud focus targets', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Focus pointer contract'));
   assert.ok(skill.includes('"focus"'));
   assert.ok(skill.includes('"ranges"'));
@@ -196,8 +248,8 @@ test('bundled review-tour skill teaches explicit read-aloud focus targets', () =
   assert.ok(skill.includes('not the whole displayed section'));
 });
 
-test('bundled review-tour skill teaches viewport and highlighted line selection', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches viewport and highlighted line selection', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Viewport contract'));
   assert.ok(skill.includes('`viewport`'));
   assert.ok(skill.includes('`highlights`'));
@@ -208,8 +260,8 @@ test('bundled review-tour skill teaches viewport and highlighted line selection'
   assert.ok(skill.includes('steady camera shot'));
 });
 
-test('bundled review-tour skill requires beat-by-beat narration for read-aloud sync', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill requires beat-by-beat narration for read-aloud sync', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Beat contract'));
   assert.ok(skill.includes('`beats`'));
   assert.ok(skill.includes('separate speech'));
@@ -217,8 +269,8 @@ test('bundled review-tour skill requires beat-by-beat narration for read-aloud s
   assert.ok(skill.includes('Do not put one big speech over several highlight groups'));
 });
 
-test('bundled review-tour skill teaches story detail levels', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches story detail levels', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Detail levels'));
   assert.ok(skill.includes('Brief mode'));
   assert.ok(skill.includes('Balanced mode'));
@@ -229,8 +281,8 @@ test('bundled review-tour skill teaches story detail levels', () => {
   assert.ok(skill.includes('"mode": "detailed"'));
 });
 
-test('bundled review-tour skill recovers intent before writing', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill recovers intent before writing', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Recover the why'));
   assert.ok(skill.includes('"sources"'));
   assert.ok(skill.includes('code-derived'));
@@ -240,8 +292,8 @@ test('bundled review-tour skill recovers intent before writing', () => {
   assert.ok(skill.includes('Never invent product intent'));
 });
 
-test('bundled review-tour skill enforces the narrative audit', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill enforces the narrative audit', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('Narrative audit'));
   assert.ok(skill.includes('Order test'));
   assert.ok(skill.includes('Thread rule'));
@@ -249,8 +301,8 @@ test('bundled review-tour skill enforces the narrative audit', () => {
   assert.ok(skill.includes('one continuous story'));
 });
 
-test('bundled review-tour skill teaches focused story scopes', () => {
-  const skill = readFileSync(new URL('../skills/review-tour/SKILL.md', import.meta.url), 'utf8');
+test('bundled diffstory-storyteller skill teaches focused story scopes', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('storyScope'));
   assert.ok(skill.includes('includedFiles'));
   assert.ok(skill.includes('excludedFiles'));
@@ -284,6 +336,7 @@ test('storyPrompt supports selected story files and reviewer guidance', () => {
   assert.ok(p.includes('These changed files are intentionally outside this story scope: test/story.test.ts, package.json'));
   assert.ok(p.includes('"storyScope"'));
   assert.ok(p.includes('Pay extra attention to the fee guard.'));
+  assert.ok(p.includes('cite "reviewer guidance" in intent.sources'));
 });
 
 test('storyPrompt with no exclusions leaves the diff command untouched', () => {
@@ -298,7 +351,7 @@ test('agentCommand builds headless invocations with a safe default model', () =>
     'claude',
     ['-p', 'GO', '--permission-mode', 'acceptEdits', '--model', 'sonnet'],
   ]);
-  assert.deepEqual(agentCommand('codex', 'GO'), ['codex', ['exec', '--full-auto', 'GO']]);
+  assert.deepEqual(agentCommand('codex', 'GO'), [codexTaskBinary(), ['exec', '--full-auto', 'GO']]);
 });
 
 test('selectAvailableAgent honors explicit installed choices and rejects unavailable ones', () => {
@@ -373,6 +426,7 @@ test('normalizeCodexRunOptions keeps only supported story-generation options', (
 test('addressPrompt targets specific ids via the address-review skill', () => {
   const p = addressPrompt(['c_a', 'c_b']);
   assert.ok(p.includes('address-review'));
+  assert.ok(p.includes('diffstory-storyteller'));
   assert.ok(p.includes('c_a, c_b'));
   assert.ok(p.includes('.diffstory/comments.json'));
   assert.ok(p.includes('selected text'));
@@ -435,6 +489,7 @@ test('storyRepairPrompt preserves unaffected steps and targets one repair', () =
   assert.match(prompt, /Preserve every unaffected step/);
   assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
   assert.match(prompt, /\.diffstory\/story\.json/);
+  assert.match(prompt, /diffstory-storyteller/);
 });
 
 test('streamCommand uses stream-json for claude and exec for codex', () => {
@@ -443,7 +498,7 @@ test('streamCommand uses stream-json for claude and exec for codex', () => {
     ['-p', 'GO', '--output-format', 'stream-json', '--verbose',
      '--permission-mode', 'acceptEdits', '--model', 'sonnet'],
   ]);
-  assert.deepEqual(streamCommand('codex', 'GO'), ['codex', ['exec', '--full-auto', 'GO']]);
+  assert.deepEqual(streamCommand('codex', 'GO'), [codexTaskBinary(), ['exec', '--full-auto', 'GO']]);
   assert.deepEqual(streamCommand('codex', 'GO', 'gpt-5')[1], ['exec', '--full-auto', '--model', 'gpt-5', 'GO']);
   assert.deepEqual(streamCommand('codex', 'GO', 'gpt-5', { codex: { sandbox: 'read-only' } })[1], [
     'exec',
@@ -453,6 +508,35 @@ test('streamCommand uses stream-json for claude and exec for codex', () => {
     'gpt-5',
     'GO',
   ]);
+});
+
+test('streamCommand resumes a selected Codex task with the runtime that listed it', () => {
+  const id = '019f5079-f420-7423-8aa8-cf9f6a079e03';
+  assert.deepEqual(
+    streamCommand('codex', 'ADDRESS', undefined, {
+      codex: { binary: '/Applications/ChatGPT.app/Contents/Resources/codex', threadId: id, json: true },
+    }),
+    [
+      '/Applications/ChatGPT.app/Contents/Resources/codex',
+      ['exec', 'resume', '--json', id, 'ADDRESS'],
+    ],
+  );
+});
+
+test('Codex JSONL progress exposes useful events and the persistent task id', () => {
+  const id = '019f5079-f420-7423-8aa8-cf9f6a079e03';
+  assert.deepEqual(
+    parseCodexStreamLine(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Done.' } })),
+    [{ type: 'text', data: 'Done.' }],
+  );
+  assert.deepEqual(
+    parseCodexStreamLine(JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'npm test' } })),
+    [{ type: 'command', command: 'npm test', label: '$ npm test' }],
+  );
+  assert.equal(
+    codexThreadIdFromOutput(JSON.stringify({ type: 'thread.started', thread_id: id }) + '\n'),
+    id,
+  );
 });
 
 test('classifyTool maps tools to the most specific progress event', () => {
@@ -544,10 +628,33 @@ test('parseCodexStreamLine forwards prose as text and $-lines as commands', () =
   assert.equal(cmd[0].command, 'npm test');
 });
 
+test('Codex upgrade failures become one actionable diagnostic instead of streamed JSON', () => {
+  const message = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again.";
+  const line = `ERROR: ${JSON.stringify({
+    type: 'error',
+    status: 400,
+    error: { type: 'invalid_request_error', message },
+  })}`;
+
+  assert.equal(codexErrorMessage(line), message);
+  assert.deepEqual(parseCodexStreamLine(line), []);
+
+  const summary = summarizeAgentFailure([
+    'hook: SessionStart',
+    line,
+    line,
+  ].join('\n'));
+  assert.equal(summary.label, 'Codex needs an update for gpt-5.6-sol');
+  assert.match(summary.detail, /choose another model and try again/i);
+  assert.equal(summary.technicalDetail, message);
+  assert.doesNotMatch(summary.technicalDetail, /hook:|ERROR:|\{"type"/);
+});
+
 test('storyPrompt requires live >> phase markers and notes', () => {
   const p = storyPrompt('main');
   assert.match(p, /">> Recovering the why"/);
-  assert.match(p, /">> Designing the reading path"/);
+  assert.match(p, /">> Reconstructing the app path"/);
+  assert.match(p, /">> Storyboarding the camera"/);
   assert.match(p, /">> Writing the steps"/);
   assert.match(p, /starting with ">> "/);
 });

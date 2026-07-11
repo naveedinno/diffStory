@@ -14,9 +14,9 @@ export type StepKind =
 
 /** How much detail the authored story should carry. */
 export type StoryMode =
-  | 'brief' // quickest skim: one short sentence per meaningful change cluster
-  | 'guided' // balanced review path: enough context to read the diff in the right order
-  | 'detailed'; // line-by-line correctness audit: longer, code-path explanation
+  | 'brief' // compact story: every changed hunk, grouped into the fewest useful stops
+  | 'guided' // guided review: behavior and context without line-by-line narration
+  | 'detailed'; // deep review: more correctness boundaries, while still skipping trivial syntax
 
 /** Optional legacy read-aloud pointer inside a step's wider review window. */
 export interface StepFocusTarget {

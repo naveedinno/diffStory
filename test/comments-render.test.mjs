@@ -109,22 +109,26 @@ test('agent replies render Markdown as safe chat content', () => {
   assert.doesNotMatch(html, /<script>alert/);
 });
 
-test('server-rendered thread composer has Add and Ask now buttons', () => {
+test('server-rendered thread composer makes the agent route and send choice explicit', () => {
   const html = commentHtml({
     id: 'c9', file: 'a.ts', line: 1, type: 'question',
     body: 'q?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
   });
   assert.match(html, /data-thread-add/);
   assert.match(html, /data-thread-send/);
-  assert.match(html, />Ask now</);
+  assert.match(html, /data-agent-target-name/);
+  assert.match(html, />Save reply</);
+  assert.match(html, />Choose task &amp; ask</);
 });
 
-test('review header folds open comments into the compact Review menu', () => {
+test('review header separates the agent task from compact review status', () => {
   const comments = [{ id: 'c1', file: 'a.ts', line: 1, type: 'change',
     body: 'x', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
+  assert.match(html, /data-agent-target-control/);
   assert.match(html, /ds-review-menu-count/);
   assert.match(html, /<b>1<\/b>/);
-  assert.match(html, />Send open comments</);
+  assert.match(html, />Resend open comments</);
+  assert.match(html, />More review actions/);
   assert.doesNotMatch(html, /data-send-all/);
 });

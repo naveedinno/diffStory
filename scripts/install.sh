@@ -69,12 +69,14 @@ VERSION=$(node "$SRC/dist/cli.js" --version 2>/dev/null || true)
 # Install the agent skills into the cross-agent location (Codex, Cursor, …).
 SKILLS_DEST="${DIFFSTORY_SKILLS:-$HOME/.agents/skills}"
 mkdir -p "$SKILLS_DEST"
-for s in review-tour address-review; do
+# Remove the retired name so updates cannot leave two storyteller skills installed.
+rm -rf "$SKILLS_DEST/review-tour"
+for s in diffstory-storyteller address-review; do
   [ -d "$SRC/skills/$s" ] || continue
   rm -rf "$SKILLS_DEST/$s"
   cp -R "$SRC/skills/$s" "$SKILLS_DEST/$s"
 done
-say "› Installed skills: $SKILLS_DEST  (Codex: \$review-tour / \$address-review)"
+say "› Installed skills: $SKILLS_DEST  (Codex: \$diffstory-storyteller / \$address-review)"
 say "  Claude Code uses the plugin instead: /plugin marketplace add naveedinno/diffStory && /plugin install diffstory@diffstory"
 
 # Ensure BIN_DIR is on PATH (bash, zsh, fish).

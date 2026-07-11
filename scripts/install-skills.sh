@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install the diffStory agent skills (review-tour, address-review) into an agent's
+# Install the diffStory agent skills (diffstory-storyteller, address-review) into an agent's
 # skills directory, so any SKILL.md-aware agent (Codex, Cursor, Claude Code, …) can
 # drive the review loop. Run it from a clone of the diffStory repo.
 #
@@ -16,7 +16,7 @@ usage() { sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SRC="$(cd "$SCRIPT_DIR/.." && pwd)/skills"
-SKILLS="review-tour address-review"
+SKILLS="diffstory-storyteller address-review"
 
 CLAUDE=0
 CUSTOM_DIR=""
@@ -35,6 +35,8 @@ done
 install_into() {
   dest="$1"
   mkdir -p "$dest"
+  # Remove the retired name so updates cannot leave two storyteller skills installed.
+  rm -rf "$dest/review-tour"
   for s in $SKILLS; do
     rm -rf "$dest/$s"
     cp -R "$SRC/$s" "$dest/$s"
@@ -51,7 +53,7 @@ fi
 
 echo
 echo "Done. Skills are live for agents that read those directories:"
-echo "  ~/.agents/skills  ->  Codex (\$review-tour / \$address-review), Cursor, etc."
+echo "  ~/.agents/skills  ->  Codex (\$diffstory-storyteller / \$address-review), Cursor, etc."
 echo "  ~/.claude/skills  ->  Claude Code (or just use the plugin)"
 echo
 echo "Open the app with:  diffstory"

@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "mode": "guided",
   "title": "Add per-market funding-rate cap",
   "summary": "Read the keeper entry point first, then the helper it delegates clamping to, then where the cap is stored, and finally the test that pins it. Slow down on the require in _capRate().",
   "intent": {
@@ -16,7 +17,7 @@
       "file": "contracts/Funding.sol",
       "range": [120, 145],
       "viewport": [120, 145],
-      "highlights": [[128, 132]],
+      "highlights": [[120, 126], [128, 140]],
       "kind": "changed",
       "why": "settleFunding() now clamps the epoch rate before applying it.",
       "beats": [
@@ -30,7 +31,7 @@
         },
         {
           "text": "When you review this, check that the balance mutation still happens after the capped value is chosen.",
-          "highlights": [[133, 145]]
+          "highlights": [[133, 140]]
         }
       ],
       "calls": ["s2"],
@@ -43,7 +44,7 @@
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
       "viewport": [40, 58],
-      "highlights": [[44, 52]],
+      "highlights": [[40, 44], [48, 58]],
       "kind": "new-file",
       "why": "_capRate() owns the boundary rule that settleFunding() now delegates.",
       "beats": [

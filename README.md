@@ -74,8 +74,9 @@ couple of comments so you can see the full review loop.
 5. Read the diff in **All files**, or open **Story** and generate a guided
    walkthrough.
 6. Select exact text in the diff, right-click, and add a comment.
-7. Use **Ask agent** or **Send all** when you want Claude or Codex to answer and
-   patch the repo.
+7. In the header, choose an **Agent task**: reuse an existing Codex task or
+   start a new one. Every composer shows that destination before **Ask agent**,
+   and later questions keep reusing it until you choose another task.
 
 You can use diffStory as a clean diff viewer without an agent. The AI parts are
 only needed when you want generated stories or agent-handled comments.
@@ -92,8 +93,11 @@ The first screen is your project list.
 Inside a repo, diffStory gives you two useful ways to read:
 
 - **All files** shows the real git diff file by file.
-- **Story** can generate a short reading path so you review the change in the
-  order the logic flows, not alphabetically by filename.
+- **Story** rebuilds the minimum app context around the task, then walks the
+  existing entry point, changed decision, downstream effect, and proof in the
+  order the logic flows—not alphabetically by filename. Each step frames the
+  relevant surrounding code, including unchanged lines when they explain the
+  boundary, and spotlights the exact evidence for each narration beat.
 
 The story never replaces the diff. It only explains and orders it. The code you
 read comes from git.
@@ -107,14 +111,22 @@ explicit:
   agent finishes. Use **Since review** to inspect only the follow-up changes.
 - **Feedback verification** collects addressed comments in one inbox. Accept a
   fix after checking it, or reopen the comment without losing the conversation.
-- **File search and filters** narrow the sidebar to unviewed files, files with
+- **Reusable Codex tasks** keep review questions in the implementation chat you
+  select. The binding is remembered per repository in this browser, and a new
+  task becomes the destination for later questions as soon as its first run completes.
+- **Review** stays focused on unresolved feedback, the review timeline, and
+  approval. Copy and resend recovery actions live under **More review actions**.
+- **File search and filters** narrow the sidebar to seen or unseen files, files with
   comments, unexplained changes, tests, or files changed since your review.
 - **Resume review** returns to the last file, line, and display mode on this
-  device. **Next unviewed** keeps a larger review moving.
+  device. **Next unseen** keeps a larger review moving.
 - Select diff text to reveal the quick comment action. Press `C` to comment on
   the current selection, `/` to search files, or `?` for the command palette.
 - A story step can be repaired in place: ask the agent to explain it, shorten
   it, or split it without regenerating the rest of the walkthrough.
+- Open a story step to land on its first spotlight, then select any narration
+  beat to move the highlight to the exact lines it explains. Read-aloud follows
+  the same camera path automatically.
 - The review timeline records feedback handoffs, agent completions, replies, and
   verification decisions for the current change.
 
@@ -259,6 +271,13 @@ from a diffStory clone.
 Install one of them and make sure its command is available on your PATH. You can
 still read diffs without an agent.
 
+**Why are Codex Cloud tasks not in the destination picker?**
+
+The current Codex Cloud CLI can list and start Cloud tasks, but it does not
+provide a follow-up/resume operation. diffStory lists resumable local and Codex
+Desktop tasks for the selected repository instead of presenting a Cloud task it
+cannot continue.
+
 ## How It Works
 
 diffStory starts a small local Node server and opens a browser page. The server
@@ -269,7 +288,7 @@ The app uses Node built-ins for its runtime server. It does not need a hosted
 service, database, browser extension, or cloud account.
 
 For the story schema and agent contract, see
-[`skills/review-tour/SKILL.md`](skills/review-tour/SKILL.md).
+[`skills/diffstory-storyteller/SKILL.md`](skills/diffstory-storyteller/SKILL.md).
 
 ## Contributing
 

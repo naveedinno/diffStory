@@ -14,4 +14,6 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.match(html, /No folders match/);
   assert.match(html, /fsSearch\.focus\(\)/);
   assert.match(html, /if\(modalTrigger&&modalTrigger\.focus\)modalTrigger\.focus\(\)/);
+  assert.match(html, /if\(sk\.legacyInstalled\)/);
+  assert.match(html, /review-tour was renamed to diffstory-storyteller/);
 });
