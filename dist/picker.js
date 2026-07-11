@@ -37,6 +37,7 @@ const ICON_BRANCH = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none"
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
 const ICON_PLUS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>';
+const ICON_SEARCH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>';
 const ICON_MARK = brandMarkSvg('appmark', 34, 34);
 function statusPill(r) {
     // Tour status is an internal concept and confused users — don't surface it here.
@@ -161,11 +162,11 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
 .chooser .ct1{display:block;font-size:13.5px; font-weight:650; color:var(--label)}
 .chooser .ct2{display:block;font-size:12.5px; color:var(--label2); margin-top:1px}
 .orpaste{display:flex; gap:10px; align-items:center; margin-top:12px}
-input[type=text]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
+input[type=text],input[type=search]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
   background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; outline:none;
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .14s ease, border-color .14s ease;}
-input[type=text]::placeholder{color:var(--label3)}
-input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
+input[type=text]::placeholder,input[type=search]::placeholder{color:var(--label3)}
+input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
 .btn{height:36px; padding:0 16px; font:inherit; font-size:13.5px; font-weight:590; color:#fff; cursor:pointer;
   background:var(--blue); border:none; border-radius:8px; letter-spacing:0;
   box-shadow:0 1px 2px rgba(0,40,120,.18); transition:background .14s ease, transform .1s ease}
@@ -199,9 +200,20 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
 .crumb:hover{background:var(--hover)}
 .crumb.cur{color:var(--label); font-weight:590; cursor:default}
 .crumb-sep{color:var(--label3); opacity:.6}
+.fssearch{padding:10px 16px;border-bottom:.5px solid var(--sep)}
+.fssearch-box{position:relative;display:flex;align-items:center}
+.fssearch-icon{position:absolute;left:11px;color:var(--label3);display:flex;pointer-events:none}
+.fssearch input{height:34px;padding-left:35px;padding-right:34px;background:var(--bg);box-shadow:none}
+.fssearch input::-webkit-search-cancel-button{-webkit-appearance:none}
+.fsclear{position:absolute;right:6px;width:23px;height:23px;border:0;border-radius:6px;background:var(--neutral-bg);color:var(--label2);font:inherit;font-size:13px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center}
+.fsclear.show{display:flex}
+.fsclear:hover{background:var(--hover)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .fslist{overflow-y:auto; padding:6px; flex:1; min-height:120px}
 .fsrow{width:100%; display:flex; align-items:center; gap:11px; padding:9px 10px; border-radius:8px; background:none; border:none}
 .fsrow:hover{background:var(--hover)}
+.fsrow.is-selected{background:var(--hover);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--blue) 42%,transparent)}
+.fsrow:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
 .fsrow .fi{color:var(--blue); display:flex; flex:none}
 .fsrow .fn{flex:1; min-width:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left}
 .fsrow .repo{font-size:11px; font-weight:600; padding:1px 7px; border-radius:100px; background:var(--green-bg); color:var(--green-fg)}
@@ -271,6 +283,14 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
       <button class="iconbtn" id="fsClose" type="button" aria-label="Close">✕</button>
     </div>
     <div class="crumbs" id="crumbs"></div>
+    <div class="fssearch">
+      <div class="fssearch-box">
+        <span class="fssearch-icon" aria-hidden="true">${ICON_SEARCH}</span>
+        <input type="search" id="fsSearch" placeholder="Filter folders" autocomplete="off" spellcheck="false" aria-label="Filter folders in this location" aria-controls="fslist" />
+        <button class="fsclear" id="fsClear" type="button" aria-label="Clear folder filter">✕</button>
+      </div>
+      <span class="sr-only" id="fsSearchStatus" role="status" aria-live="polite"></span>
+    </div>
     <div class="fslist" id="fslist"></div>
     <div class="sheet-foot">
       <span class="foot-path" id="footPath"></span>
@@ -340,11 +360,15 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
 
   var scrim=document.getElementById('scrim'), fslist=document.getElementById('fslist'),
       crumbs=document.getElementById('crumbs'), footPath=document.getElementById('footPath'),
-      openHere=document.getElementById('openHere'), cur=null, curGit=false;
+      openHere=document.getElementById('openHere'), fsSearch=document.getElementById('fsSearch'),
+      fsClear=document.getElementById('fsClear'), fsSearchStatus=document.getElementById('fsSearchStatus'),
+      cur=null, curGit=false, entries=[], filteredEntries=[], selectedIndex=-1, modalTrigger=null;
   function el(tag,cls,txt){ var n=document.createElement(tag); if(cls) n.className=cls; if(txt!=null) n.textContent=txt; return n; }
   function ico(id){ return document.getElementById(id).content.cloneNode(true); }
 
   function browse(path){
+    fsSearch.value=''; fsClear.classList.remove('show'); entries=[]; filteredEntries=[]; selectedIndex=-1;
+    fsSearch.removeAttribute('aria-activedescendant'); fsSearchStatus.textContent='';
     fslist.textContent='Loading…';
     fslist.className='fslist'; fslist.style.color='var(--label3)'; fslist.style.padding='26px';
     fetch('/api/fs'+(path?('?path='+encodeURIComponent(path)):''))
@@ -364,24 +388,63 @@ input[type=text]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(
     for(var i=0;i<parts.length;i++){ acc+='/'+parts[i];
       crumbs.appendChild(el('span','crumb-sep','/'));
       crumbs.appendChild(crumbFor({label:parts[i],path:acc,cur:i===parts.length-1})); }
-    // list
+    entries=l.entries.slice();
+    renderEntries();
+    footPath.textContent=l.path;
+    openHere.disabled=!curGit;
+    openHere.textContent=curGit?'Open this folder':'Not a git repo';
+    if(scrim.classList.contains('show'))fsSearch.focus();
+  }
+  function activateEntry(en){ if(en.isGit){ open(en.path); } else { browse(en.path); } }
+  function renderEntries(){
+    var query=fsSearch.value.trim().toLocaleLowerCase();
+    filteredEntries=query?entries.filter(function(en){return en.name.toLocaleLowerCase().indexOf(query)!==-1;}):entries.slice();
+    if(query){ selectedIndex=filteredEntries.length?Math.min(Math.max(selectedIndex,0),filteredEntries.length-1):-1; }
+    else { selectedIndex=-1; }
+    fsClear.classList.toggle('show',!!fsSearch.value);
     fslist.textContent='';
-    if(!l.entries.length){ fslist.appendChild(el('div','fsempty','No subfolders here.')); }
-    l.entries.forEach(function(en){
+    if(!filteredEntries.length){
+      var emptyText=query?'No folders match “'+fsSearch.value.trim()+'”.':'No subfolders here.';
+      fslist.appendChild(el('div','fsempty',emptyText));
+    }
+    filteredEntries.forEach(function(en,index){
       var row=el('button','fsrow'); row.type='button';
+      row.id='fs-entry-'+index;
       var fi=el('span','fi'); fi.appendChild(ico('ico-folder')); row.appendChild(fi);
       row.appendChild(el('span','fn',en.name));
       if(en.isGit){ row.appendChild(el('span','repo','repo')); }
       else { var go=el('span','go'); go.appendChild(ico('ico-go')); row.appendChild(go); }
-      row.addEventListener('click',function(){ if(en.isGit){ open(en.path); } else { browse(en.path); } });
+      if(index===selectedIndex)row.classList.add('is-selected');
+      row.addEventListener('mouseenter',function(){ selectEntry(index,false); });
+      row.addEventListener('click',function(){ activateEntry(en); });
       fslist.appendChild(row);
     });
-    footPath.textContent=l.path;
-    openHere.disabled=!curGit;
-    openHere.textContent=curGit?'Open this folder':'Not a git repo';
+    updateSelection(false);
+    fsSearchStatus.textContent=filteredEntries.length+' folder'+(filteredEntries.length===1?'':'s')+' shown.';
   }
-  function openModal(){ scrim.classList.add('show'); browse(null); }
-  function closeModal(){ scrim.classList.remove('show'); }
+  function updateSelection(scroll){
+    var rows=fslist.querySelectorAll('.fsrow');
+    rows.forEach(function(row,index){row.classList.toggle('is-selected',index===selectedIndex);});
+    if(selectedIndex<0||!rows[selectedIndex]){fsSearch.removeAttribute('aria-activedescendant');return;}
+    fsSearch.setAttribute('aria-activedescendant',rows[selectedIndex].id);
+    if(scroll)rows[selectedIndex].scrollIntoView({block:'nearest'});
+  }
+  function selectEntry(index,scroll){selectedIndex=index;updateSelection(scroll);}
+  function moveSelection(delta){
+    if(!filteredEntries.length)return;
+    if(selectedIndex<0)selectedIndex=delta>0?0:filteredEntries.length-1;
+    else selectedIndex=(selectedIndex+delta+filteredEntries.length)%filteredEntries.length;
+    updateSelection(true);
+  }
+  fsSearch.addEventListener('input',function(){selectedIndex=fsSearch.value.trim()?0:-1;renderEntries();});
+  fsSearch.addEventListener('keydown',function(e){
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();moveSelection(e.key==='ArrowDown'?1:-1);return;}
+    if(e.key==='Enter'&&selectedIndex>=0&&filteredEntries[selectedIndex]){e.preventDefault();activateEntry(filteredEntries[selectedIndex]);return;}
+    if(e.key==='Escape'&&fsSearch.value){e.preventDefault();e.stopPropagation();fsSearch.value='';selectedIndex=-1;renderEntries();}
+  });
+  fsClear.addEventListener('click',function(){fsSearch.value='';selectedIndex=-1;renderEntries();fsSearch.focus();});
+  function openModal(e){ modalTrigger=e&&e.currentTarget?e.currentTarget:document.activeElement; scrim.classList.add('show'); browse(null); fsSearch.focus(); }
+  function closeModal(){ scrim.classList.remove('show'); fsSearch.value=''; if(modalTrigger&&modalTrigger.focus)modalTrigger.focus(); modalTrigger=null; }
   document.getElementById('quickAddBtn').addEventListener('click',openModal);
   document.getElementById('chooseBtn').addEventListener('click',openModal);
   document.getElementById('fsClose').addEventListener('click',closeModal);
