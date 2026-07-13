@@ -29,6 +29,9 @@ export interface RunContext {
   base?: string;
   head?: string;
   targetCount?: number;
+  taskMode?: 'new' | 'resume';
+  taskLabel?: string;
+  taskId?: string;
 }
 
 export type ProgressEvent =

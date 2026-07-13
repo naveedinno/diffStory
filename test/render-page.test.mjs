@@ -55,6 +55,15 @@ test('rail step numbers stay stable after visiting steps', () => {
   assert.doesNotMatch(html, /isD\?'✓'/);
 });
 
+test('story sidebar uses a compact reading rail with one clear active marker', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-stepcard\{[^}]*grid-template-columns:42px minmax\(0,1fr\)/);
+  assert.match(html, /\.ds-stepcard::after\{[^}]*width:3px[^}]*background:transparent/);
+  assert.match(html, /\.ds-stepcard\.is-active::after\{background:var\(--accent-blue\)\}/);
+  assert.match(html, /\.ds-readhead\{[^}]*border:0[^}]*background:transparent/);
+  assert.match(html, /\.ds-viewtoggle\{[^}]*padding:3px[^}]*border:0/);
+});
+
 test('step narrative is labeled as story, not why-this-step', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, />Story<\/span>/);
@@ -77,6 +86,26 @@ test('story text cannot take over the diff viewport when read aloud is off', () 
   assert.match(html, /\.ds-why\{[^}]*max-height:min\(24vh,190px\)[^}]*overflow-y:auto/s);
   assert.match(html, /\.ds-diffscroll\{[^}]*min-height:180px/s);
   assert.match(html, /@media \(max-height:760px\)\{\.ds-why\{max-height:120px\}\.ds-diffscroll\{min-height:160px\}\}/);
+});
+
+test('the final session layout cannot re-enable horizontal story or diff scrolling', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*overflow-x:hidden;overflow-y:auto/);
+  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-diffscroll\{[^}]*overflow-x:hidden;overflow-y:auto/);
+  assert.doesNotMatch(html, /\.ds-step:not\(\.is-intro\)>\.ds-(?:why|diffscroll)\{[^}]*overflow:auto/);
+  assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:22px minmax\(0,1fr\)/);
+  assert.match(html, /\.ds-beat-text\{[^}]*min-width:0[^}]*white-space:normal[^}]*overflow-wrap:anywhere/);
+  assert.match(html, /\.ds-step-title\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
+});
+
+test('story narrative is a compact reading column instead of a nested full-height card', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*border:0[^}]*border-right:1px solid var\(--line-soft\)[^}]*border-radius:0[^}]*background:transparent/);
+  assert.doesNotMatch(html, /\.ds-beats::before/);
+  assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:30px minmax\(0,1fr\)[^}]*border-top:1px solid var\(--line-soft\)/);
+  assert.match(html, /\.ds-beat-index\{[^}]*border:0[^}]*background:transparent[^}]*font-family:var\(--mono\)/);
+  assert.match(html, /\.ds-beat\.is-selected\{[^}]*border-radius:8px[^}]*background:var\(--fill-2\)[^}]*box-shadow:none/);
+  assert.match(html, /@media \(max-width:1080px\)[\s\S]*\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*border:1px solid var\(--line-soft\)[^}]*border-radius:10px/);
 });
 
 test('review page can return to the story chooser', () => {
@@ -106,6 +135,11 @@ test('toolbar separates the persistent agent task from compact review status', (
   assert.match(html, />Resend open comments</);
   assert.match(html, />More review actions/);
   assert.match(html, /ds-check">✓<\/span> Approve/);
+  assert.match(html, /class="ds-reviewstatusbar" data-roundbar aria-label="Review status"/);
+  assert.match(html, /class="ds-roundbadge">Round 1<\/span>/);
+  assert.match(html, /class="ds-reviewstatus-scope"><b>1<\/b> file in scope/);
+  assert.match(html, />Feedback clear<\/span>/);
+  assert.doesNotMatch(html, /class="ds-sessionstage/);
   assert.doesNotMatch(html, /need coverage/);
   assert.doesNotMatch(html, />Question destination</);
   assert.doesNotMatch(html, />Ask for fixes</);
@@ -124,7 +158,9 @@ test('version-aware review rounds expose full and since-review modes', () => {
   assert.match(html, /1 file changed since your feedback/);
   assert.match(html, /data-review-mode="full"/);
   assert.match(html, /data-review-mode="since"/);
+  assert.match(html, /data-review-mode="full"[^>]*aria-pressed="true"/);
   assert.match(html, /data-filter-since="1"/);
+  assert.match(html, /class="ds-roundbadge">Round 2<\/span>/);
 });
 
 test('review page renders feedback, timeline, filters, resume, and story repair affordances', () => {
@@ -140,7 +176,7 @@ test('review page renders feedback, timeline, filters, resume, and story repair 
   assert.match(html, /data-resume-review/);
   assert.match(html, /data-shortcuts-open/);
   assert.match(html, /data-story-repair="shorten"/);
-  assert.match(html, /data-selection-quick/);
+  assert.doesNotMatch(html, /data-selection-quick/);
 });
 
 test('submitting a comment sends it to the agent immediately', () => {
@@ -157,7 +193,7 @@ test('submitting a comment sends it to the agent immediately', () => {
   assert.match(html, /'Save only'/);
   assert.match(html, /'Choose task & ask'/);
   assert.match(html, /data-agent-target-cta/);
-  assert.match(html, /allComments\.push\(c\);removeComposer\(box\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
+  assert.match(html, /allComments\.push\(c\);removeComposer\(box,false\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
   assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
 });
 
@@ -175,15 +211,16 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
   assert.match(html, /document\.addEventListener\('mousedown',startSidebarResize\)/);
   assert.match(html, /document\.addEventListener\('mousemove',moveSidebarResize\)/);
   assert.match(html, /document\.addEventListener\('mouseup',endSidebarResize\)/);
+  assert.doesNotMatch(html, /\.ds-rail\{--ds-rail-width:/, 'redesign styles must not override the user-resized width');
 });
 
-test('compact review keeps the diff full-width behind an overlay sidebar', () => {
+test('compact review opens on the diff and keeps the optional sidebar as an overlay', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:48px;bottom:0;left:0/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-main\{width:100%\}/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-rail-resizer\{display:none\}/);
   assert.match(html, /function compactScreen\(\)/);
-  assert.match(html, /storedCollapsed==='1'\|\|\(compactScreen\(\)&&storedCollapsed!=='0'\)/);
+  assert.match(html, /setSidebarCollapsed\(compactScreen\(\)\|\|storedCollapsed==='1',false\)/);
   assert.match(html, /localStorage\.setItem\('ds-sidebar-collapsed',collapsed\?'1':'0'\)/);
   assert.match(html, /function collapseCompactSidebar\(\)/);
   assert.match(html, /data-sidebar-scrim/);
@@ -261,7 +298,7 @@ test('all-files sidebar groups changed paths into an expanded tree', () => {
 
   assert.match(html, /<div class="ds-filetree">/);
   assert.doesNotMatch(html, /role="tree(?:item)?"/);
-  assert.doesNotMatch(html, /role="group"/);
+  assert.doesNotMatch(html, /class="ds-filetree"[^>]*role=/);
   assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/" style="--tree-depth:0" open/);
   assert.match(html, /class="ds-filetree-dir" data-filetree-path="contracts\/interfaces\/" style="--tree-depth:1" open/);
   assert.match(html, /data-goto-file="contracts\/DepositVault\.sol"/);
@@ -307,6 +344,7 @@ test('diff panels expose automatic first-change navigation controls', () => {
 test('read aloud keeps browser presets separate from two mac voices', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-voice-engine="browser"/);
+  assert.match(html, /data-voice-engine="browser" class="is-active" aria-pressed="true"/);
   assert.match(html, /data-voice-engine="say"/);
   assert.match(html, /data-voice-engine="kokoro"/);
   assert.match(html, /Mac local/);
@@ -315,6 +353,7 @@ test('read aloud keeps browser presets separate from two mac voices', () => {
   assert.match(html, /data-say-voices/);
   assert.match(html, /data-kokoro-voices/);
   assert.match(html, /data-voice-preset="story"/);
+  assert.match(html, /data-voice-preset="story" aria-pressed="true"/);
   assert.match(html, /data-voice-preset="flirty"/);
   assert.match(html, /data-voice-preset="bass"/);
   assert.match(html, /data-voice-preset="system"/);
@@ -477,7 +516,10 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function updateVoiceFocusForChar\(stepIndex,charIndex,text\)/);
   assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
   assert.match(html, /function centerFocusRows\(rows,instant\)/);
-  assert.match(html, /target\.scrollIntoView\(\{block:'center',inline:'nearest',behavior:instant\?'auto':'smooth'\}\)/);
+  assert.match(html, /var scroller=closest\(target,'\.ds-diffscroll'\)/);
+  assert.match(html, /scroller\.scrollTo\(\{top:Math\.max\(0,top\),behavior:instant\?'auto':'smooth'\}\)/);
+  assert.doesNotMatch(html, /target\.scrollIntoView/);
+  assert.doesNotMatch(html, /scrollIntoView/, 'review row navigation must never scroll horizontal ancestors');
   assert.match(html, /function stepSpeechUnits\(panel\)/);
   assert.match(html, /function speakStepIndex\(i,manual\)/);
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
@@ -722,12 +764,15 @@ test('story beats are keyboard controls that select and center their exact rows'
   assert.match(html, /status\.textContent='Story beat '/);
 });
 
-test('compact story steps default to a real unified diff while split stays opt-in', () => {
+test('story steps default to a real unified diff while split stays opt-in', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
 
-  assert.match(html, /<button data-mode="diff">Unified<\/button>\s*<button class="is-active" data-mode="split">Split<\/button>/);
-  assert.match(html, /<div data-diff-inner hidden>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
-  assert.match(html, /<div data-split-inner data-loaded="1">[\s\S]*class="ds-diffbody"/);
+  assert.match(html, /class="ds-modetoggle" role="group" aria-label="Diff display mode"/);
+  assert.match(html, /data-mode="diff" aria-pressed="true">Unified<\/button>/);
+  assert.match(html, /data-mode="split" aria-pressed="false">Split<\/button>/);
+  assert.match(html, /data-playstep title="Read this step aloud" aria-label="Read this step aloud"/);
+  assert.match(html, /<div data-diff-inner>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
+  assert.match(html, /<div data-split-inner data-loaded="1" hidden>[\s\S]*class="ds-diffbody"/);
   assert.match(html, /function applyResponsiveStoryMode\(panel\)/);
   assert.match(html, /if\(!panel\|\|!compactScreen\(\)\)return;/);
   assert.match(html, /holder\.hasAttribute\('data-mode-user-set'\)/);
@@ -1169,6 +1214,10 @@ test('story scope keeps excluded files visible without flagging them as unexplai
   assert.match(html, /b\.test\.ts/);
   assert.doesNotMatch(html, /<b>1<\/b> unexplained/);
   assert.doesNotMatch(html, /title="1 unexplained change"/);
+  assert.match(html, /data-story-scope="focused"/);
+  assert.match(html, /Story matches this diff and covers its selected scope/);
+  assert.match(html, /selected story scope explained/);
+  assert.doesNotMatch(html, /every change explained/);
 });
 
 test('intro panel leads with the recovered intent without exposing its sources', () => {
@@ -1227,13 +1276,19 @@ test('intent text is HTML-escaped in the intro panel', () => {
 
 test('all-files view exposes seen and unseen controls with visible sidebar state', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-file-hint>Showing selected file</);
+  assert.match(html, /fileHint\.textContent=filePath\?'Viewing '\+filePath:'Showing selected file'/);
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
   assert.match(html, /data-viewed-toggle aria-pressed="false"/);
   assert.match(html, /data-viewed-label>Mark seen</);
   assert.match(html, /class="ds-fileitem-viewed" aria-hidden="true">✓</);
-  assert.match(html, /data-file-filter="seen">Seen<\/button>/);
-  assert.match(html, /data-file-filter="unseen">Unseen<\/button>/);
+  assert.match(html, /data-file-filter="all" aria-pressed="true">All<\/button>/);
+  assert.match(html, /data-file-filter="seen" aria-pressed="false">Seen<\/button>/);
+  assert.match(html, /data-file-filter="unseen" aria-pressed="false">Unseen<\/button>/);
+  assert.match(html, /btn\.setAttribute\('aria-pressed',active\?'true':'false'\)/);
+  assert.match(html, /data-rate="1\.05" class="is-active" aria-pressed="true">Normal<\/button>/);
+  assert.match(html, /b\.setAttribute\('aria-pressed',active\?'true':'false'\)/);
   assert.match(html, /data-next-unviewed[^>]*>Next unseen/);
   assert.doesNotMatch(html, />Unviewed<\/button>/);
   assert.doesNotMatch(html, /role="checkbox"/);
@@ -1315,4 +1370,20 @@ test('adjacent hunks render a bare, non-expandable gap between them', () => {
   // …while the trailing eof gap stays expandable.
   assert.match(html, /<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all"/);
   assert.match(html, /data-gap-from="10" data-gap-to="eof"/);
+});
+
+test('unverified stories block approval and explain how to recover trust', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files,
+    baseLabel: 'main',
+    comments: [],
+    routeBase: '/repo/demo',
+    storyFreshness: 'unverified',
+  });
+  assert.match(html, /Unverified<\/b> story · regenerate before approval/);
+  assert.match(html, /This older story has no exact diff fingerprint/);
+  assert.match(html, /data-verdict="approve" disabled/);
+  assert.match(html, /Regenerate story/);
 });

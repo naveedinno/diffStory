@@ -236,6 +236,9 @@ export function validateTour(obj) {
     const t = obj;
     if (t.version !== 1)
         errors.push('version must be 1');
+    if (t.diffFingerprint !== undefined && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
+        errors.push('diffFingerprint must be a SHA-256 hex digest');
+    }
     if (t.mode !== undefined && !MODES.includes(t.mode)) {
         errors.push(`mode must be one of ${MODES.join(', ')}`);
     }

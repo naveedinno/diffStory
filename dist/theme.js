@@ -1,13 +1,12 @@
-// The one Apple-HIG palette every page draws from. Emitted as --app-* custom
-// properties (light defaults, dark override); each page aliases its legacy
-// token names onto these so both screens read as one app.
+// The shared graphite review palette. Git truth stays neutral, blue is reserved
+// for the current action, and diff semantics keep their familiar green/red.
 export function sharedTokens() {
     return `
-:root{--app-bg:#f5f5f7;--app-elev:#ffffff;--app-label:#1d1d1f;--app-l2:#6e6e73;--app-l3:#8e8e93;
-  --app-hair:rgba(0,0,0,.1);--app-sep:rgba(0,0,0,.07);--app-fill:rgba(120,120,128,.12);--app-subbg:rgba(120,120,128,.06);
-  --app-blue:#007aff;--app-blue2:#0067d6;--app-add:#1d7d3f;--app-del:#c4271f;--app-addbar:#34c759;--app-delbar:#ff453a}
-@media (prefers-color-scheme:dark){:root{--app-bg:#1c1c1e;--app-elev:#2c2c2e;--app-label:#f5f5f7;--app-l2:#aeaeb2;--app-l3:#8e8e93;
-  --app-hair:rgba(255,255,255,.12);--app-sep:rgba(255,255,255,.08);--app-fill:rgba(120,120,128,.24);--app-subbg:rgba(255,255,255,.035);
-  --app-blue:#0a84ff;--app-blue2:#3395ff;--app-add:#30d158;--app-del:#ff6961;--app-addbar:#30d158;--app-delbar:#ff453a}}
+:root{--app-bg:#f1f3f6;--app-elev:#ffffff;--app-label:#17191e;--app-l2:#5e6470;--app-l3:#858c99;
+  --app-hair:rgba(18,23,32,.13);--app-sep:rgba(18,23,32,.075);--app-fill:rgba(15,23,42,.055);--app-subbg:rgba(15,23,42,.028);
+  --app-blue:#0866e5;--app-blue2:#0057ca;--app-add:#177a51;--app-del:#bd2a22;--app-addbar:#2b9a68;--app-delbar:#e14a43}
+@media (prefers-color-scheme:dark){:root{--app-bg:#15171b;--app-elev:#22252b;--app-label:#f4f6f8;--app-l2:#b3b8c2;--app-l3:#858c98;
+  --app-hair:rgba(255,255,255,.13);--app-sep:rgba(255,255,255,.075);--app-fill:rgba(255,255,255,.075);--app-subbg:rgba(255,255,255,.035);
+  --app-blue:#4a9cff;--app-blue2:#72b2ff;--app-add:#48d597;--app-del:#ff756e;--app-addbar:#48d597;--app-delbar:#ff625b}}
 `;
 }

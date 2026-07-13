@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { request } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { serve } from '../dist/server.js';
 
 function gitRepo() {
@@ -67,6 +68,41 @@ printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","na
   chmodSync(path, 0o755);
 }
 
+async function fakeCodexDesktop(socketPath) {
+  rmSync(socketPath, { force: true });
+  const requests = [];
+  const server = createNetServer((socket) => {
+    let buffered = Buffer.alloc(0);
+    socket.on('data', (chunk) => {
+      buffered = Buffer.concat([buffered, chunk]);
+      while (buffered.length >= 4) {
+        const length = buffered.readUInt32LE(0);
+        if (buffered.length < length + 4) return;
+        const message = JSON.parse(buffered.subarray(4, length + 4).toString('utf8'));
+        buffered = buffered.subarray(length + 4);
+        requests.push(message);
+        const response = message.method === 'initialize'
+          ? {
+              type: 'response', requestId: message.requestId, resultType: 'success',
+              method: 'initialize', handledByClientId: 'router', result: { clientId: 'diffstory-client' },
+            }
+          : {
+              type: 'response', requestId: message.requestId, resultType: 'success',
+              method: message.method, handledByClientId: 'desktop-owner', result: { result: { turn: { id: 'turn-1' } } },
+            };
+        const json = JSON.stringify(response);
+        const frame = Buffer.alloc(4 + Buffer.byteLength(json));
+        frame.writeUInt32LE(Buffer.byteLength(json), 0);
+        frame.write(json, 4);
+        socket.write(frame);
+      }
+    });
+  });
+  server.listen(socketPath);
+  await once(server, 'listening');
+  return { server, requests };
+}
+
 function installFakeCodex(binDir) {
   const path = join(binDir, 'codex');
   writeFileSync(
@@ -74,6 +110,19 @@ function installFakeCodex(binDir) {
     `#!/bin/sh
 printf '\\ncodex edit\\n' >> README.md
 printf '%s\\n' '$ printf codex'
+`,
+  );
+  chmodSync(path, 0o755);
+}
+
+function installFakeResumingCodex(binDir, threadId) {
+  const path = join(binDir, 'codex');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+printf '%s\n' "$@" > codex-args.txt
+printf '\nresumed codex edit\n' >> README.md
+printf '%s\n' '{"type":"thread.started","thread_id":"${threadId}"}'
 `,
   );
   chmodSync(path, 0o755);
@@ -414,6 +463,82 @@ test('POST /api/address honors the selected agent instead of first PATH match', 
     process.env.PATH = realPath;
     if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
     else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/address sends a visible turn through the selected task live Desktop owner', async () => {
+  const realHome = process.env.HOME;
+  const realPath = process.env.PATH;
+  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
+  const realCodexSocket = process.env.DIFFSTORY_CODEX_IPC_SOCKET;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
+  const threadId = '019f5079-f420-7423-8aa8-cf9f6a079e03';
+  process.env.HOME = tmpHome;
+  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
+  installFakeResumingCodex(fakeBin, threadId);
+  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
+  const socketPath = join(tmpdir(), `diffstory-codex-${process.pid}-${Date.now()}.sock`);
+  process.env.DIFFSTORY_CODEX_IPC_SOCKET = socketPath;
+  const desktop = await fakeCodexDesktop(socketPath);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    const comment = await (await fetch(`${base}/api/comments`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 2, type: 'question', body: 'What is happening?' }),
+    })).json();
+    await fetch(`${base}/api/comments/${comment.id}/message`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'Are you sure?' }),
+    });
+
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        all: true, agent: 'codex', codexThreadId: threadId,
+        codexTaskLabel: 'Clarify restated quote handling',
+      }),
+    });
+    assert.equal(addr.status, 200);
+    const events = ndjsonEvents(await addr.text());
+    const context = events.find((event) => event.type === 'context');
+    assert.equal(context?.taskMode, 'resume');
+    assert.equal(context?.taskLabel, 'Clarify restated quote handling');
+    assert.equal(context?.taskId, threadId);
+    assert.ok(events.some((event) => event.type === 'activity' && /Sent to live ChatGPT task/.test(event.label)));
+    const done = events.find((event) => event.type === 'run_done');
+    assert.equal(done?.status, 'complete');
+    assert.equal(done?.result?.codexThreadId, threadId);
+    assert.equal(done?.result?.delivery, 'desktop');
+    assert.equal(existsSync(join(repo, 'codex-args.txt')), false, 'selected tasks never fall back to codex exec resume');
+    const sent = desktop.requests.find((message) => message.method === 'thread-follower-start-turn');
+    assert.equal(sent?.version, 1);
+    assert.equal(sent?.sourceClientId, 'diffstory-client');
+    assert.equal(sent?.params?.conversationId, threadId);
+    const visibleText = sent?.params?.turnStartParams?.input?.[0]?.text;
+    assert.ok(visibleText.indexOf('Are you sure?') === 0, 'latest diffStory message is the visible turn text');
+    assert.ok(visibleText.indexOf('Are you sure?') < visibleText.indexOf('Use the diffStory address-review skill'));
+    assert.equal(visibleText.includes('What is happening?'), false, 'the visible task message uses the latest user turn');
+  } finally {
+    server.close();
+    desktop.server.close();
+    process.env.HOME = realHome;
+    process.env.PATH = realPath;
+    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
+    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
+    if (realCodexSocket === undefined) delete process.env.DIFFSTORY_CODEX_IPC_SOCKET;
+    else process.env.DIFFSTORY_CODEX_IPC_SOCKET = realCodexSocket;
+    rmSync(socketPath, { force: true });
     rmSync(repo, { recursive: true, force: true });
     rmSync(tmpHome, { recursive: true, force: true });
     rmSync(fakeBin, { recursive: true, force: true });

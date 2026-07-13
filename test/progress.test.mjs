@@ -16,13 +16,16 @@ test('runStarted and contextEvent carry workflow + context fields', () => {
   const ctx = contextEvent({
     repoName: 'SmartDiffChecker', repoPath: '/r', workflow: 'detailed_audit',
     agent: 'claude', model: 'opus', base: 'main', head: 'working tree',
-    targetCount: undefined,
+    targetCount: undefined, taskMode: 'resume', taskLabel: 'Clarify quote handling', taskId: 'task-id',
   });
   assert.equal(ctx.type, 'context');
   assert.equal(ctx.repoName, 'SmartDiffChecker');
   assert.equal(ctx.agent, 'claude');
   assert.equal(ctx.model, 'opus');
   assert.equal(ctx.base, 'main');
+  assert.equal(ctx.taskMode, 'resume');
+  assert.equal(ctx.taskLabel, 'Clarify quote handling');
+  assert.equal(ctx.taskId, 'task-id');
 });
 
 test('phaseEvent fills the default label and keeps detail optional', () => {

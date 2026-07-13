@@ -19,14 +19,14 @@ import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, appendUserMessage, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
-import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, storyRepairPrompt, } from './agent.js';
+import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, resumedCodexTaskMatches, storyRepairPrompt, } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, noteEventsFromText, createFileEnricher, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
 import { createSession, openSession, closeSession } from './session.js';
 import { inspectRepo } from './repo-state.js';
 import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { listDirs } from './fs-browse.js';
-import { deleteStory, listStories, storyPathForId } from './stories.js';
+import { deleteStory, diffFingerprint, listStories, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
 import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,6 +34,7 @@ import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
 import { codexTaskBinary, listCodexStoryModels, listCodexTasks, nameCodexTask, validCodexThreadId, } from './codex-tasks.js';
+import { sendCodexDesktopTurn } from './codex-desktop.js';
 import { captureReviewSnapshot, diffSinceReview, recordReviewEvent, reviewStateSummary, } from './review-state.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -612,6 +613,11 @@ function renderReview(session, params = new URLSearchParams()) {
     const files = reviewMode === 'since'
         ? parseUnifiedDiff(diffSinceReview(repo, base, head, fullFiles, params.get('from') || reviewState.compareFrom?.id))
         : fullFiles;
+    const storyFreshness = !tour.diffFingerprint
+        ? 'unverified'
+        : diffFingerprint(diff) === tour.diffFingerprint
+            ? 'current'
+            : 'stale';
     return renderPage({
         repo,
         routeBase: repoRouteBase(repo),
@@ -623,6 +629,7 @@ function renderReview(session, params = new URLSearchParams()) {
         comments: loadComments(repo),
         reviewState,
         reviewMode,
+        storyFreshness,
     });
 }
 function sessionReviewData(session) {
@@ -932,6 +939,44 @@ function runWorkflow(res, repo, spec) {
         agentBusy = false;
     });
 }
+/**
+ * Hand an existing task to its live Desktop owner. This deliberately has no
+ * `codex exec resume` fallback: that creates a parallel stored turn which the
+ * selected ChatGPT task does not render as its normal conversation.
+ */
+function sendAddressToCodexDesktop(res, context, title, threadId, prompt) {
+    agentBusy = true;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    let seq = 0;
+    const send = (event) => {
+        if (!res.destroyed)
+            res.write(`${JSON.stringify({ seq: seq++, ...event })}\n`);
+    };
+    send(runStarted('address', title));
+    send(contextEvent(context));
+    send(phaseEvent('resolving_context'));
+    send(phaseEvent('preparing_prompt'));
+    send(phaseEvent('starting_agent', 'Sending to the selected ChatGPT task'));
+    sendCodexDesktopTurn(threadId, prompt)
+        .then(() => {
+        send({ type: 'activity', kind: 'task', label: `Sent to live ChatGPT task · …${threadId.slice(-8)}` });
+        send(doneEvent('complete', {
+            codexThreadId: threadId,
+            messageSent: true,
+            delivery: 'desktop',
+        }));
+    })
+        .catch((error) => {
+        send(errorEvent('execution', 'Could not reach the selected task in ChatGPT', error instanceof Error ? error.message : String(error)));
+        send(doneEvent('failed', { codexThreadId: threadId, messageSent: false }));
+    })
+        .finally(() => {
+        res.end();
+        agentBusy = false;
+    });
+}
 function addressRepoContext(repo, head) {
     if (!head)
         return { runRepo: repo, historical: false };
@@ -1005,19 +1050,31 @@ function runAddress(res, session, body) {
         return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
     const agent = selected.agent;
     const codexThreadId = validCodexThreadId(input.codexThreadId) ? input.codexThreadId : undefined;
+    const codexTaskLabel = typeof input.codexTaskLabel === 'string'
+        ? input.codexTaskLabel.replace(/\s+/g, ' ').trim().slice(0, 100)
+        : undefined;
     if (agent === 'codex' && input.codexThreadId !== undefined && !codexThreadId) {
         return sendJson(res, 400, errorEvent('preflight', 'Invalid Codex task', 'Choose a Codex task from the task picker.'));
     }
-    const useCodexTask = agent === 'codex' && (codexThreadId !== undefined || input.newCodexTask === true);
-    const agentOptions = useCodexTask
-        ? { codex: { binary: codexTaskBinary(), threadId: codexThreadId, json: true } }
+    const useNewCodexTask = agent === 'codex' && input.newCodexTask === true;
+    const agentOptions = useNewCodexTask
+        ? { codex: { binary: codexTaskBinary(), json: true } }
         : undefined;
     const repo = session.repo;
-    const openCount = loadComments(repo).filter((c) => c.status === 'open').length;
+    const comments = loadComments(repo);
+    const openComments = comments.filter((comment) => comment.status === 'open');
+    const openCount = openComments.length;
     const targetCount = target === 'all' ? openCount : target.length;
     const targetIds = target === 'all'
-        ? loadComments(repo).filter((comment) => comment.status === 'open').map((comment) => comment.id)
+        ? openComments.map((comment) => comment.id)
         : target;
+    const targetSet = new Set(targetIds);
+    const reviewMessages = comments
+        .filter((comment) => targetSet.has(comment.id))
+        .map((comment) => {
+        const latestUserTurn = [...(comment.turns ?? [])].reverse().find((turn) => turn.role === 'user');
+        return { id: comment.id, text: latestUserTurn?.text || comment.body };
+    });
     const title = target === 'all'
         ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
         : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
@@ -1051,20 +1108,29 @@ function runAddress(res, session, body) {
         addressCtx.cleanup?.();
         addressCtx = { runRepo: repo, historical: true };
     }
+    const prompt = addressPrompt(target, base, head, {
+        historicalCheckout: addressCtx.historical,
+        originalRepo: addressCtx.historical ? repo : undefined,
+        resumedCodexTask: resumedHistoricalTask,
+        reviewMessages,
+    });
+    const runContext = {
+        repoName: basename(repo), repoPath: repo, workflow: 'address',
+        agent, targetCount,
+        ...(codexThreadId ? { taskMode: 'resume', taskLabel: codexTaskLabel || 'Selected Codex task', taskId: codexThreadId } : {}),
+        ...(agent === 'codex' && input.newCodexTask === true ? { taskMode: 'new' } : {}),
+    };
+    if (agent === 'codex' && codexThreadId) {
+        sendAddressToCodexDesktop(res, runContext, title, codexThreadId, prompt);
+        return;
+    }
     runWorkflow(res, addressCtx.runRepo, {
         workflow: 'address',
         title,
         agent,
-        prompt: addressPrompt(target, base, head, {
-            historicalCheckout: addressCtx.historical,
-            originalRepo: addressCtx.historical ? repo : undefined,
-            resumedCodexTask: resumedHistoricalTask,
-        }),
+        prompt,
         agentOptions,
-        context: {
-            repoName: basename(repo), repoPath: repo, workflow: 'address',
-            agent, targetCount,
-        },
+        context: runContext,
         // For address, the output is code: any non-read write to a non-JSON file.
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && !ev.target.endsWith('.json'),
         finish: (r) => {
@@ -1077,6 +1143,12 @@ function runAddress(res, session, body) {
             }
             else if (!r.ok) {
                 events.push(agentFailureEvent(r));
+                status = 'failed';
+            }
+            else if (!resumedCodexTaskMatches(codexThreadId, r.threadId)) {
+                events.push(errorEvent('execution', 'Codex did not resume the selected task', r.threadId
+                    ? 'Codex connected to a different task. Re-select the intended task and try again.'
+                    : 'Codex did not confirm the selected task id. Re-select the intended task and try again.', `Expected ${codexThreadId}; received ${r.threadId || 'no task id'}.`));
                 status = 'failed';
             }
             else if (!codeChanged && !addressCtx.historical) {
@@ -1159,14 +1231,16 @@ function storyScopeFromInput(input, changedFiles) {
         },
     };
 }
-function stampStoryScope(storyPath, scope) {
-    if (!scope || !existsSync(storyPath))
+function stampStoryMetadata(storyPath, fingerprint, scope) {
+    if (!existsSync(storyPath))
         return;
     try {
         const parsed = JSON.parse(readFileSync(storyPath, 'utf8'));
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
             return;
-        parsed.storyScope = scope;
+        parsed.diffFingerprint = fingerprint;
+        if (scope)
+            parsed.storyScope = scope;
         writeFileSync(storyPath, `${JSON.stringify(parsed, null, 2)}\n`);
     }
     catch {
@@ -1229,6 +1303,9 @@ function runStoryRepair(res, session, body) {
         },
         isTargetWrite: (event) => event.type === 'file' && event.action !== 'read' && event.target.endsWith('story.json'),
         finish: (result) => {
+            if (result.ok && existsSync(storyPath)) {
+                stampStoryMetadata(storyPath, diffFingerprint(data.diff));
+            }
             const finished = finishStoryGeneration(result, storyPath, session, storyBefore, storyWasModern);
             if (finished.status === 'complete')
                 captureSessionReview(session, 'story-repaired');
@@ -1299,8 +1376,9 @@ function runGenerate(res, session, body) {
         isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
         finish: (r) => {
             const storyChanged = existsSync(storyPath) && (storyBefore === null || readFileSync(storyPath, 'utf8') !== storyBefore);
-            if (r.ok && storyChanged)
-                stampStoryScope(storyPath, storyScope.scope);
+            if (r.ok && storyChanged) {
+                stampStoryMetadata(storyPath, diffFingerprint(getDiff(repo, promptBase, promptHead)), storyScope.scope);
+            }
             return finishStoryGeneration(r, storyPath, session, storyBefore);
         },
         fileScope: { repoPath: repo, changedFiles },

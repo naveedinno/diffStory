@@ -42,22 +42,31 @@ function changeBar(file) {
     const delWidth = 100 - addWidth;
     return `<span class="bar" aria-hidden="true"><span class="bar-a" style="width:${addWidth}%"></span><span class="bar-d" style="width:${delWidth}%"></span></span>`;
 }
-function renderFileSummary(sum, diffHref) {
-    const total = totals(sum);
-    const rows = sum.files
-        .map((file) => `<div class="frow">` +
+function generatedOutput(path) {
+    return /^(dist|build|coverage|out|target)\//.test(path) || /(^|\/)([^/]+\.generated\.[^/]+|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(path);
+}
+function fileRow(file) {
+    return `<div class="frow">` +
         `<span class="fp" title="${esc(file.path)}">${filePathHtml(file.path)}</span>` +
         changeBar(file) +
         `<span class="fc">${fileStat(file)}</span>` +
-        `</div>`)
-        .join('');
+        `</div>`;
+}
+function renderFileSummary(sum, diffHref) {
+    const total = totals(sum);
+    const primary = sum.files.filter((file) => !generatedOutput(file.path));
+    const generated = sum.files.filter((file) => generatedOutput(file.path));
+    const rows = primary.map(fileRow).join('');
+    const generatedRows = generated.length
+        ? `<details class="generated"><summary><span>Generated output</span><span>${generated.length} ${generated.length === 1 ? 'file' : 'files'} <i>⌄</i></span></summary><div>${generated.map(fileRow).join('')}</div></details>`
+        : '';
     return `<div class="card file-summary-card">
     <div class="fsum">
-      <span class="fsum-n"><b>${sum.totalChanged}</b> ${sum.totalChanged === 1 ? 'file changed' : 'files changed'}</span>
+      <span class="fsum-n"><b>${primary.length}</b> review ${primary.length === 1 ? 'file' : 'files'}${generated.length ? ` <span>· ${generated.length} generated</span>` : ''}</span>
       <span class="fsum-stat"><span class="add">+${total.added}</span><span class="del">−${total.removed}</span></span>
-      <a class="openreview" href="${esc(diffHref)}">Open diff viewer <span aria-hidden="true">→</span></a>
+      <a class="openreview" href="${esc(diffHref)}" aria-label="Start review of ${sum.totalChanged} ${sum.totalChanged === 1 ? 'file' : 'files'}">Review ${sum.totalChanged} ${sum.totalChanged === 1 ? 'file' : 'files'} <span aria-hidden="true">→</span></a>
     </div>
-    <div class="files">${rows}</div>
+    <div class="files">${rows}${generatedRows}</div>
   </div>`;
 }
 /** Carry the current scope to the /diff viewer so it diffs the same thing. */
@@ -84,7 +93,7 @@ export function renderChangePage(sum, opts) {
             { label: 'Diff' },
         ],
         right: `<button class="nv-act" id="reloadBtn" type="button" title="Re-read the working tree and rebuild the diff">${REFRESH_ICON}Reload</button>` +
-            `<a class="nv-act" href="${esc(routeBase)}/stories">Saved stories</a>`,
+            `<a class="nv-act" href="${esc(routeBase)}/stories">Review sessions</a>`,
     });
     const scopeControls = `<div class="sopts" role="group" aria-label="Review scope">` +
         `<a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=uncommitted">` +
@@ -122,6 +131,7 @@ ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 .wrap{max-width:1120px;margin:0 auto;padding:26px 24px 34px}
+.review-path{display:grid;grid-template-columns:100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px;align-items:center;width:min(640px,100%);margin:0 0 26px;color:var(--l3);font-size:11px;font-weight:720;text-transform:uppercase;letter-spacing:.07em}.review-path>b{height:1px;margin:0 12px;background:var(--hair)}.review-path span{display:flex;align-items:center;gap:9px;white-space:nowrap}.review-path i{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:50%;background:var(--bg);border:1px solid var(--hair);font-style:normal;color:var(--l3)}.review-path .active{color:var(--label)}.review-path .active i{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent)}
 .lede{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin:4px 0 18px}
 .eyebrow{margin:0 0 7px;color:var(--blue);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .lede h1{font-size:30px;font-weight:760;letter-spacing:-.026em;margin:0}
@@ -175,14 +185,16 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .file-summary-card{overflow:hidden}
 .fsum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-bottom:.5px solid var(--sep);background:var(--subbg);font-size:13px;color:var(--l2);flex-wrap:wrap}
 .fsum-n b{color:var(--label);font-weight:650;font-variant-numeric:tabular-nums}
+.fsum-n span{color:var(--l3)}
 .fsum-stat{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12.5px;display:inline-flex;gap:9px}
 .openreview{margin-left:auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:9px;background:var(--blue);color:#fff;text-decoration:none;font-size:13px;font-weight:650;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .openreview:hover{background:var(--blue2)}
 .files{max-height:min(58vh,620px);overflow:auto}
 .frow{display:flex;align-items:center;gap:12px;padding:9px 15px;border-bottom:.5px solid var(--sep);font-size:13px}
 .frow:last-child{border-bottom:none}
+.generated{border-top:.5px solid var(--sep)}.generated summary{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;background:var(--subbg);cursor:pointer;color:var(--l2);font-size:12px;font-weight:650;list-style:none}.generated summary::-webkit-details-marker{display:none}.generated summary i{font-style:normal;margin-left:6px;color:var(--l3)}.generated[open] summary i{display:inline-block;transform:rotate(180deg)}.generated>div .frow{padding-left:25px;background:color-mix(in srgb,var(--subbg) 50%,transparent)}
 .fp{flex:1;min-width:0;display:flex;align-items:baseline;overflow:hidden;font-family:"SF Mono",ui-monospace,Menlo,monospace}
-.fdir{flex:0 1 auto;min-width:0;direction:rtl;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--l3)}
+.fdir{flex:0 1 auto;min-width:0;direction:ltr;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--l3)}
 .fname{flex:0 0 auto;color:var(--label);font-weight:520}
 .bar{flex:none;display:inline-flex;width:42px;height:7px;border-radius:3px;overflow:hidden;background:var(--fill)}
 .bar-a{background:var(--addbar);height:100%}.bar-d{background:var(--delbar);height:100%}
@@ -197,16 +209,17 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 @media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:980px){.scope-card,.file-card{grid-column:1}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
 @media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}}
-@media (max-width:600px){.wrap{padding:22px 14px 26px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
+@media (max-width:600px){.wrap{padding:20px 14px 26px}.review-path{grid-template-columns:24px 1fr 24px 1fr 24px 1fr 24px}.review-path>b{margin:0 10px}.review-path span{gap:0;font-size:0}.review-path i{font-size:11px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
 </style></head>
 <body>
 ${nav}
 <main class="wrap">
+  <div class="review-path" role="list" aria-label="Review workflow"><span class="active" role="listitem" aria-current="step"><i>1</i>Scope</span><b aria-hidden="true"></b><span role="listitem"><i>2</i>Read</span><b aria-hidden="true"></b><span role="listitem"><i>3</i>Resolve</span><b aria-hidden="true"></b><span role="listitem"><i>4</i>Decide</span></div>
   <div class="lede">
     <div>
-      <p class="eyebrow">Your change</p>
-      <h1>Change summary</h1>
-      <p>A quick file-by-file summary for this scope. Open the review viewer for the full diff, comments, and optional story.</p>
+      <p class="eyebrow">Review session</p>
+      <h1>Choose what to review</h1>
+      <p>Set the exact git scope, confirm the changed files, then start with the real diff. A guided story stays optional.</p>
     </div>
     <div class="scope-metrics" aria-label="Current scope summary">
       <span class="metric"><b>${sum.totalChanged}</b><span>${sum.totalChanged === 1 ? 'file' : 'files'}</span></span>

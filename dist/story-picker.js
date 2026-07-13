@@ -25,36 +25,39 @@ const CHEV = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke
 const TRASH = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>`;
 function storyRow(s, now, routeBase) {
     const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
-    const mode = s.mode === 'brief'
-        ? 'Compact story'
-        : s.mode === 'detailed'
-            ? 'Deep review'
-            : 'Guided review';
-    const badges = (s.current ? `<span class="badge badge-cur">Current</span>` : '') +
-        (s.valid ? '' : `<span class="badge badge-bad">Needs fix</span>`);
-    const meta = s.valid
-        ? [
-            `<span class="chip"${s.scope.command ? ` title="${esc(s.scope.command)}"` : ''}>${esc(s.scope.label)}</span>`,
-            mode,
-            `${plural(s.files, 'file')} · ${plural(s.steps, 'step')}`,
-            relTime(s.updatedAt, now),
-        ]
-        : [`<span class="chip chip-bad">${esc(s.scope.label)}</span>`, relTime(s.updatedAt, now)];
-    const metaHtml = meta
-        .map((m, i) => (i === 0 ? m : `<span class="mdot">·</span>${m}`))
-        .join('');
+    const state = !s.valid
+        ? { label: 'Needs repair', cls: 'bad', detail: 'Story file cannot be read' }
+        : s.openComments
+            ? { label: 'Resolve feedback', cls: 'feedback', detail: `${plural(s.openComments, 'open thread')} waiting` }
+            : s.freshness === 'stale'
+                ? { label: 'Diff changed', cls: 'warn', detail: 'Regenerate before approval' }
+                : s.freshness === 'unverified'
+                    ? { label: 'Verify scope', cls: 'warn', detail: 'Story has no exact diff fingerprint' }
+                    : { label: 'Ready to decide', cls: 'ready', detail: 'Current diff is verified' };
+    const activity = s.changedSinceReview
+        ? `${plural(s.changedSinceReview, 'file')} changed since feedback`
+        : s.addressedComments
+            ? `${plural(s.addressedComments, 'reply')} ready to verify`
+            : state.detail;
     const summary = esc(s.valid ? s.summary || 'No summary yet.' : s.error || 'This story file could not be read.');
-    return (`<div class="story-row${s.valid ? '' : ' row-bad'}">` +
+    return (`<article class="story-row state-${state.cls}${s.valid ? '' : ' row-bad'}">` +
         `<a class="row-main" href="${href}">` +
+        `<span class="state-rail" aria-hidden="true"></span>` +
         `<span class="row-body">` +
-        `<span class="row-head"><span class="row-title">${esc(s.title || s.id)}</span>${badges}</span>` +
+        `<span class="row-head"><span class="row-title">${esc(s.title || s.id)}</span><span class="badge">${state.label}</span></span>` +
         `<span class="row-sum">${summary}</span>` +
-        `<span class="row-meta">${metaHtml}</span>` +
+        `<span class="session-facts">` +
+        `<span><b>${s.liveFiles || s.files}</b> files</span>` +
+        `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` +
+        `<span><b>${s.steps}</b> guided stops</span>` +
+        `<span><b>Round ${s.reviewRound}</b></span>` +
         `</span>` +
-        `<span class="row-chev" aria-hidden="true">${CHEV}</span>` +
+        `<span class="row-foot"><span class="chip"${s.scope.command ? ` title="${esc(s.scope.command)}"` : ''}>${esc(s.scope.label)}</span><span>${esc(activity)}</span><span>${relTime(s.updatedAt, now)}</span></span>` +
+        `</span>` +
+        `<span class="resume">Resume review ${CHEV}</span>` +
         `</a>` +
         `<button class="row-del" data-delete-story="${esc(s.id)}" data-story-title="${esc(s.title || s.id)}" type="button" title="Remove story" aria-label="Remove ${esc(s.title || s.id)}">${TRASH}</button>` +
-        `</div>`);
+        `</article>`);
 }
 export function renderStoryPicker(opts) {
     const rb = opts.routeBase;
@@ -66,20 +69,22 @@ export function renderStoryPicker(opts) {
         home: '/repos',
         crumbs: [{ label: opts.repoName }],
         right: `<a class="nv-act" href="${esc(rb)}/stories" title="Reload after another agent saves a story">Refresh</a>` +
-            `<a class="nv-pri" href="${esc(rb)}/change">New diff scope</a>`,
+            `<a class="nv-pri" href="${esc(rb)}/change">Start review</a>`,
     });
     const body = hasStories
-        ? `<div class="layout">
+        ? `<div class="review-path" role="list" aria-label="Review workflow"><span class="done" role="listitem" aria-label="Scope, complete"><i>1</i>Scope</span><b aria-hidden="true"></b><span class="active" role="listitem" aria-current="step"><i>2</i>Read</span><b aria-hidden="true"></b><span role="listitem"><i>3</i>Resolve</span><b aria-hidden="true"></b><span role="listitem"><i>4</i>Decide</span></div>
+       <div class="layout">
        <aside class="side">
-         <p class="kicker">Story library</p>
+         <p class="kicker">Review sessions</p>
          <h1>${esc(opts.repoName)}</h1>
-         <p class="sub">Open a saved walkthrough, refresh after an agent writes a new one, or remove old story files you no longer need.</p>
-         <a class="side-cta" href="${esc(rb)}/change">New diff scope</a>
+         <p class="sub">Every session keeps the scope, guided reading, feedback, and final decision in one review thread.</p>
+         <div class="side-note"><b>${opts.stories.filter((s) => s.openComments).length}</b> need feedback<br><b>${opts.stories.filter((s) => s.current && !s.openComments).length}</b> ready to decide</div>
+         <a class="side-cta" href="${esc(rb)}/change">Start review</a>
        </aside>
        <section class="stories-panel">
          <div class="head">
-           <div><p class="kicker">Saved stories</p><h2>${opts.stories.length} ${opts.stories.length === 1 ? 'story' : 'stories'}</h2></div>
-           <a class="panel-action" href="${esc(rb)}/change">New diff scope</a>
+           <div><p class="kicker">Active work</p><h2>${opts.stories.length} review ${opts.stories.length === 1 ? 'session' : 'sessions'}</h2></div>
+           <a class="panel-action" href="${esc(rb)}/change">Start review</a>
          </div>
          <div class="card" id="storyList">${list}</div>
        </section>
@@ -87,9 +92,9 @@ export function renderStoryPicker(opts) {
        `
         : `<div class="empty">
          <span class="empty-mark">${MARK}</span>
-         <h1 class="empty-title">No stories yet</h1>
-         <p class="empty-sub">Open <b>${esc(opts.repoName)}</b>'s current diff to read the change — then generate a guided story from it whenever you want one.</p>
-         <a class="empty-cta" href="${esc(rb)}/change">New diff scope</a>
+         <h1 class="empty-title">No review sessions yet</h1>
+         <p class="empty-sub">Start with <b>${esc(opts.repoName)}</b>'s current diff. Generate a guided story only when it helps explain the change.</p>
+         <a class="empty-cta" href="${esc(rb)}/change">Start review</a>
        </div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -97,12 +102,16 @@ export function renderStoryPicker(opts) {
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(opts.repoName)} stories</title>
 <style>
-:root{--bg:#f4f5f7;--elev:#fff;--label:#17181c;--l2:#61656f;--l3:#8a8f9b;--hair:rgba(20,24,32,.12);--sep:rgba(20,24,32,.08);--blue:#007aff;--blue2:#0067d6;--red-bg:#fde9e7;--red:#bd2a22;--fill:rgba(0,0,0,.045);--chip:rgba(94,99,112,.12)}
+:root{--bg:#f1f3f6;--elev:#fff;--label:#17191e;--l2:#5e6470;--l3:#858c99;--hair:rgba(18,23,32,.13);--sep:rgba(18,23,32,.08);--blue:#0866e5;--blue2:#0057ca;--red-bg:#fde9e7;--red:#bd2a22;--amber:#b86b00;--green:#177a51;--fill:rgba(15,23,42,.045);--chip:rgba(94,99,112,.11)}
 @media (prefers-color-scheme:dark){:root{--bg:#17181b;--elev:#24262b;--label:#f5f6f8;--l2:#b3b7c0;--l3:#858b97;--hair:rgba(255,255,255,.13);--sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--red-bg:rgba(255,69,58,.18);--red:#ff6961;--fill:rgba(255,255,255,.06);--chip:rgba(127,132,145,.22)}}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:0}
-.wrap{width:min(1080px,100%);margin:0 auto;padding:36px 24px 80px}
+.wrap{width:min(1160px,100%);margin:0 auto;padding:28px 24px 80px}
+.review-path{display:grid;grid-template-columns:100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px;align-items:center;width:min(640px,100%);margin:0 0 34px;padding-top:1px;color:var(--l3);font-size:11px;font-weight:720;text-transform:uppercase;letter-spacing:.07em}
+.review-path>b{height:1px;margin:0 12px;background:var(--hair)}
+.review-path span{display:flex;align-items:center;gap:9px;white-space:nowrap}.review-path i{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:50%;background:var(--bg);border:1px solid var(--hair);font-style:normal;color:var(--l3)}
+.review-path .done,.review-path .active{color:var(--label)}.review-path .done i{background:var(--label);border-color:var(--label);color:var(--elev)}.review-path .active i{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent)}
 .layout{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);gap:34px;align-items:start}
 .side{position:sticky;top:76px;min-height:calc(100vh - 128px);display:flex;flex-direction:column;align-items:flex-start}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 14px}
@@ -111,28 +120,27 @@ h1{font-size:28px;font-weight:740;letter-spacing:-.02em;margin:0}
 h2{font-size:24px;line-height:1.1;font-weight:720;letter-spacing:-.018em;margin:0}
 .sub{color:var(--l2);font-size:14px;margin:12px 0 20px;line-height:1.48;max-width:32ch}
 .sub b{color:var(--label);font-weight:600}
+.side-note{margin:0 0 22px;padding-left:13px;border-left:2px solid var(--blue);font-size:12.5px;line-height:1.65;color:var(--l2)}.side-note b{color:var(--label);font-variant-numeric:tabular-nums}
 .side-cta,.panel-action{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:8px;font-size:13.5px;font-weight:650;text-decoration:none;color:#fff;background:var(--blue)}
 .side-cta:hover,.panel-action:hover{background:var(--blue2)}
 .panel-action{display:none}
 .stories-panel{min-width:0}
-.card{display:grid;gap:8px}
+.card{display:grid;gap:12px}
 .story-row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:8px;align-items:stretch}
-.row-main{display:flex;align-items:center;gap:14px;padding:14px 14px;border:.5px solid var(--hair);border-radius:8px;background:var(--elev);color:inherit;text-decoration:none;transition:background .12s ease,box-shadow .12s ease}
+.row-main{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding:18px 18px 18px 21px;border:.5px solid var(--hair);border-radius:12px;background:var(--elev);color:inherit;text-decoration:none;overflow:hidden;transition:background .12s ease,box-shadow .12s ease}
 .row-main:hover{background:linear-gradient(0deg,var(--fill),var(--fill)),var(--elev);box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.state-rail{position:absolute;inset:0 auto 0 0;width:3px;background:var(--l3)}.state-ready .state-rail{background:var(--green)}.state-feedback .state-rail{background:var(--blue)}.state-warn .state-rail{background:var(--amber)}.state-bad .state-rail{background:var(--red)}
 .row-main:focus-visible,.row-del:focus-visible,.side-cta:focus-visible,.panel-action:focus-visible{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
 .row-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .row-head{display:flex;align-items:center;gap:8px;min-width:0}
 .row-title{font-size:15.5px;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.badge{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;padding:2px 7px;border-radius:6px}
-.badge-cur{color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,transparent)}
-.badge-bad{color:var(--red);background:var(--red-bg)}
+.badge{flex:none;font-size:10.5px;font-weight:740;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:5px;color:var(--l2);background:var(--fill)}.state-ready .badge{color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent)}.state-feedback .badge{color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)}.state-warn .badge{color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent)}.state-bad .badge{color:var(--red);background:var(--red-bg)}
 .row-sum{font-size:13.5px;color:var(--l2);line-height:1.42;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.row-meta{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:12.5px;color:var(--l3);margin-top:1px}
-.mdot{opacity:.5}
+.session-facts{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin-top:5px;color:var(--l2);font-size:12px}.session-facts>span{padding:0 11px;border-left:1px solid var(--sep)}.session-facts>span:first-child{padding-left:0;border-left:0}.session-facts b{color:var(--label);font-variant-numeric:tabular-nums}.session-facts .plus{color:var(--green)}.session-facts .minus{color:var(--red);margin-left:3px}
+.row-foot{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:3px;color:var(--l3);font-size:11.5px}.row-foot>span+span:before{content:"·";margin-right:8px;opacity:.55}
 .chip{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--label);background:var(--chip);padding:2px 7px;border-radius:6px;letter-spacing:0}
 .chip-bad{color:var(--red);background:var(--red-bg)}
-.row-chev{flex:none;color:var(--l3);display:flex;opacity:.5}
-.row-main:hover .row-chev{opacity:.8}
+.resume{display:inline-flex;align-items:center;gap:4px;color:var(--blue);font-size:12.5px;font-weight:680;white-space:nowrap}.resume svg{width:14px;height:14px}
 .row-bad .row-sum{color:var(--red)}
 .row-del{width:38px;border:.5px solid var(--hair);border-radius:8px;background:var(--elev);color:var(--l3);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .row-del:hover{background:var(--red-bg);color:var(--red)}
@@ -143,7 +151,8 @@ h2{font-size:24px;line-height:1.1;font-weight:720;letter-spacing:-.018em;margin:
 .empty-sub b{color:var(--label);font-weight:600}
 .empty-cta{display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:8px;font-size:15px;font-weight:600;color:#fff;background:var(--blue);text-decoration:none;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .empty-cta:hover{background:var(--blue2)}
-@media (max-width:760px){.wrap{padding:24px 16px 64px}.layout{display:block}.side{position:static;min-height:0;margin-bottom:26px}.side-cta{display:none}.panel-action{display:inline-flex}.row-meta{font-size:12px}}
+@media (max-width:760px){.wrap{padding:22px 16px 64px}.review-path{grid-template-columns:24px 1fr 24px 1fr 24px 1fr 24px;margin-bottom:28px}.review-path>b{margin:0 10px}.review-path span{gap:0;font-size:0}.review-path i{font-size:11px}.layout{display:block}.side{position:static;min-height:0;margin-bottom:26px}.side-note,.side-cta{display:none}.panel-action{display:inline-flex}.row-main{grid-template-columns:1fr;padding:16px 15px 15px 19px;gap:12px}.resume{justify-self:start}.session-facts>span:nth-child(4){display:none}}
+@media (max-width:460px){.row-head{align-items:flex-start;flex-direction:column}.session-facts>span{padding:0 8px}.session-facts>span:nth-child(3){display:none}.row-foot>span:nth-child(2){display:none}}
 </style></head>
 <body>
 ${nav}

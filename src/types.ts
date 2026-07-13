@@ -88,6 +88,8 @@ export interface TourStep {
 /** The whole reading plan the AI emits. */
 export interface Tour {
   version: 1;
+  /** SHA-256 of the exact rendered git diff when the story was last generated or repaired. */
+  diffFingerprint?: string;
   /** Story depth requested at generation time; old stories default to guided. */
   mode?: StoryMode;
   title: string;

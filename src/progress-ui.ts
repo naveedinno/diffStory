@@ -31,9 +31,12 @@ export function progressPanelStyles(): string {
 .ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:550;color:var(--pp-text);background:transparent;border:.5px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
 .ds-pp-stop[hidden],.ds-pp-close[hidden]{display:none}
 .ds-pp-stop:focus-visible,.ds-pp-close:focus-visible,.ds-pp-foot button:focus-visible{outline:2px solid var(--pp-blue);outline-offset:2px}
-.ds-pp-sub{padding:9px 14px 2px}
-.ds-pp-repo{font-size:11.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.ds-pp-sub{padding:9px 14px 2px;display:flex;align-items:flex-start;gap:10px}
+.ds-pp-repo{flex:1;min-width:0;font-size:11.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
 .ds-pp-repo:empty{display:none}
+.ds-pp-task-link{flex:none;margin-left:auto;font-size:11.5px;font-weight:650;color:var(--pp-blue);text-decoration:none;white-space:nowrap}
+.ds-pp-task-link:hover{text-decoration:underline}.ds-pp-task-link:focus-visible{outline:2px solid var(--pp-blue);outline-offset:2px;border-radius:3px}
+.ds-pp-task-link[hidden]{display:none}
 .ds-pp-plan{list-style:none;margin:0;padding:6px 14px 4px;overflow:auto;flex:1;min-height:40px}
 .ds-pp-plan:empty{display:none}
 .ds-pp-step{display:flex;align-items:flex-start;gap:10px;padding:5px 0}
@@ -116,7 +119,7 @@ export function progressPanelMarkup(variant: 'inline' | 'floating'): string {
     <button class="ds-pp-stop" data-pp-stop hidden>Stop</button>
     <button class="ds-pp-close" data-pp-close hidden>Close</button>
   </div>
-  <div class="ds-pp-sub"><span class="ds-pp-repo"></span></div>
+  <div class="ds-pp-sub"><span class="ds-pp-repo"></span><a class="ds-pp-task-link" data-pp-task-link hidden>Open in Codex ↗</a></div>
   <ol class="ds-pp-miles" hidden></ol>
   <div class="ds-pp-note" hidden></div>
   <ol class="ds-pp-plan"></ol>
@@ -141,7 +144,7 @@ function ProgressPanel(root, opts){
     liveTx:q('.ds-pp-live-tx'), liveCount:q('.ds-pp-live-count'),
     details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
     error:q('.ds-pp-error'), errorTitle:q('.ds-pp-error-title'), errorDetail:q('.ds-pp-error-detail'),
-    stop:q('[data-pp-stop]'), close:q('[data-pp-close]'),
+    stop:q('[data-pp-stop]'), close:q('[data-pp-close]'), taskLink:q('[data-pp-task-link]'),
     miles:q('.ds-pp-miles'), note:q('.ds-pp-note')
   };
   var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review',address:'Addressing comments'};
@@ -239,11 +242,13 @@ function ProgressPanel(root, opts){
     var c=root.className.replace(/\\s*\\bis-finished\\b/g,'');
     root.className=on?(c+' is-finished'):c;
   }
-  function agentChip(agent,model){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; return model?(a+' · '+model):a; }
+  function agentChip(agent,model,taskMode){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; if(taskMode==='resume')a+=' · selected task';else if(taskMode==='new')a+=' · new task';return model?(a+' · '+model):a; }
   function repoLine(ev){
     var p=ev.repoName||'';
     if(ev.base){ p+=' · '+ev.base+' → '+(ev.head||'working tree'); }
     if(typeof ev.targetCount==='number'){ p+=' · '+ev.targetCount+' '+(ev.targetCount===1?'comment':'comments'); }
+    if(ev.taskMode==='resume')p+=' · Sending to '+(ev.taskLabel||'selected Codex task');
+    else if(ev.taskMode==='new')p+=' · Starting a new Codex task';
     return p;
   }
   function start(){
@@ -252,6 +257,7 @@ function ProgressPanel(root, opts){
     miles=null; mileIdx=-1; mileFailed=false; root.setAttribute('aria-live','polite');
     if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
     if(els.note){els.note.textContent='';els.note.hidden=true;}
+    if(els.taskLink){els.taskLink.hidden=true;els.taskLink.removeAttribute('href');}
     if(els.spin)els.spin.hidden=false;
     if(els.stop)els.stop.hidden=false;
     if(els.close)els.close.hidden=true;
@@ -279,8 +285,14 @@ function ProgressPanel(root, opts){
         miles=MILES[workflow]||null; mileIdx=miles?0:-1; if(miles)renderMiles();
         curState='Working'; setLive('Working',0); break;
       case 'context':
-        if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model);
-        if(els.repo)els.repo.textContent=repoLine(ev); break;
+        if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model,ev.taskMode);
+        if(els.repo){els.repo.textContent=repoLine(ev);els.repo.title=ev.taskId?('Codex task '+ev.taskId):'';}
+        if(els.taskLink){
+          var canOpen=ev.taskMode==='resume'&&typeof ev.taskId==='string'&&ev.taskId;
+          els.taskLink.hidden=!canOpen;
+          if(canOpen){els.taskLink.href='codex://threads/'+encodeURIComponent(ev.taskId);els.taskLink.setAttribute('aria-label','Open '+(ev.taskLabel||'selected Codex task')+' in Codex');}
+          else els.taskLink.removeAttribute('href');
+        } break;
       case 'phase':
         advanceMiles(ev.phase);
         if(ev.phase==='validating_output'||ev.phase==='applying_results'){
@@ -312,13 +324,14 @@ function ProgressPanel(root, opts){
     if(els.stop)els.stop.hidden=true;
     if(els.close)els.close.hidden=false;
     var ok=(status==='complete');
+    var handedToDesktop=ok&&result&&result.delivery==='desktop';
     if(ok&&miles){ mileIdx=miles.length; renderMiles(); }
     else if(!ok&&status!=='stopped'&&miles){mileFailed=true;renderMiles();}
-    if(els.title)els.title.textContent=ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':(FAIL[workflow]||"Couldn't finish");
+    if(els.title)els.title.textContent=handedToDesktop?'Sent to ChatGPT':ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':(FAIL[workflow]||"Couldn't finish");
     if(els.now)els.now.hidden=true;
     if(els.live){
       els.live.className='ds-pp-live '+(ok?'is-done':'is-error');
-      if(els.liveTx)els.liveTx.textContent=(ok?'Done':(status==='stopped')?'Stopped':'Failed')+' · '+elapsed();
+      if(els.liveTx)els.liveTx.textContent=(handedToDesktop?'Message delivered':ok?'Done':(status==='stopped')?'Stopped':'Failed')+' · '+elapsed();
     }
     if(!ok&&status!=='stopped'&&!lastError)showError({label:'The connection to the agent ended',detail:'Try again. If it keeps failing, reopen diffStory and check the technical details.'});
     if(!ok && els.details && els.raw && els.raw.textContent.trim()){els.details.hidden=false;els.details.open=false;}

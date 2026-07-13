@@ -87,8 +87,13 @@ function recentCard(r: RecentRow, home: string, now: number): string {
 }
 
 export function renderPicker(recents: RecentRow[], home: string, now: number): string {
+  const available = recents.filter((r) => r.isGit);
+  const missing = recents.filter((r) => !r.isGit);
   const list = recents.length
-    ? recents.map((r) => recentCard(r, home, now)).join('')
+    ? available.map((r) => recentCard(r, home, now)).join('') +
+      (missing.length
+        ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r) => recentCard(r, home, now)).join('')}</div></details>`
+        : '')
     : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Choose a folder below to start your first guided review.</p></div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -97,14 +102,14 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 :root{
-  --bg:#f4f5f7; --bg-rail:#e9ebef; --bg-elev:#ffffff; --label:#17181c; --label2:#61656f; --label3:#8a8f9b;
+  --bg:#f1f3f6; --bg-rail:#e8ebf0; --bg-elev:#ffffff; --label:#17191e; --label2:#5e6470; --label3:#858c99;
   --sep:rgba(20,24,32,.09); --hairline:rgba(20,24,32,.12); --hover:rgba(0,0,0,.045);
-  --blue:#007aff; --blue-press:#0067d6; --green-bg:#e2f6e9; --green-fg:#16783a;
+  --blue:#0866e5; --blue-press:#0057ca; --green-bg:#e2f6e9; --green-fg:#16783a;
   --neutral-bg:rgba(95,99,109,.12); --neutral-fg:#656a75; --red-bg:#fde9e7; --red-fg:#bd2a22;
   --tile:rgba(0,122,255,.10); --tile-fg:#007aff; --scrim:rgba(0,0,0,.36); --sheet:#ffffff;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#17181b; --bg-rail:#202226; --bg-elev:#24262b; --label:#f5f6f8; --label2:#b3b7c0; --label3:#858b97;
+  --bg:#15171b; --bg-rail:#1d2025; --bg-elev:#22252b; --label:#f4f6f8; --label2:#b3b8c2; --label3:#858c98;
   --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
   --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(53,199,89,.16); --green-fg:#35c759;
   --neutral-bg:rgba(127,132,145,.22); --neutral-fg:#aeb4bf; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
@@ -121,11 +126,12 @@ body{
 .hero{position:sticky; top:28px; min-height:calc(100vh - 88px); display:flex; flex-direction:column; justify-content:space-between; gap:34px}
 .head{display:flex; align-items:center; gap:14px; margin-bottom:14px}
 .appicon{width:54px; height:54px; border-radius:14px; flex:none;
-  background:#007aff;
+  background:var(--blue);
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
 .appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
 h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
+.hero-title{font-size:22px;line-height:1.2;font-weight:710;letter-spacing:-.02em;margin:24px 0 8px;max-width:12ch}
 .sub{color:var(--label2); font-size:15px; margin:0; max-width:31ch; line-height:1.5}
 .manager{min-width:0}
 .launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
@@ -139,6 +145,7 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
 .add-btn{height:36px;padding:0 13px;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:8px;background:var(--blue);color:#fff;font:inherit;font-size:13px;font-weight:650;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .add-btn:hover{background:var(--blue-press)}
 .stack>*+*{margin-top:8px}
+.missing-group{margin-top:12px;border-top:.5px solid var(--sep);padding-top:8px}.missing-group>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:8px 3px;color:var(--label3);font-size:12px;font-weight:650;cursor:pointer}.missing-group>summary::-webkit-details-marker{display:none}.missing-group[open]>summary span{transform:rotate(180deg)}.missing-list{display:grid;gap:8px;padding-top:2px}
 .repo-card,.fsrow{font:inherit; color:inherit; cursor:pointer}
 .repo-row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:8px;align-items:stretch}
 .repo-card{width:100%; display:flex; align-items:center; gap:13px; text-align:left;
@@ -199,11 +206,9 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   background:transparent; border:.5px solid var(--hairline); border-radius:8px; cursor:pointer}
 .ghost:hover{background:var(--hover)}
 .msg{min-height:18px; margin:10px 2px 0; font-size:13px; color:var(--red-fg)}
-.steps{display:grid; gap:14px; padding-top:20px; border-top:.5px solid var(--sep)}
-.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
-.step-n{display:inline-flex; width:20px; height:20px; border-radius:50%; align-items:center; justify-content:center;
-  background:var(--neutral-bg); color:var(--label2); font-size:11px; font-weight:700; margin-top:1px}
-.step-t{font-size:13px; font-weight:600; margin:0 0 2px}
+.steps{position:relative;display:grid;gap:0;padding:0 0 0 12px;border-left:1px solid var(--hairline)}
+.step{position:relative;padding:0 0 20px 20px}.step:last-child{padding-bottom:0}.step:before{content:"";position:absolute;left:-17px;top:1px;width:8px;height:8px;border:3px solid var(--bg);border-radius:50%;background:var(--label3)}.step:first-child:before{background:var(--blue)}
+.step-t{font-size:11px;font-weight:740;text-transform:uppercase;letter-spacing:.07em;margin:0 0 4px;color:var(--label)}
 .step-d{font-size:12px; color:var(--label2); margin:0; line-height:1.4}
 .scrim{position:fixed; inset:0; background:var(--scrim); display:none; align-items:center; justify-content:center;
   padding:20px; z-index:50}
@@ -264,21 +269,23 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
         <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
         <div><h1>${esc(APP_BRAND)}</h1></div>
       </div>
-      <p class="sub">Open a repo, generate a short story, then review the actual diff in the order the change wants to be read.</p>
+      <p class="hero-title">Code review, held together.</p>
+      <p class="sub">Open a workspace and continue the review session around your current code change.</p>
     </div>
 
-    <section class="steps" aria-label="How it works">
-      <div class="step"><span class="step-n">1</span><span><p class="step-t">Make changes</p><p class="step-d">Let your agent edit code as usual.</p></span></div>
-      <div class="step"><span class="step-n">2</span><span><p class="step-t">Generate the story</p><p class="step-d">Save a guided reading order for the current diff.</p></span></div>
-      <div class="step"><span class="step-n">3</span><span><p class="step-t">Walk the diff</p><p class="step-d">Read, comment, and send fixes back inline.</p></span></div>
+    <section class="steps" aria-label="Review workflow">
+      <div class="step"><p class="step-t">Scope</p><p class="step-d">Choose the exact change.</p></div>
+      <div class="step"><p class="step-t">Read</p><p class="step-d">Follow evidence through the real diff.</p></div>
+      <div class="step"><p class="step-t">Resolve</p><p class="step-d">Send feedback and verify replies.</p></div>
+      <div class="step"><p class="step-t">Decide</p><p class="step-d">Approve only when the thread is clear.</p></div>
     </section>
   </section>
 
   <section class="manager reveal d2">
     <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
     <div class="section-head">
-      <div><p class="section">Repositories</p><h2>Choose your workspace</h2></div>
-      <button class="add-btn" id="quickAddBtn" type="button">${ICON_PLUS}<span>Add repo</span></button>
+      <div><p class="section">Workspaces</p><h2>Continue a review</h2></div>
+      <button class="add-btn" id="quickAddBtn" type="button">${ICON_PLUS}<span>Open workspace</span></button>
     </div>
     <div class="stack" id="recent">${list}</div>
 
@@ -289,7 +296,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       </div>
     <button class="chooser" id="chooseBtn" type="button">
       <span class="tile" aria-hidden="true">${ICON_FOLDER}</span>
-      <span class="ctext"><span class="ct1">Browse folders</span><span class="ct2">Pick a local git repository from your machine</span></span>
+      <span class="ctext"><span class="ct1">Open another workspace</span><span class="ct2">Browse to a local git repository</span></span>
       <span class="chev" aria-hidden="true">${ICON_CHEVRON}</span>
     </button>
       <p class="msg" id="msg" role="status"></p>

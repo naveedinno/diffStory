@@ -7,6 +7,7 @@ import {
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
   codexErrorMessage, summarizeAgentFailure,
   codexThreadIdFromOutput,
+  resumedCodexTaskMatches,
   selectAvailableAgent,
   storyRepairPrompt,
 } from '../dist/agent.js';
@@ -440,6 +441,26 @@ test('addressPrompt handles the all-open case', () => {
   assert.ok(p.includes('address-review'));
 });
 
+test('addressPrompt puts the reviewer message first so it is visible in a resumed Codex task', () => {
+  const p = addressPrompt(['c_question'], undefined, undefined, {
+    reviewMessages: [{ id: 'c_question', text: 'are you sure sir?' }],
+  });
+  assert.ok(p.startsWith('are you sure sir?\n\n---\n\n'));
+  assert.ok(p.includes('comments with these ids: c_question'));
+});
+
+test('addressPrompt surfaces every reviewer message in a batch run', () => {
+  const p = addressPrompt('all', undefined, undefined, {
+    reviewMessages: [
+      { id: 'c_one', text: 'why is this nullable?' },
+      { id: 'c_two', text: 'please rename this' },
+    ],
+  });
+  assert.ok(p.startsWith('Review these diffStory messages:'));
+  assert.ok(p.includes('1. why is this nullable? (comment c_one)'));
+  assert.ok(p.includes('2. please rename this (comment c_two)'));
+});
+
 test('addressPrompt grounds answers in both sides when a base ref is given', () => {
   const p = addressPrompt(['c_a'], 'origin/main');
   assert.ok(p.includes('origin/main'));               // names the target side
@@ -537,6 +558,13 @@ test('Codex JSONL progress exposes useful events and the persistent task id', ()
     codexThreadIdFromOutput(JSON.stringify({ type: 'thread.started', thread_id: id }) + '\n'),
     id,
   );
+  assert.deepEqual(
+    parseCodexStreamLine(JSON.stringify({ type: 'thread.started', thread_id: id })),
+    [{ type: 'activity', kind: 'task', label: 'Message added to selected Codex task · …6a079e03' }],
+  );
+  assert.equal(resumedCodexTaskMatches(id, id), true);
+  assert.equal(resumedCodexTaskMatches(id, undefined), false);
+  assert.equal(resumedCodexTaskMatches(id, '019f5079-f420-7423-8aa8-cf9f00000000'), false);
 });
 
 test('classifyTool maps tools to the most specific progress event', () => {

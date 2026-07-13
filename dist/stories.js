@@ -1,7 +1,12 @@
 import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { basename, join, relative, sep } from 'node:path';
 import { DATA_DIR, LEGACY_STORY_FILENAME, STORY_FILENAME, dataDir } from './config.js';
 import { loadTour } from './tour.js';
+import { getDiff, resolveBase } from './git.js';
+import { parseUnifiedDiff } from './diff.js';
+import { loadComments } from './comments.js';
+import { reviewStateSummary } from './review-state.js';
 const NAMED_STORIES_DIR = 'stories';
 /** Stories saved for a repo, in the order the app should present them. */
 export function listStories(repo) {
@@ -54,9 +59,9 @@ function storySummary(repo, id) {
     if (!existsSync(path))
         return null;
     const updatedAt = statSync(path).mtimeMs;
-    const current = id === STORY_FILENAME || id === LEGACY_STORY_FILENAME;
     try {
         const story = loadTour(path);
+        const session = storySession(repo, story.base, story.head, story.diffFingerprint);
         return {
             id,
             path,
@@ -70,7 +75,8 @@ function storySummary(repo, id) {
             valid: true,
             steps: story.steps.length,
             files: new Set(story.steps.map((s) => s.file)).size,
-            current,
+            current: session.freshness === 'current',
+            ...session,
         };
     }
     catch (e) {
@@ -90,8 +96,64 @@ function storySummary(repo, id) {
             error: e.message,
             steps: 0,
             files: 0,
-            current,
+            current: false,
+            freshness: 'unverified',
+            liveFiles: 0,
+            additions: 0,
+            deletions: 0,
+            openComments: 0,
+            addressedComments: 0,
+            reviewRound: 1,
+            changedSinceReview: 0,
         };
+    }
+}
+/** Stable identity for the exact diff a story was written against. */
+export function diffFingerprint(diff) {
+    return createHash('sha256').update(diff).digest('hex');
+}
+function storySession(repo, base, head, expected) {
+    const empty = {
+        freshness: 'unverified',
+        liveFiles: 0,
+        additions: 0,
+        deletions: 0,
+        openComments: 0,
+        addressedComments: 0,
+        reviewRound: 1,
+        changedSinceReview: 0,
+    };
+    try {
+        const resolvedBase = resolveBase(repo, base);
+        const diff = getDiff(repo, resolvedBase, head);
+        const files = parseUnifiedDiff(diff);
+        const comments = loadComments(repo);
+        const state = reviewStateSummary(repo, resolvedBase, head, diff, files);
+        let additions = 0;
+        let deletions = 0;
+        for (const file of files) {
+            for (const hunk of file.hunks) {
+                for (const line of hunk.lines) {
+                    if (line.type === 'add')
+                        additions++;
+                    if (line.type === 'del')
+                        deletions++;
+                }
+            }
+        }
+        return {
+            freshness: expected ? (diffFingerprint(diff) === expected ? 'current' : 'stale') : 'unverified',
+            liveFiles: files.length,
+            additions,
+            deletions,
+            openComments: comments.filter((comment) => comment.status === 'open').length,
+            addressedComments: comments.filter((comment) => comment.status === 'addressed').length,
+            reviewRound: state.round,
+            changedSinceReview: state.changedFiles.length,
+        };
+    }
+    catch {
+        return empty;
     }
 }
 function storyScope(base, head) {

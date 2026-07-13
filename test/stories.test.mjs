@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteStory, listStories, storyPathForId } from '../dist/stories.js';
+import { deleteStory, diffFingerprint, listStories, storyPathForId } from '../dist/stories.js';
+import { getDiff } from '../dist/git.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-stories-'));
 
@@ -85,6 +87,37 @@ test('listStories exposes the story generation mode', () => {
   assert.equal(stories[0].mode, 'guided');
   assert.equal(stories[1].mode, 'brief');
   assert.equal(stories[2].mode, 'detailed');
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('listStories calls a story current only when its exact diff fingerprint matches', () => {
+  const repo = tmp();
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  writeFileSync(join(repo, 'a.txt'), 'one\n');
+  execFileSync('git', ['add', 'a.txt'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'initial'], { cwd: repo });
+  writeFileSync(join(repo, 'a.txt'), 'two\n');
+  const fingerprint = diffFingerprint(getDiff(repo, 'HEAD'));
+  writeStory(repo, 'story.json', 'Exact review', { base: 'HEAD', diffFingerprint: fingerprint });
+  writeStory(repo, 'stories/old.json', 'Old review', { base: 'HEAD' });
+
+  let stories = listStories(repo);
+  assert.equal(stories[0].freshness, 'current');
+  assert.equal(stories[0].current, true);
+  assert.equal(stories[0].liveFiles, 1);
+  assert.equal(stories[0].additions, 1);
+  assert.equal(stories[0].deletions, 1);
+  assert.equal(stories[0].openComments, 0);
+  assert.equal(stories[0].reviewRound, 1);
+  assert.equal(stories[1].freshness, 'unverified');
+
+  writeFileSync(join(repo, 'a.txt'), 'three\n');
+  stories = listStories(repo);
+  assert.equal(stories[0].freshness, 'stale');
+  assert.equal(stories[0].current, false);
 
   rmSync(repo, { recursive: true, force: true });
 });

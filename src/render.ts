@@ -42,6 +42,8 @@ export interface RenderInput {
   reviewState?: ReviewStateSummary;
   /** Render the complete change or only the delta since feedback was sent. */
   reviewMode?: 'full' | 'since';
+  /** Whether this story was generated for the exact diff currently on screen. */
+  storyFreshness?: 'current' | 'stale' | 'unverified';
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -80,6 +82,7 @@ export function renderPage(input: RenderInput): string {
   })();
   const storyless = input.storyless ?? false;
   const reviewMode = input.reviewMode ?? 'full';
+  const storyFreshness = storyless ? 'current' : (input.storyFreshness ?? 'current');
   const reviewState = input.reviewState ?? {
     scopeKey: '',
     round: 1,
@@ -98,14 +101,17 @@ export function renderPage(input: RenderInput): string {
   const openCount = comments.filter((c) => c.status !== 'resolved').length;
   const sendableCount = comments.filter((c) => c.status === 'open').length;
   const uncoveredCount = model.trust.uncovered.length;
-  const approveReady = openCount === 0 && uncoveredCount === 0;
+  const focusedStory = !!tour.storyScope?.excludedFiles?.length;
+  const approveReady = openCount === 0 && uncoveredCount === 0 && storyFreshness === 'current';
   // No story → no coverage to report, so the coverage row is meaningless; hide it.
   const trustPill = storyless
     ? ''
-    : `<button class="ds-trustpill${uncoveredCount ? '' : ' is-clean'}" data-trust-open title="Trust check — changes in the diff that no story step explains">${
-        uncoveredCount
+    : `<button class="ds-trustpill${storyFreshness === 'current' && !uncoveredCount ? ' is-clean' : ''}" data-trust-open title="Trust check — story freshness and changes the story does not explain">${
+        storyFreshness !== 'current'
+          ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate before approval</span><span class="ds-review-row-arrow">›</span>`
+          : uncoveredCount
           ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
-          : `<span class="ds-check">✓</span><span>Story covers every change</span><span class="ds-review-row-arrow">›</span>`
+          : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story matches this diff and covers its selected scope' : 'Story matches and covers this diff'}</span><span class="ds-review-row-arrow">›</span>`
       }</button>`;
 
   const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
@@ -128,7 +134,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
+<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
     reviewState.scopeKey,
   )}" data-review-round="${reviewState.round}" data-review-snapshot="${esc(
     reviewState.currentSnapshotId ?? '',
@@ -163,35 +169,35 @@ ${BRAND_HEAD_LINKS}
         </div>
         <button class="ds-preview" data-preview-voice><span class="ds-preview-ico">▶</span><span data-preview-label>Preview</span></button>
       </div>
-      <div class="ds-engine-row" aria-label="Voice engine">
-        <button data-voice-engine="browser" class="is-active">Browser</button>
-        <button data-voice-engine="say">Mac local</button>
-        <button data-voice-engine="kokoro">Kokoro AI</button>
+      <div class="ds-engine-row" role="group" aria-label="Voice engine">
+        <button data-voice-engine="browser" class="is-active" aria-pressed="true">Browser</button>
+        <button data-voice-engine="say" aria-pressed="false">Mac local</button>
+        <button data-voice-engine="kokoro" aria-pressed="false">Kokoro AI</button>
       </div>
       <div class="ds-voice-grid" data-browser-voices aria-label="Browser voice style">
-        <button class="ds-voice-card is-active" data-voice-preset="story">
+        <button class="ds-voice-card is-active" data-voice-preset="story" aria-pressed="true">
           <span class="ds-voice-badge">S</span>
           <span><span class="ds-voice-name">Story <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Best natural browser narrator for walkthroughs.</span></span>
         </button>
-        <button class="ds-voice-card" data-voice-preset="flirty">
+        <button class="ds-voice-card" data-voice-preset="flirty" aria-pressed="false">
           <span class="ds-voice-badge">F</span>
           <span><span class="ds-voice-name">Warm <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Softer browser voice when available.</span></span>
         </button>
-        <button class="ds-voice-card" data-voice-preset="bass">
+        <button class="ds-voice-card" data-voice-preset="bass" aria-pressed="false">
           <span class="ds-voice-badge">M</span>
           <span><span class="ds-voice-name">Deep <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Lower browser voice when available.</span></span>
         </button>
-        <button class="ds-voice-card" data-voice-preset="system">
+        <button class="ds-voice-card" data-voice-preset="system" aria-pressed="false">
           <span class="ds-voice-badge">SYS</span>
           <span><span class="ds-voice-name">System <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">Browser default, fastest and plainest.</span></span>
         </button>
       </div>
       <div class="ds-voice-grid ds-say-voice-grid" data-say-voices aria-label="Mac local voice" hidden>
-        <button class="ds-voice-card is-active" data-say-voice="samantha">
+        <button class="ds-voice-card is-active" data-say-voice="samantha" aria-pressed="true">
           <span class="ds-voice-badge">S</span>
           <span><span class="ds-voice-name">Samantha <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">macOS local voice.</span></span>
         </button>
-        <button class="ds-voice-card" data-say-voice="daniel">
+        <button class="ds-voice-card" data-say-voice="daniel" aria-pressed="false">
           <span class="ds-voice-badge">D</span>
           <span><span class="ds-voice-name">Daniel <span class="ds-voice-check">✓</span></span><span class="ds-voice-desc">macOS local voice.</span></span>
         </button>
@@ -201,10 +207,10 @@ ${BRAND_HEAD_LINKS}
       </div>
       <div class="ds-settings-row">
         <span class="ds-settings-label">Speed</span>
-        <div class="ds-speed-row" aria-label="Read aloud speed">
-          <button data-rate="0.8">Slow</button>
-          <button data-rate="1.05" class="is-active">Normal</button>
-          <button data-rate="1.4">Fast</button>
+        <div class="ds-speed-row" role="group" aria-label="Read aloud speed">
+          <button data-rate="0.8" aria-pressed="false">Slow</button>
+          <button data-rate="1.05" class="is-active" aria-pressed="true">Normal</button>
+          <button data-rate="1.4" aria-pressed="false">Fast</button>
         </div>
       </div>
     </div>
@@ -226,7 +232,7 @@ ${BRAND_HEAD_LINKS}
       <span class="ds-agent-target-caret" aria-hidden="true">⌄</span>
     </button>
     <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : ''}" title="Open review status">
+      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${storyFreshness !== 'current' ? ', story requires regeneration before approval' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : ''}" title="Open review status">
         <span class="ds-review-menu-dot" aria-hidden="true"></span>
         <span>Review</span>
         ${uncoveredCount ? `<span class="ds-review-menu-coverage" title="Changes not explained by the story">${uncoveredCount} unexplained</span>` : ''}
@@ -253,15 +259,23 @@ ${BRAND_HEAD_LINKS}
           <div class="ds-review-section-label">Decision</div>
         <button class="ds-review-option ds-review-option-approve" data-verdict="approve"${approveReady ? '' : ' disabled'} title="${
           approveReady
-            ? 'Everything is covered and there are no open comments'
-            : 'Resolve open comments and make sure every change is explained first'
+            ? focusedStory
+              ? 'This exact diff matches the story, its selected scope is covered, and there are no open comments'
+              : 'This exact diff is covered and there are no open comments'
+            : storyFreshness !== 'current'
+              ? 'Regenerate the story for this exact diff before approval'
+              : 'Resolve open comments and make sure every change is explained first'
         }">
           <span class="ds-review-option-title"><span class="ds-check">✓</span> Approve</span>
           <span class="ds-review-option-desc" data-approve-desc>${
             approveReady
-              ? 'Everything is covered and resolved.'
+              ? focusedStory
+                ? 'This exact diff matches; the selected story scope is covered and resolved.'
+                : 'This exact diff is covered and resolved.'
               : openCount
                 ? `Resolve ${openCount} ${plural(openCount, 'comment')} first.`
+                : storyFreshness !== 'current'
+                  ? 'Regenerate the story for this exact diff first.'
                 : `Explain ${uncoveredCount} more ${plural(uncoveredCount, 'change')} in the story first.`
           }</span>
         </button>
@@ -288,7 +302,16 @@ ${BRAND_HEAD_LINKS}
 
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
 
-${reviewRoundBar(reviewState, reviewMode)}
+${reviewSessionBar({
+  state: reviewState,
+  mode: reviewMode,
+  files: model.files.length,
+  open: openCount,
+  addressed: comments.filter((comment) => comment.status === 'addressed').length,
+  approveReady,
+  freshness: storyFreshness,
+  uncovered: uncoveredCount,
+})}
 
 <div class="ds-layout">
   <aside class="ds-rail" aria-label="Review navigation">
@@ -316,14 +339,14 @@ ${reviewRoundBar(reviewState, reviewMode)}
       </div>
       <div class="ds-filetools">
         <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Filter files" aria-label="Filter changed files"></label>
-        <div class="ds-filefilters" aria-label="File filters">
-          <button class="is-active" data-file-filter="all">All</button>
-          <button data-file-filter="seen">Seen</button>
-          <button data-file-filter="unseen">Unseen</button>
-          <button data-file-filter="comments">Comments</button>
-          <button data-file-filter="unexplained">Unexplained</button>
-          <button data-file-filter="tests">Tests</button>
-          ${reviewState.compareFrom ? '<button data-file-filter="since">Since review</button>' : ''}
+        <div class="ds-filefilters" role="group" aria-label="File filters">
+          <button class="is-active" data-file-filter="all" aria-pressed="true">All</button>
+          <button data-file-filter="seen" aria-pressed="false">Seen</button>
+          <button data-file-filter="unseen" aria-pressed="false">Unseen</button>
+          <button data-file-filter="comments" aria-pressed="false">Comments</button>
+          <button data-file-filter="unexplained" aria-pressed="false">Unexplained</button>
+          <button data-file-filter="tests" aria-pressed="false">Tests</button>
+          ${reviewState.compareFrom ? '<button data-file-filter="since" aria-pressed="false">Since review</button>' : ''}
         </div>
         <button class="ds-next-unviewed" data-next-unviewed type="button">Next unseen <span aria-hidden="true">→</span></button>
       </div>
@@ -344,7 +367,7 @@ ${reviewRoundBar(reviewState, reviewMode)}
 
   <main class="ds-main">
     <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
-      ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour)}
+      ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour, storyFreshness, routeBase)}
       ${storyless ? '' : stepPanels}
     </div>
     <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
@@ -366,7 +389,7 @@ ${reviewRoundBar(reviewState, reviewMode)}
           </div>
         </div>
         <div class="ds-fileshead-r">
-          <span class="ds-fileshint">Pick a file from the list</span>
+          <span class="ds-fileshint" data-file-hint>Showing selected file</span>
         </div>
       </div>
       <div class="ds-filedetail" id="ds-file-detail">
@@ -383,11 +406,6 @@ ${commandPalette()}
   <button type="button" role="menuitem" data-selection-action="question">Ask</button>
   <button type="button" role="menuitem" data-selection-action="change">Ask for change</button>
   <button type="button" role="menuitem" data-selection-action="nit">Nit</button>
-</div>
-<div class="ds-selection-quick" data-selection-quick role="toolbar" aria-label="Selected code actions" hidden>
-  <button type="button" data-selection-quick-action="change">Comment</button>
-  <button type="button" data-selection-quick-action="question">Ask</button>
-  <button type="button" data-selection-quick-action="copy">Copy</button>
 </div>
 <div class="ds-toast" id="ds-toast" hidden></div>
 <noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
@@ -407,23 +425,45 @@ function voiceCard(kind: 'kokoro', id: string, label: string, description: strin
         </button>`;
 }
 
-function reviewRoundBar(state: ReviewStateSummary, mode: 'full' | 'since'): string {
-  if (!state.compareFrom) return '';
+function reviewSessionBar(input: {
+  state: ReviewStateSummary;
+  mode: 'full' | 'since';
+  files: number;
+  open: number;
+  addressed: number;
+  approveReady: boolean;
+  freshness: 'current' | 'stale' | 'unverified';
+  uncovered: number;
+}): string {
+  const { state, mode } = input;
   const changed = state.changedFiles.length;
-  const status = changed
-    ? `${changed} ${plural(changed, 'file')} changed since your feedback`
-    : 'No code changes since your feedback';
-  return `<div class="ds-roundbar" data-roundbar>
-    <div class="ds-roundbar-copy">
+  const resolveDetail = input.open
+    ? `${input.open} open ${plural(input.open, 'comment')}`
+    : input.addressed
+      ? `${input.addressed} ${plural(input.addressed, 'reply')} to verify`
+      : 'Clear';
+  const decisionDetail = input.approveReady
+    ? 'No approval blockers'
+    : input.freshness !== 'current'
+      ? input.freshness === 'stale' ? 'Story out of date' : 'Verify story scope'
+      : input.uncovered
+        ? `${input.uncovered} ${plural(input.uncovered, 'change')} unexplained`
+        : 'Decision blocked';
+  return `<div class="ds-reviewstatusbar" data-roundbar aria-label="Review status">
+    <div class="ds-reviewstatus-main">
       <span class="ds-roundbadge">Round ${state.round}</span>
-      <span class="ds-roundstatus">${status}</span>
+      <span class="ds-reviewstatus-scope"><b>${input.files}</b> ${plural(input.files, 'file')} in scope</span>
     </div>
-    <div class="ds-roundmodes" role="group" aria-label="Review comparison">
-      <button type="button" data-review-mode="full" class="${mode === 'full' ? 'is-active' : ''}">Full change</button>
+    <div class="ds-reviewstatus-signals">
+      <span class="ds-statussignal${input.open ? ' is-attention' : input.addressed ? ' is-pending' : ' is-clear'}"><i aria-hidden="true"></i>${resolveDetail === 'Clear' ? 'Feedback clear' : resolveDetail}</span>
+      <span class="ds-statussignal${input.approveReady ? ' is-ready' : ' is-attention'}"><i aria-hidden="true"></i>${decisionDetail}</span>
+    </div>
+    ${state.compareFrom ? `<div class="ds-roundmodes" role="group" aria-label="Review comparison" title="${changed ? `${changed} ${plural(changed, 'file')} changed since your feedback` : 'No code changes since your feedback'}">
+      <button type="button" data-review-mode="full" class="${mode === 'full' ? 'is-active' : ''}" aria-pressed="${mode === 'full'}">Full change</button>
       <button type="button" data-review-mode="since" class="${mode === 'since' ? 'is-active' : ''}"${
         changed ? '' : ' disabled'
-      }>Since review</button>
-    </div>
+      } aria-pressed="${mode === 'since'}">Since review</button>
+    </div>` : ''}
   </div>`;
 }
 
@@ -465,7 +505,12 @@ function railCard(s: StepView, i: number): string {
 // The Overview panel: the change's title and summary up front (this is the only
 // place the summary is shown in full), a few orienting facts, and one button into
 // the walkthrough. It is navigation index 0 — shown first, before any step.
-function introPanel(model: ReviewModel, tour: Tour): string {
+function introPanel(
+  model: ReviewModel,
+  tour: Tour,
+  freshness: 'current' | 'stale' | 'unverified',
+  routeBase: string,
+): string {
   const n = model.totalSteps;
   const trust = model.trust.uncovered.length;
   const first = model.steps[0];
@@ -486,12 +531,23 @@ function introPanel(model: ReviewModel, tour: Tour): string {
   const filesLabel = `${plural(model.filesChanged, 'file')} changed${
     model.contextFiles ? ` · ${model.contextFiles} for context` : ''
   }`;
-  const trustFact = trust
+  const trustFact = freshness !== 'current'
+    ? `<div class="ds-fact ds-fact-warn"><span class="ds-fact-n">▲</span><span class="ds-fact-l">${
+        freshness === 'stale' ? 'story is out of date' : 'story freshness unverified'
+      }</span></div>`
+    : trust
     ? `<div class="ds-fact ds-fact-warn"><span class="ds-fact-n">▲ ${trust}</span><span class="ds-fact-l">unexplained ${plural(
         trust,
         'change',
       )}</span></div>`
-    : `<div class="ds-fact ds-fact-ok"><span class="ds-fact-n">✓</span><span class="ds-fact-l">every change explained</span></div>`;
+    : `<div class="ds-fact ds-fact-ok"><span class="ds-fact-n">✓</span><span class="ds-fact-l">${
+        tour.storyScope?.excludedFiles?.length ? 'selected story scope explained' : 'every change explained'
+      }</span></div>`;
+  const freshnessNote = freshness === 'current'
+    ? ''
+    : `<div class="ds-freshness-callout" role="status"><span><b>${
+        freshness === 'stale' ? 'The diff changed after this story was generated.' : 'This older story has no exact diff fingerprint.'
+      }</b> Review the current diff without relying on coverage, or regenerate the story before approval.</span><a href="${esc(routeBase)}/change">Regenerate story</a></div>`;
   const start = first
     ? `<button class="ds-intro-start" data-goto-step="1">
         <span class="ds-intro-start-main">Start the walkthrough <span class="ds-intro-arrow">→</span></span>
@@ -504,6 +560,7 @@ function introPanel(model: ReviewModel, tour: Tour): string {
       <h1 class="ds-intro-title">${esc(tour.title)}</h1>
       <p class="ds-intro-lede" data-speech-overview>${lede}</p>
       ${design}${map}
+      ${freshnessNote}
       <div class="ds-intro-facts">
         <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(
     n,
@@ -841,8 +898,8 @@ function stepPanel(
         <span class="ds-flex"></span>
         <span class="ds-step-pos">${s.order} / ${total}</span>
         <span class="ds-nav">
-          <button class="ds-iconbtn" data-prev title="Previous">←</button>
-          <button class="ds-iconbtn" data-next title="Next step"${nextDisabled}>→</button>
+          <button class="ds-iconbtn" data-prev title="Previous story step" aria-label="Previous story step">←</button>
+          <button class="ds-iconbtn" data-next title="Next story step" aria-label="Next story step"${nextDisabled}>→</button>
         </span>
       </div>
       <div class="ds-step-titlerow">
@@ -857,7 +914,7 @@ function stepPanel(
         s.id,
       )}" data-story-file="${esc(s.file)}">Make shorter</button><button type="button" data-story-repair="split" data-story-step="${esc(
         s.id,
-      )}" data-story-file="${esc(s.file)}">Split this step</button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud">▸</button></div>
+      )}" data-story-file="${esc(s.file)}">Split this step</button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button></div>
       ${stepStoryHtml(s, diffRegionId)}
     </div>
     <div class="ds-diffscroll">
@@ -868,14 +925,14 @@ function stepPanel(
           <span class="ds-difthint" data-difthint>Showing storyteller-selected viewport</span>
           <span class="ds-flex"></span>
           ${changeJumpControls()}
-          <div class="ds-modetoggle">
-            <button data-mode="diff">Unified</button>
-            <button class="is-active" data-mode="split">Split</button>
-            <button data-mode="full">Full file</button>
+          <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
+            <button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>
+            <button data-mode="split" aria-pressed="false">Split</button>
+            <button data-mode="full" aria-pressed="false">Full file</button>
           </div>
         </div>
-        <div data-diff-inner hidden>${storyUnifiedDiffInner(s, comments)}</div>
-        <div data-split-inner data-loaded="1">${diffInner(s, comments)}</div>
+        <div data-diff-inner>${storyUnifiedDiffInner(s, comments)}</div>
+        <div data-split-inner data-loaded="1" hidden>${diffInner(s, comments)}</div>
         <div data-full-inner hidden></div>
       </div>
     </div>
@@ -893,7 +950,7 @@ function beatHtml(beat: StepView['beats'][number], file: string, diffRegionId: s
     beat.text,
   )}" data-focus-destination="${esc(destination)}" aria-controls="${diffRegionId}" aria-pressed="false" aria-label="Focus beat ${beat.focusGroup + 1}: ${esc(
     beat.text,
-  )}"><span class="ds-beat-index">${beat.focusGroup + 1}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></button>`;
+  )}"><span class="ds-beat-index">${String(beat.focusGroup + 1).padStart(2, '0')}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></button>`;
 }
 
 function beatDestination(file: string, highlights: Array<[number, number]>): string {
@@ -1063,8 +1120,14 @@ export function commentHtml(c0: Comment): string {
   const hasReply = turns.some((t) => t.role === 'ai');
   const resolved = c.status === 'resolved';
   const selectionLabel = commentSide(c) === 'left' ? 'Selected old side' : 'Selected new side';
+  const selectionText = c.selectedText?.replace(/\s+/g, ' ').trim() ?? '';
+  const selectionPreview = selectionText.length > 82 ? `${selectionText.slice(0, 79)}…` : selectionText;
   const selection = c.selectedText
-    ? `<div class="ds-comment-selection"><span>${selectionLabel}</span><code>${esc(c.selectedText)}</code></div>`
+    ? `<details class="ds-comment-selection"><summary><span class="ds-comment-selection-label">${selectionLabel}</span><code class="ds-comment-selection-preview">${esc(
+        selectionPreview,
+      )}</code><b class="ds-comment-selection-toggle" aria-hidden="true"></b></summary><code class="ds-comment-selection-code">${esc(
+        c.selectedText,
+      )}</code></details>`
     : '';
   return `<div class="ds-comment status-${c.status}" data-comment-id="${esc(c.id)}" data-status="${
     c.status
@@ -1079,20 +1142,23 @@ export function commentHtml(c0: Comment): string {
         <span class="ds-comment-author">${esc(authorOf(c))}</span>
         <span class="ds-flex"></span>
         <span class="ds-statusbadge"><span class="ds-dot"></span>${STATUS_LABEL[c.status]}</span>
+        <details class="ds-comment-menu">
+          <summary aria-label="Conversation actions">•••</summary>
+          <div class="ds-comment-menu-pop">
+            <button data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
+            <button class="ds-del" data-delete>Delete conversation</button>
+          </div>
+        </details>
       </div>
       ${selection}
       <div class="ds-comment-body ds-md">${renderMarkdown(c.body)}</div>
       ${turnsHtml}
-      <div class="ds-comment-actions">
-        <button class="ds-ghost" data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
-        <button class="ds-ghost ds-del" data-delete>Delete</button>
-      </div>
       <div class="ds-thread-composer">
         <textarea class="ds-thread-ta" data-thread-ta placeholder="Reply to ${esc(APP_BRAND)}…" rows="1"></textarea>
         <div class="ds-thread-composer-foot">
           <div class="ds-agent-route"><span class="ds-agent-route-icon" aria-hidden="true">◈</span><span>Agent task</span><strong data-agent-target-name>Choose task</strong><button data-agent-target-select type="button">Change</button></div>
           <div class="ds-thread-actions">
-            <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Save reply</button>
+            <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Save</button>
             <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send data-agent-target-cta>Choose task &amp; ask</button>
           </div>
         </div>
@@ -1153,9 +1219,9 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
   // the sidebar list), defaulting to the complete-file view. The full file and
   // the split view are lazy-loaded when their toggle is first activated.
   const toggle = f.hasFull
-    ? `<div class="ds-modetoggle"><button data-mode="diff">Unified</button><button data-mode="split">Split</button><button class="is-active" data-mode="full">Full file</button></div>`
+    ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button data-mode="split" aria-pressed="false">Split</button><button class="is-active" data-mode="full" aria-pressed="true">Full file</button></div>`
     : f.hunks.length
-      ? `<div class="ds-modetoggle"><button class="is-active" data-mode="diff">Unified</button><button data-mode="split">Split</button></div>`
+      ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button><button data-mode="split" aria-pressed="false">Split</button></div>`
       : '';
   return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(
     f.file,

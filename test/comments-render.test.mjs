@@ -117,8 +117,20 @@ test('server-rendered thread composer makes the agent route and send choice expl
   assert.match(html, /data-thread-add/);
   assert.match(html, /data-thread-send/);
   assert.match(html, /data-agent-target-name/);
-  assert.match(html, />Save reply</);
+  assert.match(html, />Save</);
   assert.match(html, />Choose task &amp; ask</);
+});
+
+test('server-rendered comments collapse selected code and move thread actions into a menu', () => {
+  const html = commentHtml({
+    id: 'c10', file: 'a.ts', line: 1, type: 'question', selectedText: 'const veryLongSelection = true;',
+    body: 'q?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
+  });
+  assert.match(html, /<details class="ds-comment-selection">/);
+  assert.match(html, /ds-comment-selection-preview/);
+  assert.match(html, /aria-label="Conversation actions"/);
+  assert.match(html, />Delete conversation</);
+  assert.doesNotMatch(html, /ds-comment-actions/);
 });
 
 test('review header separates the agent task from compact review status', () => {

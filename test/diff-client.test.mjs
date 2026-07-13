@@ -45,6 +45,10 @@ test('split mode is lazy-loaded and persisted', () => {
   assert.match(PAGE_JS, /function applyFilesMode\(/);
 });
 
+test('diff display modes expose their selected state to assistive technology', () => {
+  assert.match(DIFF_JS, /b\.setAttribute\('aria-pressed',active\?'true':'false'\)/);
+});
+
 test('expand-context client is wired', () => {
   assert.match(DIFF_JS, /function expandGap\(/);
   assert.match(DIFF_JS, /\/api\/diff\/context\?file=/);
@@ -54,6 +58,14 @@ test('expand-context client is wired', () => {
 test('review page consumes shared tokens and respects reduced motion', () => {
   assert.match(PAGE_CSS, /--app-bg:/);
   assert.match(DIFF_CSS, /prefers-reduced-motion/);
+});
+
+test('story diff is width-contained and never creates a horizontal scroller', () => {
+  assert.match(DIFF_CSS, /\.ds-diffscroll\{[^}]*min-width:0[^}]*overflow-x:hidden[^}]*overflow-y:auto/);
+  assert.match(DIFF_CSS, /\.ds-diff\{[^}]*width:100%[^}]*min-width:0[^}]*max-width:100%/);
+  assert.match(DIFF_JS, /function scrollReviewRowVertically\(row,opts\)/);
+  assert.match(DIFF_JS, /scrollReviewRowVertically\(row,opts\)/);
+  assert.doesNotMatch(DIFF_JS, /scrollIntoView/);
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {

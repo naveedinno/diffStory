@@ -261,6 +261,8 @@ export interface AddressPromptOptions {
   historicalCheckout?: boolean;
   originalRepo?: string;
   resumedCodexTask?: boolean;
+  /** User-authored review messages to surface verbatim in the agent task UI. */
+  reviewMessages?: Array<{ id: string; text: string }>;
 }
 
 export function addressPrompt(
@@ -310,7 +312,16 @@ export function addressPrompt(
       `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case by appending an ai turn.\n` +
       `- question → read both sides of the selected text location, then answer concretely by appending a new ai turn.\n` +
       `- nit → apply it if quick and reasonable; otherwise explain the trade-off by appending a new ai turn.\n\n`;
+  const reviewMessages = (opts.reviewMessages ?? []).filter((message) => message.text.trim());
+  const visibleRequest = reviewMessages.length === 1
+    ? `${reviewMessages[0].text.trim()}\n\n---\n\n`
+    : reviewMessages.length > 1
+      ? `Review these diffStory messages:\n\n${reviewMessages.map((message, index) =>
+          `${index + 1}. ${message.text.trim()} (comment ${message.id})`
+        ).join('\n\n')}\n\n---\n\n`
+      : '';
   return (
+    visibleRequest +
     `Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
     grounding +
     historical +
@@ -618,6 +629,10 @@ export function parseCodexStreamLine(line: string): ProgressEvent[] {
   if (codexErrorMessage(s)) return [];
   try {
     const event = JSON.parse(s);
+    const threadId = event?.thread_id ?? event?.threadId;
+    if (event?.type === 'thread.started' && typeof threadId === 'string') {
+      return [activityEvent('task', `Message added to selected Codex task · …${threadId.slice(-8)}`)];
+    }
     const item = event?.item;
     if (event?.type !== 'item.completed' || !item) return [];
     if (item.type === 'agent_message' && item.text) return [textEvent(String(item.text))];
@@ -632,6 +647,11 @@ export function parseCodexStreamLine(line: string): ProgressEvent[] {
   const m = s.match(/^\s*\$\s+(.+)$/);
   if (m) return [commandEvent(m[1])];
   return [textEvent(s)];
+}
+
+/** A resumed run is only continuous when Codex reports the selected task id back. */
+export function resumedCodexTaskMatches(expected: string | undefined, actual: string | undefined): boolean {
+  return !expected || expected === actual;
 }
 
 export function codexThreadIdFromOutput(output: string): string | undefined {

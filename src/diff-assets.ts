@@ -2,7 +2,7 @@
 // change-jump). Same rules as page-assets.ts: plain strings, no backticks,
 // no ${} in the JS. DIFF_JS is function declarations only — page-assets
 // splices it INSIDE the page IIFE, so these share its closure scope.
-export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;padding:18px 30px 26px}
+export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;overflow-x:hidden;overflow-y:auto;padding:18px 30px 26px}
 /* .ds-why (the step narrative, page chrome) rides along in this diff-scoped
    at-rule because it shares one short-viewport breakpoint with .ds-diffscroll —
    they trade vertical space together, so the rule stays coupled rather than
@@ -10,14 +10,14 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-height:180px;overflow-y:auto;
 @media (max-height:760px){.ds-why{max-height:120px}.ds-diffscroll{min-height:160px}}
 
 /* ---- diff ---- */
-.ds-diff{position:relative;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
+.ds-diff{position:relative;width:100%;min-width:0;max-width:100%;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
 .ds-step.is-story-active:not(.is-voice-active) .ds-diff{border-color:rgba(10,132,255,0.52);box-shadow:0 0 0 1px rgba(10,132,255,0.16),inset 0 1px 0 rgba(255,255,255,0.035)}
 .ds-step.is-story-active:not(.is-voice-active) .ds-difthint{color:var(--accent-blue);font-weight:700}
 .ds-step.is-story-active:not(.is-voice-active) .ds-difthint::before{content:'Story focus';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent-blue);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-step.is-voice-active .ds-diff{border-color:rgba(208,188,255,0.72);box-shadow:0 0 0 1px rgba(208,188,255,0.34),0 12px 34px rgba(80,64,140,0.18),inset 0 1px 0 rgba(255,255,255,0.035)}
 .ds-step.is-voice-active .ds-difthint{color:var(--md-primary);font-weight:700}
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:999px;background:rgba(208,188,255,0.16);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
-.ds-difftoolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
+.ds-difftoolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
 .ds-modetoggle{display:flex;gap:0;padding:2px;border-radius:7px;background:var(--fill-2);border:none}
 .ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background .15s ease,color .15s ease}
@@ -89,7 +89,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-urow .ds-no,.ds-urow .ds-sign{padding-top:2px;padding-bottom:2px}
 .ds-changejump{flex:none;display:flex;align-items:center;gap:4px;padding:2px;border:1px solid var(--diff-rule);border-radius:7px;background:var(--gutter-hi)}
 .ds-changejump[hidden]{display:none}
-.ds-changebtn{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:none;border-radius:6px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+.ds-changebtn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
 .ds-changebtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-changebtn:disabled{opacity:.35;cursor:default}
 .ds-changecount{min-width:40px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
@@ -153,6 +153,16 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 `;
 
 export const DIFF_JS = `
+  function scrollReviewRowVertically(row,opts){
+    if(!row)return false;
+    var scroller=closest(row,'.ds-diffscroll')||closest(row,'.ds-filedetail');
+    if(!scroller)return false;
+    var sr=scroller.getBoundingClientRect(),rr=row.getBoundingClientRect();
+    var top=scroller.scrollTop+(rr.top-sr.top)-(scroller.clientHeight-rr.height)/2;
+    try{scroller.scrollTo({top:Math.max(0,top),behavior:opts&&opts.instant?'auto':'smooth'});}
+    catch(e){scroller.scrollTop=Math.max(0,top);}
+    return true;
+  }
   function visibleDiffRoot(holder){
     var fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),diffInner=$('[data-diff-inner]',holder);
     if(fullInner&&!fullInner.hidden)return fullInner;
@@ -185,8 +195,7 @@ export const DIFF_JS = `
     updateChangeNav(holder);
     var row=rows[idx];if(!row)return false;
     row.classList.add('is-change-jump');
-    try{row.scrollIntoView({block:'center',inline:'nearest',behavior:opts&&opts.instant?'auto':'smooth'});}
-    catch(e){try{row.scrollIntoView(false);}catch(ignore){}}
+    scrollReviewRowVertically(row,opts);
     setTimeout(function(){row.classList.remove('is-change-jump');},1300);
     return true;
   }
@@ -230,7 +239,7 @@ export const DIFF_JS = `
     var holder=closest(btn,'.ds-filepanel')||closest(btn,'.ds-diff');if(!holder)return;
     var file=holder.getAttribute('data-file');
     var mode=btn.getAttribute('data-mode');
-    $all('.ds-modetoggle button',holder).forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-mode')===mode);});
+    $all('.ds-modetoggle button',holder).forEach(function(b){var active=b.getAttribute('data-mode')===mode;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',active?'true':'false');});
     var diffInner=$('[data-diff-inner]',holder),fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),hint=$('[data-difthint]',holder);
     if(holder.classList.contains('ds-filepanel')&&!(opts&&opts.persist===false)){try{localStorage.setItem('ds-files-mode',mode);}catch(e){}}
     var needsLoad=false;

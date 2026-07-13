@@ -3,17 +3,78 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
 
+test('resume control contains long file paths inside the resizable sidebar', () => {
+  assert.match(PAGE_CSS, /\.ds-resume-review\{[^}]*min-width:0[^}]*overflow:hidden/);
+  assert.match(PAGE_CSS, /\.ds-resume-review \[data-resume-review-label\]\{[^}]*min-width:0[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
+  assert.match(PAGE_JS, /btn\.title=text;btn\.setAttribute\('aria-label',text\)/);
+  assert.match(PAGE_JS, /btn\.removeAttribute\('title'\);btn\.removeAttribute\('aria-label'\)/);
+});
+
 test('client defines thread mounting and a comment cache', () => {
   assert.match(PAGE_JS, /function mountThreads\(/);
   assert.match(PAGE_JS, /function syncThreads\(/);
   assert.match(PAGE_JS, /var allComments\s*=/);
 });
 
+test('comment conversations open in a floating sidecar instead of splitting the diff', () => {
+  assert.match(PAGE_CSS, /\.ds-thread\{position:fixed/);
+  assert.match(PAGE_CSS, /\.ds-thread\.is-open\{display:block/);
+  assert.match(PAGE_CSS, /\.ds-comment-pin\{position:absolute/);
+  assert.match(PAGE_JS, /function openCommentSurface\(/);
+  assert.match(PAGE_JS, /data-comment-launcher/);
+  assert.match(PAGE_JS, /data-comment-surface-close/);
+  assert.match(PAGE_JS, /setAttribute\('aria-expanded'/);
+  assert.match(PAGE_JS, /if\(focusInside\)surface\.focus\(\{preventScroll:true\}\)/);
+  assert.match(PAGE_JS, /t\.tabIndex=-1/);
+  assert.match(PAGE_JS, /setSidebarCollapsed\(true,false\)/);
+  assert.match(PAGE_JS, /setSidebarCollapsed\(false,false\)/);
+});
+
+test('new review comments compose in the same floating surface', () => {
+  assert.match(PAGE_CSS, /\.ds-composer\{position:fixed/);
+  assert.match(PAGE_JS, /box\.setAttribute\('role','dialog'\)/);
+  assert.match(PAGE_JS, /document\.body\.appendChild\(box\)/);
+  assert.doesNotMatch(PAGE_JS, /anchor\.parentNode\.insertBefore\(box,anchor\.nextSibling\)/);
+});
+
+test('deleting a review conversation is visibly destructive and requires confirmation', () => {
+  assert.match(PAGE_CSS, /\.ds-del\{color:var\(--del-text\)/);
+  assert.match(PAGE_JS, /window\.confirm\('Delete this review conversation\? This cannot be undone\.'/);
+});
+
 test('the context menu opens the composer from selected review text', () => {
   assert.match(PAGE_JS, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
   assert.match(PAGE_JS, /function currentSelectionContext\(/);
+  assert.match(PAGE_JS, /function contextForSelectionMenu\(e\)/);
+  assert.match(PAGE_JS, /selectionContext&&pointInSelection\(e\.clientX,e\.clientY\)/);
+  assert.match(PAGE_JS, /if\(e\.button!==0\)return/);
   assert.match(PAGE_JS, /data-selection-action/);
   assert.doesNotMatch(PAGE_JS, /ds-addcomment/);
+});
+
+test('right click survives a browser-collapsed selection but stays inside its highlight', () => {
+  assert.match(PAGE_JS, /selectionRects=\[\]/);
+  assert.match(PAGE_JS, /range\.getClientRects/);
+  assert.match(PAGE_JS, /function cacheSelectionContext\(\)/);
+  assert.match(PAGE_JS, /cacheSelectionContext\(\)/);
+  assert.match(PAGE_JS, /function isSecondarySelectionGesture\(e\)/);
+  assert.match(PAGE_JS, /e\.button===2\|\|\(e\.button===0&&e\.ctrlKey\)/);
+  assert.match(PAGE_JS, /if\(isSecondarySelectionGesture\(e\)\)\{selectionContextMenuPending=true/);
+  assert.match(PAGE_JS, /if\(isSecondarySelectionGesture\(e\)\|\|\(e&&e\.button!==0\)\)return/);
+  assert.match(PAGE_JS, /return selectionContext&&pointInSelection\(e\.clientX,e\.clientY\)\?selectionContext:null/);
+  assert.match(PAGE_JS, /var ctx=contextForSelectionMenu\(e\);\s*selectionContextMenuPending=false;\s*if\(!ctx\)return;\s*e\.preventDefault\(\)/);
+});
+
+test('cached selection geometry clears after an ordinary collapsed selection', () => {
+  assert.match(PAGE_JS, /function clearCollapsedSelection\(\)/);
+  assert.match(PAGE_JS, /if\(selectionContextMenuPending\)return/);
+  assert.match(PAGE_JS, /selectionContext=null;selectionRects=\[\]/);
+  assert.match(PAGE_JS, /document\.addEventListener\('selectionchange',clearCollapsedSelection\)/);
+});
+
+test('selection endpoints may land on a diff row wrapper', () => {
+  assert.match(PAGE_JS, /var intendedSide=\(startCode\|\|endCode\)\?/);
+  assert.doesNotMatch(PAGE_JS, /if\(!startCode\|\|!endCode\)return null/);
 });
 
 test('the selection context is constrained to one diff side', () => {
@@ -78,9 +139,21 @@ test('address runs bind to a reusable Codex task and send that choice', () => {
   assert.match(PAGE_JS, /data-agent-task-option/);
   assert.match(PAGE_JS, /payload\.agent=target\.agent/);
   assert.match(PAGE_JS, /payload\.codexThreadId=target\.threadId/);
+  assert.match(PAGE_JS, /payload\.codexTaskLabel=target\.label\|\|'Selected Codex task'/);
   assert.match(PAGE_JS, /payload\.newCodexTask=true/);
   assert.match(PAGE_JS, /readAgentTarget\(\)/);
   assert.match(PAGE_JS, /saveAgentTarget\(target\)/);
+});
+
+test('agent task picker opens immediately while slow task discovery stays inside the dialog', () => {
+  const shell = PAGE_JS.indexOf('renderAgentTargetChooser([],[],null,done,codexOnly,true)');
+  const discovery = PAGE_JS.indexOf("fetch('/api/agents')", shell);
+  assert.ok(shell >= 0 && discovery > shell, 'renders the loading dialog before starting discovery');
+  assert.match(PAGE_JS, /Loading available tasks…/);
+  assert.match(PAGE_JS, /request!==agentChooserRequest/);
+  assert.match(PAGE_JS, /agentChooserRequest\+\+/);
+  assert.match(PAGE_CSS, /\.ds-agent-task-loading/);
+  assert.match(PAGE_CSS, /\.ds-agent-task-spinner/);
 });
 
 test('a freshly loaded full file gets its threads mounted', () => {
@@ -97,7 +170,7 @@ test('client mounts a persistent chat composer that posts and re-runs the agent'
   assert.match(PAGE_JS, /data-thread-send/);
   assert.match(PAGE_JS, /data-thread-ta/);
   assert.match(PAGE_JS, /\/message/);
-  assert.match(PAGE_JS, /sendToAgent\(\[id\]\)/);
+  assert.match(PAGE_JS, /sendToAgent\(\[id\],wrap\)/);
   assert.match(PAGE_CSS, /\.ds-thread-composer/);
   assert.match(PAGE_CSS, /\.ds-thread-ta/);
 });
@@ -130,19 +203,53 @@ test('the new-comment composer shows its agent task and separates save from send
   assert.match(PAGE_JS, /submitComment\(true\)/);
 });
 
+test('Enter asks the agent from a new comment while Shift+Enter stays multiline', () => {
+  assert.match(PAGE_JS, /ta\.title='Enter to ask agent · Shift\+Enter for a new line'/);
+  assert.match(PAGE_JS, /ta\.setAttribute\('aria-keyshortcuts','Enter'\)/);
+  assert.match(PAGE_JS, /if\(e\.key!=='Enter'\|\|e\.shiftKey\|\|e\.isComposing\)return;e\.preventDefault\(\);if\(!ask\.disabled\)submitComment\(true\)/);
+});
+
 test('the thread composer shows its agent task and separates save from send', () => {
   assert.match(PAGE_JS, /function buildThreadComposer\(/);
   assert.match(PAGE_JS, /data-thread-add/);
-  assert.match(PAGE_JS, /'Save reply'/);
+  assert.match(PAGE_JS, /'Save'/);
   assert.match(PAGE_JS, /'Choose task & ask'/);
   // sendThreadMessage gates the agent run on the `run` flag:
   assert.match(PAGE_JS, /function sendThreadMessage\(wrap,run\)/);
-  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\]\)/);
+  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\],wrap\)/);
   // delegation: Save reply => run=false, Ask agent => run=true
   assert.match(PAGE_JS, /\[data-thread-add\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),false\)/);
   assert.match(PAGE_JS, /\[data-thread-send\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),true\)/);
   // Enter sends via the run path
   assert.match(PAGE_JS, /sendThreadMessage\(closest\(ta,'\.ds-comment'\),true\)/);
+});
+
+test('Ask agent sends an existing popup conversation even when the reply box is empty', () => {
+  assert.match(PAGE_JS, /if\(!text\)\{if\(run\)sendToAgent\(\[id\],wrap\);return;\}/);
+  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\],wrap\);/);
+});
+
+test('conversation hierarchy keeps code context compact and secondary actions quiet', () => {
+  assert.match(PAGE_CSS, /\.ds-thread\{position:fixed[^}]*width:min\(460px[^}]*max-height:calc\(100vh - 96px\)/);
+  assert.match(PAGE_CSS, /\.ds-comment-selection>summary/);
+  assert.match(PAGE_CSS, /\.ds-comment-selection-preview/);
+  assert.match(PAGE_CSS, /\.ds-comment-menu-pop/);
+  assert.match(PAGE_CSS, /\.ds-thread-composer\{position:sticky/);
+  assert.match(PAGE_JS, /ds-comment-selection-preview/);
+  assert.match(PAGE_JS, /ds-comment-menu-pop/);
+  assert.match(PAGE_JS, /Delete conversation/);
+});
+
+test('multiple comments on one anchor show one conversation and one composer at a time', () => {
+  assert.match(PAGE_CSS, /\.ds-comment\[hidden\]\{display:none!important\}/);
+  assert.match(PAGE_CSS, /\.ds-chat-nav\[hidden\]\{display:none!important\}/);
+  assert.match(PAGE_JS, /function surfaceComments\(/);
+  assert.match(PAGE_JS, /function showCommentInSurface\(/);
+  assert.match(PAGE_JS, /comments\[k\]\.hidden=!active/);
+  assert.match(PAGE_JS, /data-comment-position/);
+  assert.match(PAGE_JS, /data-comment-prev/);
+  assert.match(PAGE_JS, /data-comment-next/);
+  assert.match(PAGE_JS, /showCommentInSurface\(surface,wrap\.getAttribute\('data-comment-id'\)\)/);
 });
 
 test('the compact Review menu runs the batch and tracks the open count', () => {
@@ -183,11 +290,11 @@ test('copying all comments includes every conversation turn, not only legacy rep
   assert.match(PAGE_JS, /commentTurnsToText\(c\)\.forEach/);
 });
 
-test('selection actions are discoverable without restoring line plus buttons', () => {
-  assert.match(PAGE_JS, /function showSelectionQuick\(/);
-  assert.match(PAGE_JS, /data-selection-quick-action/);
+test('ordinary selection stays quiet while right click and keyboard actions remain available', () => {
+  assert.doesNotMatch(PAGE_JS, /showSelectionQuick/);
+  assert.doesNotMatch(PAGE_JS, /data-selection-quick-action/);
   assert.match(PAGE_JS, /e\.key==='c'\|\|e\.key==='C'/);
-  assert.match(PAGE_CSS, /\.ds-selection-quick/);
+  assert.doesNotMatch(PAGE_CSS, /\.ds-selection-quick/);
 });
 
 test('review feedback has a verification inbox and timeline', () => {

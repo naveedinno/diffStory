@@ -37,7 +37,11 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
   assert.ok(html.includes('src/api.ts'));
   assert.ok(!html.includes('class="dv-file"'), 'does not render full diff hunks on the change summary');
-  assert.ok(html.includes('Open diff viewer'), 'links into the real review viewer');
+  assert.ok(html.includes('Start review'), 'links into the real review workspace');
+  assert.match(html, /aria-current="step"><i>1<\/i>Scope/, 'exposes the current lifecycle stage to assistive technology');
+  assert.match(html, /<i>2<\/i>Read/, 'makes the full review lifecycle visible before opening the diff');
+  assert.match(html, /grid-template-columns:100px minmax\(28px,1fr\) 100px/, 'uses equal fixed-width step groups');
+  assert.equal((html.match(/<b aria-hidden="true"><\/b>/g) || []).length, 3, 'renders exactly three explicit connectors');
   assert.ok(html.includes('id="reloadBtn"') && html.includes('location.reload()'), 'has a wired reload control');
   assert.ok(html.includes('main (abc123)'));
   assert.ok(!html.includes('Generate guided review'), 'does not duplicate story generation on the change page');
@@ -65,6 +69,20 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?base='"), 'auto compare stays on the repo-named change route');
   assert.ok(routed.includes('href="/repo/demo/diff"'), 'summary opens the repo-named diff viewer');
+});
+
+test('renderChangePage keeps generated output out of the primary reading list', () => {
+  const sum = {
+    base: 'HEAD', baseLabel: 'Working tree', totalChanged: 2, hasChanges: true,
+    files: [
+      { path: 'src/app.ts', added: 4, removed: 1 },
+      { path: 'dist/app.js', added: 9, removed: 3 },
+    ],
+  };
+  const html = renderChangePage(sum, { repoName: 'demo' });
+  assert.match(html, /<b>1<\/b> review file <span>· 1 generated<\/span>/);
+  assert.match(html, /<details class="generated"><summary><span>Generated output<\/span><span>1 file/);
+  assert.match(html, /aria-label="Start review of 2 files"/);
 });
 
 test('renderChangePage escapes file paths and shows an empty-change guard', () => {
