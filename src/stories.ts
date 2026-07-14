@@ -7,7 +7,7 @@ import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { loadComments } from './comments.js';
 import { reviewStateSummary } from './review-state.js';
-import type { StoryMode } from './types.js';
+import { isCodeStep, type StoryMode } from './types.js';
 
 export interface StorySummary {
   id: string;
@@ -23,6 +23,8 @@ export interface StorySummary {
   error?: string;
   /** Number of steps in the reading order (0 when the story is invalid). */
   steps: number;
+  /** Number of document-style concept primers in the reading order. */
+  primers: number;
   /** Distinct files the steps touch (0 when invalid). */
   files: number;
   /** True only when the story fingerprint exactly matches its current git diff. */
@@ -113,7 +115,8 @@ function storySummary(repo: string, id: string): StorySummary | null {
       updatedAt,
       valid: true,
       steps: story.steps.length,
-      files: new Set(story.steps.map((s) => s.file)).size,
+      primers: story.steps.filter((step) => step.kind === 'concept').length,
+      files: new Set(story.steps.filter(isCodeStep).map((step) => step.file)).size,
       current: session.freshness === 'current',
       ...session,
     };
@@ -133,6 +136,7 @@ function storySummary(repo: string, id: string): StorySummary | null {
       valid: false,
       error: (e as Error).message,
       steps: 0,
+      primers: 0,
       files: 0,
       current: false,
       freshness: 'unverified',

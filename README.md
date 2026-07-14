@@ -97,7 +97,11 @@ Inside a repo, diffStory gives you two useful ways to read:
   existing entry point, changed decision, downstream effect, and proof in the
   order the logic flows—not alphabetically by filename. Each step frames the
   relevant surrounding code, including unchanged lines when they explain the
-  boundary, and spotlights the exact evidence for each narration beat.
+  boundary, and spotlights the exact evidence for each narration beat. When a
+  change introduces a new term, lifecycle, or architectural boundary, the story
+  can pause for a short **concept primer** before the code that depends on it.
+  Primers are document steps with optional locally rendered Mermaid diagrams;
+  they do not pretend to be files and do not count as diff coverage.
 
 The story never replaces the diff. It only explains and orders it. The code you
 read comes from git.

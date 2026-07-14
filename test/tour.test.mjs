@@ -4,7 +4,43 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadTour, validateGeneratedTour, validateTour } from '../dist/tour.js';
+import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour, validateTour } from '../dist/tour.js';
+
+const longPrimerBody = [
+  'A request enters through the existing boundary and is normalized into a stable envelope before policy code reads it.',
+  'The envelope keeps identity, scope, and the requested action together while downstream helpers decide whether that action is allowed.',
+  'This is not another stored record or a second API request; it is temporary decision context shared by the next code steps.',
+  'Keep that ownership model in mind when checking where normalization happens, which helper applies policy, and where the accepted result returns.',
+].join(' ');
+
+const v2CodeStep = (id = 'code', order = 2, overrides = {}) => ({
+  id,
+  order,
+  title: 'The implementation',
+  file: 'x.ts',
+  range: [1, 2],
+  kind: 'changed',
+  why: 'This is where the new behavior is implemented.',
+  ...overrides,
+});
+
+const v2ConceptStep = (overrides = {}) => ({
+  id: 'concept',
+  order: 1,
+  title: 'The new request lifecycle',
+  kind: 'concept',
+  body: 'A request is normalized before the implementation applies the policy.',
+  preparesFor: ['code'],
+  ...overrides,
+});
+
+const v2Tour = (steps, overrides = {}) => ({
+  version: 2,
+  title: 'Concept-first tour',
+  summary: 'Understand the design, then review its implementation.',
+  steps,
+  ...overrides,
+});
 
 test('a well-formed tour has no errors', () => {
   const errs = validateTour({
@@ -27,6 +63,7 @@ test('generated-story validation requires context, camera framing, and narrated 
   assert.deepEqual(validateTour(legacyCompatible), []);
 
   const generatedErrors = validateGeneratedTour(legacyCompatible);
+  assert.ok(generatedErrors.includes('version must be 2 for a generated story'));
   assert.ok(generatedErrors.includes('mode is required for a generated story'));
   assert.ok(generatedErrors.includes('intent is required for a generated story'));
   assert.ok(generatedErrors.includes('steps[0].viewport is required for a generated story'));
@@ -65,6 +102,7 @@ test('generated-story validation keeps the changed range in frame and in at leas
 
   const valid = {
     ...base,
+    version: 2,
     steps: [{
       ...base.steps[0],
       viewport: [10, 26],
@@ -81,7 +119,7 @@ test('generated-story validation keeps the changed range in frame and in at leas
 
 test('generated-story validation keeps each camera shot and pointing gesture local', () => {
   const story = {
-    version: 1,
+    version: 2,
     mode: 'guided',
     title: 'T',
     summary: 'Walk the existing route into the changed branch.',
@@ -312,8 +350,8 @@ test('accepts the pure deleted-file sentinel anchor', () => {
   assert.deepEqual(errs, []);
 });
 
-test('flags wrong version, missing title, and empty steps', () => {
-  const errs = validateTour({ version: 2, steps: [] });
+test('flags unsupported version, missing title, and empty steps', () => {
+  const errs = validateTour({ version: 3, steps: [] });
   assert.ok(errs.some((e) => e.includes('version')));
   assert.ok(errs.some((e) => e.includes('title')));
   assert.ok(errs.some((e) => e.includes('steps')));
@@ -517,4 +555,186 @@ test('intent.design and intent.sources are type-checked when present', () => {
   assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: [] } }).includes('intent.sources must be a non-empty array'));
   assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: 'commit' } }).includes('intent.sources must be a non-empty array'));
   assert.ok(validateTour({ ...base, intent: { goal: 'g', sources: ['ok', ''] } }).includes('intent.sources[1] must be a non-empty string'));
+});
+
+test('schema v1 remains valid for file-backed stories and rejects concept steps', () => {
+  assert.deepEqual(validateTour({
+    version: 1,
+    title: 'Legacy story',
+    summary: '',
+    steps: [v2CodeStep('code', 1)],
+  }), []);
+
+  const errors = validateTour({
+    version: 1,
+    title: 'Legacy story',
+    summary: '',
+    steps: [v2ConceptStep(), v2CodeStep()],
+  });
+  assert.ok(errors.some((error) => error.includes('steps[0]') && error.includes('version 2')));
+});
+
+test('schema v2 accepts an interleaved concept step without code anchor or narration fields', () => {
+  const story = v2Tour([
+    v2ConceptStep({
+      tags: ['architecture', 'request-flow'],
+      diagram: {
+        type: 'mermaid',
+        source: 'flowchart LR\n  Request --> Normalize --> Policy',
+        caption: 'The request reaches policy only after normalization.',
+      },
+    }),
+    v2CodeStep(),
+  ]);
+
+  assert.deepEqual(validateTour(story), []);
+});
+
+test('concept steps reject code anchors and code-step narration fields', () => {
+  const forbidden = {
+    file: 'x.ts',
+    range: [1, 2],
+    viewport: [1, 2],
+    highlights: [[1, 2]],
+    focus: { ranges: [[1, 2]] },
+    beats: [{ text: 'Point at code.', highlights: [[1, 2]] }],
+    why: 'A code-step recap.',
+    calls: ['code'],
+    returnsTo: 'code',
+  };
+
+  for (const [field, value] of Object.entries(forbidden)) {
+    const errors = validateTour(v2Tour([
+      v2ConceptStep({ [field]: value }),
+      v2CodeStep(),
+    ]));
+    assert.ok(
+      errors.some((error) => error.includes(`steps[0].${field}`)),
+      `concept field ${field} should be rejected: ${errors.join('; ')}`,
+    );
+  }
+});
+
+test('concept preparesFor references one or more later code steps', () => {
+  const valid = v2Tour([
+    v2ConceptStep({ preparesFor: ['code-a', 'code-b'] }),
+    v2CodeStep('code-a', 2),
+    v2CodeStep('code-b', 3, { file: 'y.ts' }),
+  ]);
+  assert.deepEqual(validateTour(valid), []);
+
+  const cases = [
+    {
+      name: 'unknown target',
+      steps: [v2ConceptStep({ preparesFor: ['missing'] }), v2CodeStep()],
+    },
+    {
+      name: 'earlier target',
+      steps: [v2CodeStep('code', 1), v2ConceptStep({ order: 2, preparesFor: ['code'] }), v2CodeStep('later', 3)],
+    },
+    {
+      name: 'concept target',
+      steps: [v2ConceptStep({ id: 'intro', preparesFor: ['concept'] }), v2ConceptStep({ order: 2 }), v2CodeStep('code', 3)],
+    },
+  ];
+
+  for (const { name, steps } of cases) {
+    const errors = validateTour(v2Tour(steps));
+    assert.ok(
+      errors.some((error) => error.includes('preparesFor') && error.includes('later code step')),
+      `${name} should be rejected: ${errors.join('; ')}`,
+    );
+  }
+});
+
+test('concept preparesFor ids are unique and code flow links cannot target primers', () => {
+  const duplicate = validateTour(v2Tour([
+    v2ConceptStep({ preparesFor: ['code', 'code'] }),
+    v2CodeStep(),
+  ]));
+  assert.ok(duplicate.some((error) => error.includes('duplicate step ids')));
+
+  const badFlow = validateTour(v2Tour([
+    v2CodeStep('entry', 1, { calls: ['concept'] }),
+    v2ConceptStep({ order: 2, preparesFor: ['code'] }),
+    v2CodeStep('code', 3, { returnsTo: 'concept' }),
+  ]));
+  assert.ok(badFlow.some((error) => error.includes('steps[0].calls must reference code steps')));
+  assert.ok(badFlow.some((error) => error.includes('steps[2].returnsTo must reference code steps')));
+});
+
+test('concept steps cannot be adjacent or end the reading path', () => {
+  const adjacent = validateTour(v2Tour([
+    v2ConceptStep({ id: 'concept-a', preparesFor: ['code'] }),
+    v2ConceptStep({ id: 'concept-b', order: 2, preparesFor: ['code'] }),
+    v2CodeStep('code', 3),
+  ]));
+  assert.ok(adjacent.some((error) => error.includes('adjacent')));
+
+  const ending = validateTour(v2Tour([
+    v2CodeStep('code', 1),
+    v2ConceptStep({ order: 2, preparesFor: ['code'] }),
+  ]));
+  assert.ok(ending.some((error) => error.includes('last')));
+});
+
+test('concept adjacency follows the order field rather than JSON array order', () => {
+  const story = v2Tour([
+    v2CodeStep('code-b', 3, { file: 'y.ts' }),
+    v2ConceptStep({ preparesFor: ['code-a'] }),
+    v2CodeStep('code-a', 2),
+  ]);
+  assert.deepEqual(validateTour(story), []);
+
+  story.steps[1].preparesFor = ['code-b'];
+  assert.ok(validateTour(story).some((error) => error.includes('immediately following code step')));
+});
+
+test('concept diagrams accept Mermaid flowcharts and reject executable Mermaid directives', () => {
+  const safe = v2Tour([
+    v2ConceptStep({
+      diagram: {
+        type: 'mermaid',
+        source: 'sequenceDiagram\n  Browser->>Server: Review story',
+        caption: 'The browser requests the prepared story.',
+      },
+    }),
+    v2CodeStep(),
+  ]);
+  assert.deepEqual(validateTour(safe), []);
+
+  for (const source of [
+    '%%{init: {"securityLevel": "loose"}}%%\nflowchart LR\n  A --> B',
+    'flowchart LR\n  A[<script>alert(1)</script>] --> B',
+    'flowchart LR\n  A@{ img: "//evil.example/pixel", label: "x" }',
+  ]) {
+    const errors = validateTour(v2Tour([
+      v2ConceptStep({ diagram: { type: 'mermaid', source, caption: 'Unsafe.' } }),
+      v2CodeStep(),
+    ]));
+    assert.ok(
+      errors.some((error) => error.includes('diagram.source') && error.includes('unsafe')),
+      `unsafe Mermaid should be rejected: ${errors.join('; ')}`,
+    );
+  }
+});
+
+test('generated and repaired concept profiles enforce mode budgets and useful body length', () => {
+  const valid = v2Tour([
+    v2ConceptStep({ body: longPrimerBody }),
+    v2CodeStep(),
+  ], { mode: 'guided' });
+  assert.deepEqual(validateGeneratedConceptSteps(valid), []);
+
+  const tooShort = structuredClone(valid);
+  tooShort.steps[0].body = 'A tiny glossary entry.';
+  assert.ok(validateGeneratedConceptSteps(tooShort).includes('steps[0].body must contain at least 60 words'));
+
+  const tooMany = v2Tour([
+    v2ConceptStep({ id: 'concept-a', body: longPrimerBody, preparesFor: ['code-a'] }),
+    v2CodeStep('code-a', 2),
+    v2ConceptStep({ id: 'concept-b', order: 3, body: longPrimerBody, preparesFor: ['code-b'] }),
+    v2CodeStep('code-b', 4),
+  ], { mode: 'brief' });
+  assert.ok(validateGeneratedConceptSteps(tooMany).includes('brief stories can include at most one concept step'));
 });

@@ -1,7 +1,6 @@
-// Turn a validated tour + the parsed diff into a single self-contained HTML page —
-// the diffStory review screen. All code content is escaped here, server-side; the
-// client JS only ever sets textContent or injects this server-escaped HTML, so
-// there is no HTML-injection sink.
+// Turn a validated tour + the parsed diff into a single review page. Authored
+// text and code are escaped server-side. The one client-side HTML insertion is
+// locally rendered Mermaid SVG, parsed and sanitized before it reaches the DOM.
 import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
@@ -13,6 +12,8 @@ import { intraLineMap, type IntraSides } from './intra-line.js';
 import { renderSplitRow, renderUnifiedRow, renderHunkGap, type RowTarget } from './diff-render.js';
 import type {
   FileView,
+  CodeStepView,
+  ConceptStepView,
   ReviewModel,
   SbsRow,
   StepView,
@@ -118,7 +119,7 @@ export function renderPage(input: RenderInput): string {
   const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
   const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
   const stepPanels = model.steps
-    .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
+    .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments, stepIndexById))
     .join('');
   const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
 
@@ -327,10 +328,10 @@ ${reviewSessionBar({
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Reading order</span>
         <span class="ds-readhead-count" id="ds-progress-text">${
-          storyless ? 'No story yet' : `${model.totalSteps} ${plural(model.totalSteps, 'step')}`
+          storyless ? 'No story yet' : readingOrderLabel(model)
         }</span>
       </div>
-      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:0%"></div></div>
+      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill"></div></div>
     </div>
     <div class="ds-readhead" data-rail="files" hidden>
       <div class="ds-readhead-row">
@@ -470,12 +471,11 @@ function reviewSessionBar(input: {
 // The Overview sits above the numbered steps as navigation index 0 — the calm
 // entry point that answers "what is this change?" before the walkthrough begins.
 function introCard(model: ReviewModel): string {
-  const n = model.totalSteps;
   return `<button class="ds-stepcard is-intro is-active" data-rail="tour" data-intro data-step-index="0" title="The whole change at a glance, before the walkthrough">
     <span class="ds-num">${STORY_MARK}</span>
     <span class="ds-stepcard-body">
       <span class="ds-stepcard-title">Overview</span>
-      <span class="ds-intro-cardsub">The change at a glance${n ? ` · ${n} ${plural(n, 'step')}` : ''}</span>
+      <span class="ds-intro-cardsub">The change at a glance${model.totalSteps ? ` · ${readingOrderLabel(model)}` : ''}</span>
     </span>
   </button>`;
 }
@@ -484,6 +484,17 @@ function introCard(model: ReviewModel): string {
 // the file's base name (full path on hover). The kind badge appears only when it
 // is *not* a plain change — "Changed" on every card is noise, so it is dropped.
 function railCard(s: StepView, i: number): string {
+  if (s.kind === 'concept') {
+    return `<button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
+      <span class="ds-num">${i + 1}</span>
+      <span class="ds-stepcard-body">
+        <span class="ds-stepcard-title">${esc(s.title)}</span>
+        <span class="ds-stepcard-fileline">
+          <span class="ds-stepcard-file">Concept primer</span>
+        </span>
+      </span>
+    </button>`;
+  }
   const base = splitPath(s.file)[1];
   const badge =
     s.kind === 'changed'
@@ -511,7 +522,6 @@ function introPanel(
   freshness: 'current' | 'stale' | 'unverified',
   routeBase: string,
 ): string {
-  const n = model.totalSteps;
   const trust = model.trust.uncovered.length;
   const first = model.steps[0];
   const intent = tour.intent;
@@ -559,18 +569,18 @@ function introPanel(
       <span class="ds-intro-eyebrow">${STORY_MARK}<span>The story of this change</span></span>
       <h1 class="ds-intro-title">${esc(tour.title)}</h1>
       <p class="ds-intro-lede" data-speech-overview>${lede}</p>
-      ${design}${map}
       ${freshnessNote}
+      ${start}
+      ${design || map ? `<div class="ds-intro-context">${design}${map}</div>` : ''}
       <div class="ds-intro-facts">
-        <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(
-    n,
-    'step',
-  )} to read in order</span></div>
+        <div class="ds-fact"><span class="ds-fact-n">${model.codeSteps}</span><span class="ds-fact-l">${plural(
+    model.codeSteps,
+    'code step',
+  )}${model.conceptSteps ? ` · ${model.conceptSteps} ${plural(model.conceptSteps, 'primer')}` : ''}</span></div>
         <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
         <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
         ${trustFact}
       </div>
-      ${start}
     </div>
   </section>`;
 }
@@ -871,7 +881,20 @@ function changeJumpControls(): string {
 
 function stepPanel(
   repo: string,
-  s: StepView,
+  step: StepView,
+  i: number,
+  total: number,
+  comments: Comment[],
+  stepIndexById: Map<string, number>,
+): string {
+  return step.kind === 'concept'
+    ? conceptStepPanel(step, i, total, stepIndexById)
+    : codeStepPanel(repo, step, i, total, comments);
+}
+
+function codeStepPanel(
+  repo: string,
+  s: CodeStepView,
   i: number,
   total: number,
   comments: Comment[],
@@ -886,7 +909,7 @@ function stepPanel(
         s.flow,
       )}</span>`
     : '';
-  return `<section class="ds-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${
+  return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${
     s.focusExplicit ? ' data-story-focus="authored"' : ''
   } hidden>
     <div class="ds-step-top">
@@ -939,12 +962,85 @@ function stepPanel(
   </section>`;
 }
 
-function stepStoryHtml(s: StepView, diffRegionId: string): string {
+function conceptStepPanel(
+  s: ConceptStepView,
+  i: number,
+  total: number,
+  stepIndexById: Map<string, number>,
+): string {
+  const nextDisabled = i === total - 1 ? ' disabled' : '';
+  const next = s.preparesFor[0];
+  const nextIndex = next ? stepIndexById.get(next.id) : undefined;
+  const nextLink = next && nextIndex !== undefined
+    ? `<button class="ds-concept-next" type="button" data-goto-step="${nextIndex}">
+        <span class="ds-concept-next-kicker">Next in code · Step ${next.order}</span>
+        <span class="ds-concept-next-title">${esc(next.title)}</span>
+        <span class="ds-concept-next-arrow" aria-hidden="true">→</span>
+      </button>`
+    : '';
+  const diagram = s.diagram
+    ? `<figure class="ds-concept-diagram" data-concept-diagram>
+        <div class="ds-concept-diagram-output" data-mermaid-output role="img" aria-label="${esc(
+          s.diagram.caption,
+        )}"><span class="ds-concept-diagram-loading">Drawing the mental model…</span></div>
+        <pre data-mermaid-source hidden>${esc(s.diagram.source)}</pre>
+        <figcaption>${esc(s.diagram.caption)}</figcaption>
+        <details class="ds-concept-diagram-source" data-mermaid-fallback>
+          <summary>Diagram source</summary>
+          <pre><code>${esc(s.diagram.source)}</code></pre>
+        </details>
+      </figure>`
+    : '';
+  const speech = conceptSpeechText(s);
+  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
+    <div class="ds-step-top">
+      <div class="ds-step-meta">
+        <span class="ds-step-count">Step ${s.order} of ${total}</span>
+        <span class="ds-dot"></span>
+        <span class="ds-badge ds-badge-concept">Concept</span>
+        <span class="ds-flex"></span>
+        <span class="ds-step-pos">${s.order} / ${total}</span>
+        <span class="ds-nav">
+          <button class="ds-iconbtn" data-prev title="Previous story step" aria-label="Previous story step">←</button>
+          <button class="ds-iconbtn" data-next title="Next story step" aria-label="Next story step"${nextDisabled}>→</button>
+        </span>
+      </div>
+    </div>
+    <div class="ds-concept-scroll">
+      <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
+        <div class="ds-concept-heading">
+          <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+          <button class="ds-playstep" data-playstep title="Read this primer aloud" aria-label="Read this primer aloud">▸</button>
+        </div>
+        <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${esc(s.title)}</h1>
+        <div class="ds-concept-body ds-md">${renderMarkdown(s.body)}</div>
+        ${diagram}
+        ${nextLink}
+        <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
+      </article>
+    </div>
+  </section>`;
+}
+
+function conceptSpeechText(s: ConceptStepView): string {
+  const body = s.body
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^#{1,4}\s+/gm, '')
+    .replace(/^\s*(?:[-*]|\d+[.)])\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const caption = s.diagram?.caption?.trim();
+  return [s.title, body, caption].filter(Boolean).join('. ');
+}
+
+function stepStoryHtml(s: CodeStepView, diffRegionId: string): string {
   if (!s.beats.length) return `<p class="ds-why-text">${nl(esc(s.why))}</p>`;
   return `<div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div><div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>`;
 }
 
-function beatHtml(beat: StepView['beats'][number], file: string, diffRegionId: string): string {
+function beatHtml(beat: CodeStepView['beats'][number], file: string, diffRegionId: string): string {
   const destination = beatDestination(file, beat.highlights);
   return `<button type="button" class="ds-beat" data-story-beat data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(
     beat.text,
@@ -961,7 +1057,7 @@ function beatDestination(file: string, highlights: Array<[number, number]>): str
   return `${file}, ${ranges.join(' and ')}`;
 }
 
-function storyUnifiedDiffInner(s: StepView, comments: Comment[]): string {
+function storyUnifiedDiffInner(s: CodeStepView, comments: Comment[]): string {
   if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
     return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
   }
@@ -981,7 +1077,7 @@ function storyUnifiedDiffInner(s: StepView, comments: Comment[]): string {
   return `${storyUnifiedHead(s)}${note}<div class="ds-diffbody ds-diffbody-unified">${body}</div>`;
 }
 
-function storyUnifiedHead(s: StepView): string {
+function storyUnifiedHead(s: CodeStepView): string {
   const label = s.context ? 'Context' : s.newFile ? 'New file' : 'Unified';
   const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
   return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${
@@ -993,7 +1089,7 @@ function storyUnifiedHead(s: StepView): string {
 
 function storyUnifiedRow(
   row: SbsRow,
-  s: StepView,
+  s: CodeStepView,
   comments: Comment[],
   blockIndex: number,
   intra?: Map<SbsRow, IntraSides>,
@@ -1013,7 +1109,7 @@ function storyUnifiedRow(
   return rowHtml + threadForTargets([target], comments);
 }
 
-function diffInner(s: StepView, comments: Comment[]): string {
+function diffInner(s: CodeStepView, comments: Comment[]): string {
   if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
     return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
   }
@@ -1035,7 +1131,7 @@ function diffInner(s: StepView, comments: Comment[]): string {
   return `${head}${note}<div class="ds-diffbody">${body}</div>`;
 }
 
-function diffHead(s: StepView): string {
+function diffHead(s: CodeStepView): string {
   if (s.context) {
     return `<div class="ds-diffhead ds-diffhead-ctx">
       <span class="ds-diffhead-side"><span class="ds-diffhead-label">Context</span><span class="ds-diffhead-path">${esc(
@@ -1066,7 +1162,7 @@ function diffHead(s: StepView): string {
   </div>`;
 }
 
-function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: number, intra?: Map<SbsRow, IntraSides>): string {
+function sbsRow(row: SbsRow, s: CodeStepView, comments: Comment[], blockIndex: number, intra?: Map<SbsRow, IntraSides>): string {
   const leftTarget =
     !s.context && !s.newFile && row.oldNo !== undefined
       ? { side: 'left' as const, file: s.oldFile, line: row.oldNo }
@@ -1084,7 +1180,7 @@ function sbsRow(row: SbsRow, s: StepView, comments: Comment[], blockIndex: numbe
   return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
 }
 
-function rowVoiceFocusIndex(row: SbsRow, s: StepView, blockIndex: number): number | null {
+function rowVoiceFocusIndex(row: SbsRow, s: CodeStepView, blockIndex: number): number | null {
   const idx = s.focusGroups.findIndex((ranges) => ranges.some((range) => rowInFocusRange(row, s, range)));
   if (idx >= 0) {
     return s.focusExplicit ? idx : blockIndex;
@@ -1092,7 +1188,7 @@ function rowVoiceFocusIndex(row: SbsRow, s: StepView, blockIndex: number): numbe
   return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
 }
 
-function rowInFocusRange(row: SbsRow, s: StepView, [start, end]: [number, number]): boolean {
+function rowInFocusRange(row: SbsRow, s: CodeStepView, [start, end]: [number, number]): boolean {
   if (row.newNo !== undefined) return row.newNo >= start && row.newNo <= end;
   return s.kind === 'changed' && row.type === 'del' && start === 0 && end === 0;
 }
@@ -1570,6 +1666,14 @@ function plural(n: number, word: string): string {
   return n === 1 ? word : word + 's';
 }
 
+function readingOrderLabel(model: ReviewModel): string {
+  if (!model.conceptSteps) return `${model.codeSteps} ${plural(model.codeSteps, 'step')}`;
+  return `${model.codeSteps} ${plural(model.codeSteps, 'code step')} + ${model.conceptSteps} ${plural(
+    model.conceptSteps,
+    'primer',
+  )}`;
+}
+
 function vscodeLink(repo: string, file: string, line: number): string {
   return `vscode://file${encodeURI(join(repo, file))}:${line}`;
 }
@@ -1601,6 +1705,14 @@ function renderMarkdown(input: string): string {
     const line = lines[i];
     if (!line.trim()) {
       flushParagraph();
+      continue;
+    }
+
+    const heading = line.match(/^(#{2,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      const level = Math.min(4, heading[1].length);
+      out.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
       continue;
     }
 

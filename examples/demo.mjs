@@ -101,7 +101,7 @@ test('rejects an order over the monthly cap', async () => {
 `;
 
 const TOUR = `{
-  "version": 1,
+  "version": 2,
   "mode": "guided",
   "title": "Add per-customer monthly spending limit",
   "summary": "Start at the existing POST /orders boundary, follow the new decision into customer state, then return to the placement path and its proof. Slow down on the exact-cap boundary.",
@@ -125,7 +125,19 @@ const TOUR = `{
       "calls": ["s2"], "tags": ["entrypoint"]
     },
     {
-      "id": "s2", "order": 2, "title": "checkSpendingLimit() turns stored spend into the gate result",
+      "id": "c1", "order": 2, "title": "The limit is a decision over derived budget, not a stored flag",
+      "kind": "concept",
+      "body": "## Three values form the policy\\n\\nThe store owns **spent so far**. Configuration supplies the **monthly cap**. The helper derives **remaining budget**, then compares the incoming order amount with that result.\\n\\nThat separation matters in the next steps: \`monthlySpend\` is state, \`MONTHLY_CAP\` is policy, and \`remaining\` is temporary decision data. No file stores whether a customer is currently over the limit.\\n\\n> Review the comparison as a business boundary: an amount equal to the remaining budget should either be deliberately accepted or deliberately rejected.",
+      "preparesFor": ["s2", "s3", "s4"],
+      "diagram": {
+        "type": "mermaid",
+        "source": "flowchart LR\\n  Stored[Spent so far] --> Remaining[Remaining budget]\\n  Cap[Monthly cap] --> Remaining\\n  Remaining --> Gate{Order fits?}\\n  Amount[Order amount] --> Gate",
+        "caption": "Stored spend and the cap produce a remaining budget; the incoming amount is compared with that derived value."
+      },
+      "tags": ["mental-model", "policy"]
+    },
+    {
+      "id": "s2", "order": 3, "title": "checkSpendingLimit() turns stored spend into the gate result",
       "file": "src/limits.ts", "range": [1, 11], "viewport": [1, 11],
       "highlights": [[1, 5], [7, 10]], "kind": "new-file",
       "why": "I isolate the cap math here, with the exact-equality comparison as the review hinge.",
@@ -136,7 +148,7 @@ const TOUR = `{
       "calls": ["s3"], "returnsTo": "s1", "tags": ["core"]
     },
     {
-      "id": "s3", "order": 3, "title": "Existing customer storage supplies monthlySpend",
+      "id": "s3", "order": 4, "title": "Existing customer storage supplies monthlySpend",
       "file": "src/db.ts", "range": [1, 8], "viewport": [1, 8],
       "highlights": [[2, 4], [6, 8]], "kind": "context",
       "why": "Unchanged context: this store is the state contract the new helper relies on.",
@@ -147,7 +159,7 @@ const TOUR = `{
       "returnsTo": "s2", "tags": ["context"]
     },
     {
-      "id": "s4", "order": 4, "title": "Accepted orders feed spend back into the placement path",
+      "id": "s4", "order": 5, "title": "Accepted orders feed spend back into the placement path",
       "file": "src/orders.ts", "range": [1, 13], "viewport": [1, 13],
       "highlights": [[3, 6], [10, 13]], "kind": "changed",
       "why": "Back on the accepted path, I record the spend after storing the order so the next limit check can see it.",
@@ -159,7 +171,7 @@ const TOUR = `{
       "returnsTo": "s1", "tags": ["core"]
     },
     {
-      "id": "s5", "order": 5, "title": "Rejection proof leaves the exact boundary exposed",
+      "id": "s5", "order": 6, "title": "Rejection proof leaves the exact boundary exposed",
       "file": "test/limits.test.ts", "range": [1, 7], "viewport": [1, 7],
       "highlights": [[1, 7]], "kind": "new-file",
       "why": "The test proves an over-cap request fails, while leaving equal-to-remaining as the missing case to review.",

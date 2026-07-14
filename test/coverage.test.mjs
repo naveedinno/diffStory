@@ -47,3 +47,31 @@ test('stalePointers flags a step pointing at unchanged code', () => {
   );
   assert.equal(stale.length, 1);
 });
+
+test('concept primers neither claim coverage nor become stale diff pointers', () => {
+  const concept = {
+    id: 'primer',
+    order: 1,
+    title: 'The request envelope',
+    kind: 'concept',
+    body: 'The request is normalized before the policy is applied.',
+    preparesFor: ['implementation'],
+  };
+  const code = {
+    id: 'implementation',
+    order: 2,
+    title: 'Apply the policy',
+    file: 'a.ts',
+    range: [1, 3],
+    kind: 'changed',
+    why: 'This implements the policy introduced by the primer.',
+  };
+  const v2 = { version: 2, title: 'Concept-first story', summary: '', steps: [concept, code] };
+
+  assert.equal(computeCoverage(v2, files).uncovered.length, 0);
+  assert.deepEqual(stalePointers(v2, files), []);
+
+  const withoutCodeClaim = { ...v2, steps: [concept] };
+  assert.ok(computeCoverage(withoutCodeClaim, files).uncovered.length >= 1);
+  assert.deepEqual(stalePointers(withoutCodeClaim, files), []);
+});

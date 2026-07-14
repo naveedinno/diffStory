@@ -12,6 +12,7 @@ import {
   storyRepairPrompt,
 } from '../dist/agent.js';
 import { codexTaskBinary } from '../dist/codex-tasks.js';
+import { validateGeneratedTour, validateTour } from '../dist/tour.js';
 
 test('onPath finds sh, not a bogus command', () => {
   assert.equal(onPath('sh'), true);
@@ -22,6 +23,7 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
+  assert.ok(p.includes('set its "version" field to 2'));
   assert.ok(p.includes('Use the diffstory-storyteller skill'));
   assert.ok(!p.includes('diffStory review-tour skill'));
   assert.ok(p.includes('do not emit one step per file'));
@@ -63,12 +65,39 @@ test('storyPrompt designs the reading path as a narrative, not a file list', () 
   assert.ok(p.includes('one continuous story'));
 });
 
+test('storyPrompt detects concept gaps and places primers just in time', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Concept-gap test:'));
+  assert.ok(p.includes('terminology, roles, relationships, or state model'));
+  assert.ok(p.includes('immediately before the first code step that depends on it'));
+  assert.ok(p.includes('must include that immediately following code step'));
+  assert.ok(p.includes('Never place concept primers next to each other or at the end'));
+  assert.ok(p.includes('Overview is the whole-change reading map'));
+  assert.ok(p.includes('primer is a just-in-time mental model'));
+});
+
+test('storyPrompt pins the concept primer schema and safety contract', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Concept primer contract'));
+  assert.ok(p.includes('"kind":"concept"'));
+  assert.ok(p.includes('"body"'));
+  assert.ok(p.includes('"preparesFor"'));
+  assert.ok(p.includes('must not contain "file", "range", "viewport", "highlights", "beats", "why", "calls", or "returnsTo"'));
+  assert.ok(p.includes('60-180 words'));
+  assert.ok(p.includes('hard maximum is 220 words'));
+  assert.ok(p.includes('Concept primers never claim diff coverage'));
+  assert.ok(p.includes('three or more actors/components'));
+  assert.ok(p.includes('flowchart, sequenceDiagram, or stateDiagram-v2'));
+  assert.ok(p.includes('caption is required'));
+  assert.ok(p.includes('no links, URLs, click/href directives, init/config directives, HTML, images, or custom styling directives'));
+});
+
 test('storyPrompt ends with a falsifiable self-review', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('Falsifiable self-review'));
   assert.ok(p.includes('Why test:'));
   assert.ok(p.includes('Thread test:'));
-  assert.ok(p.includes('read only the beats'));
+  assert.ok(p.includes('read concept bodies and code beats'));
   assert.ok(p.includes('Do not ask questions. Generate it directly.'));
 });
 
@@ -76,7 +105,7 @@ test('storyPrompt asks for a context map and hard quality gates', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('private context map'));
   assert.ok(p.includes('entry -> existing owner -> changed decision -> downstream effect -> proof or risk'));
-  assert.ok(p.includes('Each step must answer a reviewer question'));
+  assert.ok(p.includes('Each code step must answer a reviewer question'));
   assert.ok(p.includes('coverage ledger'));
   assert.ok(p.includes('"range" is only the changed-line coverage anchor'));
   assert.ok(p.includes('Truth contract'));
@@ -91,7 +120,7 @@ test('storyPrompt rebuilds the app context a forgetful reviewer needs', () => {
   assert.ok(p.includes('outbound consumer'));
   assert.ok(p.includes('existing app path, the attachment point for this diff, and the new outcome'));
   assert.ok(p.includes('app orientation -> behavioral entry -> changed decision -> downstream consequence -> proof'));
-  assert.ok(p.includes('The first stop is the behavioral entry point'));
+  assert.ok(p.includes('The first code stop is the behavioral entry point'));
   assert.ok(p.includes('Do not start with imports, icons, styling, generated output, or tests'));
 });
 
@@ -162,11 +191,15 @@ test('storyPrompt supports story detail levels', () => {
   const guided = storyPrompt('main');
   assert.ok(guided.includes('set its "mode" field to "guided"'));
   assert.ok(guided.includes('Balanced mode'));
+  assert.ok(guided.includes('guided 2'));
+  assert.ok(guided.includes('use at most 2 concept primers'));
   assert.ok(!guided.includes('Line-by-line mode'));
 
   const brief = storyPrompt('main', undefined, 'brief');
   assert.ok(brief.includes('set its "mode" field to "brief"'));
   assert.ok(brief.includes('Brief mode'));
+  assert.ok(brief.includes('brief 1'));
+  assert.ok(brief.includes('use at most 1 concept primer'));
   assert.ok(brief.includes('one short sentence'));
   assert.ok(brief.includes('one compact stop per meaningful change cluster'));
 
@@ -174,6 +207,8 @@ test('storyPrompt supports story detail levels', () => {
   assert.ok(detailed.includes('git diff main --'));
   assert.ok(detailed.includes('set its "mode" field to "detailed"'));
   assert.ok(detailed.includes('Line-by-line mode'));
+  assert.ok(detailed.includes('detailed 3'));
+  assert.ok(detailed.includes('use at most 3 concept primers'));
   assert.ok(detailed.includes('line-by-line'));
   assert.ok(detailed.includes('all meaningful code paths'));
   assert.ok(detailed.includes('3-7 short sentences'));
@@ -223,6 +258,47 @@ test('bundled diffstory-storyteller skill requires the narrative story arc', () 
   assert.ok(skill.includes('To implement that flow, I first'));
   assert.ok(skill.includes('intent -> flow -> implementation'));
   assert.ok(skill.includes('not a list of touched files'));
+});
+
+test('bundled diffstory-storyteller skill teaches just-in-time concept primers', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Concept-gap test'));
+  assert.ok(skill.includes('terminology, roles, relationships, or state model'));
+  assert.ok(skill.includes('immediately before the first code step that depends on it'));
+  assert.ok(skill.includes('Overview is the whole-change reading map'));
+  assert.ok(skill.includes('primer is a just-in-time mental model'));
+  assert.ok(skill.includes('Never place two concept primers next to each other'));
+  assert.ok(skill.includes('Never end the story with a concept primer'));
+});
+
+test('bundled diffstory-storyteller skill pins concept schema, limits, and diagram safety', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Newly generated stories use `"version": 2`'));
+  assert.ok(skill.includes('60-180 words'));
+  assert.match(skill, /hard maximum\s+of 220 words/);
+  assert.ok(skill.includes('Brief: at most 1 concept primer'));
+  assert.ok(skill.includes('Guided: at most 2 concept primers'));
+  assert.ok(skill.includes('Detailed: at most 3 concept primers'));
+  assert.ok(skill.includes('Concept primers never claim diff coverage'));
+  assert.match(skill, /three or more\s+actors\/components/);
+  assert.ok(skill.includes('flowchart`, `sequenceDiagram`, or `stateDiagram-v2'));
+  assert.ok(skill.includes('caption is required'));
+  assert.ok(skill.includes('No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives'));
+  assert.ok(skill.includes('must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`'));
+});
+
+test('bundled skill schema example is a valid interleaved v2 story', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const example = JSON.parse(skill.split('## Schema')[1].split('```jsonc')[1].split('```')[0]);
+  assert.deepEqual(validateTour(example), []);
+  assert.deepEqual(validateGeneratedTour(example), []);
+  assert.deepEqual(example.steps.map((step) => [step.order, step.kind]), [
+    [1, 'changed'],
+    [2, 'concept'],
+    [3, 'new-file'],
+    [4, 'context'],
+  ]);
+  assert.deepEqual(example.steps[1].preparesFor, ['s2']);
 });
 
 test('bundled diffstory-storyteller skill makes deleted-file steps use the changed kind', () => {
@@ -509,6 +585,10 @@ test('storyRepairPrompt preserves unaffected steps and targets one repair', () =
   assert.match(prompt, /Split story step "s2" in src\/a\.ts/);
   assert.match(prompt, /Preserve every unaffected step/);
   assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
+  assert.match(prompt, /Preserve every unaffected concept primer/);
+  assert.match(prompt, /Keep a legacy version 1 story at version 1/);
+  assert.match(prompt, /upgrade it to version 2 only if this repair introduces a concept primer/);
+  assert.match(prompt, /concept primers do not claim coverage/i);
   assert.match(prompt, /\.diffstory\/story\.json/);
   assert.match(prompt, /diffstory-storyteller/);
 });

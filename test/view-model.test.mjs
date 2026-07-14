@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { buildFullFileRows, hunksToSbsBlocks } from '../dist/view-model.js';
+import { buildFullFileRows, buildReviewModel, hunksToSbsBlocks } from '../dist/view-model.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -63,4 +63,53 @@ test('hunksToSbsBlocks tolerates an absent file (context-only degrade path)', ()
   // Split view for a context-only file (referenced by a step, absent from the
   // diff) has no DiffFile — the endpoint passes undefined and expects [].
   assert.deepEqual(hunksToSbsBlocks(undefined, []), []);
+});
+
+test('concept primers stay in reading order but out of file and coverage views', () => {
+  const parsed = parseUnifiedDiff(DIFF);
+  const tour = {
+    version: 2,
+    title: 'Concept-first story',
+    summary: 'Learn the request lifecycle, then review its implementation.',
+    steps: [
+      {
+        id: 'primer',
+        order: 1,
+        title: 'The request lifecycle',
+        kind: 'concept',
+        body: 'A request is normalized before the policy receives it.',
+        preparesFor: ['implementation'],
+        diagram: {
+          type: 'mermaid',
+          source: 'flowchart LR\n  Request --> Normalize --> Policy',
+          caption: 'The request lifecycle before the changed policy.',
+        },
+      },
+      {
+        id: 'implementation',
+        order: 2,
+        title: 'Apply the policy',
+        file: 'a.ts',
+        range: [1, 3],
+        kind: 'changed',
+        why: 'The changed line applies the policy.',
+      },
+    ],
+  };
+
+  const model = buildReviewModel(process.cwd(), tour, parsed);
+
+  assert.equal(model.totalSteps, 2);
+  assert.equal(model.codeSteps, 1);
+  assert.equal(model.conceptSteps, 1);
+  assert.equal(model.steps[0].kind, 'concept');
+  assert.equal(model.steps[0].body, tour.steps[0].body);
+  assert.deepEqual(model.steps[0].preparesFor, [
+    { id: 'implementation', order: 2, title: 'Apply the policy' },
+  ]);
+  assert.deepEqual(model.steps[0].diagram, tour.steps[0].diagram);
+  assert.equal(model.files.length, 1);
+  assert.equal(model.files[0].file, 'a.ts');
+  assert.equal(model.files[0].stepId, 'implementation');
+  assert.equal(model.trust.uncovered.length, 0);
 });

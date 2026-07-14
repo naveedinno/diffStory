@@ -1,5 +1,6 @@
 node_modules/
 *.log
+.DS_Store
 
 # dist/ is committed so `npm i -g github:naveedinno/diffStory` works without a
 # build step (a global git-install does not install devDeps, so tsc is absent).

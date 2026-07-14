@@ -1,7 +1,6 @@
-// Turn a validated tour + the parsed diff into a single self-contained HTML page —
-// the diffStory review screen. All code content is escaped here, server-side; the
-// client JS only ever sets textContent or injects this server-escaped HTML, so
-// there is no HTML-injection sink.
+// Turn a validated tour + the parsed diff into a single review page. Authored
+// text and code are escaped server-side. The one client-side HTML insertion is
+// locally rendered Mermaid SVG, parsed and sanitized before it reaches the DOM.
 import { join } from 'node:path';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
@@ -78,7 +77,7 @@ export function renderPage(input) {
     const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
     const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
     const stepPanels = model.steps
-        .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments))
+        .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments, stepIndexById))
         .join('');
     const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
     return `<!doctype html>
@@ -271,9 +270,9 @@ ${reviewSessionBar({
     <div class="ds-readhead" data-rail="tour">
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Reading order</span>
-        <span class="ds-readhead-count" id="ds-progress-text">${storyless ? 'No story yet' : `${model.totalSteps} ${plural(model.totalSteps, 'step')}`}</span>
+        <span class="ds-readhead-count" id="ds-progress-text">${storyless ? 'No story yet' : readingOrderLabel(model)}</span>
       </div>
-      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill" style="width:0%"></div></div>
+      <div class="ds-readhead-track"><div class="ds-readhead-fill" id="ds-progress-fill"></div></div>
     </div>
     <div class="ds-readhead" data-rail="files" hidden>
       <div class="ds-readhead-row">
@@ -394,12 +393,11 @@ function reviewSessionBar(input) {
 // The Overview sits above the numbered steps as navigation index 0 — the calm
 // entry point that answers "what is this change?" before the walkthrough begins.
 function introCard(model) {
-    const n = model.totalSteps;
     return `<button class="ds-stepcard is-intro is-active" data-rail="tour" data-intro data-step-index="0" title="The whole change at a glance, before the walkthrough">
     <span class="ds-num">${STORY_MARK}</span>
     <span class="ds-stepcard-body">
       <span class="ds-stepcard-title">Overview</span>
-      <span class="ds-intro-cardsub">The change at a glance${n ? ` · ${n} ${plural(n, 'step')}` : ''}</span>
+      <span class="ds-intro-cardsub">The change at a glance${model.totalSteps ? ` · ${readingOrderLabel(model)}` : ''}</span>
     </span>
   </button>`;
 }
@@ -407,6 +405,17 @@ function introCard(model) {
 // the file's base name (full path on hover). The kind badge appears only when it
 // is *not* a plain change — "Changed" on every card is noise, so it is dropped.
 function railCard(s, i) {
+    if (s.kind === 'concept') {
+        return `<button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
+      <span class="ds-num">${i + 1}</span>
+      <span class="ds-stepcard-body">
+        <span class="ds-stepcard-title">${esc(s.title)}</span>
+        <span class="ds-stepcard-fileline">
+          <span class="ds-stepcard-file">Concept primer</span>
+        </span>
+      </span>
+    </button>`;
+    }
     const base = splitPath(s.file)[1];
     const badge = s.kind === 'changed'
         ? ''
@@ -425,7 +434,6 @@ function railCard(s, i) {
 // place the summary is shown in full), a few orienting facts, and one button into
 // the walkthrough. It is navigation index 0 — shown first, before any step.
 function introPanel(model, tour, freshness, routeBase) {
-    const n = model.totalSteps;
     const trust = model.trust.uncovered.length;
     const first = model.steps[0];
     const intent = tour.intent;
@@ -460,15 +468,15 @@ function introPanel(model, tour, freshness, routeBase) {
       <span class="ds-intro-eyebrow">${STORY_MARK}<span>The story of this change</span></span>
       <h1 class="ds-intro-title">${esc(tour.title)}</h1>
       <p class="ds-intro-lede" data-speech-overview>${lede}</p>
-      ${design}${map}
       ${freshnessNote}
+      ${start}
+      ${design || map ? `<div class="ds-intro-context">${design}${map}</div>` : ''}
       <div class="ds-intro-facts">
-        <div class="ds-fact"><span class="ds-fact-n">${n}</span><span class="ds-fact-l">${plural(n, 'step')} to read in order</span></div>
+        <div class="ds-fact"><span class="ds-fact-n">${model.codeSteps}</span><span class="ds-fact-l">${plural(model.codeSteps, 'code step')}${model.conceptSteps ? ` · ${model.conceptSteps} ${plural(model.conceptSteps, 'primer')}` : ''}</span></div>
         <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
         <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
         ${trustFact}
       </div>
-      ${start}
     </div>
   </section>`;
 }
@@ -701,7 +709,12 @@ function changeJumpControls() {
   </div>`;
 }
 // ---- story tour ----
-function stepPanel(repo, s, i, total, comments) {
+function stepPanel(repo, step, i, total, comments, stepIndexById) {
+    return step.kind === 'concept'
+        ? conceptStepPanel(step, i, total, stepIndexById)
+        : codeStepPanel(repo, step, i, total, comments);
+}
+function codeStepPanel(repo, s, i, total, comments) {
     const editor = vscodeLink(repo, s.file, 1);
     const diffRegionId = `ds-story-diff-${i + 1}`;
     const nextDisabled = i === total - 1 ? ' disabled' : '';
@@ -710,7 +723,7 @@ function stepPanel(repo, s, i, total, comments) {
     const flow = /^(Calls|Returns)/.test(s.flow)
         ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
         : '';
-    return `<section class="ds-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
+    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
@@ -751,6 +764,70 @@ function stepPanel(repo, s, i, total, comments) {
       </div>
     </div>
   </section>`;
+}
+function conceptStepPanel(s, i, total, stepIndexById) {
+    const nextDisabled = i === total - 1 ? ' disabled' : '';
+    const next = s.preparesFor[0];
+    const nextIndex = next ? stepIndexById.get(next.id) : undefined;
+    const nextLink = next && nextIndex !== undefined
+        ? `<button class="ds-concept-next" type="button" data-goto-step="${nextIndex}">
+        <span class="ds-concept-next-kicker">Next in code · Step ${next.order}</span>
+        <span class="ds-concept-next-title">${esc(next.title)}</span>
+        <span class="ds-concept-next-arrow" aria-hidden="true">→</span>
+      </button>`
+        : '';
+    const diagram = s.diagram
+        ? `<figure class="ds-concept-diagram" data-concept-diagram>
+        <div class="ds-concept-diagram-output" data-mermaid-output role="img" aria-label="${esc(s.diagram.caption)}"><span class="ds-concept-diagram-loading">Drawing the mental model…</span></div>
+        <pre data-mermaid-source hidden>${esc(s.diagram.source)}</pre>
+        <figcaption>${esc(s.diagram.caption)}</figcaption>
+        <details class="ds-concept-diagram-source" data-mermaid-fallback>
+          <summary>Diagram source</summary>
+          <pre><code>${esc(s.diagram.source)}</code></pre>
+        </details>
+      </figure>`
+        : '';
+    const speech = conceptSpeechText(s);
+    return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
+    <div class="ds-step-top">
+      <div class="ds-step-meta">
+        <span class="ds-step-count">Step ${s.order} of ${total}</span>
+        <span class="ds-dot"></span>
+        <span class="ds-badge ds-badge-concept">Concept</span>
+        <span class="ds-flex"></span>
+        <span class="ds-step-pos">${s.order} / ${total}</span>
+        <span class="ds-nav">
+          <button class="ds-iconbtn" data-prev title="Previous story step" aria-label="Previous story step">←</button>
+          <button class="ds-iconbtn" data-next title="Next story step" aria-label="Next story step"${nextDisabled}>→</button>
+        </span>
+      </div>
+    </div>
+    <div class="ds-concept-scroll">
+      <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
+        <div class="ds-concept-heading">
+          <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+          <button class="ds-playstep" data-playstep title="Read this primer aloud" aria-label="Read this primer aloud">▸</button>
+        </div>
+        <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${esc(s.title)}</h1>
+        <div class="ds-concept-body ds-md">${renderMarkdown(s.body)}</div>
+        ${diagram}
+        ${nextLink}
+        <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
+      </article>
+    </div>
+  </section>`;
+}
+function conceptSpeechText(s) {
+    const body = s.body
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/^#{1,4}\s+/gm, '')
+        .replace(/^\s*(?:[-*]|\d+[.)])\s+/gm, '')
+        .replace(/^>\s?/gm, '')
+        .replace(/[*_`]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const caption = s.diagram?.caption?.trim();
+    return [s.title, body, caption].filter(Boolean).join('. ');
 }
 function stepStoryHtml(s, diffRegionId) {
     if (!s.beats.length)
@@ -1269,6 +1346,11 @@ function splitPath(p) {
 function plural(n, word) {
     return n === 1 ? word : word + 's';
 }
+function readingOrderLabel(model) {
+    if (!model.conceptSteps)
+        return `${model.codeSteps} ${plural(model.codeSteps, 'step')}`;
+    return `${model.codeSteps} ${plural(model.codeSteps, 'code step')} + ${model.conceptSteps} ${plural(model.conceptSteps, 'primer')}`;
+}
 function vscodeLink(repo, file, line) {
     return `vscode://file${encodeURI(join(repo, file))}:${line}`;
 }
@@ -1296,6 +1378,13 @@ function renderMarkdown(input) {
         const line = lines[i];
         if (!line.trim()) {
             flushParagraph();
+            continue;
+        }
+        const heading = line.match(/^(#{2,4})\s+(.+)$/);
+        if (heading) {
+            flushParagraph();
+            const level = Math.min(4, heading[1].length);
+            out.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
             continue;
         }
         const fence = line.match(/^```([\w-]+)?\s*$/);

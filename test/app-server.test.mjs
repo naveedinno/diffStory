@@ -38,6 +38,25 @@ async function boot() {
   return { server, base: `http://localhost:${port}` };
 }
 
+test('app server serves the bundled Mermaid ESM from the same origin', async () => {
+  const { server, base } = await boot();
+  try {
+    const res = await fetch(`${base}/assets/mermaid.esm.min.mjs`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /^text\/javascript/);
+    assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
+    assert.match(
+      res.headers.get('content-security-policy') ?? '',
+      /script-src 'self' 'unsafe-inline'/,
+    );
+    const source = await res.text();
+    assert.ok(source.length > 500_000, 'serves the real local Mermaid browser bundle');
+    assert.match(source, /export\{/);
+  } finally {
+    server.close();
+  }
+});
+
 function requestStatusWithHost(base, host) {
   const url = new URL(base);
   return new Promise((resolve, reject) => {

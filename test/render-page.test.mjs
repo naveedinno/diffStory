@@ -40,6 +40,78 @@ const files = [
   },
 ];
 
+test('concept steps render as safe document primers linked to the next code step', () => {
+  const conceptTour = {
+    version: 2,
+    title: 'Concept-first review',
+    summary: 'Learn the request lifecycle, then inspect the implementation.',
+    steps: [
+      {
+        id: 'request-primer',
+        order: 1,
+        title: 'The request envelope',
+        kind: 'concept',
+        body: [
+          '## Request envelope',
+          'A **request envelope** carries `identity` into the policy.',
+          '',
+          '- Normalize once',
+          '- Apply the policy',
+          '',
+          '<script>alert("primer")</script>',
+          '',
+          '```html',
+          '<img src=x onerror=alert("fence")>',
+          '```',
+        ].join('\n'),
+        preparesFor: ['implementation'],
+        diagram: {
+          type: 'mermaid',
+          source: 'flowchart LR\n  Request --> Normalize --> Policy',
+          caption: 'Parse <then> apply.',
+        },
+      },
+      {
+        ...tour.steps[0],
+        id: 'implementation',
+        order: 2,
+        title: 'Apply the request policy',
+      },
+    ],
+  };
+
+  const html = renderPage({ repo: process.cwd(), tour: conceptTour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /class="ds-stepcard is-concept"[^>]*data-step-id="request-primer"/);
+  assert.match(html, />Concept primer</);
+  assert.match(html, /class="ds-step ds-concept-step"[^>]*data-step-id="request-primer"/);
+  assert.match(html, /<h2>Request envelope<\/h2>/);
+  assert.match(html, /<strong>request envelope<\/strong>/);
+  assert.match(html, /<ul><li>Normalize once<\/li><li>Apply the policy<\/li><\/ul>/);
+  assert.match(html, /&lt;script&gt;alert\(&quot;primer&quot;\)&lt;\/script&gt;/);
+  assert.match(html, /&lt;img src=x onerror=alert\(&quot;fence&quot;\)&gt;/);
+  assert.doesNotMatch(html, /<script>alert\("primer"\)<\/script>/);
+
+  assert.match(html, /class="ds-concept-diagram" data-concept-diagram/);
+  assert.match(html, /\.ds-concept-diagram figcaption\{[^}]*color:var\(--muted\)/);
+  assert.match(html, /\.ds-concept-diagram-source\{[^}]*color:var\(--muted\)/);
+  assert.match(html, /root\.namespaceURI!==['"]http:\/\/www\.w3\.org\/2000\/svg['"]/);
+  assert.match(html, /\[root\]\.concat\(Array\.prototype\.slice\.call\(root\.querySelectorAll\('\*'\)\)\)/);
+  assert.match(html, /<pre data-mermaid-source hidden>flowchart LR\n  Request --&gt; Normalize --&gt; Policy<\/pre>/);
+  assert.match(html, /aria-label="Parse &lt;then&gt; apply\."/);
+  assert.doesNotMatch(html, /<then>/);
+  assert.match(html, /class="ds-concept-next"[^>]*data-goto-step="2"/);
+  assert.match(html, /Next in code · Step 2/);
+  assert.match(html, />Apply the request policy<\/span>/);
+
+  assert.match(html, /1 code step \+ 1 primer/);
+  assert.match(html, />1<\/span><span class="ds-fact-l">code step · 1 primer<\/span>/);
+  const speech = html.match(/<span class="ds-sr-only" data-speech-concept>(.*?)<\/span>/s)?.[1] ?? '';
+  assert.match(speech, /The request envelope/);
+  assert.match(speech, /Parse &lt;then&gt; apply\./);
+  assert.doesNotMatch(speech, /##|\*\*|```|img src/);
+});
+
 test('agent activity console starts hidden and idle', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /<div id="ds-agentpanel">/);
@@ -62,6 +134,29 @@ test('story sidebar uses a compact reading rail with one clear active marker', (
   assert.match(html, /\.ds-stepcard\.is-active::after\{background:var\(--accent-blue\)\}/);
   assert.match(html, /\.ds-readhead\{[^}]*border:0[^}]*background:transparent/);
   assert.match(html, /\.ds-viewtoggle\{[^}]*padding:3px[^}]*border:0/);
+});
+
+test('overview keeps the primary walkthrough action ahead of supporting detail', () => {
+  const intentTour = {
+    ...tour,
+    intent: {
+      goal: 'Let reviewers understand the change quickly.',
+      design: 'The implementation follows the existing review route.',
+    },
+  };
+  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+  const ledeAt = html.indexOf('class="ds-intro-lede"');
+  const startAt = html.indexOf('class="ds-intro-start"');
+  const contextAt = html.indexOf('class="ds-intro-context"');
+  const factsAt = html.indexOf('class="ds-intro-facts"');
+
+  assert.ok(ledeAt < startAt, 'the overview should establish intent before the action');
+  assert.ok(startAt < contextAt, 'the action should be reachable before supporting prose');
+  assert.ok(contextAt < factsAt, 'supporting prose should remain available before the review facts');
+  assert.match(html, /@media \(prefers-reduced-motion:reduce\)/);
+  assert.match(html, /@media \(prefers-reduced-transparency:reduce\)/);
+  assert.match(html, /@media \(prefers-contrast:more\)/);
+  assert.match(html, /\.ds-intro-context \.ds-intro-design\{[^}]*color:color-mix\(in srgb,var\(--text\) 70%,transparent\)/);
 });
 
 test('step narrative is labeled as story, not why-this-step', () => {
@@ -90,9 +185,9 @@ test('story text cannot take over the diff viewport when read aloud is off', () 
 
 test('the final session layout cannot re-enable horizontal story or diff scrolling', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*overflow-x:hidden;overflow-y:auto/);
-  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-diffscroll\{[^}]*overflow-x:hidden;overflow-y:auto/);
-  assert.doesNotMatch(html, /\.ds-step:not\(\.is-intro\)>\.ds-(?:why|diffscroll)\{[^}]*overflow:auto/);
+  assert.match(html, /\.ds-step\.is-code-step>\.ds-why\{[^}]*overflow-x:hidden;overflow-y:auto/);
+  assert.match(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*overflow-x:hidden;overflow-y:auto/);
+  assert.doesNotMatch(html, /\.ds-step\.is-code-step>\.ds-(?:why|diffscroll)\{[^}]*overflow:auto/);
   assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:22px minmax\(0,1fr\)/);
   assert.match(html, /\.ds-beat-text\{[^}]*min-width:0[^}]*white-space:normal[^}]*overflow-wrap:anywhere/);
   assert.match(html, /\.ds-step-title\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
@@ -100,12 +195,12 @@ test('the final session layout cannot re-enable horizontal story or diff scrolli
 
 test('story narrative is a compact reading column instead of a nested full-height card', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*border:0[^}]*border-right:1px solid var\(--line-soft\)[^}]*border-radius:0[^}]*background:transparent/);
+  assert.match(html, /\.ds-step\.is-code-step>\.ds-why\{[^}]*border:0[^}]*border-right:1px solid var\(--line-soft\)[^}]*border-radius:0[^}]*background:transparent/);
   assert.doesNotMatch(html, /\.ds-beats::before/);
   assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:30px minmax\(0,1fr\)[^}]*border-top:1px solid var\(--line-soft\)/);
   assert.match(html, /\.ds-beat-index\{[^}]*border:0[^}]*background:transparent[^}]*font-family:var\(--mono\)/);
   assert.match(html, /\.ds-beat\.is-selected\{[^}]*border-radius:8px[^}]*background:var\(--fill-2\)[^}]*box-shadow:none/);
-  assert.match(html, /@media \(max-width:1080px\)[\s\S]*\.ds-step:not\(\.is-intro\)>\.ds-why\{[^}]*border:1px solid var\(--line-soft\)[^}]*border-radius:10px/);
+  assert.match(html, /@media \(max-width:1080px\)[\s\S]*\.ds-step\.is-code-step>\.ds-why\{[^}]*border:1px solid var\(--line-soft\)[^}]*border-radius:10px/);
 });
 
 test('review page can return to the story chooser', () => {
@@ -116,7 +211,7 @@ test('review page can return to the story chooser', () => {
   assert.doesNotMatch(html, /\.ds-close-story\{/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*:root\{--ds-rail-width:240px\}/);
   assert.match(html, /\.ds-settings-wrap\{display:none\}/);
-  assert.match(html, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--ds-rail-width'\)/);
+  assert.match(html, /getComputedStyle\(layout\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
 test('toolbar separates the persistent agent task from compact review status', () => {
@@ -517,7 +612,7 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
   assert.match(html, /function centerFocusRows\(rows,instant\)/);
   assert.match(html, /var scroller=closest\(target,'\.ds-diffscroll'\)/);
-  assert.match(html, /scroller\.scrollTo\(\{top:Math\.max\(0,top\),behavior:instant\?'auto':'smooth'\}\)/);
+  assert.match(html, /scroller\.scrollTo\(\{top:Math\.max\(0,top\),behavior:instant\|\|prefersReducedMotion\(\)\?'auto':'smooth'\}\)/);
   assert.doesNotMatch(html, /target\.scrollIntoView/);
   assert.doesNotMatch(html, /scrollIntoView/, 'review row navigation must never scroll horizontal ancestors');
   assert.match(html, /function stepSpeechUnits\(panel\)/);
@@ -1260,7 +1355,7 @@ test('read aloud starts with overview context before advancing to step one', () 
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
 
   assert.equal((html.match(/<p class="ds-intro-(?:lede|design)" data-speech-overview/g) ?? []).length, 3);
-  assert.match(html, /var overview=\$all\('\[data-speech-overview\]',panel\)/);
+  assert.match(html, /var overview=\$all\('\[data-speech-overview\],\[data-speech-concept\]',panel\)/);
   assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechClean\(node\.textContent\|\|''\),group:null\};\}\)/);
   assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
   assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)\{setActive\(n\);return;\}/);

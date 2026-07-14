@@ -10,10 +10,12 @@ import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
+import { isCodeStep } from './types.js';
 const STEP_KIND_LABEL = {
     changed: 'Changed',
     context: 'Context',
     'new-file': 'New file',
+    concept: 'Concept',
 };
 const FILE_KIND_LABEL = {
     changed: 'Changed',
@@ -23,6 +25,7 @@ const FILE_KIND_LABEL = {
 export function buildReviewModel(repo, tour, files, headRef, opts) {
     const steps = orderedSteps(tour);
     const byId = new Map(steps.map((s) => [s.id, s]));
+    const codeSteps = steps.filter(isCodeStep);
     const coverageFiles = filesForStoryCoverage(tour, files);
     // Story-less (diff-only) view: there's no story to measure the diff against,
     // so nothing is "unexplained" — skip coverage instead of flagging every line.
@@ -36,17 +39,21 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
     }
     // First ordered step that shows each file → the "Step N" chip + jump target.
     const stepByFile = new Map();
-    for (const s of steps)
+    for (const s of codeSteps)
         if (!stepByFile.has(s.file))
             stepByFile.set(s.file, s);
-    const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
-    const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
+    const stepViews = steps.map((step) => isCodeStep(step)
+        ? buildCodeStep(repo, step, files, byId, steps.length, headRef)
+        : buildConceptStep(step, byId));
+    const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef);
     const trust = buildTrust(coverageFiles, uncovered, stepByFile);
     return {
         steps: stepViews,
         files: fileViews,
         trust,
         totalSteps: steps.length,
+        codeSteps: codeSteps.length,
+        conceptSteps: steps.length - codeSteps.length,
         filesChanged: fileViews.filter((f) => f.kind !== 'context').length,
         contextFiles: fileViews.filter((f) => f.kind === 'context').length,
         totalAdd: fileViews.reduce((a, f) => a + f.add, 0),
@@ -60,7 +67,7 @@ function filesForStoryCoverage(tour, files) {
     const selected = new Set(included);
     return files.filter((f) => selected.has(f.newPath));
 }
-function buildStep(repo, step, files, byId, total, headRef) {
+function buildCodeStep(repo, step, files, byId, total, headRef) {
     const { blocks, note } = stepBlocks(repo, step, files, headRef);
     const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
@@ -88,6 +95,22 @@ function buildStep(repo, step, files, byId, total, headRef) {
         flow: flowLabel(step, byId, total),
         blocks,
         note,
+    };
+}
+function buildConceptStep(step, byId) {
+    return {
+        id: step.id,
+        order: step.order,
+        title: step.title,
+        kind: 'concept',
+        kindLabel: STEP_KIND_LABEL.concept,
+        body: step.body,
+        diagram: step.diagram,
+        preparesFor: step.preparesFor
+            .map((id) => byId.get(id))
+            .filter((target) => !!target && isCodeStep(target))
+            .map((target) => ({ id: target.id, order: target.order, title: target.title }))
+            .sort((a, b) => a.order - b.order),
     };
 }
 function stepViewport(step) {

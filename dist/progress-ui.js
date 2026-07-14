@@ -96,6 +96,12 @@ export function progressPanelStyles() {
 .ds-pp[data-variant="stage"] .ds-pp-miles{padding:12px 16px 4px;gap:8px 16px}
 .ds-pp[data-variant="stage"] .ds-pp-mile{font-size:12.5px}
 .ds-pp[data-variant="stage"] .ds-pp-note{font-size:14px;padding:12px 16px 4px}
+@media (prefers-reduced-motion:reduce){
+  .ds-pp-spin,.ds-pp-step.is-active .ds-pp-mark::before,.ds-pp-live-dot,.ds-pp-mile.is-active .ds-pp-mile-dot{animation:none!important}
+  .ds-pp-spin{border-color:var(--pp-blue)}
+  .ds-pp-step.is-active .ds-pp-mark::before{opacity:1}
+  .ds-pp-live-dot{opacity:1}
+}
 @media (max-width:520px){
   .ds-pp-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:9px;row-gap:6px;align-items:start}
   .ds-pp-spin{grid-column:1;grid-row:1}

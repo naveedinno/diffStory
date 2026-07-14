@@ -4,7 +4,7 @@
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { loadTour, validateGeneratedTour } from './tour.js';
+import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour } from './tour.js';
 import {
   isGitRepo,
   resolveBase,
@@ -41,7 +41,7 @@ import {
   type NewComment,
 } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
-import type { DiffFile, StoryScope, Tour } from './types.js';
+import { isCodeStep, type DiffFile, type StoryScope, type Tour } from './types.js';
 import {
   availableAgents,
   streamAgent,
@@ -223,7 +223,7 @@ function setLocalResponseHeaders(res: ServerResponse): void {
     "frame-ancestors 'none'",
     "img-src 'self' data:",
     "media-src 'self' blob:",
-    "script-src 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'unsafe-inline'",
   ].join('; '));
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
@@ -242,6 +242,9 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
   }
 
   try {
+    if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
+      return sendMermaidBrowserAsset(res);
+    }
     if (method === 'GET' && url.pathname === '/') {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
       // Back-compat for URLs emitted by older app builds.
@@ -784,7 +787,10 @@ function renderFullFileResponse(session: Session, file: string): string {
   }
 
   const { tour, head, files } = loadReview(session);
-  const allowed = new Set<string>([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+  const allowed = new Set<string>([
+    ...files.map((f) => f.newPath),
+    ...tour.steps.filter(isCodeStep).map((s) => s.file),
+  ]);
   if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
 
   const df = files.find((f) => f.newPath === file);
@@ -819,7 +825,10 @@ function renderSplitResponse(session: Session, file: string): string {
   }
 
   const { tour, files } = loadReview(session);
-  const allowed = new Set<string>([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+  const allowed = new Set<string>([
+    ...files.map((f) => f.newPath),
+    ...tour.steps.filter(isCodeStep).map((s) => s.file),
+  ]);
   if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
 
   const df = files.find((f) => f.newPath === file);
@@ -866,7 +875,10 @@ function renderContextResponse(session: Session, params: URLSearchParams): strin
     const loaded = loadReview(session);
     const { tour, files } = loaded;
     head = loaded.head;
-    const allowed = new Set<string>([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+    const allowed = new Set<string>([
+      ...files.map((f) => f.newPath),
+      ...tour.steps.filter(isCodeStep).map((s) => s.file),
+    ]);
     if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     df = files.find((f) => f.newPath === file);
   }
@@ -944,7 +956,9 @@ export function finishStoryGeneration(
   if (storyWritten) {
     try {
       const tour = loadTour(storyPath);
-      const qualityErrors = requireModernStory ? validateGeneratedTour(tour) : [];
+      const qualityErrors = requireModernStory
+        ? validateGeneratedTour(tour)
+        : validateGeneratedConceptSteps(tour);
       if (qualityErrors.length) {
         throw new Error(`Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join('\n  - ')}`);
       }
@@ -1685,6 +1699,22 @@ function sendLocalKokoroAudio(res: ServerResponse, file: string, home: string): 
   res.setHeader('Content-Length', String(stat.size));
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   createReadStream(path).pipe(res);
+}
+
+const MERMAID_BROWSER_ASSET = new URL('./mermaid.esm.min.mjs', import.meta.url);
+
+function sendMermaidBrowserAsset(res: ServerResponse): void {
+  if (!existsSync(MERMAID_BROWSER_ASSET)) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const stat = statSync(MERMAID_BROWSER_ASSET);
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+  res.setHeader('Content-Length', String(stat.size));
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  createReadStream(MERMAID_BROWSER_ASSET).pipe(res);
 }
 
 function sendHtml(res: ServerResponse, html: string, status = 200): void {

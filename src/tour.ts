@@ -2,10 +2,26 @@
 // but thorough — a malformed story should fail loudly with a useful message,
 // not render a broken page.
 import { readFileSync } from 'node:fs';
-import type { Tour, TourStep, StepKind, StoryMode } from './types.js';
+import type { CodeStepKind, Tour, TourStep, StepKind, StoryMode } from './types.js';
 
-const KINDS: StepKind[] = ['changed', 'context', 'new-file'];
+const CODE_KINDS: CodeStepKind[] = ['changed', 'context', 'new-file'];
+const KINDS: StepKind[] = [...CODE_KINDS, 'concept'];
 const MODES: StoryMode[] = ['brief', 'guided', 'detailed'];
+const CONCEPT_CODE_FIELDS = [
+  'file',
+  'range',
+  'viewport',
+  'highlights',
+  'beats',
+  'focus',
+  'why',
+  'calls',
+  'returnsTo',
+] as const;
+const CONCEPT_MIN_WORDS = 60;
+const CONCEPT_MAX_WORDS = 220;
+const MERMAID_MAX_CHARS = 8_000;
+const MERMAID_MAX_LINES = 80;
 
 export class TourError extends Error {}
 
@@ -229,6 +245,90 @@ function validateStoryScope(t: Record<string, unknown>, errors: string[]): void 
   }
 }
 
+function validateConceptDiagram(value: unknown, where: string, errors: string[]): void {
+  if (value === undefined) return;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    errors.push(`${where}.diagram must be an object`);
+    return;
+  }
+  const diagram = value as Record<string, unknown>;
+  if (diagram.type !== 'mermaid') errors.push(`${where}.diagram.type must be "mermaid"`);
+  if (typeof diagram.caption !== 'string' || !diagram.caption.trim()) {
+    errors.push(`${where}.diagram.caption is required`);
+  }
+  if (typeof diagram.source !== 'string' || !diagram.source.trim()) {
+    errors.push(`${where}.diagram.source is required`);
+    return;
+  }
+
+  const source = diagram.source.trim();
+  const lines = source.split(/\r?\n/);
+  if (source.length > MERMAID_MAX_CHARS) {
+    errors.push(`${where}.diagram.source must be at most ${MERMAID_MAX_CHARS} characters`);
+  }
+  if (lines.length > MERMAID_MAX_LINES) {
+    errors.push(`${where}.diagram.source must be at most ${MERMAID_MAX_LINES} lines`);
+  }
+  const declaration = lines.find((line) => line.trim() && !line.trim().startsWith('%%'))?.trim() ?? '';
+  if (!/^(?:flowchart\s+(?:TD|TB|BT|LR|RL)|sequenceDiagram\b|stateDiagram-v2\b)/.test(declaration)) {
+    errors.push(`${where}.diagram.source must start with flowchart, sequenceDiagram, or stateDiagram-v2`);
+  }
+  const unsafePatterns: Array<[RegExp, string]> = [
+    [/%%\s*\{/i, 'configuration directives'],
+    [/\bclick\b/i, 'click directives'],
+    [/\bhref\b/i, 'href directives'],
+    [/(?:https?:|javascript:|data:)?\/\//i, 'external URLs'],
+    [/(?:javascript:|data:)/i, 'executable or embedded URLs'],
+    [/<\/?[a-z][^>]*>/i, 'HTML tags'],
+    [/\b(?:image|img)\s*:/i, 'image directives'],
+    [/\b(?:classDef|linkStyle|style)\b/i, 'custom style directives'],
+  ];
+  for (const [pattern, label] of unsafePatterns) {
+    if (pattern.test(source)) errors.push(`${where}.diagram.source cannot contain unsafe ${label}`);
+  }
+}
+
+function validateConceptStep(step: Record<string, unknown>, where: string, errors: string[]): void {
+  if (typeof step.body !== 'string' || !step.body.trim()) errors.push(`${where}.body is required`);
+  validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, { required: true, nonEmpty: true });
+  if (Array.isArray(step.preparesFor)) {
+    const refs = step.preparesFor.filter((ref): ref is string => typeof ref === 'string');
+    if (new Set(refs).size !== refs.length) errors.push(`${where}.preparesFor must not contain duplicate step ids`);
+  }
+  validateConceptDiagram(step.diagram, where, errors);
+  for (const field of CONCEPT_CODE_FIELDS) {
+    if (step[field] !== undefined) errors.push(`${where}.${field} is not allowed for a concept step`);
+  }
+}
+
+function validateCodeStep(
+  step: Record<string, unknown>,
+  where: string,
+  storyFiles: Set<string> | null,
+  errors: string[],
+): void {
+  const stepKind = step.kind as CodeStepKind;
+  if (typeof step.file !== 'string' || !step.file) errors.push(`${where}.file is required`);
+  if (typeof step.why !== 'string') errors.push(`${where}.why is required`);
+  validateStringArray(step.calls, `${where}.calls`, errors);
+  if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
+    errors.push(`${where}.returnsTo must be a string`);
+  }
+  if (storyFiles && stepKind !== 'context' && typeof step.file === 'string' && !storyFiles.has(step.file)) {
+    errors.push(`${where}.file must be in storyScope.includedFiles`);
+  }
+  const allowDeletionAnchor = stepKind === 'changed';
+  const stepRange = validateLineRange(step.range, `${where}.range`, errors, { allowDeletionAnchor });
+  const viewportRange = step.viewport === undefined
+    ? undefined
+    : validateLineRange(step.viewport, `${where}.viewport`, errors, { allowDeletionAnchor });
+  const containerRange = viewportRange ?? stepRange;
+  const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
+  validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+  validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+  validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+}
+
 function storyScopeIncludedFiles(t: Record<string, unknown>): Set<string> | null {
   if (typeof t.storyScope !== 'object' || t.storyScope === null || Array.isArray(t.storyScope)) return null;
   const includedFiles = (t.storyScope as Record<string, unknown>).includedFiles;
@@ -274,7 +374,7 @@ export function validateTour(obj: unknown): string[] {
   if (typeof obj !== 'object' || obj === null) return ['story must be a JSON object'];
   const t = obj as Record<string, unknown>;
 
-  if (t.version !== 1) errors.push('version must be 1');
+  if (t.version !== 1 && t.version !== 2) errors.push('version must be 1 or 2');
   if (t.diffFingerprint !== undefined && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
     errors.push('diffFingerprint must be a SHA-256 hex digest');
   }
@@ -289,11 +389,14 @@ export function validateTour(obj: unknown): string[] {
     errors.push('steps must be a non-empty array');
     return errors;
   }
+  const rawSteps = t.steps as unknown[];
 
   const storyFiles = storyScopeIncludedFiles(t);
   const ids = new Set<string>();
   const orders = new Set<number>();
-  t.steps.forEach((s, i) => {
+  const stepsById = new Map<string, Record<string, unknown>>();
+  let codeStepCount = 0;
+  rawSteps.forEach((s, i) => {
     const where = `steps[${i}]`;
     if (typeof s !== 'object' || s === null) {
       errors.push(`${where} must be an object`);
@@ -302,7 +405,10 @@ export function validateTour(obj: unknown): string[] {
     const step = s as Record<string, unknown>;
     if (typeof step.id !== 'string' || !step.id) errors.push(`${where}.id is required`);
     else if (ids.has(step.id)) errors.push(`${where}.id "${step.id}" is duplicated`);
-    else ids.add(step.id);
+    else {
+      ids.add(step.id);
+      stepsById.set(step.id, step);
+    }
 
     if (typeof step.order !== 'number') {
       errors.push(`${where}.order must be a number`);
@@ -314,45 +420,122 @@ export function validateTour(obj: unknown): string[] {
       orders.add(step.order);
     }
     if (typeof step.title !== 'string' || !step.title) errors.push(`${where}.title is required`);
-    if (typeof step.file !== 'string' || !step.file) errors.push(`${where}.file is required`);
-    if (typeof step.why !== 'string') errors.push(`${where}.why is required`);
     validateStringArray(step.tags, `${where}.tags`, errors);
-    validateStringArray(step.calls, `${where}.calls`, errors);
-    if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
-      errors.push(`${where}.returnsTo must be a string`);
-    }
     const stepKind = step.kind as StepKind;
     if (!KINDS.includes(stepKind)) {
       errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
+      // Keep reporting malformed code-anchor fields alongside the bad kind, as
+      // v1 validation did, so authors can fix one step in a single pass.
+      validateCodeStep(step, where, storyFiles, errors);
+      return;
     }
-    if (storyFiles && stepKind !== 'context' && typeof step.file === 'string' && !storyFiles.has(step.file)) {
-      errors.push(`${where}.file must be in storyScope.includedFiles`);
+    if (stepKind === 'concept') {
+      if (t.version !== 2) errors.push(`${where}.kind "concept" requires story version 2`);
+      validateConceptStep(step, where, errors);
+    } else {
+      codeStepCount += 1;
+      validateCodeStep(step, where, storyFiles, errors);
     }
-    const allowDeletionAnchor = stepKind === 'changed';
-    const stepRange = validateLineRange(step.range, `${where}.range`, errors, { allowDeletionAnchor });
-    const viewportRange = step.viewport === undefined
-      ? undefined
-      : validateLineRange(step.viewport, `${where}.viewport`, errors, { allowDeletionAnchor });
-    const containerRange = viewportRange ?? stepRange;
-    const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
-    validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
-    validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
-    validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor);
   });
 
-  // referential integrity for calls / returnsTo
-  t.steps.forEach((s, i) => {
+  if (codeStepCount === 0) errors.push('steps must include at least one code step');
+
+  // Referential integrity for code flow and concept-to-code preparation links.
+  // A story's reading path is defined by `order`, even when the JSON array was
+  // authored out of order, so adjacency checks use that same canonical path.
+  const readingPath = rawSteps
+    .map((step, sourceIndex) => ({ step, sourceIndex }))
+    .sort((a, b) => {
+      const aOrder = typeof (a.step as Record<string, unknown> | null)?.order === 'number'
+        ? ((a.step as Record<string, unknown>).order as number)
+        : Number.MAX_SAFE_INTEGER;
+      const bOrder = typeof (b.step as Record<string, unknown> | null)?.order === 'number'
+        ? ((b.step as Record<string, unknown>).order as number)
+        : Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder || a.sourceIndex - b.sourceIndex;
+    });
+
+  readingPath.forEach(({ step: s, sourceIndex: i }, pathIndex) => {
     if (typeof s !== 'object' || s === null) return;
-    const step = s as Partial<TourStep>;
-    const refs = [
-      ...(Array.isArray(step.calls) ? step.calls.filter((ref): ref is string => typeof ref === 'string') : []),
-      ...(typeof step.returnsTo === 'string' ? [step.returnsTo] : []),
+    const step = s as Record<string, unknown>;
+    if (step.kind === 'concept') {
+      const refs = Array.isArray(step.preparesFor)
+        ? step.preparesFor.filter((ref): ref is string => typeof ref === 'string')
+        : [];
+      const next = readingPath[pathIndex + 1]?.step;
+      if (!next || typeof next !== 'object' || next === null) {
+        errors.push(`steps[${i}] concept step cannot be the last step`);
+      } else if ((next as Record<string, unknown>).kind === 'concept') {
+        errors.push(`steps[${i}] concept steps cannot be adjacent`);
+      } else if (typeof (next as Record<string, unknown>).id === 'string' && !refs.includes((next as Record<string, unknown>).id as string)) {
+        errors.push(`steps[${i}].preparesFor must include the immediately following code step`);
+      }
+      for (const ref of refs) {
+        const target = stepsById.get(ref);
+        if (!target) {
+          errors.push(`steps[${i}].preparesFor must reference a known later code step; "${ref}" is unknown`);
+          continue;
+        }
+        if (target.kind === 'concept') {
+          errors.push(`steps[${i}].preparesFor must reference later code steps, not concept "${ref}"`);
+        }
+        if (typeof step.order === 'number' && typeof target.order === 'number' && target.order <= step.order) {
+          errors.push(`steps[${i}].preparesFor must reference later code steps`);
+        }
+      }
+      return;
+    }
+    const refs: Array<[field: 'calls' | 'returnsTo', ref: string]> = [
+      ...(Array.isArray(step.calls)
+        ? step.calls
+            .filter((ref): ref is string => typeof ref === 'string')
+            .map((ref): ['calls', string] => ['calls', ref])
+        : []),
+      ...(typeof step.returnsTo === 'string' ? [['returnsTo', step.returnsTo] as ['returnsTo', string]] : []),
     ];
-    for (const ref of refs) {
-      if (!ids.has(ref)) errors.push(`steps[${i}] references unknown step id "${ref}"`);
+    for (const [field, ref] of refs) {
+      if (!ids.has(ref)) {
+        errors.push(`steps[${i}] references unknown step id "${ref}"`);
+      } else if (stepsById.get(ref)?.kind === 'concept') {
+        errors.push(`steps[${i}].${field} must reference code steps, not concept "${ref}"`);
+      }
     }
   });
 
+  return errors;
+}
+
+function conceptWordCount(body: string): number {
+  return body.match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0;
+}
+
+/**
+ * Generated-primer rules that also apply when a targeted repair upgrades a
+ * legacy code-only story. They intentionally do not impose modern camera
+ * requirements on untouched v1-era code steps.
+ */
+export function validateGeneratedConceptSteps(tour: Tour): string[] {
+  const errors: string[] = [];
+  const concepts = tour.steps
+    .map((step, index) => ({ step, index }))
+    .filter((entry): entry is { step: Extract<TourStep, { kind: 'concept' }>; index: number } => entry.step.kind === 'concept');
+  if (!concepts.length) return errors;
+
+  const mode = tour.mode ?? 'guided';
+  const limit = mode === 'brief' ? 1 : mode === 'detailed' ? 3 : 2;
+  if (concepts.length > limit) {
+    errors.push(`${mode} stories can include at most ${limit === 1 ? 'one' : limit === 2 ? 'two' : 'three'} concept ${limit === 1 ? 'step' : 'steps'}`);
+  }
+
+  for (const { step, index } of concepts) {
+    const words = conceptWordCount(step.body);
+    if (words < CONCEPT_MIN_WORDS) {
+      errors.push(`steps[${index}].body must contain at least ${CONCEPT_MIN_WORDS} words`);
+    }
+    if (words > CONCEPT_MAX_WORDS) {
+      errors.push(`steps[${index}].body must stay within ${CONCEPT_MAX_WORDS} words`);
+    }
+  }
   return errors;
 }
 
@@ -362,8 +545,9 @@ export function validateTour(obj: unknown): string[] {
  * stories still open; this stricter profile is only applied at generation time.
  */
 export function validateGeneratedTour(tour: Tour): string[] {
-  const errors: string[] = [];
+  const errors: string[] = validateGeneratedConceptSteps(tour);
 
+  if (tour.version !== 2) errors.push('version must be 2 for a generated story');
   if (!tour.mode) errors.push('mode is required for a generated story');
   if (!tour.summary.trim()) errors.push('summary must explain the generated reading path');
   if (!tour.intent) {
@@ -379,6 +563,9 @@ export function validateGeneratedTour(tour: Tour): string[] {
 
   tour.steps.forEach((step, i) => {
     const where = `steps[${i}]`;
+    if (step.kind === 'concept') {
+      return;
+    }
     if (!step.why.trim()) errors.push(`${where}.why must be a non-empty fallback recap`);
     if (!step.viewport) errors.push(`${where}.viewport is required for a generated story`);
     if (!step.highlights?.length) errors.push(`${where}.highlights are required for a generated story`);

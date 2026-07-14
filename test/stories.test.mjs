@@ -91,6 +91,49 @@ test('listStories exposes the story generation mode', () => {
   rmSync(repo, { recursive: true, force: true });
 });
 
+test('listStories counts concept primers without treating them as files', () => {
+  const repo = tmp();
+  writeStory(repo, 'story.json', 'Concept-first story', {
+    version: 2,
+    steps: [
+      {
+        id: 'primer',
+        order: 1,
+        title: 'The request lifecycle',
+        kind: 'concept',
+        body: 'The request is normalized before the policy is applied.',
+        preparesFor: ['implementation'],
+      },
+      {
+        id: 'implementation',
+        order: 2,
+        title: 'Apply the policy',
+        file: 'a.txt',
+        range: [1, 1],
+        kind: 'changed',
+        why: 'This is the implementation the primer prepares the reviewer for.',
+      },
+      {
+        id: 'downstream',
+        order: 3,
+        title: 'Return the result',
+        file: 'a.txt',
+        range: [2, 2],
+        kind: 'context',
+        why: 'This unchanged return shows where the result goes next.',
+      },
+    ],
+  });
+
+  const [story] = listStories(repo);
+  assert.equal(story.valid, true);
+  assert.equal(story.steps, 3);
+  assert.equal(story.primers, 1);
+  assert.equal(story.files, 1);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
 test('listStories calls a story current only when its exact diff fingerprint matches', () => {
   const repo = tmp();
   execFileSync('git', ['init', '-q'], { cwd: repo });

@@ -25,7 +25,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
+    "build": "tsc && npm run build:browser-assets && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
+    "build:browser-assets": "node scripts/build-browser-assets.mjs",
     "check": "npm run build && node --test test/*.test.mjs",
     "dev": "npm run build && node dist/cli.js",
     "setup:kokoro": "sh scripts/setup-kokoro.sh",
@@ -50,6 +51,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.1",
+    "mermaid": "^11.16.0",
     "typescript": "^5.6.0"
   }
 }

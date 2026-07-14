@@ -7,10 +7,13 @@
 // Everything else (diffs, snippets, coverage) is derived at render time.
 
 /** What a tour step is pointing at. */
-export type StepKind =
+export type CodeStepKind =
   | 'changed' // a region the diff actually touched — render the real hunk(s)
   | 'context' // unchanged code shown only so the change makes sense (e.g. the callee)
   | 'new-file'; // a brand-new file — render the region as added
+
+/** A stop in the reading path: either code evidence or a just-in-time mental model. */
+export type StepKind = CodeStepKind | 'concept';
 
 /** How much detail the authored story should carry. */
 export type StoryMode =
@@ -54,14 +57,21 @@ export interface StoryScope {
   reviewerNote?: string;
 }
 
-/** One stop on the guided tour. */
-export interface TourStep {
+/** Fields shared by every stop in the guided reading path. */
+export interface TourStepBase {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
   id: string;
   /** 1-based position in the reading order. */
   order: number;
   /** Short headline for the step. */
   title: string;
+  /** Optional free-form labels (e.g. "entrypoint", "core", "test"). */
+  tags?: string[];
+}
+
+/** One code-backed stop whose ranges drive the diff camera and coverage gate. */
+export interface CodeTourStep extends TourStepBase {
+  kind: CodeStepKind;
   /** Repo-relative path of the file this step shows. */
   file: string;
   /** Inclusive changed-line coverage anchor in the post-change file; [0, 0] means a whole-file deletion. */
@@ -74,20 +84,44 @@ export interface TourStep {
   beats?: StoryBeat[];
   /** Optional legacy narrower post-change line range(s) to point at while reading aloud. */
   focus?: StepFocusTarget;
-  kind: StepKind;
   /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */
   why: string;
   /** Step ids this one leads into (renders the A -> B jump links). */
   calls?: string[];
   /** Step id to return to afterwards (the B -> A jump back). */
   returnsTo?: string;
-  /** Optional free-form labels (e.g. "entrypoint", "core", "test"). */
-  tags?: string[];
+}
+
+/** Optional diagram inside a concept primer. Source is rendered locally by Mermaid. */
+export interface ConceptDiagram {
+  type: 'mermaid';
+  source: string;
+  /** Human-readable fallback and accessible description for the diagram. */
+  caption: string;
+}
+
+/** A short document stop that teaches a mental model before dependent code. */
+export interface ConceptTourStep extends TourStepBase {
+  kind: 'concept';
+  /** Restricted Markdown: headings, paragraphs, lists, quotes, emphasis, and inline code. */
+  body: string;
+  /** Later code-step ids this primer exists to prepare the reviewer for. */
+  preparesFor: string[];
+  /** At most one optional local Mermaid diagram. */
+  diagram?: ConceptDiagram;
+}
+
+/** One stop on the guided tour. */
+export type TourStep = CodeTourStep | ConceptTourStep;
+
+export function isCodeStep(step: TourStep): step is CodeTourStep {
+  return step.kind !== 'concept';
 }
 
 /** The whole reading plan the AI emits. */
 export interface Tour {
-  version: 1;
+  /** v1 contains code-only steps; v2 also permits concept primers. */
+  version: 1 | 2;
   /** SHA-256 of the exact rendered git diff when the story was last generated or repaired. */
   diffFingerprint?: string;
   /** Story depth requested at generation time; old stories default to guided. */

@@ -6,6 +6,12 @@ import { join } from 'node:path';
 import { finishStoryGeneration } from '../dist/server.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-generate-finish-'));
+const longPrimerBody = [
+  'A request enters through the existing boundary and is normalized into a stable envelope before policy code reads it.',
+  'The envelope keeps identity, scope, and the requested action together while downstream helpers decide whether that action is allowed.',
+  'This is not another stored record or a second API request; it is temporary decision context shared by the next code steps.',
+  'Keep that ownership model in mind when checking where normalization happens, which helper applies policy, and where the accepted result returns.',
+].join(' ');
 
 function writeStory(repo, stepKind, stepOverrides = {}) {
   const path = join(repo, '.diffstory', 'story.json');
@@ -15,7 +21,7 @@ function writeStory(repo, stepKind, stepOverrides = {}) {
   writeFileSync(
     path,
     JSON.stringify({
-      version: 1,
+      version: 2,
       mode: 'guided',
       title: 'Generated story',
       summary: 'Generated story summary',
@@ -48,6 +54,39 @@ function writeStory(repo, stepKind, stepOverrides = {}) {
 test('generation finish accepts only a valid written story', () => {
   const repo = tmp();
   const storyPath = writeStory(repo, 'changed');
+  const session = { repo, chooseStory: true };
+
+  const out = finishStoryGeneration({ ok: true, output: '' }, storyPath, session);
+
+  assert.equal(out.status, 'complete');
+  assert.deepEqual(out.result, { storyWritten: true, storyValid: true });
+  assert.deepEqual(out.events, []);
+  assert.equal(session.selectedStory, storyPath);
+  assert.equal(session.chooseStory, false);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('generation finish accepts an interleaved v2 concept primer before code', () => {
+  const repo = tmp();
+  const storyPath = writeStory(repo, 'changed');
+  const story = JSON.parse(readFileSync(storyPath, 'utf8'));
+  story.steps[0].id = 'implementation';
+  story.steps[0].order = 2;
+  story.steps.unshift({
+    id: 'primer',
+    order: 1,
+    title: 'The request lifecycle',
+    kind: 'concept',
+    body: longPrimerBody,
+    preparesFor: ['implementation'],
+    diagram: {
+      type: 'mermaid',
+      source: 'flowchart LR\n  Request --> Envelope --> Policy',
+      caption: 'The mental model that prepares the next code step.',
+    },
+  });
+  writeFileSync(storyPath, JSON.stringify(story));
   const session = { repo, chooseStory: true };
 
   const out = finishStoryGeneration({ ok: true, output: '' }, storyPath, session);
@@ -112,7 +151,7 @@ test('generation finish rejects a written but invalid story', () => {
   assert.equal(out.events[0].stage, 'validation');
   assert.match(out.events[0].label, /final check/i);
   assert.match(out.events[0].detail, /cannot safely open/i);
-  assert.match(out.events[0].technicalDetail, /kind must be one of changed, context, new-file/);
+  assert.match(out.events[0].technicalDetail, /kind must be one of changed, context, new-file, concept/);
   assert.equal(session.selectedStory, undefined);
   assert.equal(session.chooseStory, true);
 
@@ -218,6 +257,63 @@ test('targeted repair can preserve a schema-valid legacy story without forcing a
   assert.deepEqual(out.result, { storyWritten: true, storyValid: true });
   assert.equal(session.selectedStory, storyPath);
   assert.equal(session.chooseStory, false);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('targeted legacy repair applies primer rules without forcing modern code cameras', () => {
+  const repo = tmp();
+  const storyPath = join(repo, '.diffstory', 'story.json');
+  mkdirSync(join(storyPath, '..'), { recursive: true });
+  const previous = JSON.stringify({
+    version: 1,
+    title: 'Legacy story',
+    summary: 'Old but still readable.',
+    steps: [{ id: 'code', order: 1, title: 'Old step', file: 'a.txt', range: [1, 1], kind: 'changed', why: 'Before.' }],
+  });
+  const upgraded = {
+    version: 2,
+    mode: 'guided',
+    title: 'Legacy story with one primer',
+    summary: 'Learn the model, then read the preserved code step.',
+    steps: [
+      {
+        id: 'primer',
+        order: 1,
+        title: 'The request envelope',
+        kind: 'concept',
+        body: 'Too short.',
+        preparesFor: ['code'],
+      },
+      { id: 'code', order: 2, title: 'Old step', file: 'a.txt', range: [1, 1], kind: 'changed', why: 'Repaired.' },
+    ],
+  };
+  writeFileSync(storyPath, previous);
+  writeFileSync(storyPath, JSON.stringify(upgraded));
+
+  const rejected = finishStoryGeneration(
+    { ok: true, output: '' },
+    storyPath,
+    { repo, chooseStory: true },
+    previous,
+    false,
+  );
+  assert.equal(rejected.status, 'failed');
+  assert.match(rejected.events[0].technicalDetail, /at least 60 words/);
+
+  upgraded.steps[0].body = longPrimerBody;
+  writeFileSync(storyPath, JSON.stringify(upgraded));
+  const session = { repo, chooseStory: true };
+  const accepted = finishStoryGeneration(
+    { ok: true, output: '' },
+    storyPath,
+    session,
+    previous,
+    false,
+  );
+  assert.equal(accepted.status, 'complete');
+  assert.equal(accepted.result.storyValid, true);
+  assert.equal(session.selectedStory, storyPath);
 
   rmSync(repo, { recursive: true, force: true });
 });

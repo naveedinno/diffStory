@@ -10,7 +10,20 @@ import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
-import type { DiffFile, DiffHunk, DiffLine, FileStatus, Tour, TourStep, StepKind } from './types.js';
+import { isCodeStep } from './types.js';
+import type {
+  CodeStepKind,
+  CodeTourStep,
+  ConceptDiagram,
+  ConceptTourStep,
+  DiffFile,
+  DiffHunk,
+  DiffLine,
+  FileStatus,
+  Tour,
+  TourStep,
+  StepKind,
+} from './types.js';
 
 export type RowType = 'add' | 'del' | 'ctx';
 
@@ -40,6 +53,7 @@ const STEP_KIND_LABEL: Record<StepKind, string> = {
   changed: 'Changed',
   context: 'Context',
   'new-file': 'New file',
+  concept: 'Concept',
 };
 const FILE_KIND_LABEL: Record<FileKind, string> = {
   changed: 'Changed',
@@ -47,10 +61,16 @@ const FILE_KIND_LABEL: Record<FileKind, string> = {
   context: 'Context',
 };
 
-export interface StepView {
+export interface StepViewBase {
   id: string;
   order: number;
   title: string;
+  kind: StepKind;
+  kindLabel: string;
+}
+
+export interface CodeStepView extends StepViewBase {
+  kind: CodeStepKind;
   file: string;
   oldFile: string;
   /** Storyteller-selected visible window. */
@@ -62,8 +82,6 @@ export interface StepView {
   focusGroups: Array<Array<[number, number]>>;
   /** Whether focusRanges came from story JSON instead of the step range fallback. */
   focusExplicit: boolean;
-  kind: StepKind;
-  kindLabel: string;
   newFile: boolean;
   context: boolean;
   why: string;
@@ -74,6 +92,15 @@ export interface StepView {
   blocks: SbsRow[][];
   note?: string;
 }
+
+export interface ConceptStepView extends StepViewBase {
+  kind: 'concept';
+  body: string;
+  diagram?: ConceptDiagram;
+  preparesFor: Array<{ id: string; order: number; title: string }>;
+}
+
+export type StepView = CodeStepView | ConceptStepView;
 
 export interface StepBeatView {
   text: string;
@@ -120,6 +147,8 @@ export interface ReviewModel {
   files: FileView[];
   trust: TrustView;
   totalSteps: number;
+  codeSteps: number;
+  conceptSteps: number;
   filesChanged: number;
   contextFiles: number;
   totalAdd: number;
@@ -135,6 +164,7 @@ export function buildReviewModel(
 ): ReviewModel {
   const steps = orderedSteps(tour);
   const byId = new Map(steps.map((s) => [s.id, s]));
+  const codeSteps = steps.filter(isCodeStep);
   const coverageFiles = filesForStoryCoverage(tour, files);
   // Story-less (diff-only) view: there's no story to measure the diff against,
   // so nothing is "unexplained" — skip coverage instead of flagging every line.
@@ -149,11 +179,15 @@ export function buildReviewModel(
   }
 
   // First ordered step that shows each file → the "Step N" chip + jump target.
-  const stepByFile = new Map<string, TourStep>();
-  for (const s of steps) if (!stepByFile.has(s.file)) stepByFile.set(s.file, s);
+  const stepByFile = new Map<string, CodeTourStep>();
+  for (const s of codeSteps) if (!stepByFile.has(s.file)) stepByFile.set(s.file, s);
 
-  const stepViews = steps.map((s) => buildStep(repo, s, files, byId, steps.length, headRef));
-  const fileViews = buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef);
+  const stepViews = steps.map((step) =>
+    isCodeStep(step)
+      ? buildCodeStep(repo, step, files, byId, steps.length, headRef)
+      : buildConceptStep(step, byId),
+  );
+  const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef);
   const trust = buildTrust(coverageFiles, uncovered, stepByFile);
 
   return {
@@ -161,6 +195,8 @@ export function buildReviewModel(
     files: fileViews,
     trust,
     totalSteps: steps.length,
+    codeSteps: codeSteps.length,
+    conceptSteps: steps.length - codeSteps.length,
     filesChanged: fileViews.filter((f) => f.kind !== 'context').length,
     contextFiles: fileViews.filter((f) => f.kind === 'context').length,
     totalAdd: fileViews.reduce((a, f) => a + f.add, 0),
@@ -175,14 +211,14 @@ function filesForStoryCoverage(tour: Tour, files: DiffFile[]): DiffFile[] {
   return files.filter((f) => selected.has(f.newPath));
 }
 
-function buildStep(
+function buildCodeStep(
   repo: string,
-  step: TourStep,
+  step: CodeTourStep,
   files: DiffFile[],
   byId: Map<string, TourStep>,
   total: number,
   headRef?: string,
-): StepView {
+): CodeStepView {
   const { blocks, note } = stepBlocks(repo, step, files, headRef);
   const diffFile = files.find((f) => f.newPath === step.file);
   const viewport = stepViewport(step);
@@ -213,15 +249,32 @@ function buildStep(
   };
 }
 
-function stepViewport(step: TourStep): [number, number] {
+function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): ConceptStepView {
+  return {
+    id: step.id,
+    order: step.order,
+    title: step.title,
+    kind: 'concept',
+    kindLabel: STEP_KIND_LABEL.concept,
+    body: step.body,
+    diagram: step.diagram,
+    preparesFor: step.preparesFor
+      .map((id) => byId.get(id))
+      .filter((target): target is CodeTourStep => !!target && isCodeStep(target))
+      .map((target) => ({ id: target.id, order: target.order, title: target.title }))
+      .sort((a, b) => a.order - b.order),
+  };
+}
+
+function stepViewport(step: CodeTourStep): [number, number] {
   return step.viewport ?? step.range;
 }
 
-function stepHighlights(step: TourStep): Array<[number, number]> {
+function stepHighlights(step: CodeTourStep): Array<[number, number]> {
   return step.highlights ?? step.focus?.ranges ?? [];
 }
 
-function stepBeats(step: TourStep): StepBeatView[] {
+function stepBeats(step: CodeTourStep): StepBeatView[] {
   return (step.beats ?? []).map((beat, i) => ({
     text: beat.text,
     focusGroup: i,
@@ -241,7 +294,7 @@ function stepFocusGroups(
 
 function stepBlocks(
   repo: string,
-  step: TourStep,
+  step: CodeTourStep,
   files: DiffFile[],
   headRef?: string,
 ): { blocks: SbsRow[][]; note?: string } {
@@ -304,9 +357,9 @@ function nearestNewLine(rows: SbsRow[], from: number, dir: -1 | 1): number | und
 
 function buildFiles(
   repo: string,
-  steps: TourStep[],
+  steps: CodeTourStep[],
   files: DiffFile[],
-  stepByFile: Map<string, TourStep>,
+  stepByFile: Map<string, CodeTourStep>,
   uncoveredByFile: Map<string, Array<[number, number]>>,
   headRef?: string,
 ): FileView[] {
@@ -367,7 +420,7 @@ function buildFiles(
 function buildTrust(
   files: DiffFile[],
   uncovered: ReturnType<typeof computeCoverage>['uncovered'],
-  stepByFile: Map<string, TourStep>,
+  stepByFile: Map<string, CodeTourStep>,
 ): TrustView {
   const byPath = new Map(files.map((f) => [f.newPath, f]));
   let totalAdd = 0;
@@ -463,7 +516,7 @@ export function hunksToSbsBlocks(
 
 // ---- helpers ----
 
-function flowLabel(step: TourStep, byId: Map<string, TourStep>, total: number): string {
+function flowLabel(step: CodeTourStep, byId: Map<string, TourStep>, total: number): string {
   const calls = (step.calls ?? []).map((id) => byId.get(id)).filter((t): t is TourStep => !!t);
   const ret = step.returnsTo ? byId.get(step.returnsTo) : undefined;
   if (calls.length) {

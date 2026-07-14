@@ -7,6 +7,7 @@ import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { loadComments } from './comments.js';
 import { reviewStateSummary } from './review-state.js';
+import { isCodeStep } from './types.js';
 const NAMED_STORIES_DIR = 'stories';
 /** Stories saved for a repo, in the order the app should present them. */
 export function listStories(repo) {
@@ -74,7 +75,8 @@ function storySummary(repo, id) {
             updatedAt,
             valid: true,
             steps: story.steps.length,
-            files: new Set(story.steps.map((s) => s.file)).size,
+            primers: story.steps.filter((step) => step.kind === 'concept').length,
+            files: new Set(story.steps.filter(isCodeStep).map((step) => step.file)).size,
             current: session.freshness === 'current',
             ...session,
         };
@@ -95,6 +97,7 @@ function storySummary(repo, id) {
             valid: false,
             error: e.message,
             steps: 0,
+            primers: 0,
             files: 0,
             current: false,
             freshness: 'unverified',

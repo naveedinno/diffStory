@@ -55,6 +55,7 @@ export function navStyles() {
 .nv-brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--nv-fg);text-decoration:none;
   padding:5px 7px;margin-left:-7px;border-radius:8px}
 .nv-brand:hover{background:var(--nv-fill)}
+.nv-brand:active{transform:scale(.98)}
 .nv-brand:focus-visible{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--nv-blue) 36%,transparent)}
 .nv-mark{display:block;--ds-brand-path:var(--nv-blue);--ds-brand-node-a:var(--nv-fg);--ds-brand-node-b:#64d2ff;--ds-brand-node-c:var(--nv-fg)}
 .nv-word{font-size:15px;letter-spacing:-.01em}
@@ -75,7 +76,12 @@ a.nv-crumb:focus-visible{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var
 .nv-pri{color:#fff;background:var(--nv-blue);border:.5px solid transparent;font-weight:600;
   box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .nv-pri:hover{background:var(--nv-blue2)}
+.nv-act:active,.nv-pri:active{transform:scale(.97)}
+.nv-brand,.nv-act,.nv-pri{transition:background-color 120ms ease-out,transform 100ms ease-out,box-shadow 120ms ease-out}
 .nv-act:focus-visible,.nv-pri:focus-visible{outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--nv-blue) 36%,transparent)}
 @media (max-width:560px){.ds-nav{padding:0 13px;gap:8px}.nv-word{display:none}.nv-act{padding:0 10px}}
+@media (prefers-reduced-motion:reduce){.nv-brand,.nv-act,.nv-pri{transition:none}.nv-brand:active,.nv-act:active,.nv-pri:active{transform:none}}
+@media (prefers-reduced-transparency:reduce){.ds-nav{background:var(--nv-bg);backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media (prefers-contrast:more){.ds-nav{border-bottom:1px solid var(--nv-fg)}.nv-act{border-color:var(--nv-fg)}}
 `;
 }

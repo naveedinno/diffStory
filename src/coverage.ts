@@ -2,7 +2,7 @@
 // one tour step. Anything unclaimed is surfaced loudly so the agent can't quietly
 // leave a change out of the narrative.
 import { changedRanges, rangesOverlap } from './diff.js';
-import type { DiffFile, Tour, TourStep } from './types.js';
+import { isCodeStep, type DiffFile, type Tour, type TourStep } from './types.js';
 
 export interface UncoveredHunk {
   file: string;
@@ -20,7 +20,7 @@ export function computeCoverage(tour: Tour, files: DiffFile[]): Coverage {
   // Index the ranges each step claims, by file.
   const claimsByFile = new Map<string, Array<[number, number]>>();
   for (const step of tour.steps) {
-    if (step.kind === 'context') continue; // context steps don't claim changes
+    if (!isCodeStep(step) || step.kind === 'context') continue; // concepts/context never claim changes
     const list = claimsByFile.get(step.file) ?? [];
     list.push(step.range);
     claimsByFile.set(step.file, list);
@@ -50,7 +50,7 @@ export function computeCoverage(tour: Tour, files: DiffFile[]): Coverage {
 export function stalePointers(tour: Tour, files: DiffFile[]): TourStep[] {
   const byPath = new Map(files.map((f) => [f.newPath, f]));
   return tour.steps.filter((step) => {
-    if (step.kind === 'context') return false; // context intentionally points at unchanged code
+    if (!isCodeStep(step) || step.kind === 'context') return false; // context/concepts are not diff pointers
     const file = byPath.get(step.file);
     if (!file) return true;
     return !changedRanges(file).some((r) => rangesOverlap(r, step.range));

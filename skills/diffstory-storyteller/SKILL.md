@@ -22,6 +22,8 @@ Coverage is the trust floor; restored context is the product.
 
 ## Non-Negotiable Contract
 
+- Newly generated stories use `"version": 2`. Version 1 stories remain readable;
+  do not rewrite an existing v1 story merely to modernize its number.
 - Open the story with an `intent` block whose `goal` cites real `sources`; use
   `["code-derived"]` when no evidence exists.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
@@ -43,12 +45,22 @@ Coverage is the trust floor; restored context is the product.
   `viewport`; these are the lines the story is currently talking about.
 - Optional `focus.ranges` is the legacy spelling for `highlights`.
 - `context` is only for unchanged code that helps the reviewer understand a changed path.
+- `concept` is a short, fileless primer that teaches a mental model immediately
+  before dependent code. It never claims coverage.
 - Do not reproduce code in the story. diffStory pulls code from git.
 
 ## Detail levels
 
 The prompt may ask for `"mode": "brief"`, `"mode": "guided"`, or
 `"mode": "detailed"`. Write that top-level field in `.diffstory/story.json`.
+
+Concept-primer budgets are hard maxima, not targets:
+
+- Brief: at most 1 concept primer.
+- Guided: at most 2 concept primers.
+- Detailed: at most 3 concept primers.
+
+Use zero when the code story has no real concept gap.
 
 ### Brief mode
 
@@ -207,14 +219,47 @@ goal -> design decisions -> implementation chain.
 - Then walk the implementation sequence: "To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs."
 - Each step should continue that arc. Explain why this stop exists in the
   designed flow and what it unlocks next.
-- Thread rule: every step's first beat except the first must pick up what the
-  previous step established ("Now that the cap is stored, here is who reads
-  it"), so the steps read as one continuous story.
+- Thread rule: each code step's first beat must pick up what the previous stop
+  established ("Now that the cap is stored, here is who reads it"). After a
+  primer, apply its mental model directly to the code so the steps read as one
+  continuous story.
 - Order test: if sorting your planned steps by filename would not change how
   the story reads, it is not a story yet — reorder, or state in one line why
   file order genuinely is the clearest path.
 - Do not invent user intent. If the diff only proves a technical refactor, make
   the goal technical and keep it grounded.
+
+### 3.75. Test for concept gaps
+
+Run this Concept-gap test before finalizing the reading path: before each code
+stop, ask whether a reviewer can explain the terminology, roles, relationships, or state model needed to understand the next lines. Add a concept primer only
+when the answer is no and one visible code span cannot teach the model cleanly.
+
+Keep these roles separate:
+
+- Overview is the whole-change reading map: goal, designed flow, and where the
+  review goes.
+- A primer is a just-in-time mental model for unfamiliar concepts needed at one
+  specific code stop. Do not repeat the Overview or summarize the diff.
+- A context step shows exact unchanged code when that code is the clearest
+  contract. A concept primer synthesizes a relationship or model that no single
+  code viewport explains well.
+
+Place each primer immediately before the first code step that depends on it.
+Its `preparesFor` must include that immediately following code step and may list
+other later dependent code-step ids. Never place two concept primers next to each other. Never end the story with a concept primer.
+
+Write the primer `body` as a short document of 60-180 words, with a hard maximum
+of 220 words. Use compact paragraphs, small lists, emphasis, and inline code.
+Do not paste implementation code, add Markdown links/images, or inflate a
+primer to hit the word target. If the model does not earn 60 useful words, teach
+it in the code beat instead.
+
+Use an optional Mermaid diagram only when it materially clarifies three or more
+actors/components, a real branch, or a state transition. Supported declarations
+are `flowchart`, `sequenceDiagram`, or `stateDiagram-v2`; a caption is required.
+Keep Mermaid local and declarative. No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives. Skip the
+diagram for a simple one-way chain the body already explains.
 
 ### 4. Plan the reading path
 
@@ -226,9 +271,11 @@ step | role | file:range | kind | leads to | reason this stop exists
 
 Plan by code logic, not filenames:
 
-- Start at the behavioral entry point a developer recognizes, even when it is
-  unchanged and needs a `context` step. Do not start with imports, icons,
-  styling, generated output, or tests unless one of those is itself the feature.
+- Make the first code stop the behavioral entry point a developer recognizes,
+  even when it is unchanged and needs a `context` step. A just-in-time concept
+  primer may precede it only when the entry code already depends on that model.
+  Do not start with imports, icons, styling, generated output, or tests unless
+  one of those is itself the feature.
 - Follow runtime/control/data flow across files. When you dive into a helper, return to the caller if that helps the reader.
 - Put definitions before repeated uses when the definition makes later steps readable.
 - Put core behavior before glue, adapters, docs, generated files, snapshots, and tests.
@@ -238,20 +285,22 @@ Plan by code logic, not filenames:
   steady camera shot over one method, struct, test case, or doc section, not a
   teleport between distant highlight islands.
 - Use context stops only for real dependency contracts: unchanged callers, callees, storage/schema/config, feature flags, external API boundaries, or helper preconditions.
+- Insert a concept primer only at its just-in-time dependency boundary; do not
+  collect primers into an up-front glossary or append them after the code.
 - A small change may need one context-rich changed step. Do not force a fixed
   number of stops.
 
 A good path reads like: "Start here, jump into the helper this calls, come back
 for the boundary handling, then inspect the tests that pin it."
 
-### 5. Storyboard the viewport and highlighted lines
+### 5. Storyboard code viewports and highlighted lines
 
-Each step must choose what the reviewer sees before choosing the exact lines the
-story is talking about.
+Each code step must choose what the reviewer sees before choosing the exact
+lines the story is talking about. Concept primers have no file camera.
 
 Treat this as a guided camera:
 
-- One step is one local shot that fits without manual scrolling.
+- One code step is one local shot that fits without manual scrolling.
 - One beat is one exact pointing gesture whose highlighted lines visibly prove
   its sentence.
 - A changed step should usually move through orientation -> change ->
@@ -309,7 +358,7 @@ Coverage anchor contract:
 `viewport` is the review window. `highlights` are what the narrator is pointing
 at. `range` is the coverage hook.
 
-### 5.5. Add precise read-aloud focus when useful
+### 5.5. Add precise code read-aloud focus when useful
 
 diffStory can glow the exact code while the story is read aloud. New stories
 should use `highlights`; `focus.ranges` remains accepted for old stories.
@@ -333,19 +382,19 @@ Focus pointer contract:
 - If the whole step range is the right thing to point at, omit `focus`;
   diffStory highlights the step range automatically.
 
-### 5.6. Split narration into read-aloud beats
+### 5.6. Split code narration into read-aloud beats
 
 Beat contract:
 
-- Every new step must include `beats`: ordered short narration units, each with
-  its own `text` and `highlights`.
+- Every new code step must include `beats`: ordered short narration units, each
+  with its own `text` and `highlights`. Concept primers use `body` instead.
 - Each beat is a separate speech unit, so the read-aloud voice and glowing code
   can move together without guessing timing.
 - Use one beat per highlighted code part. If a step has three review points,
   write three beats instead of one long `why`.
 - The first beat locates the reviewer in the existing flow unless the previous
-  context step already did. Later beats point at the changed decision and its
-  consequence.
+  context step already did; after a concept primer, it applies that mental model
+  to the code. Later beats point at the changed decision and its consequence.
 - A beat may point at one small range or a few nearby related ranges, but it
   must stay inside that step's `viewport`.
 - Do not put one big speech over several highlight groups; split it into
@@ -353,9 +402,9 @@ Beat contract:
 - Keep `why` as the compact fallback recap for older readers, but put the
   read-aloud story in `beats`.
 
-### 6. Write one step per stop
+### 6. Write one code step per code stop
 
-Each step has:
+Each code step has:
 
 - `file` + `range`: the changed-line coverage anchor.
 - `viewport`: the post-change window the diff viewer should show.
@@ -368,7 +417,7 @@ Each step has:
 - `why`: the compact fallback recap for the stop.
 - `calls` / `returnsTo`: optional links for real conceptual jumps.
 
-Step titles should work without the body text. Good titles:
+Code-step titles should work without the body text. Good titles:
 
 ```text
 Entry point rejects over-cap orders before placement
@@ -386,7 +435,7 @@ Tests
 Changes in api.ts
 ```
 
-Each `why` should be a compact fallback recap for the whole stop. The
+Each code-step `why` should be a compact fallback recap for the whole stop. The
 read-aloud explanation belongs in `beats`, and each beat should answer one
 local reviewer question. In brief mode, use exactly one short first-person
 sentence per beat. In balanced/guided mode, use short first-person beats. In
@@ -417,6 +466,32 @@ Use attention cues when they help scanning: `Start here`, `Pause here`,
 `Skim this`, `Check this invariant`, `Final proof`. They should feel natural,
 not like labels pasted onto every step.
 
+### 6.25. Write concept primers with the exact fileless shape
+
+A concept step has exactly the shared identity fields plus its document fields:
+
+```jsonc
+{
+  "id": "concept-cap-model",
+  "order": 2,
+  "title": "How the cap travels",
+  "kind": "concept",
+  "body": "<60-180 word mental model>",
+  "preparesFor": ["s2"],
+  "diagram": {
+    "type": "mermaid",
+    "source": "flowchart LR\n  A --> B",
+    "caption": "The request crosses the owner before the boundary check."
+  },
+  "tags": ["mental-model"]
+}
+```
+
+`diagram` and `tags` are optional. Every other field shown above is required.
+A concept step must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`. It also must not contain legacy `focus`. Link it only through `preparesFor`,
+which must point to later code-step ids and include the immediately following
+code step. Concept primers never claim diff coverage.
+
 ### 6.5. Put necessary context in the visible story
 
 Context must not stay trapped in your private reviewer map.
@@ -436,7 +511,8 @@ Context must not stay trapped in your private reviewer map.
 
 ### 7. Link calls sparingly
 
-Use `calls` / `returnsTo` only when the reviewer should conceptually jump.
+Use `calls` / `returnsTo` only between code steps when the reviewer should
+conceptually jump. Concept primers use `preparesFor` instead.
 
 - Caller step uses `calls: ["calleeStep"]`.
 - Callee step uses `returnsTo: "callerStep"` when the reader should come back.
@@ -453,6 +529,8 @@ Before writing `.diffstory/story.json`, build a private coverage ledger from the
 exact diff: file, changed hunk range, semantic purpose, and planned step id.
 Every changed hunk must appear in the ledger and must be claimed by a
 `changed` or `new-file` step. Context steps never count as coverage.
+Concept primers never claim diff coverage and never replace a changed or
+new-file step in the ledger.
 Never use "deleted" as a step kind. For deleted files, use kind "changed" and
 anchor the range at the post-change deletion location.
 For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`.
@@ -467,7 +545,7 @@ coverage.
 
 ### Range and viewport audit
 
-- Read the post-change file with line numbers before choosing `range`,
+- For code steps, read the post-change file with line numbers before choosing `range`,
   `viewport`, and `highlights`.
 - `changed` and `new-file` ranges must overlap real changed ranges.
 - `context` ranges must be unchanged and must not be used to satisfy coverage.
@@ -501,31 +579,43 @@ Falsifiable checks — run each one, do not skim:
 
 - Order test: reorder your steps by filename in your head. If the story reads
   the same, the path is not a story yet.
-- Why test: strike any beat that only restates what the code does. Every step
-  must say why it exists in the designed flow and what it unlocks next.
-- Thread test: read only the beats in order with no code. They must still form
-  one continuous story with no jumps.
+- Why test: strike any code beat that only restates what the code does. Strike
+  any primer that repeats the Overview or could be replaced by one orienting
+  code beat.
+- Thread test: read concept bodies and code beats in order with no code. They
+  must form one continuous story with no unexplained term or jump.
+- Concept-gap test: before each code stop, verify the reviewer already has the
+  terminology, roles, relationships, and state model needed to read it. Add a
+  primer only for a real gap.
+- Primer placement test: every primer sits immediately before its first
+  dependent code step, `preparesFor` includes that next step, no two primers are
+  adjacent, no primer is final, and the active mode's primer budget is respected.
 
 ### Context and camera audit
 
-- Memory test: read only `intent`, `summary`, titles, and beats. A reviewer who
+- Memory test: read only `intent`, `summary`, concept bodies, titles, and beats. A reviewer who
   remembers the request but not the app must be able to answer where the
-  behavior enters, who owns it, what changed, where the result goes, and what
-  proves or threatens it.
+  behavior enters, explain unfamiliar concepts before dependent code, identify
+  who owns it, what changed, where the result goes, and what proves or threatens it.
 - Camera test: follow only the files, viewports, and highlight groups. Every
   glow must visibly prove its beat without scrolling or guessing.
-- First-stop test: the story opens at the behavioral entry point, never at
-  incidental imports, icons, styling, generated output, or tests.
+- First-stop test: the first code stop is the behavioral entry point, never
+  incidental imports, icons, styling, generated output, or tests. If a primer
+  opens the story, it must directly prepare that entry step.
 
 ### Reviewability audit
 
 - The `intent` block carries why we wanted the change and the designed flow;
   the summary is the reading map: how to walk the implementation and the one
   or two places where the reviewer should slow down.
-- The first step should start at the most useful entry point.
-- Every title should name behavior, risk, contract, or invariant, not a file operation.
-- Every beat should connect previous context, local change, and next implication;
-  every `why` should stay compact.
+- The Overview stays whole-change orientation. Each primer teaches only the
+  local mental model required by the code step immediately after it.
+- The first code step should start at the most useful entry point; a primer may
+  precede it only to prepare that exact step.
+- Every code-step title should name behavior, risk, contract, or invariant, not
+  a file operation. Every primer title should name the mental model it teaches.
+- Every code beat should connect previous context, local change, and next
+  implication; every code-step `why` should stay compact.
 - Tests, docs, snapshots, and generated files go after the behavior they verify or explain.
 - Generated or oversized files excluded by the prompt must not appear as story
   steps.
@@ -535,7 +625,7 @@ Falsifiable checks — run each one, do not skim:
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "mode": "guided",
   "title": "<short title for the whole change>",
   "summary": "<1-3 short sentences: how the steps walk the implementation + where to slow down; the goal and designed flow live in intent, not here>",
@@ -580,8 +670,22 @@ Falsifiable checks — run each one, do not skim:
       "tags": ["entrypoint", "core"]
     },
     {
-      "id": "s2",
+      "id": "concept-cap-model",
       "order": 2,
+      "title": "How the per-market cap travels",
+      "kind": "concept",
+      "body": "One settlement carries a proposed funding rate into a market-specific boundary. The keeper triggers `settleFunding()`, the entry point chooses the market, and `_capRate()` applies that market's configured ceiling before balances move. The cap is therefore not a global throttle or a post-settlement correction: it is an input constraint owned by each market. Keep that ownership in mind while reading the helper next. The key review question is whether every caller supplies the matching market configuration and whether the inclusive edge behaves consistently.",
+      "preparesFor": ["s2"],
+      "diagram": {
+        "type": "mermaid",
+        "source": "sequenceDiagram\n  actor Keeper\n  participant Funding\n  participant MarketConfig\n  participant Balances\n  Keeper->>Funding: settle\n  Funding->>MarketConfig: read cap\n  Funding->>Funding: clamp rate\n  Funding->>Balances: mutate with chosen rate",
+        "caption": "The keeper's proposed rate crosses the per-market cap before balance mutation."
+      },
+      "tags": ["mental-model"]
+    },
+    {
+      "id": "s2",
+      "order": 3,
       "title": "Helper: _capRate() owns the boundary rule",
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
@@ -604,7 +708,7 @@ Falsifiable checks — run each one, do not skim:
     },
     {
       "id": "s3",
-      "order": 3,
+      "order": 4,
       "title": "Existing marketConfig contract supplies the per-market cap",
       "file": "contracts/storage/MarketConfig.sol",
       "range": [88, 94],
@@ -638,7 +742,10 @@ Write `.diffstory/story.json`, then verify it against the diff yourself:
   trust check flags any change no step explains, so leave none uncovered.
 - Every changed/new-file range overlaps real changed code; every context step
   deliberately points at unchanged code that changes how the diff is judged.
-- The JSON is valid: ids, `order`, `calls`, and `returnsTo` all resolve.
+- Every concept primer is just in time, stays within its mode budget, has a
+  60-180 word body (never over 220), and claims no coverage.
+- The JSON is valid: ids, `order`, `calls`, `returnsTo`, and `preparesFor` all
+  resolve; no primer is adjacent to another primer or final.
 
 Fix every issue before handing back. If a clean story is impossible, report the
 blocker instead of pretending it is ready.
@@ -652,6 +759,8 @@ Tell the user: "Story ready — open the diff in the diffStory app to review."
 - Don't restate the diff with bland verbs like "adds", "updates", "modifies", or "changes" unless the sentence also names the consequence or review risk.
 - Don't write checklist-only copy. Work the review focus into the story.
 - Don't add context steps as scenery.
+- Don't add primers as an up-front glossary, repeat the Overview, place primers
+  back-to-back, or leave a primer at the end.
 - Don't assume the changed lines explain where the behavior enters or what
   consumes it; show that task-local context with the camera.
 - Don't bury the core behavior behind docs, tests, generated files, or cleanup.
@@ -659,5 +768,7 @@ Tell the user: "Story ready — open the diff in the diffStory app to review."
   visible code and highlighted code stay in one local review moment.
 - Don't make unsupported confidence claims like "this is safe" or "tests cover it" without naming the exact condition or evidence.
 - Don't skip the coverage gate — every changed hunk needs a covering step.
+- Don't give concept primers file/range/camera/beat/why/call fields or count
+  them toward coverage.
 - Don't invent intent. Every `goal` claim needs a source; `["code-derived"]` is the honest fallback.
 - Don't ship steps in file order without stating why that order genuinely reads best.

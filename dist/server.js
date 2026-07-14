@@ -4,7 +4,7 @@
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { loadTour, validateGeneratedTour } from './tour.js';
+import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour } from './tour.js';
 import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
@@ -19,6 +19,7 @@ import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
 import { loadComments, addComment, deleteComment, setCommentStatus, appendUserMessage, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
+import { isCodeStep } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, resumedCodexTaskMatches, storyRepairPrompt, } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, noteEventsFromText, createFileEnricher, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
@@ -152,7 +153,7 @@ function setLocalResponseHeaders(res) {
         "frame-ancestors 'none'",
         "img-src 'self' data:",
         "media-src 'self' blob:",
-        "script-src 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline'",
         "style-src 'unsafe-inline'",
     ].join('; '));
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
@@ -168,6 +169,9 @@ function handle(req, res, session, home) {
         return sendJson(res, 403, { error: 'This local app only accepts same-origin localhost requests.' });
     }
     try {
+        if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
+            return sendMermaidBrowserAsset(res);
+        }
         if (method === 'GET' && url.pathname === '/') {
             if (session.repo == null)
                 return sendHtml(res, pickerStub(home));
@@ -696,7 +700,10 @@ function renderFullFileResponse(session, file) {
         });
     }
     const { tour, head, files } = loadReview(session);
-    const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+    const allowed = new Set([
+        ...files.map((f) => f.newPath),
+        ...tour.steps.filter(isCodeStep).map((s) => s.file),
+    ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     const df = files.find((f) => f.newPath === file);
@@ -729,7 +736,10 @@ function renderSplitResponse(session, file) {
         });
     }
     const { tour, files } = loadReview(session);
-    const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+    const allowed = new Set([
+        ...files.map((f) => f.newPath),
+        ...tour.steps.filter(isCodeStep).map((s) => s.file),
+    ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
     const df = files.find((f) => f.newPath === file);
@@ -777,7 +787,10 @@ function renderContextResponse(session, params) {
         const loaded = loadReview(session);
         const { tour, files } = loaded;
         head = loaded.head;
-        const allowed = new Set([...files.map((f) => f.newPath), ...tour.steps.map((s) => s.file)]);
+        const allowed = new Set([
+            ...files.map((f) => f.newPath),
+            ...tour.steps.filter(isCodeStep).map((s) => s.file),
+        ]);
         if (!allowed.has(file))
             return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
         df = files.find((f) => f.newPath === file);
@@ -826,7 +839,9 @@ export function finishStoryGeneration(r, storyPath, session, previousStoryConten
     if (storyWritten) {
         try {
             const tour = loadTour(storyPath);
-            const qualityErrors = requireModernStory ? validateGeneratedTour(tour) : [];
+            const qualityErrors = requireModernStory
+                ? validateGeneratedTour(tour)
+                : validateGeneratedConceptSteps(tour);
             if (qualityErrors.length) {
                 throw new Error(`Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join('\n  - ')}`);
             }
@@ -1506,6 +1521,20 @@ function sendLocalKokoroAudio(res, file, home) {
     res.setHeader('Content-Length', String(stat.size));
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     createReadStream(path).pipe(res);
+}
+const MERMAID_BROWSER_ASSET = new URL('./mermaid.esm.min.mjs', import.meta.url);
+function sendMermaidBrowserAsset(res) {
+    if (!existsSync(MERMAID_BROWSER_ASSET)) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+    }
+    const stat = statSync(MERMAID_BROWSER_ASSET);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    createReadStream(MERMAID_BROWSER_ASSET).pipe(res);
 }
 function sendHtml(res, html, status = 200) {
     res.statusCode = status;
