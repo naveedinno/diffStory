@@ -232,9 +232,9 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.match(html, />Resend open comments</);
   assert.match(html, />More review actions/);
   assert.match(html, /ds-check">✓<\/span> Approve/);
-  assert.match(html, /class="ds-reviewstatusbar" data-roundbar aria-label="Review status"/);
-  assert.match(html, /class="ds-roundbadge">Round 1<\/span>/);
-  assert.match(html, /class="ds-statussignal/);
+  assert.match(html, /class="ds-reviewstatusbar is-(?:attention|ready)" data-roundbar aria-label="Review status"/);
+  assert.match(html, /class="ds-ledger-round"><i aria-hidden="true"><\/i><b>Round 1<\/b><\/span>/);
+  assert.match(html, /class="ds-statussignal" role="status"/);
   assert.doesNotMatch(html, /class="ds-reviewstatus-scope"/);
   assert.doesNotMatch(html, />Feedback clear<\/span>/);
   assert.doesNotMatch(html, /class="ds-sessionstage/);
@@ -280,10 +280,11 @@ test('version-aware review rounds expose full and since-review modes', () => {
   assert.match(html, /data-review-mode="since"/);
   assert.match(html, /data-review-mode="full"[^>]*aria-pressed="true"/);
   assert.match(html, /data-filter-since="1"/);
-  assert.match(html, /class="ds-roundbadge">Round 2<\/span>/);
-  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes\{display:flex;margin-left:auto\}/);
-  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes\{width:100%;margin-left:0\}/);
-  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes button\{height:32px;flex:1\}/);
+  assert.match(html, /class="ds-ledger-round"><i aria-hidden="true"><\/i><b>Round 2<\/b><\/span>/);
+  assert.match(html, /class="ds-reviewstatusbar is-(?:followup|ready) has-modes"/);
+  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes\{margin-left:auto\}/);
+  assert.match(html, /\.ds-reviewchrome\.has-review-modes>\.ds-reviewstatusbar>\.ds-roundmodes\{grid-row:2;width:100%;height:44px;margin:0\}/);
+  assert.match(html, /\.ds-reviewchrome\.has-review-modes \.ds-roundmodes button\{height:44px;flex:1;font-size:11px\}/);
   assert.match(html, /var open=compactScreen\(\)&&!collapsed,main=\$\('\.ds-main'\),status=\$\('\.ds-reviewstatusbar'\)/);
   assert.match(html, /if\(status\)\{if\(open\)status\.setAttribute\('inert',''\);else status\.removeAttribute\('inert'\);\}/);
   assert.match(html, /\.ds-layout>\.ds-rail,body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{top:52px\}/);
@@ -394,6 +395,7 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
   assert.match(html, /\.ds-rail-resizer\{[^}]*cursor:col-resize/s);
   assert.match(html, /body\.ds-sidebar-resizing/);
   assert.match(html, /function setSidebarWidth\(w,persist\)/);
+  assert.match(html, /document\.body\.style\.setProperty\('--ds-rail-width',width\+'px'\)/);
   assert.match(html, /function startSidebarResize\(e\)/);
   assert.match(html, /localStorage\.setItem\('ds-sidebar-width',String\(Math\.round\(width\)\)\)/);
   assert.match(html, /document\.addEventListener\('mousedown',startSidebarResize\)/);
@@ -411,8 +413,12 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /setSidebarCollapsed\(compactScreen\(\)\|\|storedCollapsed==='1',false\)/);
   assert.match(html, /localStorage\.setItem\('ds-sidebar-collapsed',collapsed\?'1':'0'\)/);
   assert.match(html, /function collapseCompactSidebar\(\)/);
+  assert.match(html, /chrome=\$\('\.ds-reviewchrome-main'\)/);
+  assert.match(html, /if\(chrome\)\{if\(open\)chrome\.setAttribute\('inert',''\);else chrome\.removeAttribute\('inert'\);\}/);
   assert.match(html, /data-sidebar-scrim/);
   assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:56px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
+  assert.match(html, /\.ds-reviewchrome,body\.ds-rail-collapsed \.ds-reviewchrome\{height:86px;grid-template-columns:minmax\(0,1fr\);grid-template-rows:56px 30px\}/);
+  assert.match(html, /\.ds-reload-diff,\.ds-review-menu\{min-width:44px;height:44px/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
@@ -1224,6 +1230,14 @@ test('storyless review page puts story generation controls in the Story tab', ()
     storyless: true,
   });
   assert.match(html, /data-storyless="1"/);
+  assert.match(html, /<header class="ds-reviewchrome" data-storyless-chrome>/);
+  assert.match(html, /class="ds-reviewchrome-repo"[^>]*>demo<\/a>/);
+  assert.match(html, /class="ds-reviewchrome-subtitle">Working tree <span>vs<\/span> <b>main<\/b><\/div>/);
+  assert.match(html, /class="ds-reload-diff" data-reload-diff[^>]*aria-label="Reload diff"/);
+  assert.match(html, /class="ds-ui-icon ds-review-menu-icon"/);
+  assert.doesNotMatch(html, /class="ds-review-menu-dot"/);
+  assert.doesNotMatch(html, /class="ds-readaloud"/);
+  assert.doesNotMatch(html, /id="ds-settings"/);
   assert.match(html, /id="storyAgentSel"/);
   assert.match(html, /id="storyModelSel"/);
   assert.match(html, /id="storyMode"/);
@@ -1275,7 +1289,8 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.match(html, /data-reload-diff/);
   assert.match(html, /Reload diff/);
   assert.match(html, /closest\(t,'\[data-reload-diff\]'\)/);
-  assert.match(html, /b\.disabled=true;location\.reload\(\);return;/);
+  assert.match(html, /b\.disabled=true;b\.classList\.add\('is-loading'\);b\.setAttribute\('aria-busy','true'\);b\.setAttribute\('aria-label','Reloading diff'\)/);
+  assert.match(html, /requestAnimationFrame\(function\(\)\{location\.reload\(\);\}\);return;/);
   assert.doesNotMatch(html, />Line-by-line<\/button>/);
   assert.match(html, /Best quality/);
   assert.match(html, /Lower cost/);

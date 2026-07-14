@@ -45,7 +45,7 @@ test('resize gestures batch frame writes and scope layout variables', () => {
   assert.match(PAGE_JS, /splitResizeFrame=requestAnimationFrame/);
   assert.match(PAGE_JS, /cancelAnimationFrame\(sidebarResizeFrame\)/);
   assert.match(PAGE_JS, /cancelAnimationFrame\(splitResizeFrame\)/);
-  assert.match(PAGE_JS, /layout\.style\.setProperty\('--ds-rail-width'/);
+  assert.match(PAGE_JS, /document\.body\.style\.setProperty\('--ds-rail-width'/);
   assert.match(PAGE_JS, /splitHolder\.style\.setProperty\('--ds-split'/);
   assert.doesNotMatch(PAGE_JS, /document\.documentElement\.style\.setProperty\('--ds-(?:rail-width|split)'/);
   assert.match(PAGE_JS, /localStorage\.setItem\('ds-sidebar-width'/);

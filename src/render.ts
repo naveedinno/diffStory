@@ -188,6 +188,18 @@ export function renderPage(input: RenderInput): string {
     )
     .join('');
   const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
+  const reviewStatusBarMarkup = reviewSessionBar({
+    state: reviewState,
+    mode: reviewMode,
+    files: model.files.length,
+    open: openCount,
+    addressed: comments.filter((comment) => comment.status === 'addressed').length,
+    approveReady,
+    freshness: storyFreshness,
+    uncovered: uncoveredCount,
+    excluded: excludedFiles.length,
+    indexDivergent: indexDivergentFiles.length,
+  });
 
   return `<!doctype html>
 <html lang="en">
@@ -210,7 +222,35 @@ ${BRAND_HEAD_LINKS}
   )}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(
     input.reviewPageToken ?? '',
   )}"${input.reviewFrom ? ` data-review-from="${esc(input.reviewFrom)}"` : ''} data-verdict-state="${verdictEvaluation?.state ?? 'none'}" data-verdict-decision="${currentVerdict?.decision ?? ''}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
-<header class="ds-top">
+${storyless ? `<header class="ds-reviewchrome${reviewState.compareFrom ? ' has-review-modes' : ''}" data-storyless-chrome>
+  <div class="ds-reviewchrome-rail">
+    <div class="ds-reviewchrome-nav">
+      <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+        <span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('menu')}</span>
+      </button>
+      <a class="ds-back" data-close-story href="${esc(routeBase)}/change" title="Back to change scope" aria-label="Back to change scope">
+        <span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('back')}</span><span>Change</span>
+      </a>
+    </div>
+    <a class="ds-reviewchrome-repo" href="${esc(routeBase)}/change" title="${esc(repoName)} — change scope">${esc(repoName)}</a>
+  </div>
+  <div class="ds-reviewchrome-main">
+    <div class="ds-reviewchrome-mobile-nav">
+      <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+        <span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('menu')}</span>
+      </button>
+      <a class="ds-back" data-close-story href="${esc(routeBase)}/change" title="Back to change scope" aria-label="Back to change scope">
+        <span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('back')}</span><span class="ds-sr-only">Change</span>
+      </a>
+    </div>
+    <div class="ds-titlewrap">
+      <div class="ds-title" title="The current diff, file by file">${esc(pageTitle)}</div>
+      <div class="ds-reviewchrome-subtitle">Working tree <span>vs</span> <b>${esc(baseLabel)}</b></div>
+    </div>
+    <div class="ds-reviewchrome-utilities">
+      <button class="ds-gear ds-help" data-shortcuts-open title="Commands and shortcuts" aria-label="Commands and shortcuts"><span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('help')}</span></button>
+      <span class="ds-reviewchrome-divider" aria-hidden="true"></span>
+` : `<header class="ds-top">
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
   </button>
@@ -224,7 +264,7 @@ ${BRAND_HEAD_LINKS}
         baseLabel,
       )}">${esc(baseLabel)}</span></span>
     </div>
-    <div class="ds-title" title="${esc(storyless ? 'The current diff, file by file' : tour.summary || tour.title)}">${esc(pageTitle)}</div>
+    <div class="ds-title" title="${esc(tour.summary || tour.title)}">${esc(pageTitle)}</div>
   </div>
   <div class="ds-settings-wrap">
     <button class="ds-readaloud" data-readaloud title="Read story aloud" aria-label="Read story aloud" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span class="ds-sr-only" data-readaloud-label>Read aloud</span></button>
@@ -283,23 +323,23 @@ ${BRAND_HEAD_LINKS}
         </div>
       </div>
     </div>
-  </div>
+  </div>`}
   <div class="ds-actions">
     ${
       storyless
-        ? `<button class="ds-review-menu ds-reload-diff" data-reload-diff type="button" title="Re-read the working tree and refresh this diff">
-        <span class="ds-review-menu-dot" aria-hidden="true"></span>
-        <span>Reload diff</span>
+        ? `<button class="ds-reload-diff" data-reload-diff type="button" title="Re-read the working tree and refresh this diff" aria-label="Reload diff">
+        <span class="ds-ui-icon ds-reload-icon" aria-hidden="true">${reviewChromeIcon('refresh')}</span>
+        <span data-reload-label>Reload</span>
       </button>`
         : ''
     }
     <div class="ds-review-menu-wrap">
       <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration before approval' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} require acknowledgement` : ''}" title="Open review status">
-        <span class="ds-review-menu-dot" aria-hidden="true"></span>
-        <span>Review</span>
+        <span class="ds-ui-icon ds-review-menu-icon" aria-hidden="true">${reviewChromeIcon('review')}</span>
+        <span class="ds-review-menu-label">Review</span>
         ${uncoveredCount ? `<span class="ds-review-menu-coverage" title="Changes not explained by the story">${uncoveredCount} unexplained</span>` : ''}
-        <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
-        <span class="ds-review-menu-caret" aria-hidden="true">⌄</span>
+        <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"${openCount ? '' : ' hidden'}><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
+        <span class="ds-ui-icon ds-review-menu-caret" aria-hidden="true">${reviewChromeIcon('chevron')}</span>
       </button>
       <div class="ds-review-menu-pop" data-review-menu-pop role="dialog" aria-label="Review status and actions" tabindex="-1" hidden>
         <div class="ds-review-menu-title">Review</div>
@@ -395,22 +435,15 @@ ${BRAND_HEAD_LINKS}
       </div>
     </div>
   </div>
-</header>
+${storyless
+  ? `  </div>
+  </div>
+  ${reviewStatusBarMarkup}
+</header>`
+  : `</header>
+${reviewStatusBarMarkup}`}
 
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
-
-${reviewSessionBar({
-  state: reviewState,
-  mode: reviewMode,
-  files: model.files.length,
-  open: openCount,
-  addressed: comments.filter((comment) => comment.status === 'addressed').length,
-  approveReady,
-  freshness: storyFreshness,
-  uncovered: uncoveredCount,
-  excluded: excludedFiles.length,
-  indexDivergent: indexDivergentFiles.length,
-})}
 
 <div class="ds-layout">
   <aside class="ds-rail" aria-label="Review navigation">
@@ -528,6 +561,22 @@ function voiceCard(kind: 'kokoro', id: string, label: string, description: strin
         </button>`;
 }
 
+function reviewChromeIcon(name: 'menu' | 'back' | 'help' | 'refresh' | 'review' | 'chevron' | 'warning' | 'check' | 'info' | 'request'): string {
+  const paths: Record<typeof name, string> = {
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.55 2.55 0 0 1 4.89 1c0 1.7-2.49 2.02-2.49 3.5"/><path d="M12 17.25h.01"/>',
+    refresh: '<path d="M20 11a8.1 8.1 0 0 0-14.9-4.4L3 10"/><path d="M3 4v6h6M4 13a8.1 8.1 0 0 0 14.9 4.4L21 14"/><path d="M21 20v-6h-6"/>',
+    review: '<path d="M6.5 5.5h11A2.5 2.5 0 0 1 20 8v6a2.5 2.5 0 0 1-2.5 2.5H11L6 20v-3.5A2.5 2.5 0 0 1 3.5 14V8A2.5 2.5 0 0 1 6 5.5Z"/><path d="M8 9.5h8M8 13h5"/>',
+    chevron: '<path d="m8 10 4 4 4-4"/>',
+    warning: '<path d="M10.3 4.2 2.7 17.5A1.7 1.7 0 0 0 4.2 20h15.6a1.7 1.7 0 0 0 1.5-2.5L13.7 4.2a1.95 1.95 0 0 0-3.4 0Z"/><path d="M12 9v4M12 16.5h.01"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    request: '<circle cx="12" cy="12" r="9"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">${paths[name]}</svg>`;
+}
+
 function reviewSessionBar(input: {
   state: ReviewStateSummary;
   mode: 'full' | 'since';
@@ -561,10 +610,27 @@ function reviewSessionBar(input: {
         : input.excluded
           ? `${input.excluded} excluded ${plural(input.excluded, 'file')} to inspect`
         : 'Decision blocked';
-  return `<div class="ds-reviewstatusbar" data-roundbar aria-label="Review status">
+  const tone = currentDecision === 'approved' || input.approveReady
+    ? 'is-ready'
+    : currentDecision === 'changes-requested'
+      ? 'is-requested'
+      : !feedbackHealthy
+        ? 'is-error'
+        : state.compareFrom
+          ? 'is-followup'
+          : 'is-attention';
+  const icon = tone === 'is-ready'
+    ? 'check'
+    : tone === 'is-requested'
+      ? 'request'
+      : tone === 'is-followup'
+        ? 'info'
+        : 'warning';
+  return `<div class="ds-reviewstatusbar ${tone}${state.compareFrom ? ' has-modes' : ''}" data-roundbar aria-label="Review status">
     <div class="ds-reviewstatus-main">
-      <span class="ds-roundbadge">Round ${state.round}</span>
-      <span class="ds-statussignal${currentDecision === 'approved' || input.approveReady ? ' is-ready' : ' is-attention'}"><i aria-hidden="true"></i>${decisionDetail}</span>
+      <span class="ds-ledger-round"><i aria-hidden="true"></i><b>Round ${state.round}</b></span>
+      <span class="ds-ledger-line" aria-hidden="true"></span>
+      <span class="ds-statussignal" role="status"><span class="ds-ui-icon ds-ledger-icon" aria-hidden="true">${reviewChromeIcon(icon)}</span><strong>${decisionDetail}</strong></span>
     </div>
     ${state.compareFrom ? `<div class="ds-roundmodes" role="group" aria-label="Review comparison" title="${changed ? `${changed} ${plural(changed, 'file')} changed since your feedback` : 'No code changes since your feedback'}">
       <button type="button" data-review-mode="full" class="${mode === 'full' ? 'is-active' : ''}" aria-pressed="${mode === 'full'}">Full change</button>
