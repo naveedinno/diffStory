@@ -5,6 +5,7 @@
 // browser (GET /api/fs) instead. Self-contained; every server value is escaped.
 import { APP_BRAND } from './config.js';
 import { BRAND_HEAD_LINKS, brandMarkSvg } from './brand.js';
+import { themeBootstrapScript, themeControl, themeControlStyles } from './theme.js';
 function esc(s) {
     return s
         .replace(/&/g, '&amp;')
@@ -77,23 +78,27 @@ export function renderPicker(recents, home, now) {
         : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Open a local git repository to review its current change.</p></div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#15171b" data-ds-theme-color>
+${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 :root{
+  --bg:#15171b; --bg-rail:#1d2025; --bg-elev:#22252b; --label:#f4f6f8; --label2:#b3b8c2; --label3:#858c98;
+  --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
+  --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(53,199,89,.16); --green-fg:#35c759;
+  --neutral-bg:rgba(127,132,145,.22); --neutral-fg:#aeb4bf; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
+  --tile:rgba(10,132,255,.18); --tile-fg:#0a84ff; --scrim:rgba(0,0,0,.55); --sheet:#25272c;
+}
+:root[data-theme="light"]{
   --bg:#f1f3f6; --bg-rail:#e8ebf0; --bg-elev:#ffffff; --label:#17191e; --label2:#5e6470; --label3:#858c99;
   --sep:rgba(20,24,32,.09); --hairline:rgba(20,24,32,.12); --hover:rgba(0,0,0,.045);
   --blue:#0866e5; --blue-press:#0057ca; --green-bg:#e2f6e9; --green-fg:#16783a;
   --neutral-bg:rgba(95,99,109,.12); --neutral-fg:#656a75; --red-bg:#fde9e7; --red-fg:#bd2a22;
   --tile:rgba(0,122,255,.10); --tile-fg:#007aff; --scrim:rgba(0,0,0,.36); --sheet:#ffffff;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#15171b; --bg-rail:#1d2025; --bg-elev:#22252b; --label:#f4f6f8; --label2:#b3b8c2; --label3:#858c98;
-  --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
-  --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(53,199,89,.16); --green-fg:#35c759;
-  --neutral-bg:rgba(127,132,145,.22); --neutral-fg:#aeb4bf; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
-  --tile:rgba(10,132,255,.18); --tile-fg:#0a84ff; --scrim:rgba(0,0,0,.55); --sheet:#25272c;
-}}
+${themeControlStyles()}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{
@@ -103,6 +108,7 @@ body{
 }
 .wrap{width:min(860px,100%); margin:0 auto; padding:34px 24px 64px}
 .hero{display:flex;align-items:center;gap:16px;padding-bottom:24px;margin-bottom:24px;border-bottom:.5px solid var(--sep)}
+.hero>.ds-theme-wrap{margin-left:auto;align-self:flex-start}
 .head{display:flex; align-items:center; gap:14px; flex:none}
 .appicon{width:54px; height:54px; border-radius:14px; flex:none;
   background:var(--blue);
@@ -231,6 +237,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   .add-btn span{display:none}
 }
 @media (max-width:480px){
+  .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 12px}.hero>.ds-theme-wrap{grid-column:2;grid-row:1;margin-left:0}.hero-copy{grid-column:1 / -1}
   .appicon{width:44px;height:44px;border-radius:11px}.appmark{width:28px;height:28px}
   h1{font-size:22px}.hero-title{font-size:15px}.sub{font-size:13px}
   .section-head{align-items:center}.section{display:none}h2{font-size:21px}
@@ -247,6 +254,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       <div><h1>${esc(APP_BRAND)}</h1></div>
     </div>
     <div class="hero-copy"><p class="hero-title">Open a repository to review its current change.</p><p class="sub">Recent repositories keep branch and working-tree context visible before you enter.</p></div>
+    ${themeControl()}
   </section>
 
   <section class="manager reveal d2">

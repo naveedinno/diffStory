@@ -33,6 +33,8 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.match(html, /id="quickAddBtn"[^>]+aria-label="Open repository"/, 'keeps the icon-only mobile action named');
   assert.doesNotMatch(html, /id="chooseBtn"/, 'does not repeat the folder-browser action below the path field');
   assert.match(html, /\.remove-btn::after\{content:"";position:absolute;inset:-5px\}/, 'keeps the compact mobile remove action easy to tap');
+  assert.match(html, /\.hero\{display:grid;grid-template-columns:minmax\(0,1fr\) auto/, 'gives compact theme controls and intro copy separate rows');
+  assert.match(html, /\.hero-copy\{grid-column:1 \/ -1\}/, 'keeps the compact intro copy at a readable width');
 });
 
 test('folder browser enforces its aria-modal contract and restores focus', () => {

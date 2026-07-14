@@ -82,6 +82,11 @@ test('concept steps render as safe document primers linked to the next code step
 
   const html = renderPage({ repo: process.cwd(), tour: conceptTour, files, baseLabel: 'main', comments: [] });
 
+  assert.ok(html.indexOf("var key='ds-theme'") < html.indexOf('<style>'), 'resolves the color theme before review CSS');
+  assert.equal((html.match(/class="ds-theme-toggle"/g) || []).length, 1, 'renders one shared color-theme selector');
+  assert.match(html, /data-theme-choice="light"/);
+  assert.match(html, /document\.documentElement\.getAttribute\('data-theme'\)==='dark'/, 'uses the resolved theme for diagrams');
+  assert.match(html, /document\.addEventListener\('ds-theme-change'/, 're-renders diagrams after a theme change');
   assert.match(html, /class="ds-stepcard is-concept"[^>]*data-step-id="request-primer"/);
   assert.match(html, />Concept primer</);
   assert.match(html, /class="ds-step ds-concept-step"[^>]*data-step-id="request-primer"/);
@@ -422,7 +427,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
-  assert.match(html, /\.ds-fileitem\{gap:7px;padding-right:7px;padding-left:calc\(7px \+ var\(--tree-indent,0px\)\)\}/);
+  assert.match(html, /\.ds-fileitem\{padding-right:5px;padding-left:calc\(5px \+ var\(--tree-indent,0px\)\)\}/);
   assert.match(html, /\.ds-filetree-count\{display:none\}/);
 });
 
@@ -498,6 +503,14 @@ test('all-files sidebar groups changed paths into an expanded tree', () => {
   assert.match(html, /data-goto-file="contracts\/DepositVault\.sol"/);
   assert.match(html, /data-goto-file="contracts\/interfaces\/IInstantWithdraw\.sol"/);
   assert.match(html, /data-goto-file="README\.md"/);
+  assert.match(html, /class="ds-filetree-caret"[^>]*><svg/);
+  assert.match(html, /class="ds-filetree-folder"[^>]*><svg/);
+  assert.match(html, /class="ds-fileitem-spacer"/);
+  assert.match(html, /class="ds-fileitem-icon k-changed"[^>]*><svg/);
+  assert.doesNotMatch(html, /class="ds-fileitem-symbol"/);
+  assert.match(html, /\.ds-fileitem\{display:grid;grid-template-columns:14px 16px minmax\(0,1fr\) auto/);
+  assert.match(html, /\.ds-fileitem-path\{min-width:0;font-family:var\(--sans\)/);
+  assert.match(html, /@container \(max-width:300px\)\{\.ds-filetree-count\{display:none\}/);
   assert.match(html, /it\.classList\.toggle\('is-active',Number\(it\.getAttribute\('data-file-index'\)\)===i\)/);
 });
 

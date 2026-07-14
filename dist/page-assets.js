@@ -3,13 +3,13 @@
 // literal. The client only ever sets textContent, builds nodes with createElement,
 // or injects server-escaped HTML from /api/fullfile — so there is no injection sink.
 import { DIFF_CSS, DIFF_JS } from './diff-assets.js';
-import { sharedTokens } from './theme.js';
+import { sharedTokens, themeControlStyles } from './theme.js';
 const PAGE_CSS_CORE = `
 /* Material 3-inspired tokens. Dark is the default scheme; the light override
    flips the same semantic roles. Existing component variables map onto M3
    surface, primary, secondary, outline, and state-layer roles. */
 :root{
-  color-scheme:light dark;
+  color-scheme:dark;
   /* Apple-HIG palette (dark default): neutral system grays + system blue accent.
      The --md-* role names are kept so existing component CSS keeps resolving; only
      the values changed (purple/Google → gray/blue/SF). */
@@ -43,8 +43,7 @@ const PAGE_CSS_CORE = `
   --mono:"SF Mono",ui-monospace,Menlo,Monaco,"Cascadia Mono",Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;
 }
-@media (prefers-color-scheme:light){
-  :root{
+:root[data-theme="light"]{
     --md-on-primary:#FFFFFF; --md-primary-container:#D5E7FF; --md-on-primary-container:#003E80;
     --md-secondary:#6E6E73; --md-secondary-container:rgba(0,122,255,0.14); --md-on-secondary-container:#0061CC;
     --md-tertiary:#FF2D55; --md-error:#FF3B30; --md-on-error:#FFFFFF; --md-error-container:rgba(255,59,48,0.12);
@@ -75,7 +74,6 @@ const PAGE_CSS_CORE = `
        them light equivalents here. */
     --gutter:#ECECF0; --gutter-hi:#E3E3E8; --diff-rule:rgba(0,0,0,0.10);
     --tk-k:#9A2EBF; --tk-t:#0E7490; --tk-f:#2563EB; --tk-s:#297A3A; --tk-n:#B45309; --tk-c:#6B7785;
-  }
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%}
@@ -652,38 +650,41 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-cardstat{flex:none;display:flex;gap:8px;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;justify-content:flex-end}
 
 /* ---- sidebar file list (All files view) ---- */
-.ds-railfiles{padding:6px 12px 8px 14px}
+.ds-railfiles{padding:5px 8px 8px;container-type:inline-size}
 .ds-railfiles[hidden]{display:none}
-.ds-filetree{display:flex;flex-direction:column;gap:1px}
-.ds-filetree-dir{margin:1px 0}
-.ds-filetree-dir>summary{list-style:none;display:flex;align-items:center;gap:8px;width:100%;min-height:31px;padding:7px 8px 7px calc(10px + var(--tree-indent,0px));border-radius:8px;color:var(--muted);cursor:pointer;user-select:none}
+.ds-filetree{display:flex;flex-direction:column;gap:0}
+.ds-filetree-dir{margin:0}
+.ds-filetree-dir>summary{list-style:none;display:grid;grid-template-columns:14px 16px minmax(0,1fr) auto;align-items:center;gap:5px;width:100%;min-height:28px;padding:4px 6px 4px calc(6px + var(--tree-indent,0px));border-radius:5px;color:var(--muted);cursor:pointer;user-select:none}
 .ds-filetree-dir>summary::-webkit-details-marker{display:none}
 .ds-filetree-dir>summary:hover{background:var(--fill-1);color:var(--text)}
-.ds-filetree-caret{flex:none;width:10px;color:var(--dim);font-size:15px;line-height:1;transform-origin:center;transition:transform .12s ease}
+.ds-filetree-caret,.ds-filetree-folder,.ds-fileitem-spacer,.ds-fileitem-icon{width:14px;height:16px;display:grid;place-items:center;color:var(--dim)}
+.ds-filetree-caret svg,.ds-filetree-folder svg,.ds-fileitem-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.ds-filetree-caret{transform-origin:center;transition:transform .12s ease}
 .ds-filetree-dir[open]>summary .ds-filetree-caret{transform:rotate(90deg)}
-.ds-filetree-folder{flex:none;width:9px;height:7px;border-radius:2px;background:var(--fill-3);box-shadow:inset 0 0 0 1px var(--line-soft)}
-.ds-filetree-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12.5px;font-weight:650;color:var(--text)}
-.ds-filetree-count{flex:none;font-size:10.5px;color:var(--dim);font-weight:650}
-.ds-filetree-stat{flex:none;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;display:flex;gap:6px}
-.ds-filetree-children{display:flex;flex-direction:column;gap:1px}
-.ds-fileitem{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:none;background:transparent;cursor:pointer;padding:8px 10px 8px calc(10px + var(--tree-indent,0px));border-radius:8px;font-family:var(--sans);margin-bottom:1px}
+.ds-filetree-folder{width:16px;color:var(--muted)}
+.ds-filetree-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sans);font-size:12.5px;font-weight:580;color:var(--text)}
+.ds-filetree-meta,.ds-fileitem-meta{min-width:0;display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;margin-left:auto}
+.ds-filetree-count{flex:none;font-size:10.5px;color:var(--dim);font-weight:550}
+.ds-filetree-stat{flex:none;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;display:flex;gap:5px}
+.ds-filetree-children{display:flex;flex-direction:column;gap:0}
+.ds-fileitem{display:grid;grid-template-columns:14px 16px minmax(0,1fr) auto;align-items:center;gap:5px;width:100%;min-height:28px;text-align:left;border:none;background:transparent;cursor:pointer;padding:4px 6px 4px calc(6px + var(--tree-indent,0px));border-radius:5px;font-family:var(--sans);margin:0}
 .ds-fileitem:hover{background:var(--fill-1)}
-.ds-fileitem.is-active{background:var(--fill-2)}
-.ds-fileitem-dot{flex:none;width:8px;height:8px;border-radius:2px}
-.ds-fileitem-dot.k-changed{background:var(--accent-blue)}
-.ds-fileitem-dot.k-new{background:var(--add)}
-.ds-fileitem-dot.k-context{background:var(--muted)}
-.ds-fileitem-path{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-fileitem.is-active{background:var(--fill-2);box-shadow:inset 2px 0 0 var(--accent-blue)}
+.ds-fileitem-icon.k-changed{color:var(--accent-blue)}
+.ds-fileitem-icon.k-new{color:var(--add)}
+.ds-fileitem-icon.k-context{color:var(--muted)}
+.ds-fileitem-path{min-width:0;font-family:var(--sans);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-fileitem-path .ds-dim{color:var(--dim)}
-.ds-fileitem-base{color:var(--text);font-weight:600}
+.ds-fileitem-base{color:var(--text);font-weight:500}.ds-fileitem.is-active .ds-fileitem-base{font-weight:650}
 .ds-fileitem-flag{flex:none;color:var(--amber);font-size:9px}
-.ds-fileitem-stat{flex:none;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;display:flex;gap:6px}
+.ds-fileitem-stat{flex:none;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;display:flex;gap:5px}
 .ds-fileitem[hidden],.ds-filetree-dir[hidden]{display:none}
 .ds-empty-rail{padding:24px 14px;font-size:12.5px}
+@container (max-width:300px){.ds-filetree-count{display:none}.ds-filetree-meta,.ds-fileitem-meta{gap:4px}.ds-filetree-stat,.ds-fileitem-stat{font-size:10.5px;gap:3px}}
 @media (max-width:720px){
   .ds-viewtoggle .ds-tab{min-height:44px;padding-top:12px;padding-bottom:12px}
   .ds-filetree-dir>summary,.ds-fileitem{min-height:44px}
-  .ds-fileitem{gap:7px;padding-right:7px;padding-left:calc(7px + var(--tree-indent,0px))}
+  .ds-fileitem{padding-right:5px;padding-left:calc(5px + var(--tree-indent,0px))}
   .ds-fileitem-stat{gap:3px;font-size:10.5px}
   .ds-filetree-count{display:none}
 }
@@ -868,7 +869,7 @@ body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}bo
 @media (prefers-reduced-transparency:reduce){.ds-reviewchrome,.ds-reviewchrome-rail{background:var(--panel3)}}
 @media (prefers-contrast:more){.ds-reviewchrome-main,.ds-reviewchrome-rail,.ds-reviewchrome>.ds-reviewstatusbar{border-color:var(--line)}}
 `;
-export const PAGE_CSS = sharedTokens() + PAGE_CSS_CORE + DIFF_CSS + SESSION_REDESIGN_CSS;
+export const PAGE_CSS = sharedTokens() + themeControlStyles() + PAGE_CSS_CORE + DIFF_CSS + SESSION_REDESIGN_CSS;
 // No backticks and no ${} below — safe to embed in a template literal.
 const PAGE_JS_HEAD = `
 (function(){
@@ -1024,7 +1025,7 @@ const PAGE_JS_HEAD = `
     if(mermaidModulePromise)return mermaidModulePromise;
     mermaidModulePromise=import('/assets/mermaid.esm.min.mjs').then(function(mod){
       var mermaid=mod.default||mod;
-      var dark=!!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var dark=document.documentElement.getAttribute('data-theme')==='dark';
       mermaid.initialize({startOnLoad:false,securityLevel:'strict',htmlLabels:false,suppressErrorRendering:true,maxTextSize:8000,maxEdges:120,theme:dark?'dark':'default',flowchart:{htmlLabels:false,useMaxWidth:true}});
       return mermaid;
     });
@@ -1065,6 +1066,14 @@ const PAGE_JS_HEAD = `
       });
     });
   }
+  document.addEventListener('ds-theme-change',function(){
+    mermaidModulePromise=null;
+    $all('[data-concept-diagram]').forEach(function(figure){
+      figure.removeAttribute('data-render-state');figure.classList.remove('is-error');
+      var output=$('[data-mermaid-output]',figure);if(output)output.textContent='';
+    });
+    renderConceptDiagrams(document.body);
+  });
   var STORY_MODELS={
     claude:[['Best quality','opus','Use the strongest available model for the clearest story'],['Lower cost','haiku','Use a smaller model for a faster, cheaper run']],
     // Safe while the live catalog loads: use the default from the exact Codex

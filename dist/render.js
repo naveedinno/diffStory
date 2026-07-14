@@ -7,6 +7,7 @@ import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
 import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
+import { themeBootstrapScript, themeControl } from './theme.js';
 import { kokoroVoiceOptions } from './kokoro-tts.js';
 import { buildReviewModel } from './view-model.js';
 import { intraLineMap } from './intra-line.js';
@@ -148,8 +149,8 @@ export function renderPage(input) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#15171b" data-ds-theme-color>
+${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
@@ -181,6 +182,7 @@ ${storyless ? `<header class="ds-reviewchrome${reviewState.compareFrom ? ' has-r
       <div class="ds-reviewchrome-subtitle">Working tree <span>vs</span> <b>${esc(baseLabel)}</b></div>
     </div>
     <div class="ds-reviewchrome-utilities">
+      ${themeControl()}
       <button class="ds-gear ds-help" data-shortcuts-open title="Commands and shortcuts" aria-label="Commands and shortcuts"><span class="ds-ui-icon" aria-hidden="true">${reviewChromeIcon('help')}</span></button>
       <span class="ds-reviewchrome-divider" aria-hidden="true"></span>
 ` : `<header class="ds-top">
@@ -198,6 +200,7 @@ ${storyless ? `<header class="ds-reviewchrome${reviewState.compareFrom ? ' has-r
     <div class="ds-title" title="${esc(tour.summary || tour.title)}">${esc(pageTitle)}</div>
   </div>
   <div class="ds-settings-wrap">
+    ${themeControl()}
     <button class="ds-readaloud" data-readaloud title="Read story aloud" aria-label="Read story aloud" aria-pressed="false"><span class="ds-readaloud-ico">▶</span><span class="ds-sr-only" data-readaloud-label>Read aloud</span></button>
     <button class="ds-gear" data-settings title="Voice settings" aria-label="Voice settings">⚙</button>
     <button class="ds-gear ds-help" data-shortcuts-open title="Commands and shortcuts" aria-label="Commands and shortcuts">?</button>
@@ -847,6 +850,9 @@ function trustRailCard(trust) {
     </span>
   </button>`;
 }
+const FILE_TREE_CHEVRON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.75 3.75 4.25 4.25-4.25 4.25"/></svg>';
+const FILE_TREE_FOLDER = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25h4.1l1.4 1.5h7v7.5H1.75z"/></svg>';
+const FILE_TREE_FILE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.75 1.75h5.1l3.4 3.4v9.1h-8.5z"/><path d="M8.75 1.75v3.5h3.5"/></svg>';
 function railFileTree(files, comments, sinceFiles) {
     if (!files.length)
         return '';
@@ -898,12 +904,14 @@ function renderFileTreeDir(dir, depth, meta) {
         : '';
     return `<details class="ds-filetree-dir" data-filetree-path="${esc(dir.path)}" style="--tree-depth:${depth}" open>
     <summary class="ds-filetree-summary" style="--tree-indent:${depth * 14}px" title="${esc(dir.path)}">
-      <span class="ds-filetree-caret" aria-hidden="true">›</span>
-      <span class="ds-filetree-folder" aria-hidden="true"></span>
+      <span class="ds-filetree-caret" aria-hidden="true">${FILE_TREE_CHEVRON}</span>
+      <span class="ds-filetree-folder" aria-hidden="true">${FILE_TREE_FOLDER}</span>
       <span class="ds-filetree-name">${esc(dir.name)}</span>
-      <span class="ds-filetree-count">${dir.count} ${plural(dir.count, 'file')}</span>
-      ${flag}
-      <span class="ds-filetree-stat">${stat}</span>
+      <span class="ds-filetree-meta">
+        <span class="ds-filetree-count">${dir.count} ${plural(dir.count, 'file')}</span>
+        ${flag}
+        <span class="ds-filetree-stat">${stat}</span>
+      </span>
     </summary>
     <div class="ds-filetree-children">${renderFileTreeChildren(dir.children, depth + 1, meta)}</div>
   </details>`;
@@ -917,19 +925,22 @@ function railFileItem(f, i, depth, meta) {
         : '';
     const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(test|spec)\.[^.]+$/i.test(f.file);
     const reviewHash = fileReviewHash(f);
+    const declarationTitle = f.symbols.length ? ` · Changed: ${f.symbols.slice(0, 2).join(', ')}` : '';
     const searchCode = f.hunks
         .flat()
         .filter((row) => row.type !== 'ctx')
         .map((row) => row.content)
         .join(' ')
         .toLowerCase();
-    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(`${f.symbols.join(' ')} ${searchCode}`)}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}">
-    <span class="ds-fileitem-dot k-${kindClass}"></span>
+    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(`${f.symbols.join(' ')} ${searchCode}`)}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}${esc(declarationTitle)}">
+    <span class="ds-fileitem-spacer" aria-hidden="true"></span>
+    <span class="ds-fileitem-icon k-${kindClass}" aria-hidden="true">${FILE_TREE_FILE}</span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
-    ${f.symbols.length ? `<span class="ds-fileitem-symbol" title="Changed declarations">${esc(f.symbols[0])}</span>` : ''}
-    ${flag}
-    <span class="ds-fileitem-viewed" aria-hidden="true">✓</span>
-    <span class="ds-fileitem-stat">${stat}</span>
+    <span class="ds-fileitem-meta">
+      ${flag}
+      <span class="ds-fileitem-viewed" aria-hidden="true">✓</span>
+      <span class="ds-fileitem-stat">${stat}</span>
+    </span>
   </button>`;
 }
 function railFileStat(add, del) {

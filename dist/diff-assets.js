@@ -22,7 +22,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-modetoggle{display:flex;gap:0;padding:2px;border-radius:7px;background:var(--fill-2);border:none}
 .ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
 .ds-modetoggle button.is-active{background:var(--panel4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.28)}
-.ds-diffhead{display:flex;background:#191b20;border-bottom:1px solid var(--diff-rule)}
+.ds-diffhead{display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
 .ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 14px;overflow:hidden}
 .ds-diffhead-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
@@ -36,7 +36,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-diffhead-note{font-size:11px;color:var(--dim2)}
 .ds-diffbody{font-family:var(--mono);font-size:12.5px;line-height:1.48;background:var(--panel3)}
 .ds-diffbody-unified{font-size:12px;line-height:1.5;background:var(--panel3)}
-.ds-hunkgap{padding:2px 14px;background:#15161a;color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+.ds-hunkgap{padding:2px 14px;background:var(--gutter);color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .ds-row{display:flex;position:relative;border-bottom:1px solid rgba(255,255,255,0.025);min-height:24px}
 .ds-row[data-review-row]:focus-visible,.ds-urow[data-review-row]:focus-visible{outline:2px solid var(--accent-blue);outline-offset:-2px;z-index:3}
 .ds-row.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue)}

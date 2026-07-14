@@ -5,7 +5,7 @@
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS } from './brand.js';
-import { sharedTokens } from './theme.js';
+import { sharedTokens, themeBootstrapScript } from './theme.js';
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -119,6 +119,8 @@ export function renderChangePage(sum, opts) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#15171b" data-ds-theme-color>
+${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — choose review scope</title>
 <style>

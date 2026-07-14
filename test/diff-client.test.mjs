@@ -24,6 +24,13 @@ test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
+test('diff headers and context gaps follow the resolved color theme', () => {
+  assert.match(DIFF_CSS, /\.ds-diffhead\{[^}]*background:var\(--gutter-hi\)/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap\{[^}]*background:var\(--gutter\)/);
+  assert.doesNotMatch(DIFF_CSS, /\.ds-diffhead\{[^}]*background:#[0-9a-f]+/i);
+  assert.doesNotMatch(DIFF_CSS, /\.ds-hunkgap\{[^}]*background:#[0-9a-f]+/i);
+});
+
 test('reviewed-file tracking is hash-bound, accessible, and wired through storage and the v key', () => {
   assert.match(DIFF_JS, /function toggleViewed\(/);
   assert.match(DIFF_JS, /function syncViewed\(/);
