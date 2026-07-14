@@ -8,7 +8,9 @@ test('unified add row carries anchors, sign, and tint class', () => {
     { type: 'add', no: 3, content: 'const x = 1;' },
     { side: 'right', file: 'a.ts', line: 3 },
   );
-  assert.match(html, /^<div class="ds-urow ds-row-add" data-file="a\.ts" data-line="3" data-side="right">/);
+  assert.match(html, /^<div class="ds-urow ds-row-add" data-file="a\.ts" data-line="3" data-side="right"/);
+  assert.match(html, /data-review-row role="group" tabindex="-1"/);
+  assert.match(html, /aria-label="Added after line 3 in a\.ts: const x = 1;"/);
   assert.match(html, /<span class="ds-no">3<\/span>/);
   assert.match(html, /<span class="ds-sign ds-sign-add">\+<\/span>/);
   assert.match(html, /data-comment-file="a\.ts" data-comment-line="3"/);
@@ -25,7 +27,8 @@ test('unified del row carries the minus sign and an old-side anchor', () => {
     { type: 'del', no: 7, content: 'gone();' },
     { side: 'left', file: 'a.ts', line: 7 },
   );
-  assert.match(html, /^<div class="ds-urow ds-row-del" data-file="a\.ts" data-line="7" data-side="left">/);
+  assert.match(html, /^<div class="ds-urow ds-row-del" data-file="a\.ts" data-line="7" data-side="left"/);
+  assert.match(html, /aria-label="Deleted before line 7 in a\.ts: gone\(\);"/);
   assert.match(html, /<span class="ds-sign ds-sign-del">−<\/span>/);
   assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="7"/);
 });
@@ -38,9 +41,10 @@ test('split ctx row renders both cells with line numbers', () => {
       rightTarget: { side: 'right', file: 'a.ts', line: 5 },
     },
   );
-  assert.match(html, /^<div class="ds-row ds-row-ctx" data-file="a\.ts" data-line="5" data-side="right">/);
+  assert.match(html, /^<div class="ds-row ds-row-ctx" data-file="a\.ts" data-line="5" data-side="right"/);
+  assert.match(html, /aria-label="Context after line 5 in a\.ts: same"/);
   assert.match(html, /ds-cell-l/);
-  assert.match(html, /ds-celldiv/);
+  assert.match(html, /<span class="ds-celldiv" aria-hidden="true"><\/span>/);
   assert.match(html, /ds-cell-r/);
 });
 
@@ -93,6 +97,14 @@ test('attrs helpers escape file paths', () => {
   assert.match(targetAttrs({ side: 'left', file: '<x>.ts', line: 2 }), /data-comment-file="&lt;x&gt;\.ts"/);
 });
 
+test('review-row accessible names escape code and file content', () => {
+  const html = renderUnifiedRow(
+    { type: 'add', no: 1, content: 'if (a < b) return "yes";' },
+    { side: 'right', file: 'src/a&b.ts', line: 1 },
+  );
+  assert.match(html, /aria-label="Added after line 1 in src\/a&amp;b\.ts: if \(a &lt; b\) return &quot;yes&quot;;"/);
+});
+
 test('interactive hunk gap carries range data and expand buttons', () => {
   const html = renderHunkGap({ file: 'a.ts', from: 10, to: 30 });
   assert.match(html, /data-gap /);
@@ -102,6 +114,9 @@ test('interactive hunk gap carries range data and expand buttons', () => {
   assert.match(html, /data-expand="down"/);
   assert.match(html, /data-expand="all"/);
   assert.match(html, /data-expand="up"/);
+  assert.match(html, /aria-label="Show the first 20 hidden lines"/);
+  assert.match(html, /aria-label="Show all hidden lines"/);
+  assert.match(html, /aria-label="Show the last 20 hidden lines"/);
 });
 
 test('eof gap omits the up button', () => {

@@ -2,6 +2,7 @@
 // text and code are escaped server-side. The one client-side HTML insertion is
 // locally rendered Mermaid SVG, parsed and sanitized before it reaches the DOM.
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
@@ -22,8 +23,9 @@ import type {
   UnifiedRow,
 } from './view-model.js';
 import { normalizeComment } from './comments.js';
-import type { Comment, CommentSide, CommentType, DiffFile, Tour, Turn } from './types.js';
+import type { Comment, CommentSeverity, CommentSide, CommentType, DiffFile, Tour, Turn } from './types.js';
 import type { ReviewStateSummary } from './review-state.js';
+import type { ReviewExclusionMetadata } from './noise.js';
 import { readWholeFile } from './git.js';
 
 export interface RenderInput {
@@ -43,8 +45,16 @@ export interface RenderInput {
   reviewState?: ReviewStateSummary;
   /** Render the complete change or only the delta since feedback was sent. */
   reviewMode?: 'full' | 'since';
+  /** Opaque server-issued identity for lazy requests from this exact page. */
+  reviewPageToken?: string;
+  /** Snapshot marker used when reviewMode is `since`. */
+  reviewFrom?: string;
   /** Whether this story was generated for the exact diff currently on screen. */
   storyFreshness?: 'current' | 'stale' | 'unverified';
+  /** Files intentionally omitted from the bounded renderer, never hidden from scope. */
+  excludedFiles?: ReviewExclusionMetadata[];
+  /** Paths whose staged and working-tree bytes are different review states. */
+  stagedWorktreeDivergentFiles?: string[];
 }
 
 const FLAVOR_LABEL: Record<CommentType, string> = {
@@ -58,9 +68,30 @@ const STATUS_LABEL: Record<Comment['status'], string> = {
   addressed: 'Needs verification',
   resolved: 'Resolved',
 };
+const SEVERITY_LABEL: Record<CommentSeverity, string> = {
+  blocking: 'Blocking',
+  concern: 'Concern',
+  nit: 'Minor',
+};
+
+function commentSeverity(comment: Comment): CommentSeverity {
+  if (comment.severity === 'blocking' || comment.severity === 'concern' || comment.severity === 'nit') {
+    return comment.severity;
+  }
+  return comment.type === 'nit' ? 'nit' : comment.type === 'change' ? 'blocking' : 'concern';
+}
 
 function commentSide(c: Comment): CommentSide {
   return c.side === 'left' ? 'left' : 'right';
+}
+
+function jsonForDataScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/&/g, '\\u0026')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 function threadForTargets(targets: Array<RowTarget | undefined>, comments: Comment[]): string {
@@ -92,7 +123,11 @@ export function renderPage(input: RenderInput): string {
     hasChangesSinceReview: false,
     events: [],
     snapshots: [],
+    blockingFeedbackDigest: '',
+    feedbackHealth: { status: 'healthy' as const, source: 'missing' as const },
   };
+  const excludedFiles = input.excludedFiles ?? [];
+  const indexDivergentFiles = input.stagedWorktreeDivergentFiles ?? [];
   const model = buildReviewModel(repo, tour, files, headRef, { storyless });
   const pageTitle = storyless ? 'Reviewing the diff' : tour.title;
   // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
@@ -100,26 +135,57 @@ export function renderPage(input: RenderInput): string {
   const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));
 
   const openCount = comments.filter((c) => c.status !== 'resolved').length;
+  const blockingOpenCount = comments.filter(
+    (comment) => comment.status !== 'resolved' && commentSeverity(comment) === 'blocking',
+  ).length;
   const sendableCount = comments.filter((c) => c.status === 'open').length;
   const uncoveredCount = model.trust.uncovered.length;
   const focusedStory = !!tour.storyScope?.excludedFiles?.length;
-  const approveReady = openCount === 0 && uncoveredCount === 0 && storyFreshness === 'current';
+  const feedbackHealthy = reviewState.feedbackHealth?.status !== 'invalid';
+  const feedbackRecovery = reviewState.feedbackHealth?.status === 'invalid'
+    ? reviewState.feedbackHealth.recovery
+    : '';
+  const verdictEvaluation = reviewState.verdict;
+  const currentVerdict = verdictEvaluation?.state === 'current' ? verdictEvaluation.current : undefined;
+  const currentApproved = currentVerdict?.decision === 'approved';
+  const approveReady =
+    feedbackHealthy &&
+    blockingOpenCount === 0 &&
+    uncoveredCount === 0 &&
+    storyFreshness === 'current' &&
+    excludedFiles.length === 0 &&
+    indexDivergentFiles.length === 0 &&
+    reviewMode === 'full' &&
+    !focusedStory;
   // No story → no coverage to report, so the coverage row is meaningless; hide it.
-  const trustPill = storyless
-    ? ''
-    : `<button class="ds-trustpill${storyFreshness === 'current' && !uncoveredCount ? ' is-clean' : ''}" data-trust-open title="Trust check — story freshness and changes the story does not explain">${
-        storyFreshness !== 'current'
+  const showTrustPill = !storyless || excludedFiles.length > 0 || indexDivergentFiles.length > 0;
+  const trustPillClean = !indexDivergentFiles.length && (storyless || (storyFreshness === 'current' && !uncoveredCount));
+  const trustPill = showTrustPill
+    ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-trust-open title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${
+        indexDivergentFiles.length
+          ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before approval</span><span class="ds-review-row-arrow">›</span>`
+          : storyless && excludedFiles.length
+            ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before approval</span><span class="ds-review-row-arrow">›</span>`
+          : storyFreshness !== 'current'
           ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate before approval</span><span class="ds-review-row-arrow">›</span>`
           : uncoveredCount
           ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
-          : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story matches this diff and covers its selected scope' : 'Story matches and covers this diff'}</span><span class="ds-review-row-arrow">›</span>`
-      }</button>`;
+          : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`
+      }</button>`
+    : '';
 
   const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
   const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
   const kokoroVoiceCards = kokoroVoiceOptions().map((v, i) => voiceCard('kokoro', v.id, v.label, v.description, i === 0)).join('');
   const stepPanels = model.steps
-    .map((s, i) => stepPanel(repo, s, i, model.totalSteps, comments, stepIndexById))
+    // The Overview is active initially, so keep only its adjacent first step in
+    // the document. Later steps load when approached instead of multiplying a
+    // large story's highlighted diff rows in the initial DOM.
+    .map((s, i) =>
+      i === 0
+        ? stepPanel(repo, s, i, model.totalSteps, comments, stepIndexById)
+        : lazyStepPanel(s, i),
+    )
     .join('');
   const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
 
@@ -135,23 +201,25 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
+<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
     reviewState.scopeKey,
-  )}" data-review-round="${reviewState.round}" data-review-snapshot="${esc(
+  )}" data-review-round="${reviewState.round}" data-feedback-version="${reviewState.feedbackVersion ?? 0}" data-blocking-feedback-digest="${esc(
+    reviewState.blockingFeedbackDigest ?? '',
+  )}" data-review-snapshot="${esc(
     reviewState.currentSnapshotId ?? '',
-  )}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
+  )}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(
+    input.reviewPageToken ?? '',
+  )}"${input.reviewFrom ? ` data-review-from="${esc(input.reviewFrom)}"` : ''} data-verdict-state="${verdictEvaluation?.state ?? 'none'}" data-verdict-decision="${currentVerdict?.decision ?? ''}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
 <header class="ds-top">
   <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
     <span class="ds-sidebar-toggle-ico">☰</span>
   </button>
-  <a class="ds-back" data-close-story href="${esc(routeBase)}/stories" title="Close this story — back to ${esc(
-    repoName,
-  )}'s saved stories" aria-label="Close story, back to saved stories">
-    <span class="ds-back-ico" aria-hidden="true">‹</span> Stories
+  <a class="ds-back" data-close-story href="${esc(routeBase)}/change" title="Back to change scope" aria-label="Back to change scope">
+    <span class="ds-back-ico" aria-hidden="true">‹</span> Change
   </a>
   <div class="ds-titlewrap">
     <div class="ds-titlebar">
-      <a class="ds-crumb-repo" href="${esc(routeBase)}/stories" title="${esc(repoName)} — saved stories">${esc(repoName)}</a>
+      <a class="ds-crumb-repo" href="${esc(routeBase)}/change" title="${esc(repoName)} — change scope">${esc(repoName)}</a>
       <span class="ds-kicker"><span class="ds-dim">·</span> Reviewing <span class="ds-dim">vs</span> <span class="ds-change" title="Diffing the working tree against ${esc(
         baseLabel,
       )}">${esc(baseLabel)}</span></span>
@@ -225,15 +293,8 @@ ${BRAND_HEAD_LINKS}
       </button>`
         : ''
     }
-    <button class="ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions" aria-label="Choose agent task">
-      <span class="ds-agent-target-icon" aria-hidden="true">◈</span>
-      <span class="ds-agent-target-prefix">Agent</span>
-      <span class="ds-agent-target-sep" aria-hidden="true">·</span>
-      <span class="ds-agent-target-name" data-agent-target-name>Choose task</span>
-      <span class="ds-agent-target-caret" aria-hidden="true">⌄</span>
-    </button>
     <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${storyFreshness !== 'current' ? ', story requires regeneration before approval' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : ''}" title="Open review status">
+      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration before approval' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} require acknowledgement` : ''}" title="Open review status">
         <span class="ds-review-menu-dot" aria-hidden="true"></span>
         <span>Review</span>
         ${uncoveredCount ? `<span class="ds-review-menu-coverage" title="Changes not explained by the story">${uncoveredCount} unexplained</span>` : ''}
@@ -244,6 +305,7 @@ ${BRAND_HEAD_LINKS}
         <div class="ds-review-menu-title">Review</div>
         <div class="ds-review-summary">
           <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'comment')}</span></span>
+          ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
           ${trustPill}
         </div>
         <div class="ds-review-section">
@@ -255,35 +317,69 @@ ${BRAND_HEAD_LINKS}
           <span class="ds-review-option-title">Timeline</span>
           <span class="ds-review-option-desc">Review rounds, comments, and agent runs.</span>
         </button>
+        <button class="ds-review-option" data-feedback-open="challenge">
+          <span class="ds-review-option-title">Challenge pass</span>
+          <span class="ds-review-option-desc">Re-read failure paths, boundaries, and missing tests before deciding.</span>
+        </button>
         </div>
         <div class="ds-review-decision">
           <div class="ds-review-section-label">Decision</div>
-        <button class="ds-review-option ds-review-option-approve" data-verdict="approve"${approveReady ? '' : ' disabled'} title="${
+          ${verdictSummary(reviewState)}
+          <label class="ds-verdict-note"><span>Decision note <small>optional</small></span><textarea data-verdict-note rows="2" placeholder="Why are you approving or requesting changes?"></textarea></label>
+        <button class="ds-review-option ds-review-option-approve${currentApproved ? ' is-current' : ''}" data-verdict="approve"${approveReady && !currentApproved ? '' : ' disabled'} title="${
           approveReady
-            ? focusedStory
-              ? 'This exact diff matches the story, its selected scope is covered, and there are no open comments'
-              : 'This exact diff is covered and there are no open comments'
+            ? 'This exact full diff is covered and has no unresolved blocking feedback'
+            : reviewMode === 'since'
+              ? 'Return to Full change before making a whole-change decision'
+              : !feedbackHealthy
+                ? 'Repair .diffstory/comments.json and reload before approval'
+              : indexDivergentFiles.length
+                ? 'Reconcile staged and working-tree versions before approval'
+              : focusedStory
+                ? 'This story covers only a selected scope; use a full-change review before approval'
             : storyFreshness !== 'current'
               ? 'Regenerate the story for this exact diff before approval'
-              : 'Resolve open comments and make sure every change is explained first'
+              : excludedFiles.length
+                ? 'Inspect and acknowledge files omitted from the bounded renderer first'
+                : 'Resolve open comments and make sure every rendered change is explained first'
         }">
-          <span class="ds-review-option-title"><span class="ds-check">✓</span> Approve</span>
+          <span class="ds-review-option-title"><span class="ds-check">✓</span> ${currentApproved ? 'Approved' : 'Approve'}</span>
           <span class="ds-review-option-desc" data-approve-desc>${
             approveReady
-              ? focusedStory
-                ? 'This exact diff matches; the selected story scope is covered and resolved.'
-                : 'This exact diff is covered and resolved.'
-              : openCount
-                ? `Resolve ${openCount} ${plural(openCount, 'comment')} first.`
+              ? 'The full rendered diff is covered, exclusions are clear, and no blocking feedback remains.'
+              : reviewMode === 'since'
+                ? 'Return to Full change before approving the whole change.'
+                : !feedbackHealthy
+                  ? feedbackRecovery
+                : indexDivergentFiles.length
+                  ? `Reconcile ${indexDivergentFiles.length} staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} before approval.`
+                : focusedStory
+                  ? 'This story omits changed files. Review the full change before approving.'
+              : blockingOpenCount
+                ? `Resolve ${blockingOpenCount} blocking ${plural(blockingOpenCount, 'comment')} first.`
                 : storyFreshness !== 'current'
                   ? 'Regenerate the story for this exact diff first.'
-                : `Explain ${uncoveredCount} more ${plural(uncoveredCount, 'change')} in the story first.`
+                : excludedFiles.length
+                  ? `Inspect and acknowledge ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} first.`
+                  : `Explain ${uncoveredCount} more ${plural(uncoveredCount, 'change')} in the story first.`
           }</span>
+        </button>
+        <button class="ds-review-option ds-review-option-request" data-verdict="changes-requested">
+          <span class="ds-review-option-title">Request changes</span>
+          <span class="ds-review-option-desc">Save a durable decision for this exact diff. Open comments remain the actionable detail.</span>
         </button>
         </div>
         <details class="ds-review-more">
           <summary>More review actions <span aria-hidden="true">⌄</span></summary>
           <div class="ds-review-more-list">
+            <a class="ds-review-option" href="${esc(routeBase)}/stories">
+              <span class="ds-review-option-title">Saved reviews</span>
+              <span class="ds-review-option-desc">Open older review sessions for this repository.</span>
+            </a>
+            <button class="ds-review-option ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions">
+              <span class="ds-review-option-title"><span class="ds-agent-target-icon" aria-hidden="true">◈</span> Agent task · <span data-agent-target-name>Choose task</span></span>
+              <span class="ds-review-option-desc">Used only when you send feedback or ask for another pass.</span>
+            </button>
             <button class="ds-review-option" data-address-all${sendableCount ? '' : ' disabled'} title="Resend every open comment to your agent">
               <span class="ds-review-option-title">Resend open comments</span>
               <span class="ds-review-option-desc" data-agent-target-batch>Choose an agent task first.</span>
@@ -312,6 +408,8 @@ ${reviewSessionBar({
   approveReady,
   freshness: storyFreshness,
   uncovered: uncoveredCount,
+  excluded: excludedFiles.length,
+  indexDivergent: indexDivergentFiles.length,
 })}
 
 <div class="ds-layout">
@@ -339,17 +437,20 @@ ${reviewSessionBar({
         <span class="ds-readhead-count" data-viewed-progress>${model.files.length} ${plural(model.files.length, 'file')}</span>
       </div>
       <div class="ds-filetools">
-        <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Filter files" aria-label="Filter changed files"></label>
-        <div class="ds-filefilters" role="group" aria-label="File filters">
-          <button class="is-active" data-file-filter="all" aria-pressed="true">All</button>
-          <button data-file-filter="seen" aria-pressed="false">Seen</button>
-          <button data-file-filter="unseen" aria-pressed="false">Unseen</button>
-          <button data-file-filter="comments" aria-pressed="false">Comments</button>
-          <button data-file-filter="unexplained" aria-pressed="false">Unexplained</button>
-          <button data-file-filter="tests" aria-pressed="false">Tests</button>
-          ${reviewState.compareFrom ? '<button data-file-filter="since" aria-pressed="false">Since review</button>' : ''}
-        </div>
-        <button class="ds-next-unviewed" data-next-unviewed type="button">Next unseen <span aria-hidden="true">→</span></button>
+        <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Search files or changed code" aria-label="Search changed file paths, declarations, and code"></label>
+        <details class="ds-filefilter-menu">
+          <summary>Filter: <strong data-file-filter-label>All</strong><span aria-hidden="true">⌄</span></summary>
+          <div class="ds-filefilters" role="group" aria-label="File filters">
+            <button class="is-active" data-file-filter="all" aria-pressed="true">All</button>
+            <button data-file-filter="reviewed" aria-pressed="false">Reviewed</button>
+            <button data-file-filter="unreviewed" aria-pressed="false">Unreviewed</button>
+            <button data-file-filter="comments" aria-pressed="false">Comments</button>
+            <button data-file-filter="unexplained" aria-pressed="false">Unexplained</button>
+            <button data-file-filter="tests" aria-pressed="false">Tests</button>
+            ${reviewState.compareFrom ? '<button data-file-filter="since" aria-pressed="false">Since review</button>' : ''}
+          </div>
+        </details>
+        <button class="ds-next-unviewed" data-next-unviewed type="button">Next unreviewed <span aria-hidden="true">→</span></button>
       </div>
     </div>
     <div class="ds-railscroll">
@@ -400,16 +501,17 @@ ${reviewSessionBar({
   </main>
 </div>
 
-${trustDrawer(model.trust, stepIndexById)}
-${feedbackDrawer(repo, headRef, comments, reviewState)}
+${trustDrawer(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
+${feedbackDrawer(repo, headRef, comments, reviewState, model)}
 ${commandPalette()}
 <div class="ds-selection-menu" data-selection-menu role="menu" hidden>
   <button type="button" role="menuitem" data-selection-action="question">Ask</button>
   <button type="button" role="menuitem" data-selection-action="change">Ask for change</button>
   <button type="button" role="menuitem" data-selection-action="nit">Nit</button>
 </div>
-<div class="ds-toast" id="ds-toast" hidden></div>
+<div class="ds-toast" id="ds-toast" role="status" aria-live="polite" aria-atomic="true" aria-relevant="additions text"></div>
 <noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
+<script type="application/json" id="ds-initial-comments">${jsonForDataScript(comments)}</script>
 <script>${progressPanelScript()}</script>
 <script>${PAGE_JS}</script>
 </body>
@@ -435,29 +537,34 @@ function reviewSessionBar(input: {
   approveReady: boolean;
   freshness: 'current' | 'stale' | 'unverified';
   uncovered: number;
+  excluded: number;
+  indexDivergent: number;
 }): string {
   const { state, mode } = input;
   const changed = state.changedFiles.length;
-  const resolveDetail = input.open
-    ? `${input.open} open ${plural(input.open, 'comment')}`
-    : input.addressed
-      ? `${input.addressed} ${plural(input.addressed, 'reply')} to verify`
-      : 'Clear';
-  const decisionDetail = input.approveReady
-    ? 'No approval blockers'
+  const feedbackHealthy = state.feedbackHealth?.status !== 'invalid';
+  const currentDecision = state.verdict?.state === 'current' ? state.verdict.current?.decision : undefined;
+  const decisionDetail = currentDecision === 'approved'
+    ? 'Approved for this exact diff'
+    : currentDecision === 'changes-requested'
+      ? 'Changes requested for this exact diff'
+      : !feedbackHealthy
+        ? 'Feedback file needs repair'
+      : input.approveReady
+        ? 'Ready for a decision'
     : input.freshness !== 'current'
       ? input.freshness === 'stale' ? 'Story out of date' : 'Verify story scope'
       : input.uncovered
         ? `${input.uncovered} ${plural(input.uncovered, 'change')} unexplained`
+        : input.indexDivergent
+          ? `${input.indexDivergent} staged/working-tree ${plural(input.indexDivergent, 'mismatch')}`
+        : input.excluded
+          ? `${input.excluded} excluded ${plural(input.excluded, 'file')} to inspect`
         : 'Decision blocked';
   return `<div class="ds-reviewstatusbar" data-roundbar aria-label="Review status">
     <div class="ds-reviewstatus-main">
       <span class="ds-roundbadge">Round ${state.round}</span>
-      <span class="ds-reviewstatus-scope"><b>${input.files}</b> ${plural(input.files, 'file')} in scope</span>
-    </div>
-    <div class="ds-reviewstatus-signals">
-      <span class="ds-statussignal${input.open ? ' is-attention' : input.addressed ? ' is-pending' : ' is-clear'}"><i aria-hidden="true"></i>${resolveDetail === 'Clear' ? 'Feedback clear' : resolveDetail}</span>
-      <span class="ds-statussignal${input.approveReady ? ' is-ready' : ' is-attention'}"><i aria-hidden="true"></i>${decisionDetail}</span>
+      <span class="ds-statussignal${currentDecision === 'approved' || input.approveReady ? ' is-ready' : ' is-attention'}"><i aria-hidden="true"></i>${decisionDetail}</span>
     </div>
     ${state.compareFrom ? `<div class="ds-roundmodes" role="group" aria-label="Review comparison" title="${changed ? `${changed} ${plural(changed, 'file')} changed since your feedback` : 'No code changes since your feedback'}">
       <button type="button" data-review-mode="full" class="${mode === 'full' ? 'is-active' : ''}" aria-pressed="${mode === 'full'}">Full change</button>
@@ -466,6 +573,29 @@ function reviewSessionBar(input: {
       } aria-pressed="${mode === 'since'}">Since review</button>
     </div>` : ''}
   </div>`;
+}
+
+function verdictSummary(state: ReviewStateSummary): string {
+  const verdict = state.verdict;
+  if (!verdict || verdict.state === 'none') {
+    return '<div class="ds-verdict-state is-none">No decision saved for this diff.</div>';
+  }
+  if (verdict.state === 'stale') {
+    const previous = verdict.latest?.decision === 'approved' ? 'approval' : 'change request';
+    const reason = verdict.invalidationReason === 'scope-changed'
+      ? 'the review scope changed'
+      : verdict.invalidationReason === 'feedback-changed'
+        ? 'blocking feedback changed'
+        : 'the diff changed';
+    return `<div class="ds-verdict-state is-stale">Previous ${previous} is stale because ${reason}.</div>`;
+  }
+  const current = verdict.current;
+  if (!current) return '<div class="ds-verdict-state is-none">No decision saved for this diff.</div>';
+  return `<div class="ds-verdict-state ${current.decision === 'approved' ? 'is-approved' : 'is-requested'}"><strong>${
+    current.decision === 'approved' ? 'Approved' : 'Changes requested'
+  }</strong><span>Bound to this exact diff · ${esc(relativeTime(current.createdAt))}</span>${
+    current.note ? `<small>${esc(current.note)}</small>` : ''
+  }</div>`;
 }
 
 // The Overview sits above the numbered steps as navigation index 0 — the calm
@@ -496,6 +626,7 @@ function railCard(s: StepView, i: number): string {
     </button>`;
   }
   const base = splitPath(s.file)[1];
+  const cue = reviewCues(s)[0];
   const badge =
     s.kind === 'changed'
       ? ''
@@ -507,7 +638,7 @@ function railCard(s: StepView, i: number): string {
     <span class="ds-stepcard-body">
       <span class="ds-stepcard-title">${esc(s.title)}</span>
       <span class="ds-stepcard-fileline">
-        <span class="ds-stepcard-file" title="${esc(s.file)}">${esc(base)}</span>${badge}
+        <span class="ds-stepcard-file" title="${esc(s.file)}">${esc(base)}</span>${badge}${cue ? `<span class="ds-railcue${cue.source === 'authored' ? ' is-authored' : ''}" title="${cue.source === 'authored' ? 'Authored story tag' : 'Suggested from the step text'}">${esc(cue.label)}</span>` : ''}
       </span>
     </span>
   </button>`;
@@ -551,7 +682,7 @@ function introPanel(
         'change',
       )}</span></div>`
     : `<div class="ds-fact ds-fact-ok"><span class="ds-fact-n">✓</span><span class="ds-fact-l">${
-        tour.storyScope?.excludedFiles?.length ? 'selected story scope explained' : 'every change explained'
+        tour.storyScope?.excludedFiles?.length ? 'selected story scope explained' : 'rendered diff explained'
       }</span></div>`;
   const freshnessNote = freshness === 'current'
     ? ''
@@ -581,8 +712,71 @@ function introPanel(
         <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
         ${trustFact}
       </div>
+      ${reviewMap(model, tour)}
     </div>
   </section>`;
+}
+
+function reviewMap(model: ReviewModel, tour: Tour): string {
+  const codeSteps = model.steps
+    .map((step, index) => ({ step, index }))
+    .filter((item): item is { step: CodeStepView; index: number } => item.step.kind !== 'concept');
+  const behaviors = codeSteps.slice(0, 4).map(({ step, index }) =>
+    `<button type="button" data-goto-step="${index + 1}"><span>${String(step.order).padStart(2, '0')}</span>${esc(step.title)}</button>`,
+  ).join('');
+  const risks = codeSteps
+    .flatMap(({ step, index }) => reviewCues(step).map((cue) => ({ cue, step, index })))
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.cue.label === item.cue.label) === index)
+    .slice(0, 5)
+    .map((item) => `<button type="button" data-goto-step="${item.index + 1}" title="${item.cue.source === 'authored' ? 'Authored story tag' : 'Suggested from the step text'}; not an automated risk score"><span class="ds-reviewmap-risk${item.cue.source === 'authored' ? ' is-authored' : ''}">${esc(item.cue.label)}</span>${esc(item.step.title)}</button>`)
+    .join('');
+  const symbols = model.files
+    .flatMap((file) => file.symbols.map((symbol) => ({ file: file.file, symbol })))
+    .slice(0, 7)
+    .map((item) => `<button type="button" data-goto-file="${esc(item.file)}"><code>${esc(item.symbol)}</code><span>${esc(splitPath(item.file)[1])}</span></button>`)
+    .join('');
+  const sources = (tour.intent?.sources ?? []).slice(0, 3).map((source) => `<li>${esc(source)}</li>`).join('');
+  return `<section class="ds-reviewmap" aria-labelledby="ds-reviewmap-title">
+    <div class="ds-reviewmap-head"><div><span class="ds-reviewmap-kicker">Review map</span><h2 id="ds-reviewmap-title">What deserves attention</h2></div><span>Authored and suggested cues, not a risk score</span></div>
+    <div class="ds-reviewmap-grid">
+      <div><h3>Behavior</h3><div class="ds-reviewmap-list">${behaviors || '<span class="ds-dim">No code steps</span>'}</div></div>
+      <div><h3>Review cues</h3><div class="ds-reviewmap-list">${risks || '<span class="ds-dim">No specific cues suggested</span>'}</div></div>
+      <div><h3>Changed symbols</h3><div class="ds-reviewmap-list">${symbols || '<span class="ds-dim">No declarations detected</span>'}</div></div>
+    </div>
+    ${sources ? `<details class="ds-review-evidence"><summary>Intent evidence</summary><ul>${sources}</ul></details>` : ''}
+  </section>`;
+}
+
+interface ReviewCue {
+  label: string;
+  source: 'authored' | 'suggested';
+}
+
+function reviewCues(step: StepView): ReviewCue[] {
+  if (step.kind === 'concept') return [{ label: 'Context', source: 'suggested' }];
+  const authored = step.tags
+    .map(humanizeTag)
+    .filter(Boolean)
+    .map((label) => ({ label, source: 'authored' as const }));
+  const text = `${step.title} ${step.why} ${step.file}`.toLowerCase();
+  const suggested: ReviewCue[] = [];
+  const add = (label: string, pattern: RegExp) => {
+    if (pattern.test(text)) suggested.push({ label, source: 'suggested' });
+  };
+  add('Security', /auth|permission|access|role|signature|nonce|reentr|security/);
+  add('State change', /state|storage|schema|migration|persist|cache|transaction/);
+  add('Value movement', /fee|price|payment|balance|transfer|amount|token/);
+  add('Failure path', /error|revert|guard|fallback|retry|failure|invalid|edge/);
+  add('API contract', /api|route|endpoint|interface|public|request|response/);
+  add('Test coverage', /(^|\W)test|spec|fixture|mock/);
+  const combined = [...authored, ...suggested];
+  if (!combined.length) combined.push({ label: 'Behavior', source: 'suggested' });
+  return combined.filter((cue, index, all) => all.findIndex((candidate) => candidate.label === cue.label) === index);
+}
+
+function humanizeTag(tag: string): string {
+  const clean = tag.replace(/[-_]+/g, ' ').trim();
+  return clean ? clean[0].toUpperCase() + clean.slice(1) : 'Behavior';
 }
 
 // The Story tab when there's no story yet: generation controls live beside the
@@ -735,7 +929,7 @@ function trustRailCard(trust: TrustView): string {
     <span class="ds-trustcard-ico">▲</span>
     <span class="ds-trustcard-body">
       <span class="ds-trustcard-title">Trust check</span>
-      <span class="ds-trustcard-sub">${n} ${plural(n, 'change')} in this diff ${
+      <span class="ds-trustcard-sub">${n} ${plural(n, 'change')} in the rendered diff ${
     n === 1 ? "isn't" : "aren't"
   } explained by any step.</span>
     </span>
@@ -845,9 +1039,18 @@ function railFileItem(f: FileView, i: number, depth: number, meta: FileFilterMet
     ? `<span class="ds-fileitem-flag" title="${f.untoured} unexplained ${plural(f.untoured, 'change')}">▲</span>`
     : '';
   const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(test|spec)\.[^.]+$/i.test(f.file);
+  const reviewHash = fileReviewHash(f);
+  const searchCode = f.hunks
+    .flat()
+    .filter((row) => row.type !== 'ctx')
+    .map((row) => row.content)
+    .join(' ')
+    .toLowerCase();
   return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(
     f.file,
-  )}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-status="${f.status}" data-filter-test="${
+  )}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(
+    `${f.symbols.join(' ')} ${searchCode}`,
+  )}" data-filter-status="${f.status}" data-filter-test="${
     isTest ? '1' : '0'
   }" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${
     f.untoured ? '1' : '0'
@@ -856,6 +1059,7 @@ function railFileItem(f: FileView, i: number, depth: number, meta: FileFilterMet
   }px" title="${esc(f.file)} — ${esc(f.kindLabel)}">
     <span class="ds-fileitem-dot k-${kindClass}"></span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
+    ${f.symbols.length ? `<span class="ds-fileitem-symbol" title="Changed declarations">${esc(f.symbols[0])}</span>` : ''}
     ${flag}
     <span class="ds-fileitem-viewed" aria-hidden="true">✓</span>
     <span class="ds-fileitem-stat">${stat}</span>
@@ -878,6 +1082,26 @@ function changeJumpControls(): string {
 }
 
 // ---- story tour ----
+
+function lazyStepPanel(step: StepView, i: number): string {
+  const kind = step.kind === 'concept' ? ' ds-concept-step' : ' is-code-step';
+  return `<section class="ds-step ds-step-lazy${kind}" data-step-panel="${i + 1}" data-step-id="${esc(
+    step.id,
+  )}" data-step-lazy="1" hidden><div class="ds-step-loading" role="status">Loading this review step…</div></section>`;
+}
+
+/** Render one story step for the lazy review-step endpoint. */
+export function renderStoryStepPanel(
+  repo: string,
+  model: ReviewModel,
+  comments: Comment[],
+  stepIndex: number,
+): string {
+  const step = model.steps[stepIndex];
+  if (!step) return '<div class="ds-diffnote">That story step does not exist.</div>';
+  const stepIndexById = new Map(model.steps.map((candidate, index) => [candidate.id, index + 1]));
+  return stepPanel(repo, step, stepIndex, model.totalSteps, comments, stepIndexById);
+}
 
 function stepPanel(
   repo: string,
@@ -909,6 +1133,14 @@ function codeStepPanel(
         s.flow,
       )}</span>`
     : '';
+  const cues = reviewCues(s)
+    .map(
+      (cue) =>
+        `<span class="ds-reviewcue${cue.source === 'authored' ? ' is-authored' : ''}" title="${
+          cue.source === 'authored' ? 'Authored story tag' : 'Suggested from this step'
+        }">${esc(cue.label)}</span>`,
+    )
+    .join('');
   return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${
     s.focusExplicit ? ' data-story-focus="authored"' : ''
   } hidden>
@@ -933,7 +1165,7 @@ function codeStepPanel(
       </div>
     </div>
     <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Story</span><span class="ds-flex"></span><details class="ds-story-tune"><summary title="Tune this story step" aria-label="Tune this story step">•••</summary><div><button type="button" data-story-repair="shorten" data-story-step="${esc(
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Verify this</span><span class="ds-reviewcues" aria-label="Review cues">${cues}</span><span class="ds-flex"></span><details class="ds-story-tune"><summary title="Tune this story step" aria-label="Tune this story step">•••</summary><div><button type="button" data-story-repair="shorten" data-story-step="${esc(
         s.id,
       )}" data-story-file="${esc(s.file)}">Make shorter</button><button type="button" data-story-repair="split" data-story-step="${esc(
         s.id,
@@ -1215,6 +1447,7 @@ export function commentHtml(c0: Comment): string {
   const turnsHtml = turns.map(turnHtml).join('');
   const hasReply = turns.some((t) => t.role === 'ai');
   const resolved = c.status === 'resolved';
+  const severity = commentSeverity(c);
   const selectionLabel = commentSide(c) === 'left' ? 'Selected old side' : 'Selected new side';
   const selectionText = c.selectedText?.replace(/\s+/g, ' ').trim() ?? '';
   const selectionPreview = selectionText.length > 82 ? `${selectionText.slice(0, 79)}…` : selectionText;
@@ -1229,13 +1462,14 @@ export function commentHtml(c0: Comment): string {
     c.status
   }" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(
     c.step ?? '',
-  )}"${hasReply ? ' data-hasreply="1"' : ''}>
+  )}" data-comment-severity="${severity}"${hasReply ? ' data-hasreply="1"' : ''}>
     <div class="ds-comment-card flavor-${type}">
       <div class="ds-comment-head">
         <span class="ds-flavor-ico">${FLAVOR_ICON[type]}</span>
         <span class="ds-flavor-label">${FLAVOR_LABEL[type]}</span>
         <span class="ds-dot"></span>
         <span class="ds-comment-author">${esc(authorOf(c))}</span>
+        <span class="ds-severity ds-severity-${severity}">${SEVERITY_LABEL[severity]}</span>
         <span class="ds-flex"></span>
         <span class="ds-statusbadge"><span class="ds-dot"></span>${STATUS_LABEL[c.status]}</span>
         <details class="ds-comment-menu">
@@ -1270,6 +1504,16 @@ function authorOf(_c: Comment): string {
 // ---- all files ----
 
 function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): string {
+  const reviewHash = fileReviewHash(f);
+  return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(
+    f.file,
+  )}" data-review-hash="${reviewHash}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${i === 0 ? '' : ' hidden'}>
+    ${i === 0 ? renderFilePanelContent(f, stepIndexById) : '<div class="ds-filepanel-loading" data-file-panel-lazy role="status">Loading file review…</div>'}
+  </section>`;
+}
+
+/** Inner master/detail panel markup, also served lazily for non-active files. */
+export function renderFilePanelContent(f: FileView, stepIndexById: Map<string, number>): string {
   const [dir, base] = splitPath(f.file);
   const stepIdx = f.stepId !== undefined ? stepIndexById.get(f.stepId) : undefined;
   const stepChip =
@@ -1285,6 +1529,9 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
           f.del ? `<span class="ds-stat-del">−${f.del}</span>` : ''
         }`
       : '<span class="ds-dim">unchanged</span>';
+  const symbols = f.symbols.length
+    ? `<div class="ds-symbols" aria-label="Changed declarations">${f.symbols.slice(0, 6).map((symbol) => `<code>${esc(symbol)}</code>`).join('')}</div>`
+    : '';
   const canExpand = f.kind !== 'context' && f.hasFull;
   const gapBefore = (hi: number): string => {
     if (!canExpand) return hi > 0 ? renderHunkGap() : '';
@@ -1311,38 +1558,51 @@ function filePanel(f: FileView, i: number, stepIndexById: Map<string, number>): 
         })
         .join('') + gapAfterLast
     : '<div class="ds-diffnote">No diff to show.</div>';
-  // The All-files pane is a master/detail viewer: one file at a time (driven by
-  // the sidebar list), defaulting to the complete-file view. The full file and
-  // the split view are lazy-loaded when their toggle is first activated.
+  // Unified is the review-first default. Full-file and split views stay available
+  // but are fetched only when the reviewer asks for them.
   const toggle = f.hasFull
-    ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button data-mode="split" aria-pressed="false">Split</button><button class="is-active" data-mode="full" aria-pressed="true">Full file</button></div>`
+    ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button><button data-mode="split" aria-pressed="false">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
     : f.hunks.length
       ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button><button data-mode="split" aria-pressed="false">Split</button></div>`
       : '';
-  return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(
-    f.file,
-  )}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${i === 0 ? '' : ' hidden'}>
-    <div class="ds-filepanel-head">
+  return `<div class="ds-filepanel-head">
       <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(
         base,
       )}</span></span>
       <span class="ds-badge ds-badge-${f.kind === 'new' ? 'new' : f.kind}">${esc(f.kindLabel)}</span>
       ${untouredBadge}
       ${stepChip}
+      ${symbols}
       <span class="ds-flex"></span>
       <span class="ds-cardstat">${stat}</span>
       ${changeJumpControls()}
       <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(
         f.file,
-      )} seen" title="Mark seen (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark seen</span></button>
+      )} reviewed" title="Mark reviewed (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark reviewed</span></button>
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
-      <div data-diff-inner${f.hasFull ? ' hidden' : ''}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-diff-inner><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
       <div data-split-inner hidden></div>
-      <div data-full-inner${f.hasFull ? '' : ' hidden'}></div>
+      <div data-full-inner hidden></div>
     </div>
-  </section>`;
+  `;
+}
+
+function fileReviewHash(file: FileView): string {
+  const stableHunks = file.hunks.map((hunk) =>
+    hunk.map((row) => ({
+      type: row.type,
+      no: row.no,
+      content: row.content,
+    })),
+  );
+  return createHash('sha256')
+    // Story-derived presentation flags are intentionally absent: repairing the
+    // narrative must not clear a review mark when the file diff is unchanged.
+    .update(JSON.stringify([file.status, file.oldFile, file.file, file.hunkRanges, stableHunks]))
+    .digest('hex')
+    .slice(0, 64);
 }
 
 function unifiedRow(row: UnifiedRow, file: string, oldFile = file, intra?: string): string {
@@ -1390,16 +1650,19 @@ function feedbackCard(repo: string, headRef: string | undefined, raw: Comment): 
   const anchor = commentAnchorState(repo, headRef, c);
   const latestAgent = [...(c.turns ?? [])].reverse().find((turn) => turn.role === 'ai');
   const verify = c.status === 'addressed';
+  const severity = commentSeverity(c);
+  const currentExcerpt = feedbackCurrentExcerpt(repo, headRef, c, anchor);
   return `<article class="ds-feedback-card status-${c.status}" data-feedback-card data-feedback-status="${c.status}" data-feedback-anchor="${anchor}" data-comment-id="${esc(
     c.id,
-  )}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}">
+  )}" data-feedback-severity="${severity}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}">
     <div class="ds-feedback-head">
       <span class="ds-flavor-ico">${FLAVOR_ICON[c.type] ?? FLAVOR_ICON.change}</span>
+      <span class="ds-severity ds-severity-${severity}">${SEVERITY_LABEL[severity]}</span>
       <span class="ds-feedback-path">${esc(c.file)}<span class="ds-dim">:${c.line}</span></span>
       <span class="ds-flex"></span>
       <span class="ds-anchorbadge is-${anchor}">${anchorLabel(anchor)}</span>
     </div>
-    ${c.selectedText ? `<code class="ds-feedback-selection">${esc(c.selectedText)}</code>` : ''}
+    ${c.selectedText ? `<div class="ds-feedback-compare"><div><span>Commented on</span><code class="ds-feedback-selection">${esc(c.selectedText)}</code></div>${currentExcerpt ? `<div><span>${anchor === 'moved' ? 'Current location' : 'Current region'}</span><code class="ds-feedback-selection is-current">${esc(currentExcerpt)}</code></div>` : ''}</div>` : ''}
     <div class="ds-feedback-message ds-md">${renderMarkdown(c.body)}</div>
     ${latestAgent ? `<div class="ds-feedback-reply ds-md"><span>${esc(APP_BRAND)}</span>${renderMarkdown(latestAgent.text)}</div>` : ''}
     <div class="ds-feedback-actions">
@@ -1410,11 +1673,27 @@ function feedbackCard(repo: string, headRef: string | undefined, raw: Comment): 
   </article>`;
 }
 
+function feedbackCurrentExcerpt(
+  repo: string,
+  headRef: string | undefined,
+  comment: Comment,
+  state: CommentAnchorState,
+): string | undefined {
+  if (!comment.selectedText || (state !== 'changed' && state !== 'moved')) return undefined;
+  const lines = readWholeFile(repo, comment.file, headRef);
+  if (!lines?.length) return undefined;
+  if (state === 'moved') return comment.selectedText;
+  const count = Math.max(1, (comment.selection?.endLine ?? comment.line) - (comment.selection?.startLine ?? comment.line) + 1);
+  const start = Math.max(0, comment.line - 1);
+  return lines.slice(start, Math.min(lines.length, start + count)).join('\n') || undefined;
+}
+
 function feedbackDrawer(
   repo: string,
   headRef: string | undefined,
   comments: Comment[],
   state: ReviewStateSummary,
+  model: ReviewModel,
 ): string {
   const addressed = comments.filter((comment) => comment.status === 'addressed').length;
   const cards = comments.length
@@ -1433,26 +1712,45 @@ function feedbackDrawer(
     : '<li class="ds-drawer-empty">The timeline starts when this review is opened.</li>';
   return `<div class="ds-drawer-root" id="ds-feedback-drawer" hidden>
     <div class="ds-drawer-scrim" data-feedback-close></div>
-    <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-label="Review feedback and timeline">
+    <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-feedback-title" tabindex="-1">
       <div class="ds-drawer-head">
-        <div><div class="ds-drawer-title">Review loop</div><div class="ds-drawer-sub">Verify what changed, reopen anything unresolved, and keep the rounds honest.</div></div>
-        <button class="ds-drawer-x" data-feedback-close title="Close">×</button>
+        <div><div class="ds-drawer-title" id="ds-feedback-title">Review loop</div><div class="ds-drawer-sub">Verify what changed, reopen anything unresolved, and keep the rounds honest.</div></div>
+        <button class="ds-drawer-x" data-feedback-close title="Close" aria-label="Close review loop">×</button>
       </div>
       <div class="ds-drawer-tabs" role="tablist">
-        <button class="is-active" data-feedback-panel="feedback" role="tab">Feedback${addressed ? ` <span>${addressed}</span>` : ''}</button>
-        <button data-feedback-panel="timeline" role="tab">Timeline</button>
+        <button class="is-active" id="ds-feedback-tab" data-feedback-panel="feedback" role="tab" aria-selected="true" aria-controls="ds-feedback-panel" tabindex="0">Feedback${addressed ? ` <span>${addressed}</span>` : ''}</button>
+        <button id="ds-timeline-tab" data-feedback-panel="timeline" role="tab" aria-selected="false" aria-controls="ds-timeline-panel" tabindex="-1">Timeline</button>
+        <button id="ds-challenge-tab" data-feedback-panel="challenge" role="tab" aria-selected="false" aria-controls="ds-challenge-panel" tabindex="-1">Challenge</button>
       </div>
       <div class="ds-feedback-filters" data-feedback-tools>
         <button class="is-active" data-feedback-filter="all">All</button>
+        <button data-feedback-filter="blocking">Blocking</button>
         <button data-feedback-filter="addressed">Needs verification</button>
         <button data-feedback-filter="open">Open</button>
         <button data-feedback-filter="changed">Code changed</button>
         <button data-feedback-filter="resolved">Resolved</button>
       </div>
-      <div class="ds-drawer-body ds-feedback-list" data-feedback-view="feedback">${cards}</div>
-      <div class="ds-drawer-body" data-feedback-view="timeline" hidden><ol class="ds-review-timeline">${events}</ol></div>
+      <div class="ds-drawer-body ds-feedback-list" id="ds-feedback-panel" role="tabpanel" aria-labelledby="ds-feedback-tab" data-feedback-view="feedback">${cards}</div>
+      <div class="ds-drawer-body" id="ds-timeline-panel" role="tabpanel" aria-labelledby="ds-timeline-tab" data-feedback-view="timeline" hidden><ol class="ds-review-timeline">${events}</ol></div>
+      <div class="ds-drawer-body ds-challenge-panel" id="ds-challenge-panel" role="tabpanel" aria-labelledby="ds-challenge-tab" data-feedback-view="challenge" hidden>${challengeChecklist(model)}</div>
     </div>
   </div>`;
+}
+
+function challengeChecklist(model: ReviewModel): string {
+  const specific = model.steps
+    .map((step, index) => ({ step, index, cues: reviewCues(step) }))
+    .filter((item) => item.step.kind !== 'concept')
+    .slice(0, 5);
+  const generic = [
+    ['intent', 'Challenge the intent', 'Could the implementation be correct while solving the wrong user problem?'],
+    ['failure', 'Trace failure and rollback', 'Follow errors, retries, partial writes, and cleanup—not only the happy path.'],
+    ['boundary', 'Check trust boundaries', 'Re-check permissions, untrusted input, state transitions, and value movement.'],
+    ['tests', 'Look for the missing test', 'Name the regression or edge case that would still escape the current suite.'],
+  ];
+  const items = generic.map(([id, title, detail]) => `<label class="ds-challenge-item"><input type="checkbox" data-challenge-check="${id}"><span><strong>${title}</strong><small>${detail}</small></span></label>`).join('');
+  const targets = specific.map(({ step, index, cues }) => `<button type="button" class="ds-challenge-target" data-goto-step="${index + 1}"><span>${esc(cues.map((cue) => cue.label).join(' · '))}</span><strong>${esc(step.title)}</strong><i aria-hidden="true">→</i></button>`).join('');
+  return `<div class="ds-challenge-head"><strong>Adversarial review pass</strong><p>This checklist structures a human second pass; it does not certify the change.</p></div><div class="ds-challenge-list">${items}</div>${targets ? `<div class="ds-challenge-targets"><span>Cue-specific targets</span>${targets}</div>` : ''}`;
 }
 
 function relativeTime(iso: string): string {
@@ -1473,8 +1771,8 @@ function commandPalette(): string {
     ['files', 'Open All files', '/', 'Search and filter the changed files'],
     ['feedback', 'Review feedback', '', 'Verify agent replies and reopen comments'],
     ['timeline', 'Open review timeline', '', 'See rounds, comments, and agent runs'],
-    ['next-unviewed', 'Next unseen file', '', 'Keep the review moving'],
-    ['toggle-viewed', 'Toggle current file seen', 'V', 'Track what you have already checked'],
+    ['next-unviewed', 'Next unreviewed file', '', 'Keep the review moving'],
+    ['toggle-viewed', 'Toggle current file reviewed', 'V', 'Bind completion to this exact file diff'],
     ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],
   ];
   return `<div class="ds-command-root" data-command-root hidden>
@@ -1495,24 +1793,47 @@ function commandPalette(): string {
 
 // ---- trust drawer ----
 
-function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): string {
+function trustDrawer(
+  trust: TrustView,
+  stepIndexById: Map<string, number>,
+  excludedFiles: ReviewExclusionMetadata[],
+  indexDivergentFiles: string[],
+  storyless: boolean,
+): string {
   const clean = !trust.uncovered.length;
   const cards = trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('');
-  const body = clean
-    ? `<div class="ds-trust-clean">✓ Every change in the diff is explained by a step. Nothing was slipped in quietly.</div>`
+  const body = storyless
+    ? `<div class="ds-trust-clean">The full bounded diff is available file by file. No story-coverage claim is applied in this view.</div>`
+    : clean
+    ? `<div class="ds-trust-clean">✓ Every changed range in the bounded renderer is fully explained by a step.</div>`
     : `<div class="ds-trust-section">Unexplained ${plural(trust.uncovered.length, 'change')}</div>${cards}`;
+  const exclusions = excludedFiles.length
+    ? `<section class="ds-exclusions" aria-labelledby="ds-exclusions-title">
+        <div class="ds-trust-section" id="ds-exclusions-title">Outside the bounded renderer · ${excludedFiles.length}</div>
+        <p class="ds-exclusions-note">These files are part of the git change but are not included in story coverage or the default diff DOM. Inspect them deliberately before deciding.</p>
+        ${excludedFiles.map(excludedFileCard).join('')}
+        <label class="ds-exclusion-ack"><input type="checkbox" data-exclusions-ack><span><strong>I inspected these exclusions</strong><small>Bound to this exact diff; a code change clears the acknowledgement.</small></span></label>
+      </section>`
+    : '';
+  const stagedState = indexDivergentFiles.length
+    ? `<section class="ds-exclusions" aria-labelledby="ds-index-state-title">
+        <div class="ds-trust-section" id="ds-index-state-title">Staged state differs · ${indexDivergentFiles.length}</div>
+        <p class="ds-exclusions-note">These paths contain one version in Git's index and another in the working tree. A single combined diff cannot prove which version you intend to commit, so approval stays blocked until they match.</p>
+        ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join('')}
+      </section>`
+    : '';
   return `<div class="ds-drawer-root" id="ds-trust-drawer" hidden>
     <div class="ds-drawer-scrim" data-trust-close></div>
-    <div class="ds-drawer" role="dialog" aria-label="Trust check">
+    <div class="ds-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-trust-title" tabindex="-1">
       <div class="ds-drawer-head">
         <div>
-          <div class="ds-drawer-title">Trust check</div>
-          <div class="ds-drawer-sub">Every line in the diff, accounted for against the story.</div>
+          <div class="ds-drawer-title" id="ds-trust-title">Trust check</div>
+          <div class="ds-drawer-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
         </div>
-        <button class="ds-drawer-x" data-trust-close title="Close">×</button>
+        <button class="ds-drawer-x" data-trust-close title="Close" aria-label="Close trust check">×</button>
       </div>
       <div class="ds-drawer-body">
-        <div class="ds-trust-stats">
+        ${storyless ? '' : `<div class="ds-trust-stats">
           <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(
             trust.coveredLines,
             'line',
@@ -1521,12 +1842,31 @@ function trustDrawer(trust: TrustView, stepIndexById: Map<string, number>): stri
             trust.uncoveredLines,
             'change',
           )} no step explains</div></div>
-        </div>
+        </div>`}
         ${body}
-        <div class="ds-trust-foot">When every change is explained, this panel turns green — nothing was slipped in quietly.</div>
+        ${stagedState}
+        ${exclusions}
+        <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
       </div>
     </div>
   </div>`;
+}
+
+function excludedFileCard(file: ReviewExclusionMetadata): string {
+  const reason =
+    file.reason === 'generated-path'
+      ? 'Generated or vendored path'
+      : file.reason === 'large-diff'
+        ? 'Large diff'
+        : file.reason === 'binary'
+          ? 'Binary or non-text change'
+          : 'Metadata-only change';
+  const lines = file.changedLines == null ? 'Binary or uncounted change' : `${file.changedLines} changed ${plural(file.changedLines, 'line')}`;
+  return `<article class="ds-exclusion-card" data-excluded-file="${esc(file.path)}">
+    <div><code>${esc(file.path)}</code><span>${reason} · ${lines}</span></div>
+    <button type="button" class="ds-btn ds-btn-ghost" data-inspect-excluded="${esc(file.path)}">Inspect current file</button>
+    <div class="ds-exclusion-preview" data-excluded-preview hidden></div>
+  </article>`;
 }
 
 function trustCard(u: UncoveredView, stepIndexById: Map<string, number>): string {

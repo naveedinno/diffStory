@@ -1,10 +1,17 @@
 // Unit tests for the comment store. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { addComment, appendUserMessage, loadComments } from '../dist/comments.js';
+import {
+  addComment,
+  appendUserMessage,
+  deleteComment,
+  loadComments,
+  loadCommentsWithHealth,
+  setCommentStatus,
+} from '../dist/comments.js';
 
 function tmpRepo() { return mkdtempSync(join(tmpdir(), 'cmt-')); }
 
@@ -141,5 +148,47 @@ test('appendUserMessage rejects empty text and unknown ids', () => {
     const c = addComment(repo, { file: 'a.ts', line: 1, type: 'change', body: 'x' });
     assert.throws(() => appendUserMessage(repo, c.id, '   '), /text/);
     assert.equal(appendUserMessage(repo, 'nope', 'hi'), null);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('comment loading reports malformed stores instead of treating them as empty feedback', () => {
+  const repo = tmpRepo();
+  try {
+    mkdirSync(join(repo, '.diffstory'));
+    const path = join(repo, '.diffstory', 'comments.json');
+    const cases = [
+      ['{broken', 'invalid-json'],
+      [JSON.stringify({ comments: [] }), 'not-array'],
+      [JSON.stringify([null]), 'invalid-entry'],
+      [JSON.stringify([{ id: 'c1' }]), 'invalid-entry'],
+    ];
+    for (const [raw, reason] of cases) {
+      writeFileSync(path, raw);
+      const loaded = loadCommentsWithHealth(repo);
+      assert.equal(loaded.health.status, 'invalid');
+      assert.equal(loaded.health.reason, reason);
+      assert.deepEqual(loaded.comments, []);
+      assert.match(loaded.health.recovery, /will not overwrite/i);
+    }
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('every comment mutation preserves a malformed comments file byte for byte', () => {
+  const repo = tmpRepo();
+  try {
+    mkdirSync(join(repo, '.diffstory'));
+    const path = join(repo, '.diffstory', 'comments.json');
+    const malformed = '[null, {"partial": true}]';
+    writeFileSync(path, malformed);
+    const mutations = [
+      () => addComment(repo, { file: 'a.ts', line: 1, type: 'change', body: 'x' }),
+      () => appendUserMessage(repo, 'c1', 'follow up'),
+      () => setCommentStatus(repo, 'c1', 'resolved'),
+      () => deleteComment(repo, 'c1'),
+    ];
+    for (const mutate of mutations) {
+      assert.throws(mutate, /will not overwrite the invalid file/i);
+      assert.equal(readFileSync(path, 'utf8'), malformed);
+    }
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });

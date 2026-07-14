@@ -1,4 +1,4 @@
-// Integration test: opening a repo lands on story selection first. Run with: npm test
+// Integration test: opening a repo lands on the current change; saved reviews remain explicit. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -7,6 +7,12 @@ import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { serve } from '../dist/server.js';
+
+function reviewPageToken(html) {
+  const match = html.match(/data-review-page-token="([^"]+)"/);
+  assert.ok(match?.[1], 'review page issues a lazy-evidence token');
+  return match[1];
+}
 
 function repoWithChange() {
   const d = mkdtempSync(join(tmpdir(), 'ds-cr-'));
@@ -108,7 +114,7 @@ function repoRoute(repo) {
   return `/repo/${encodeURIComponent(basename(repo))}`;
 }
 
-test('opening a repo lands on story selection before generating a new story', async () => {
+test('opening a repo starts from the current change and keeps review history explicit', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -120,8 +126,8 @@ test('opening a repo lands on story selection before generating a new story', as
     });
     const route = repoRoute(repo);
     const html = (await (await fetch(`${base}${route}/stories`)).text());
-    assert.ok(html.includes('Start review'), 'shows review-session selection');
-    assert.ok(html.includes('No review sessions yet'), 'shows the empty review-session state');
+    assert.ok(html.includes('Start review'), 'keeps a path back to the current change');
+    assert.ok(html.includes('No saved reviews'), 'shows the empty review-history state');
     assert.ok(html.includes(`href="${route}/change"`), 'new story has its own repo-named route');
     assert.ok(!html.includes('Generate guided review'), 'does not jump straight to generation');
 
@@ -146,7 +152,7 @@ test('opening a repo lands on story selection before generating a new story', as
   }
 });
 
-test('starting with a repo lands on story selection before opening the primary story', async () => {
+test('starting with a repo lands on the current change while history lists the primary story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -154,13 +160,15 @@ test('starting with a repo lands on story selection before opening the primary s
   writeStory(repo);
   const { server, base } = await bootRepo(repo);
   try {
-    const html = await (await fetch(`${base}/`)).text();
-    assert.ok(html.includes('Start review'), 'shows review-session selection');
-    assert.ok(html.includes('Saved story'), 'lists the primary saved story');
     const route = repoRoute(repo);
-    assert.ok(html.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
-    assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
-    assert.ok(!html.includes('data-diff'), 'does not jump straight into the review diff');
+    const entry = await fetch(`${base}/`);
+    assert.equal(entry.url, `${base}${route}/change`);
+    const html = await entry.text();
+    assert.ok(html.includes('Choose what to review'), 'starts with the live change scope');
+    const history = await (await fetch(`${base}${route}/stories`)).text();
+    assert.ok(history.includes('Saved story'), 'lists the primary saved story');
+    assert.ok(history.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
+    assert.ok(history.includes('href="/repos"'), 'offers a way back to the repo picker');
 
     const picker = await (await fetch(`${base}/repos`)).text();
     assert.ok(picker.includes('Open a repository'), 'switch repo returns to the app picker');
@@ -173,7 +181,7 @@ test('starting with a repo lands on story selection before opening the primary s
   }
 });
 
-test('starting with a repo lists named stories even without a primary story', async () => {
+test('review history lists named stories even without a primary story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -181,10 +189,11 @@ test('starting with a repo lists named stories even without a primary story', as
   writeStory(repo, { title: 'Named saved story', summary: 'A named saved story for this repo' }, 'stories/native.json');
   const { server, base } = await bootRepo(repo);
   try {
-    const html = await (await fetch(`${base}/`)).text();
-    assert.ok(html.includes('Start review'), 'shows review-session selection');
-    assert.ok(html.includes('Named saved story'), 'lists the named saved story');
     const route = repoRoute(repo);
+    const entry = await fetch(`${base}/`);
+    assert.equal(entry.url, `${base}${route}/change`);
+    const html = await (await fetch(`${base}${route}/stories`)).text();
+    assert.ok(html.includes('Named saved story'), 'lists the named saved story');
     assert.ok(html.includes(`href="${route}/review?story=stories%2Fnative.json"`), 'named story has its own repo-named review route');
     assert.ok(!html.includes('No saved stories found'), 'does not show the empty story state');
   } finally {
@@ -227,7 +236,8 @@ test('a historical committed story reads context and full-file content from its 
     assert.ok(review.includes('head-one'), 'context step reads the story head side');
     assert.ok(!review.includes('live-one'), 'context step does not read the live working tree');
 
-    const full = await (await fetch(`${base}/api/fullfile?file=a.txt`)).text();
+    const token = reviewPageToken(review);
+    const full = await (await fetch(`${base}/api/fullfile?file=a.txt&page=${encodeURIComponent(token)}`)).text();
     assert.ok(full.includes('head-two'), 'full-file view reads the story head side');
     assert.ok(!full.includes('live-two'), 'full-file view does not read the live working tree');
   } finally {
@@ -297,7 +307,7 @@ test('story picker can remove a saved story', async () => {
     assert.equal(body.removed, true);
 
     const chooser = await (await fetch(`${base}${route}/stories`)).text();
-    assert.ok(chooser.includes('No review sessions yet'), 'returns to the empty review-session state');
+    assert.ok(chooser.includes('No saved reviews'), 'returns to the empty review-history state');
     assert.ok(!chooser.includes('Saved story'), 'deleted story no longer appears');
   } finally {
     server.close();

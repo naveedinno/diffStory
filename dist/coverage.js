@@ -1,9 +1,30 @@
-// Trust check: every changed hunk in the real diff must be claimed by at least
-// one tour step. Anything unclaimed is surfaced loudly so the agent can't quietly
-// leave a change out of the narrative.
+// Story-claim completeness only: this proves that authored step ranges account
+// for every changed line. It does not prove that the story is correct or that a
+// human reviewed the change.
 import { changedRanges, rangesOverlap } from './diff.js';
 import { isCodeStep } from './types.js';
-export function computeCoverage(tour, files) {
+/** Inclusive portions of target that are not accounted for by any claim. */
+function unclaimedSegments(target, claims) {
+    const relevant = claims
+        .map(([start, end]) => [Math.max(target[0], start), Math.min(target[1], end)])
+        .filter(([start, end]) => start <= end)
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const missing = [];
+    let cursor = target[0];
+    for (const [start, end] of relevant) {
+        if (end < cursor)
+            continue;
+        if (start > cursor)
+            missing.push([cursor, start - 1]);
+        cursor = Math.max(cursor, end + 1);
+        if (cursor > target[1])
+            break;
+    }
+    if (cursor <= target[1])
+        missing.push([cursor, target[1]]);
+    return missing;
+}
+export function computeStoryClaimCoverage(tour, files) {
     // Index the ranges each step claims, by file.
     const claimsByFile = new Map();
     for (const step of tour.steps) {
@@ -13,24 +34,42 @@ export function computeCoverage(tour, files) {
         list.push(step.range);
         claimsByFile.set(step.file, list);
     }
-    const uncovered = [];
+    const unclaimed = [];
     const changedFiles = files.filter((f) => f.hunks.length > 0);
-    const coveredFiles = new Set();
+    let fullyClaimedChangedFiles = 0;
+    let totalChangedRanges = 0;
+    let fullyClaimedChangedRanges = 0;
     for (const file of changedFiles) {
         const claims = claimsByFile.get(file.newPath) ?? [];
-        for (const range of changedRanges(file)) {
-            const covered = claims.some((c) => rangesOverlap(c, range));
-            if (covered)
-                coveredFiles.add(file.newPath);
-            else
-                uncovered.push({ file: file.newPath, range, status: file.status });
+        const fileRanges = changedRanges(file);
+        let fileIsFullyClaimed = true;
+        totalChangedRanges += fileRanges.length;
+        for (const range of fileRanges) {
+            const missing = unclaimedSegments(range, claims);
+            if (missing.length === 0) {
+                fullyClaimedChangedRanges += 1;
+            }
+            else {
+                fileIsFullyClaimed = false;
+                unclaimed.push(...missing.map((segment) => ({ file: file.newPath, range: segment, status: file.status })));
+            }
         }
+        if (fileIsFullyClaimed && fileRanges.length > 0)
+            fullyClaimedChangedFiles += 1;
     }
     return {
-        uncovered,
+        unclaimed,
         totalChangedFiles: changedFiles.length,
-        coveredChangedFiles: coveredFiles.size,
+        fullyClaimedChangedFiles,
+        totalChangedRanges,
+        fullyClaimedChangedRanges,
+        uncovered: unclaimed,
+        coveredChangedFiles: fullyClaimedChangedFiles,
     };
+}
+/** @deprecated Prefer computeStoryClaimCoverage; coverage here means only authored story claims. */
+export function computeCoverage(tour, files) {
+    return computeStoryClaimCoverage(tour, files);
 }
 /** Tour steps that point at a file/range with no corresponding change in the diff. */
 export function stalePointers(tour, files) {

@@ -13,7 +13,9 @@ test('resume control contains long file paths inside the resizable sidebar', () 
 test('client defines thread mounting and a comment cache', () => {
   assert.match(PAGE_JS, /function mountThreads\(/);
   assert.match(PAGE_JS, /function syncThreads\(/);
-  assert.match(PAGE_JS, /var allComments\s*=/);
+  assert.match(PAGE_JS, /function initialComments\(\)/);
+  assert.match(PAGE_JS, /document\.getElementById\('ds-initial-comments'\)/);
+  assert.match(PAGE_JS, /var allComments=initialComments\(\)/);
 });
 
 test('comment conversations open in a floating sidecar instead of splitting the diff', () => {
@@ -33,6 +35,11 @@ test('comment conversations open in a floating sidecar instead of splitting the 
 test('new review comments compose in the same floating surface', () => {
   assert.match(PAGE_CSS, /\.ds-composer\{position:fixed/);
   assert.match(PAGE_JS, /box\.setAttribute\('role','dialog'\)/);
+  assert.match(PAGE_JS, /box\.setAttribute\('aria-modal','true'\)/);
+  assert.match(PAGE_JS, /tabs\.setAttribute\('role','radiogroup'\)/);
+  assert.match(PAGE_JS, /b\.setAttribute\('role','radio'\)/);
+  assert.match(PAGE_JS, /activateModal\(box,composerReturnFocus\)/);
+  assert.match(PAGE_JS, /deactivateModal\(b,restoreFocus!==false\)/);
   assert.match(PAGE_JS, /document\.body\.appendChild\(box\)/);
   assert.doesNotMatch(PAGE_JS, /anchor\.parentNode\.insertBefore\(box,anchor\.nextSibling\)/);
 });
@@ -97,6 +104,12 @@ test('refreshComments caches the list and re-syncs threads', () => {
   // The fetch(API) handler stores the list into allComments and calls syncThreads.
   assert.match(PAGE_JS, /allComments\s*=\s*list/);
   assert.match(PAGE_JS, /syncThreads\(\)/);
+});
+
+test('refreshing feedback preserves server-rendered before/current evidence', () => {
+  assert.match(PAGE_JS, /var existing=old\[c\.id\],card=existing\?existing\.node/);
+  assert.match(PAGE_JS, /if\(existing\)patchFeedbackContent\(card,c\)/);
+  assert.doesNotMatch(PAGE_JS, /allComments\.forEach\(function\(c\)\{var card=buildFeedbackCardClient/);
 });
 
 test('client renders comment replies through the same Markdown path', () => {
@@ -180,13 +193,38 @@ test('the composer send is disabled while the agent is busy', () => {
   assert.match(PAGE_JS, /\[data-thread-add\]'\)\.forEach/);
 });
 
-test('comment counts are by unique id, so cross-surfaced comments are not double-counted', () => {
-  // a single comment mounts as several .ds-comment nodes (diff hunks, full-file, tour);
-  // collectOpenIds and refreshCount must dedupe by data-comment-id, not count nodes.
-  assert.match(PAGE_JS, /function uniqueIds\(sel\)/);
-  assert.match(PAGE_JS, /return uniqueIds\('\.ds-comment\.status-open'\)/);
-  assert.match(PAGE_JS, /var openN=uniqueIds\('\.ds-comment:not\(\.status-resolved\)'\)\.length/);
+test('global comment counts and batch actions use the canonical cache before lazy panels mount', () => {
+  // A saved comment can have zero or several mounted .ds-comment nodes. The API cache
+  // must remain canonical so neither lazy loading nor cross-surfacing changes the count.
+  assert.match(PAGE_JS, /function commentIds\(predicate\)/);
+  assert.match(PAGE_JS, /allComments\.forEach\(function\(c\)/);
+  assert.match(PAGE_JS, /return commentIds\(function\(c\)\{return c\.status==='open';\}\)/);
+  assert.match(PAGE_JS, /var openN=commentIds\(function\(c\)\{return c\.status!=='resolved';\}\)\.length/);
+  assert.match(PAGE_JS, /var totalN=commentIds\(\)\.length/);
+  assert.doesNotMatch(PAGE_JS, /uniqueIds\('\.ds-comment/);
   assert.doesNotMatch(PAGE_JS, /\$all\('\.ds-comment'\)\.length-\$all\('\.ds-comment\.status-resolved'\)\.length/);
+});
+
+test('patching a lazy comment updates the canonical cache before refreshing counts', () => {
+  assert.match(PAGE_JS, /function patchComment\(c\)\{\s*var found=false;/);
+  assert.match(PAGE_JS, /allComments\[ai\]=c;found=true/);
+  assert.match(PAGE_JS, /if\(!found\)allComments\.push\(c\)/);
+});
+
+test('approval posts the issued page identity, exact change, and live feedback identity', () => {
+  assert.match(PAGE_JS, /pageToken:document\.body\.getAttribute\('data-review-page-token'\)\|\|''/);
+  assert.match(PAGE_JS, /expectedFingerprint:document\.body\.getAttribute\('data-current-diff-hash'\)\|\|''/);
+  assert.match(PAGE_JS, /expectedScopeKey:document\.body\.getAttribute\('data-review-scope'\)\|\|''/);
+  assert.match(PAGE_JS, /expectedFeedbackVersion:Number\(document\.body\.getAttribute\('data-feedback-version'\)\|\|0\)/);
+  assert.match(PAGE_JS, /expectedBlockingFeedbackDigest:document\.body\.getAttribute\('data-blocking-feedback-digest'\)\|\|''/);
+  assert.match(PAGE_JS, /mode:mode/);
+  assert.match(PAGE_JS, /if\(kind==='approve'&&mode!=='full'\)/);
+  assert.match(PAGE_JS, /data-index-divergence-count/);
+  assert.match(PAGE_JS, /Reconcile staged and working-tree versions before approval/);
+  assert.match(PAGE_JS, /commentSeverity\(c\)==='blocking'/);
+  assert.match(PAGE_JS, /function noteBlockingFeedbackMutation\(comment\)/);
+  assert.match(PAGE_JS, /function syncReviewFeedbackIdentity\(\)/);
+  assert.match(PAGE_JS, /data-blocking-feedback-digest/);
 });
 
 test('the new-comment composer shows its agent task and separates save from send', () => {
@@ -275,12 +313,23 @@ test('agent and review controls stay distinct at compact widths', () => {
   assert.match(PAGE_CSS, /@media \(max-width:620px\)\{\.ds-thread-composer-foot\{align-items:stretch\}\}/);
 });
 
-test('agent and review dialogs restore focus and trap task-picker tabbing', () => {
+test('nested dialogs preserve the underlying modal and only trap focus in the top layer', () => {
   assert.match(PAGE_JS, /reviewMenuReturnFocus/);
   assert.match(PAGE_JS, /pop\.contains\(activeElement\)/);
   assert.match(PAGE_JS, /agentChooserReturnFocus/);
-  assert.match(PAGE_JS, /root\.addEventListener\('keydown'/);
-  assert.match(PAGE_JS, /if\(e\.key!=='Tab'\)return/);
+  assert.match(PAGE_JS, /modalStack=\[\],modalBackgroundSnapshots=\[\]/);
+  assert.match(PAGE_JS, /modalStack\.push\(\{root:root,returnFocus:/);
+  assert.match(PAGE_JS, /modalStack\.splice\(index,1\);syncModalBackground\(\);syncModalScrollLock\(\)/);
+  assert.match(PAGE_JS, /if\(node===top\)\{restoreModalNode\(snapshot\);return;\}/);
+  assert.match(PAGE_JS, /if\(!top\)\{modalBackgroundSnapshots\.forEach\(restoreModalNode\);modalBackgroundSnapshots=\[\];return;\}/);
+  assert.match(PAGE_JS, /activateModal\(root,agentChooserReturnFocus\)/);
+  assert.match(PAGE_JS, /deactivateModal\(old,restore!==false\)/);
+  assert.match(PAGE_JS, /commandReturnFocus/);
+  assert.match(PAGE_JS, /var modalRoot=topModalRoot\(\)/);
+  assert.match(PAGE_JS, /focusInside=modalRoot\.contains\(document\.activeElement\)/);
+  assert.match(PAGE_JS, /if\(modalRoot\)return/);
+  assert.match(PAGE_JS, /var escapeModal=topModalRoot\(\)/);
+  assert.doesNotMatch(PAGE_JS, /data-ds-prev-hidden/);
 });
 
 test('copying all comments includes every conversation turn, not only legacy replies', () => {

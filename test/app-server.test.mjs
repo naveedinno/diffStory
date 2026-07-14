@@ -10,6 +10,10 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { serve } from '../dist/server.js';
+import { getDiff } from '../dist/git.js';
+import { parseUnifiedDiff } from '../dist/diff.js';
+import { captureReviewSnapshot } from '../dist/review-state.js';
+import { diffFingerprint } from '../dist/stories.js';
 
 function gitRepo() {
   const d = mkdtempSync(join(tmpdir(), 'ds-app-'));
@@ -30,13 +34,617 @@ function addCommits(repo, count) {
   }
 }
 
-async function boot() {
-  const server = serve({ repo: null, port: 0, open: false });
+async function boot(repo = null) {
+  const server = serve({ repo, port: 0, open: false });
   await once(server, 'listening');
   const { address, port } = server.address();
   assert.equal(address, '127.0.0.1', 'local app server only listens on loopback');
   return { server, base: `http://localhost:${port}` };
 }
+
+function reviewPageToken(html) {
+  const match = html.match(/data-review-page-token="([^"]+)"/);
+  assert.ok(match?.[1], 'review page issues a lazy-evidence token');
+  return match[1];
+}
+
+function leased(url, token) {
+  return `${url}${url.includes('?') ? '&' : '?'}page=${encodeURIComponent(token)}`;
+}
+
+function verdictEvidence(pageHtml, state) {
+  return {
+    pageToken: reviewPageToken(pageHtml),
+    expectedFingerprint: state.currentDiffHash,
+    expectedScopeKey: state.scopeKey,
+    expectedFeedbackVersion: state.feedbackVersion,
+    expectedBlockingFeedbackDigest: state.blockingFeedbackDigest,
+  };
+}
+
+test('review decisions are server-gated by the full change, blocking feedback, and view mode', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const initialPage = await fetch(`${base}${route}`);
+    assert.equal(initialPage.status, 200, 'enters the story-less full review');
+    let pageHtml = await initialPage.text();
+    let state = await (await fetch(`${base}/api/review-state`)).json();
+
+    const stale = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state),
+        expectedFingerprint: 'stale-page', mode: 'full',
+      }),
+    });
+    assert.equal(stale.status, 409);
+    assert.match((await stale.json()).error, /moved since this page loaded/i);
+
+    const concern = await (await fetch(`${base}/api/comments`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 1, type: 'question', severity: 'concern', body: 'Worth checking' }),
+    })).json();
+    state = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(state.feedbackVersion, 0, 'non-blocking feedback does not invalidate approval readiness');
+    const approvedWithConcern = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(approvedWithConcern.status, 201);
+    assert.equal(concern.severity, 'concern');
+
+    const blocking = await (await fetch(`${base}/api/comments`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 1, type: 'change', severity: 'blocking', body: 'Must fix' }),
+    })).json();
+    const blockedState = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(blockedState.feedbackVersion, 1);
+    assert.equal(blockedState.verdict.state, 'stale');
+    assert.equal(blockedState.verdict.invalidationReason, 'feedback-changed');
+
+    const blocked = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, blockedState), mode: 'full',
+      }),
+    });
+    assert.equal(blocked.status, 409);
+    assert.deepEqual((await blocked.json()).blockingCommentIds, [blocking.id]);
+
+    assert.equal((await fetch(`${base}/api/comments/${blocking.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'resolved' }),
+    })).status, 200);
+    state = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(state.feedbackVersion, 2);
+
+    const feedbackDiff = getDiff(repo, 'HEAD');
+    captureReviewSnapshot(repo, {
+      base: 'HEAD', diff: feedbackDiff, files: parseUnifiedDiff(feedbackDiff), reason: 'feedback-sent',
+    });
+
+    mkdirSync(join(repo, 'dist'));
+    writeFileSync(join(repo, 'dist', 'bundle.js'), 'generated bytes\n');
+    const changedState = await (await fetch(`${base}/api/review-state`)).json();
+    assert.notEqual(changedState.currentDiffHash, state.currentDiffHash, 'excluded bytes are in exact identity');
+
+    pageHtml = await (await fetch(`${base}${route}?review=since`)).text();
+    assert.match(pageHtml, /data-current-review-mode="since"/);
+    const since = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, changedState), mode: 'full',
+        acknowledgedExclusions: ['dist/bundle.js'],
+      }),
+    });
+    assert.equal(since.status, 409);
+    assert.match((await since.json()).error, /full-change view/i);
+
+    pageHtml = await (await fetch(`${base}${route}`)).text();
+    const missingAck = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, changedState), mode: 'full',
+      }),
+    });
+    assert.equal(missingAck.status, 409);
+    assert.deepEqual((await missingAck.json()).missing, ['dist/bundle.js']);
+
+    const approvedExcluded = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, changedState), mode: 'full',
+        acknowledgedExclusions: ['dist/bundle.js'],
+      }),
+    });
+    assert.equal(approvedExcluded.status, 201);
+    const approvedExcludedBody = await approvedExcluded.json();
+    assert.deepEqual(approvedExcludedBody.verdict.acknowledgedExclusions, [
+      { path: 'dist/bundle.js', reason: 'generated-path' },
+    ]);
+    assert.equal(approvedExcludedBody.verdict.diffFingerprint, changedState.currentDiffHash);
+
+    pageHtml = await (await fetch(`${base}${route}?review=since`)).text();
+    const requested = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'changes-requested', ...verdictEvidence(pageHtml, changedState), mode: 'full',
+      }),
+    });
+    assert.equal(requested.status, 201, 'change requests remain permissive');
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('staged and working-tree divergence is visible and blocks approval server-side', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# staged version\n');
+  execFileSync('git', ['add', 'README.md'], { cwd: repo });
+  writeFileSync(join(repo, 'README.md'), '# working-tree version\n');
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    assert.match(pageHtml, /data-index-divergence-count="1"/);
+    assert.match(pageHtml, /Staged state differs · 1/);
+    assert.match(pageHtml, /<code>README\.md<\/code>/);
+
+    const state = await (await fetch(`${base}/api/review-state`)).json();
+    const response = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.match(body.error, /staged and working-tree versions differ/i);
+    assert.deepEqual(body.stagedWorktreeDivergentFiles, ['README.md']);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('staged deletion plus an untracked same-path restore blocks approval server-side', async () => {
+  const repo = gitRepo();
+  execFileSync('git', ['rm', '--cached', 'README.md'], { cwd: repo });
+  writeFileSync(join(repo, 'README.md'), '# restored outside the index\n');
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    assert.match(pageHtml, /data-index-divergence-count="1"/);
+    assert.match(pageHtml, /Staged state differs · 1/);
+    assert.match(pageHtml, /<code>README\.md<\/code>/);
+
+    const diffFiles = parseUnifiedDiff(getDiff(repo, 'HEAD'));
+    assert.deepEqual(
+      diffFiles.map((file) => file.newPath || file.oldPath),
+      ['README.md'],
+      'the same path is not duplicated in the rendered review',
+    );
+
+    const state = await (await fetch(`${base}/api/review-state`)).json();
+    const response = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.match(body.error, /staged and working-tree versions differ/i);
+    assert.deepEqual(body.stagedWorktreeDivergentFiles, ['README.md']);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('staged deletion plus an ignored same-path restore blocks approval server-side', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, '.gitignore'), 'README.md\n');
+  execFileSync('git', ['add', '.gitignore'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'ignore the tracked review fixture'], { cwd: repo });
+  execFileSync('git', ['rm', '--cached', 'README.md'], { cwd: repo });
+  writeFileSync(join(repo, 'README.md'), '# restored but ignored outside the index\n');
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    assert.match(pageHtml, /data-index-divergence-count="1"/);
+    assert.match(pageHtml, /Staged state differs · 1/);
+    assert.match(pageHtml, /<code>README\.md<\/code>/);
+
+    const diffFiles = parseUnifiedDiff(getDiff(repo, 'HEAD'));
+    assert.deepEqual(
+      diffFiles.map((file) => file.newPath || file.oldPath),
+      ['README.md'],
+      'ignored restores remain one staged review identity',
+    );
+
+    const state = await (await fetch(`${base}/api/review-state`)).json();
+    const response = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.match(body.error, /staged and working-tree versions differ/i);
+    assert.deepEqual(body.stagedWorktreeDivergentFiles, ['README.md']);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('direct blocking-feedback edits stale stored approval and fail closed', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    const approvedState = await (await fetch(`${base}/api/review-state`)).json();
+    const approved = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, approvedState), mode: 'full',
+      }),
+    });
+    assert.equal(approved.status, 201);
+
+    writeFileSync(join(repo, '.diffstory', 'comments.json'), JSON.stringify([{
+      id: 'direct-blocker', file: 'README.md', line: 1,
+      type: 'change', severity: 'blocking', body: 'Agent-authored blocker',
+      status: 'open', createdAt: '2026-07-14T00:00:00.000Z',
+    }], null, 2));
+    const blockedState = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(
+      blockedState.feedbackVersion,
+      approvedState.feedbackVersion + 1,
+      'observing a direct blocking transition advances the monotonic approval version',
+    );
+    assert.notEqual(blockedState.blockingFeedbackDigest, approvedState.blockingFeedbackDigest);
+    assert.equal(blockedState.verdict.state, 'stale');
+    assert.equal(blockedState.verdict.invalidationReason, 'feedback-changed');
+
+    const stalePageEvidence = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, approvedState), mode: 'full',
+      }),
+    });
+    assert.equal(stalePageEvidence.status, 409);
+    assert.match((await stalePageEvidence.json()).error, /blocking feedback changed/i);
+
+    const liveBlocker = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, blockedState), mode: 'full',
+      }),
+    });
+    assert.equal(liveBlocker.status, 409);
+    assert.deepEqual((await liveBlocker.json()).blockingCommentIds, ['direct-blocker']);
+
+    writeFileSync(join(repo, '.diffstory', 'comments.json'), '[]\n');
+    const restoredState = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(
+      restoredState.feedbackVersion,
+      approvedState.feedbackVersion + 2,
+      'removing a directly observed blocker advances the version again',
+    );
+    assert.equal(restoredState.blockingFeedbackDigest, approvedState.blockingFeedbackDigest);
+    assert.equal(restoredState.verdict.state, 'stale', 'restoring earlier bytes does not resurrect approval');
+    assert.equal(restoredState.verdict.invalidationReason, 'feedback-changed');
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('malformed feedback blocks approval and every comment write without losing source bytes', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  const commentsFile = join(repo, '.diffstory', 'comments.json');
+  const malformed = '[null, {"partial": true}]';
+  writeFileSync(commentsFile, malformed);
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    assert.match(pageHtml, /data-feedback-health="invalid"/);
+    assert.match(pageHtml, /Feedback file needs repair/);
+    assert.match(pageHtml, /data-verdict="approve" disabled/);
+
+    const state = await (await fetch(`${base}/api/review-state`)).json();
+    assert.equal(state.feedbackHealth.status, 'invalid');
+    assert.match(state.feedbackHealth.recovery, /will not overwrite/i);
+
+    const reads = await fetch(`${base}/api/comments`);
+    assert.equal(reads.status, 409);
+    assert.equal((await reads.json()).feedbackHealth.status, 'invalid');
+
+    const writes = [
+      fetch(`${base}/api/comments`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ file: 'README.md', line: 1, type: 'change', body: 'x' }),
+      }),
+      fetch(`${base}/api/comments/c1/message`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'x' }),
+      }),
+      fetch(`${base}/api/comments/c1`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }),
+      }),
+      fetch(`${base}/api/comments/c1`, { method: 'DELETE' }),
+    ];
+    for (const pending of writes) {
+      const response = await pending;
+      assert.equal(response.status, 409);
+      assert.equal((await response.json()).feedbackHealth.status, 'invalid');
+      assert.equal(readFileSync(commentsFile, 'utf8'), malformed);
+    }
+
+    const approval = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full' }),
+    });
+    assert.equal(approval.status, 409);
+    const blocked = await approval.json();
+    assert.equal(blocked.feedbackHealth.status, 'invalid');
+    assert.match(blocked.error, /repair or restore \.diffstory\/comments\.json/i);
+    assert.equal(readFileSync(commentsFile, 'utf8'), malformed);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('selected-story approval requires current metadata and full-change coverage', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  writeFileSync(join(repo, 'other.ts'), 'export const other = true;\n');
+  mkdirSync(join(repo, '.diffstory'));
+  const fingerprint = diffFingerprint(getDiff(repo, 'HEAD'));
+  const storyPath = join(repo, '.diffstory', 'story.json');
+  const story = {
+    version: 1,
+    title: 'Focused review',
+    summary: 'Review the README change.',
+    base: 'HEAD',
+    diffFingerprint: fingerprint,
+    storyScope: { includedFiles: ['README.md'], excludedFiles: ['other.ts'] },
+    steps: [{
+      id: 'readme', order: 1, title: 'README behavior', file: 'README.md',
+      range: [1, 1], kind: 'changed', why: 'Verify the visible documentation change.',
+    }],
+  };
+  writeFileSync(storyPath, JSON.stringify(story));
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=${encodeURIComponent('story.json')}`;
+    const initialPage = await fetch(`${base}${route}`);
+    assert.equal(initialPage.status, 200);
+    let pageHtml = await initialPage.text();
+    let state = await (await fetch(`${base}/api/review-state`)).json();
+    const partial = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(partial.status, 409);
+    const partialBody = await partial.json();
+    assert.match(partialBody.error, /full change/i);
+    assert.deepEqual(partialBody.focusedStoryFiles, ['other.ts']);
+
+    story.title = 'Full review';
+    story.summary = 'Review every changed file.';
+    story.storyScope = { includedFiles: ['README.md', 'other.ts'] };
+    story.steps.push({
+      id: 'other', order: 2, title: 'Added module', file: 'other.ts',
+      range: [1, 1], kind: 'new-file', why: 'Verify the new module export.',
+    });
+    writeFileSync(storyPath, JSON.stringify(story));
+    const fullPage = await (await fetch(`${base}${route}`)).text();
+    pageHtml = fullPage;
+    const fullPageToken = reviewPageToken(fullPage);
+    assert.match(fullPage, /data-step-panel="2"[^>]*data-step-lazy="1"/);
+    const lazyStep = await fetch(leased(`${base}/api/review/step-panel?index=2`, fullPageToken));
+    assert.equal(lazyStep.status, 200);
+    const lazyStepHtml = await lazyStep.text();
+    assert.match(lazyStepHtml, /data-step-panel="2"/);
+    assert.match(lazyStepHtml, /Added module/);
+    assert.doesNotMatch(lazyStepHtml, /data-step-lazy/);
+    state = await (await fetch(`${base}/api/review-state`)).json();
+    const complete = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(complete.status, 201);
+
+    story.diffFingerprint = '0'.repeat(64);
+    writeFileSync(storyPath, JSON.stringify(story));
+    const stalePage = await (await fetch(`${base}${route}`)).text();
+    pageHtml = stalePage;
+    assert.match(stalePage, /Out of date|Unverified/);
+    state = await (await fetch(`${base}/api/review-state`)).json();
+    const stale = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(stale.status, 409);
+    assert.match((await stale.json()).error, /regenerate the story/i);
+
+    story.diffFingerprint = fingerprint;
+    story.steps[1].kind = 'not-a-story-kind';
+    writeFileSync(storyPath, JSON.stringify(story));
+    const malformed = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved', ...verdictEvidence(pageHtml, state), mode: 'full',
+      }),
+    });
+    assert.equal(malformed.status, 409);
+    const malformedBody = await malformed.json();
+    assert.equal(malformedBody.reloadRequired, true);
+    assert.match(malformedBody.error, /reload required/i);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('lazy review evidence stays bound to its issued since-feedback snapshot and rejects drift', async () => {
+  const repo = gitRepo();
+  const original = Array.from({ length: 24 }, (_, index) => `line ${index + 1}`);
+  writeFileSync(join(repo, 'review.txt'), `${original.join('\n')}\n`);
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add review fixture'], { cwd: repo });
+
+  const atFeedback = [...original];
+  atFeedback[1] = 'before-feedback-only';
+  writeFileSync(join(repo, 'review.txt'), `${atFeedback.join('\n')}\n`);
+  const feedbackDiff = getDiff(repo, 'HEAD');
+  captureReviewSnapshot(repo, {
+    base: 'HEAD',
+    diff: feedbackDiff,
+    files: parseUnifiedDiff(feedbackDiff),
+    reason: 'feedback-sent',
+  });
+
+  const afterFeedback = [...atFeedback];
+  afterFeedback[20] = 'since-feedback-only';
+  writeFileSync(join(repo, 'review.txt'), `${afterFeedback.join('\n')}\n`);
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff?review=since`;
+    const page = await (await fetch(`${base}${route}`)).text();
+    const token = reviewPageToken(page);
+    assert.match(page, /data-current-review-mode="since"/);
+    assert.match(page, /data-review-from="[^"]+"/);
+
+    const missingToken = await fetch(`${base}/api/diff/file-panel?file=review.txt`);
+    assert.equal(missingToken.status, 409);
+    assert.equal((await missingToken.json()).reloadRequired, true);
+
+    const panel = await fetch(leased(`${base}/api/diff/file-panel?file=review.txt&mode=full`, token));
+    assert.equal(panel.status, 200);
+    const panelHtml = await panel.text();
+    assert.match(panelHtml, /since-feedback-only/);
+    assert.doesNotMatch(panelHtml, /before-feedback-only/, 'caller mode cannot promote the lease to the full diff');
+
+    const state = await (await fetch(`${base}/api/review-state`)).json();
+    const spoofedFullApproval = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'approved',
+        pageToken: token,
+        expectedFingerprint: state.currentDiffHash,
+        expectedScopeKey: state.scopeKey,
+        expectedFeedbackVersion: state.feedbackVersion,
+        expectedBlockingFeedbackDigest: state.blockingFeedbackDigest,
+        mode: 'full',
+      }),
+    });
+    assert.equal(spoofedFullApproval.status, 409);
+    assert.match((await spoofedFullApproval.json()).error, /full-change view/i);
+
+    afterFeedback[22] = 'newer-than-page';
+    writeFileSync(join(repo, 'review.txt'), `${afterFeedback.join('\n')}\n`);
+    const staleEndpoints = [
+      '/api/diff/file-panel?file=review.txt',
+      '/api/review/step-panel?index=1',
+      '/api/fullfile?file=review.txt',
+      '/api/diff/split?file=review.txt',
+      '/api/diff/context?file=review.txt&from=1&to=3&layout=unified',
+      '/api/review/excluded-file?file=review.txt',
+    ];
+    for (const endpoint of staleEndpoints) {
+      const response = await fetch(leased(`${base}${endpoint}`, token));
+      assert.equal(response.status, 409, `${endpoint} rejects evidence newer than the issued page`);
+      const error = await response.json();
+      assert.equal(error.reloadRequired, true);
+      assert.match(error.error, /reload required/i);
+    }
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('since-feedback leases reject review-state snapshot tampering under the same id', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# feedback checkpoint\n');
+  const feedbackDiff = getDiff(repo, 'HEAD');
+  const checkpoint = captureReviewSnapshot(repo, {
+    base: 'HEAD',
+    diff: feedbackDiff,
+    files: parseUnifiedDiff(feedbackDiff),
+    reason: 'feedback-sent',
+  });
+  writeFileSync(join(repo, 'README.md'), '# current review\n');
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff?review=since`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    const token = reviewPageToken(pageHtml);
+
+    const statePath = join(repo, '.diffstory', 'review-state.json');
+    const stored = JSON.parse(readFileSync(statePath, 'utf8'));
+    const scope = Object.values(stored.scopes)[0];
+    const snapshot = scope.snapshots.find((candidate) => candidate.id === checkpoint.id);
+    assert.ok(snapshot, 'fixture exposes the leased checkpoint');
+    snapshot.files['README.md'].content = '# forged checkpoint';
+    writeFileSync(statePath, `${JSON.stringify(stored, null, 2)}\n`);
+
+    const staleEndpoints = [
+      '/api/diff/file-panel?file=README.md',
+      '/api/review/step-panel?index=1',
+      '/api/fullfile?file=README.md',
+      '/api/diff/split?file=README.md',
+      '/api/diff/context?file=README.md&from=1&to=3&layout=unified',
+      '/api/review/excluded-file?file=README.md',
+    ];
+    for (const endpoint of staleEndpoints) {
+      const response = await fetch(leased(`${base}${endpoint}`, token));
+      assert.equal(response.status, 409, `${endpoint} rejects mutated checkpoint contents`);
+      const error = await response.json();
+      assert.equal(error.reloadRequired, true);
+      assert.match(error.detail, /checkpoint changed/i);
+    }
+
+    const verdict = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'changes-requested', pageToken: token }),
+    });
+    assert.equal(verdict.status, 409);
+    const verdictError = await verdict.json();
+    assert.equal(verdictError.reloadRequired, true);
+    assert.match(verdictError.detail, /checkpoint changed/i);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
 
 test('app server serves the bundled Mermaid ESM from the same origin', async () => {
   const { server, base } = await boot();
@@ -259,7 +867,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     const state = await opened.json();
     assert.equal(state.isGit, true);
     assert.equal(state.hasTour, false);
-    assert.equal(state.route, `/repo/${encodeURIComponent(basename(repo))}/stories`);
+    assert.equal(state.route, `/repo/${encodeURIComponent(basename(repo))}/change`);
 
     const stories = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/stories`);
     assert.equal(stories.status, 200);
@@ -643,14 +1251,15 @@ test('/api/diff/split serves side-by-side hunks for a changed file', async () =>
     });
     // Opening a repo alone leaves selectedStory undefined; visiting /diff (like the
     // storyless viewer flow does) is what puts the session into storyless mode.
-    await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`);
-    const res = await fetch(`${base}/api/diff/split?file=README.md`);
+    const page = await (await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`)).text();
+    const token = reviewPageToken(page);
+    const res = await fetch(leased(`${base}/api/diff/split?file=README.md`, token));
     assert.equal(res.status, 200);
     const html = await res.text();
     assert.match(html, /ds-diffhead/);
     assert.match(html, /ds-celldiv/);
     assert.match(html, /split me/);
-    const miss = await fetch(`${base}/api/diff/split?file=nope.md`);
+    const miss = await fetch(leased(`${base}/api/diff/split?file=nope.md`, token));
     assert.match(await miss.text(), /isn't part of this change/);
   } finally {
     server.close();
@@ -681,29 +1290,31 @@ test('/api/diff/context serves clamped context rows', async () => {
     // Opening a repo alone leaves selectedStory undefined; visiting /diff (like the
     // storyless viewer flow does) is what puts the session into storyless mode —
     // same warm-up the /api/diff/split test above needs.
-    await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`);
-    const res = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=4&layout=unified`);
+    const page = await (await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`)).text();
+    const token = reviewPageToken(page);
+    const context = (query) => leased(`${base}/api/diff/context?${query}`, token);
+    const res = await fetch(context('file=notes.txt&from=2&to=4&layout=unified'));
     assert.equal(res.status, 200);
     const html = await res.text();
     assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);
     // The syntax highlighter tokenizes the trailing digit, so "line 3" is served
     // as 'line <span class="tk-n">3</span>' rather than a literal substring.
     assert.match(html, /line <span class="tk-n">3<\/span>/);
-    const split = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=3&layout=split`);
+    const split = await fetch(context('file=notes.txt&from=2&to=3&layout=split'));
     assert.match(await split.text(), /ds-celldiv/);
-    const empty = await fetch(`${base}/api/diff/context?file=notes.txt&from=9999&to=eof&layout=unified`);
+    const empty = await fetch(context('file=notes.txt&from=9999&to=eof&layout=unified'));
     assert.match(await empty.text(), /data-from="0" data-to="0"/);
     // Inverted numeric range (to < from) hits the guard, not the row filter.
-    const inverted = await fetch(`${base}/api/diff/context?file=notes.txt&from=10&to=5&layout=unified`);
+    const inverted = await fetch(context('file=notes.txt&from=10&to=5&layout=unified'));
     assert.match(await inverted.text(), /^<div data-ctx-rows data-from="0" data-to="0"><\/div>$/);
     // A numeric range past EOF clamps to the file's last context line — that's
     // 39 here (line 40 is the added line, not a ctx row) — instead of erroring.
-    const past = await fetch(`${base}/api/diff/context?file=notes.txt&from=38&to=58&layout=unified`);
+    const past = await fetch(context('file=notes.txt&from=38&to=58&layout=unified'));
     assert.match(await past.text(), /^<div data-ctx-rows data-from="38" data-to="39">/);
     // A file that's in the diff but unreadable from the working tree gets the note.
-    const unreadable = await fetch(`${base}/api/diff/context?file=gone.txt&from=1&to=5&layout=unified`);
+    const unreadable = await fetch(context('file=gone.txt&from=1&to=5&layout=unified'));
     assert.match(await unreadable.text(), /Couldn't read gone\.txt from the working tree\./);
-    const bad = await fetch(`${base}/api/diff/context?file=nope.md&from=1&to=2&layout=unified`);
+    const bad = await fetch(context('file=nope.md&from=1&to=2&layout=unified'));
     assert.match(await bad.text(), /isn't part of this change/);
   } finally {
     server.close();
@@ -753,7 +1364,8 @@ test('/api/diff/context serves the story head, not the drifted working tree', as
     // Visiting the review route with ?story= selects the story (and clears session scope).
     const review = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`);
     assert.equal(review.status, 200);
-    const res = await fetch(`${base}/api/diff/context?file=notes.txt&from=2&to=4&layout=unified`);
+    const token = reviewPageToken(await review.text());
+    const res = await fetch(leased(`${base}/api/diff/context?file=notes.txt&from=2&to=4&layout=unified`, token));
     assert.equal(res.status, 200);
     const html = await res.text();
     assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);

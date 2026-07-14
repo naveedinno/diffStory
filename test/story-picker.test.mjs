@@ -36,4 +36,17 @@ test('compact session cards preserve trust and review facts on mobile', () => {
   assert.match(html, />5 files changed since feedback</);
   assert.doesNotMatch(html, /session-facts>span:nth-child/);
   assert.match(html, /\.row-del::after\{content:"";position:absolute;inset:-5px\}/);
+  assert.equal((html.match(/>Start review</g) || []).length, 1, 'offers one clear new-review action');
+  assert.match(html, /Review history/);
+  assert.match(html, /<b>1<\/b> review needs feedback/, 'makes clear this is a review count, not a thread count');
+  assert.doesNotMatch(html, /class="review-path"|Every session keeps the scope/, 'does not repeat the review tutorial');
+});
+
+test('empty history keeps review creation available without making history the entry tutorial', () => {
+  const html = renderStoryPicker({ repoName: 'demo', routeBase: '/repo/demo', now: Date.now(), stories: [] });
+
+  assert.match(html, /No saved reviews/);
+  assert.equal((html.match(/>Start review</g) || []).length, 1);
+  assert.match(html, /href="\/repo\/demo\/change"/);
+  assert.doesNotMatch(html, /Scope.*Read.*Resolve.*Decide/s);
 });

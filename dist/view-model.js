@@ -88,6 +88,7 @@ function buildCodeStep(repo, step, files, byId, total, headRef) {
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
+        tags: step.tags ?? [],
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
         why: step.why,
@@ -104,6 +105,7 @@ function buildConceptStep(step, byId) {
         title: step.title,
         kind: 'concept',
         kindLabel: STEP_KIND_LABEL.concept,
+        tags: step.tags ?? [],
         body: step.body,
         diagram: step.diagram,
         preparesFor: step.preparesFor
@@ -215,6 +217,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
             hunks,
             hunkRanges: file.hunks.map(hunkNewRange),
             hasFull: file.status !== 'deleted',
+            symbols: changedSymbols(file),
         });
     }
     // Context-only files (referenced by a context step, absent from the diff).
@@ -238,9 +241,28 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef) {
             hunks: rows.length ? [rows] : [],
             hunkRanges: r ? [[r.startLine, r.startLine + rows.length - 1]] : [],
             hasFull: r !== null,
+            symbols: [],
         });
     }
     return views.sort(byStepOrderThenPath);
+}
+/** Conservative declaration extraction for findability, never correctness claims. */
+function changedSymbols(file) {
+    const found = new Set();
+    const declaration = /\b(?:async\s+)?(?:function|class|interface|type|enum|struct|contract|library|event|modifier|def|fn)\s+([A-Za-z_$][\w$]*)|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=|:)/;
+    for (const hunk of file.hunks) {
+        for (const line of hunk.lines) {
+            if (line.type === 'ctx')
+                continue;
+            const match = line.content.match(declaration);
+            const symbol = match?.[1] ?? match?.[2];
+            if (symbol)
+                found.add(symbol);
+            if (found.size >= 12)
+                return [...found];
+        }
+    }
+    return [...found];
 }
 function buildTrust(files, uncovered, stepByFile) {
     const byPath = new Map(files.map((f) => [f.newPath, f]));

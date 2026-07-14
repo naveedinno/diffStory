@@ -143,7 +143,10 @@ process.stdin.on('data', (chunk) => {
   );
   chmodSync(fake, 0o755);
   try {
-    assert.deepEqual(await listCodexStoryModels({ binary: fake, timeoutMs: 3000 }), [{
+    // Match the production timeout: the complete suite starts many child
+    // processes in parallel, so a 3s test-only deadline can expire before this
+    // tiny fixture is scheduled even though the protocol is healthy.
+    assert.deepEqual(await listCodexStoryModels({ binary: fake, timeoutMs: 8000 }), [{
       label: 'Best quality',
       model: 'codex-best',
       description: 'Codex Best · recommended by your Codex app',

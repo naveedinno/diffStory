@@ -4,11 +4,49 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { commentsPath } from './config.js';
-import type { Comment, CommentSelection, CommentSide, CommentStatus, CommentType } from './types.js';
+import type {
+  Comment,
+  CommentSelection,
+  CommentSeverity,
+  CommentSide,
+  CommentStatus,
+  CommentType,
+} from './types.js';
 
 const TYPES: CommentType[] = ['change', 'question', 'nit'];
+const SEVERITIES: CommentSeverity[] = ['blocking', 'concern', 'nit'];
 const STATUSES: CommentStatus[] = ['open', 'addressed', 'resolved'];
 const SIDES: CommentSide[] = ['left', 'right'];
+
+export type CommentStoreHealth =
+  | { status: 'healthy'; source: 'missing' | 'file' }
+  | {
+      status: 'invalid';
+      reason: 'unreadable' | 'invalid-json' | 'not-array' | 'invalid-entry';
+      message: string;
+      recovery: string;
+      entryIndex?: number;
+    };
+
+export interface CommentLoadResult {
+  comments: Comment[];
+  health: CommentStoreHealth;
+  /** Identity of the exact source bytes, including malformed content. */
+  sourceDigest: string;
+}
+
+const INVALID_RECOVERY =
+  'Repair or restore .diffstory/comments.json, then reload. diffStory will not overwrite the invalid file.';
+
+export class InvalidCommentStoreError extends Error {
+  readonly health: Extract<CommentStoreHealth, { status: 'invalid' }>;
+
+  constructor(health: Extract<CommentStoreHealth, { status: 'invalid' }>) {
+    super(`${health.message} ${health.recovery}`);
+    this.name = 'InvalidCommentStoreError';
+    this.health = health;
+  }
+}
 
 /**
  * Back-compat: a legacy single `reply` reads as one `ai` turn so every caller can
@@ -22,21 +60,72 @@ export function normalizeComment(c: Comment): Comment {
   return c;
 }
 
-export function loadComments(repo: string): Comment[] {
+export function loadCommentsWithHealth(repo: string): CommentLoadResult {
   const path = commentsPath(repo);
-  if (!existsSync(path)) return [];
-  try {
-    const data = JSON.parse(readFileSync(path, 'utf8'));
-    return Array.isArray(data) ? (data as Comment[]).map(normalizeComment) : [];
-  } catch {
-    return [];
+  if (!existsSync(path)) {
+    return {
+      comments: [],
+      health: { status: 'healthy', source: 'missing' },
+      sourceDigest: hashSource(null),
+    };
   }
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
+    return invalidLoad('unreadable', `Could not read .diffstory/comments.json${detail}.`, null);
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return invalidLoad('invalid-json', '.diffstory/comments.json is not valid JSON.', raw);
+  }
+  if (!Array.isArray(data)) {
+    return invalidLoad('not-array', '.diffstory/comments.json must contain a JSON array.', raw);
+  }
+
+  const seen = new Set<string>();
+  for (let index = 0; index < data.length; index++) {
+    const problem = validateStoredComment(data[index], seen);
+    if (problem) {
+      return invalidLoad(
+        'invalid-entry',
+        `.diffstory/comments.json has an invalid comment at array index ${index}: ${problem}.`,
+        raw,
+        index,
+      );
+    }
+  }
+  return {
+    comments: (data as Comment[]).map(normalizeComment),
+    health: { status: 'healthy', source: 'file' },
+    sourceDigest: hashSource(raw),
+  };
 }
 
-function saveComments(repo: string, comments: Comment[]): void {
+/** Compatibility reader for callers that only render valid comments. */
+export function loadComments(repo: string): Comment[] {
+  return loadCommentsWithHealth(repo).comments;
+}
+
+function saveComments(repo: string, comments: Comment[], expectedSourceDigest: string): void {
   const path = commentsPath(repo);
+  const current = loadCommentsWithHealth(repo);
+  if (current.health.status === 'invalid') throw new InvalidCommentStoreError(current.health);
+  if (current.sourceDigest !== expectedSourceDigest) {
+    throw new Error('Review feedback changed while it was being saved. Reload and try again.');
+  }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(comments, null, 2) + '\n', 'utf8');
+}
+
+function writableComments(repo: string): CommentLoadResult {
+  const result = loadCommentsWithHealth(repo);
+  if (result.health.status === 'invalid') throw new InvalidCommentStoreError(result.health);
+  return result;
 }
 
 export interface NewComment {
@@ -47,6 +136,7 @@ export interface NewComment {
   selectedText?: string;
   selection?: Partial<CommentSelection>;
   type: string;
+  severity?: string;
   body: string;
   reviewRound?: number;
   reviewSnapshotId?: string;
@@ -59,12 +149,20 @@ export function addComment(repo: string, input: NewComment): Comment {
   }
   if (typeof input.file !== 'string' || !input.file) throw new Error('comment file is required');
   const type = TYPES.includes(input.type as CommentType) ? (input.type as CommentType) : 'change';
+  const severity = SEVERITIES.includes(input.severity as CommentSeverity)
+    ? (input.severity as CommentSeverity)
+    : type === 'nit'
+      ? 'nit'
+      : type === 'change'
+        ? 'blocking'
+        : 'concern';
 
   const comment: Comment = {
     id: nextId(),
     file: input.file,
     line: Number.isFinite(input.line) ? Math.trunc(input.line) : 0,
     type,
+    severity,
     body: input.body.trim(),
     status: 'open',
     createdAt: new Date().toISOString(),
@@ -89,17 +187,17 @@ export function addComment(repo: string, input: NewComment): Comment {
       .slice(0, 20);
   }
 
-  const comments = loadComments(repo);
-  comments.push(comment);
-  saveComments(repo, comments);
+  const loaded = writableComments(repo);
+  loaded.comments.push(comment);
+  saveComments(repo, loaded.comments, loaded.sourceDigest);
   return comment;
 }
 
 export function deleteComment(repo: string, id: string): boolean {
-  const comments = loadComments(repo);
-  const next = comments.filter((c) => c.id !== id);
-  if (next.length === comments.length) return false;
-  saveComments(repo, next);
+  const loaded = writableComments(repo);
+  const next = loaded.comments.filter((c) => c.id !== id);
+  if (next.length === loaded.comments.length) return false;
+  saveComments(repo, next, loaded.sourceDigest);
   return true;
 }
 
@@ -112,11 +210,11 @@ export function setCommentStatus(repo: string, id: string, status: string): Comm
   if (!STATUSES.includes(status as CommentStatus)) {
     throw new Error(`status must be one of ${STATUSES.join(', ')}`);
   }
-  const comments = loadComments(repo);
-  const target = comments.find((c) => c.id === id);
+  const loaded = writableComments(repo);
+  const target = loaded.comments.find((c) => c.id === id);
   if (!target) return null;
   target.status = status as CommentStatus;
-  saveComments(repo, comments);
+  saveComments(repo, loaded.comments, loaded.sourceDigest);
   return target;
 }
 
@@ -128,14 +226,104 @@ export function setCommentStatus(repo: string, id: string, status: string): Comm
 export function appendUserMessage(repo: string, id: string, text: string): Comment | null {
   const body = typeof text === 'string' ? text.trim() : '';
   if (!body) throw new Error('message text is required');
-  const comments = loadComments(repo);
-  const target = comments.find((c) => c.id === id);
+  const loaded = writableComments(repo);
+  const target = loaded.comments.find((c) => c.id === id);
   if (!target) return null;
   if (!Array.isArray(target.turns)) target.turns = [];
   target.turns.push({ role: 'user', text: body, at: new Date().toISOString() });
   target.status = 'open';
-  saveComments(repo, comments);
+  saveComments(repo, loaded.comments, loaded.sourceDigest);
   return target;
+}
+
+function invalidLoad(
+  reason: Extract<CommentStoreHealth, { status: 'invalid' }>['reason'],
+  message: string,
+  raw: string | null,
+  entryIndex?: number,
+): CommentLoadResult {
+  return {
+    comments: [],
+    health: {
+      status: 'invalid',
+      reason,
+      message,
+      recovery: INVALID_RECOVERY,
+      ...(entryIndex === undefined ? {} : { entryIndex }),
+    },
+    sourceDigest: hashSource(raw),
+  };
+}
+
+function hashSource(raw: string | null): string {
+  return createHash('sha256').update(raw === null ? '\0missing-or-unreadable' : raw).digest('hex');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && !!value.trim();
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function positiveInteger(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) > 0;
+}
+
+function validateStoredComment(value: unknown, seen: Set<string>): string | null {
+  if (!isRecord(value)) return 'each comment must be an object';
+  if (!nonEmptyString(value.id)) return 'id must be a non-empty string';
+  const id = value.id as string;
+  if (seen.has(id)) return `duplicate id ${JSON.stringify(id)}`;
+  seen.add(id);
+  if (!nonEmptyString(value.file)) return 'file must be a non-empty string';
+  if (!Number.isInteger(value.line) || Number(value.line) < 0) return 'line must be a non-negative integer';
+  if (!TYPES.includes(value.type as CommentType)) return `type must be one of ${TYPES.join(', ')}`;
+  if (value.severity !== undefined && !SEVERITIES.includes(value.severity as CommentSeverity)) {
+    return `severity must be one of ${SEVERITIES.join(', ')}`;
+  }
+  if (!nonEmptyString(value.body)) return 'body must be a non-empty string';
+  if (!STATUSES.includes(value.status as CommentStatus)) return `status must be one of ${STATUSES.join(', ')}`;
+  if (!nonEmptyString(value.createdAt)) return 'createdAt must be a non-empty string';
+  if (!optionalString(value.step)) return 'step must be a string when present';
+  if (value.side !== undefined && !SIDES.includes(value.side as CommentSide)) {
+    return `side must be one of ${SIDES.join(', ')}`;
+  }
+  if (!optionalString(value.selectedText)) return 'selectedText must be a string when present';
+  if (!optionalString(value.reviewSnapshotId)) return 'reviewSnapshotId must be a string when present';
+  if (!optionalString(value.anchorHash)) return 'anchorHash must be a string when present';
+  if (!optionalString(value.reply)) return 'reply must be a string when present';
+  if (value.reviewRound !== undefined && !positiveInteger(value.reviewRound)) {
+    return 'reviewRound must be a positive integer when present';
+  }
+  if (value.selection !== undefined) {
+    if (!isRecord(value.selection)) return 'selection must be an object when present';
+    if (!positiveInteger(value.selection.startLine) || !positiveInteger(value.selection.endLine)) {
+      return 'selection lines must be positive integers';
+    }
+    if (value.selection.startColumn !== undefined && !positiveInteger(value.selection.startColumn)) {
+      return 'selection startColumn must be a positive integer when present';
+    }
+    if (value.selection.endColumn !== undefined && !positiveInteger(value.selection.endColumn)) {
+      return 'selection endColumn must be a positive integer when present';
+    }
+  }
+  if (value.turns !== undefined) {
+    if (!Array.isArray(value.turns)) return 'turns must be an array when present';
+    for (let index = 0; index < value.turns.length; index++) {
+      const turn = value.turns[index];
+      if (!isRecord(turn)) return `turn ${index} must be an object`;
+      if (turn.role !== 'user' && turn.role !== 'ai') return `turn ${index} has an invalid role`;
+      if (!nonEmptyString(turn.text)) return `turn ${index} text must be a non-empty string`;
+      if (!nonEmptyString(turn.at)) return `turn ${index} at must be a non-empty string`;
+    }
+  }
+  return null;
 }
 
 function nextId(): string {

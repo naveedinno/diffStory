@@ -67,6 +67,8 @@ export interface StepViewBase {
   title: string;
   kind: StepKind;
   kindLabel: string;
+  /** Authored review cues carried through from story.json. */
+  tags: string[];
 }
 
 export interface CodeStepView extends StepViewBase {
@@ -126,6 +128,8 @@ export interface FileView {
   hunkRanges: Array<[number, number]>;
   /** Whether a complete-file view can be loaded (file exists in the working tree). */
   hasFull: boolean;
+  /** Best-effort changed declarations, used only for navigation/search. */
+  symbols: string[];
 }
 
 export interface UncoveredView {
@@ -239,6 +243,7 @@ function buildCodeStep(
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
+    tags: step.tags ?? [],
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
     why: step.why,
@@ -256,6 +261,7 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
     title: step.title,
     kind: 'concept',
     kindLabel: STEP_KIND_LABEL.concept,
+    tags: step.tags ?? [],
     body: step.body,
     diagram: step.diagram,
     preparesFor: step.preparesFor
@@ -388,6 +394,7 @@ function buildFiles(
       hunks,
       hunkRanges: file.hunks.map(hunkNewRange),
       hasFull: file.status !== 'deleted',
+      symbols: changedSymbols(file),
     });
   }
 
@@ -411,10 +418,27 @@ function buildFiles(
       hunks: rows.length ? [rows] : [],
       hunkRanges: r ? [[r.startLine, r.startLine + rows.length - 1]] : [],
       hasFull: r !== null,
+      symbols: [],
     });
   }
 
   return views.sort(byStepOrderThenPath);
+}
+
+/** Conservative declaration extraction for findability, never correctness claims. */
+function changedSymbols(file: DiffFile): string[] {
+  const found = new Set<string>();
+  const declaration = /\b(?:async\s+)?(?:function|class|interface|type|enum|struct|contract|library|event|modifier|def|fn)\s+([A-Za-z_$][\w$]*)|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=|:)/;
+  for (const hunk of file.hunks) {
+    for (const line of hunk.lines) {
+      if (line.type === 'ctx') continue;
+      const match = line.content.match(declaration);
+      const symbol = match?.[1] ?? match?.[2];
+      if (symbol) found.add(symbol);
+      if (found.size >= 12) return [...found];
+    }
+  }
+  return [...found];
 }
 
 function buildTrust(

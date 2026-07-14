@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { computeCoverage, stalePointers } from '../dist/coverage.js';
+import { computeCoverage, computeStoryClaimCoverage, stalePointers } from '../dist/coverage.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -74,4 +74,68 @@ test('concept primers neither claim coverage nor become stale diff pointers', ()
   const withoutCodeClaim = { ...v2, steps: [concept] };
   assert.ok(computeCoverage(withoutCodeClaim, files).uncovered.length >= 1);
   assert.deepEqual(stalePointers(withoutCodeClaim, files), []);
+});
+
+test('a story claim must cover every changed line rather than merely overlap the change', () => {
+  const multiLineDiff = [
+    'diff --git a/a.ts b/a.ts',
+    '--- a/a.ts',
+    '+++ b/a.ts',
+    '@@ -1,2 +1,5 @@',
+    ' line1',
+    '+added2',
+    '+added3',
+    '+added4',
+    ' line5',
+  ].join('\n');
+  const multiLineFiles = parseUnifiedDiff(multiLineDiff);
+  const cov = computeStoryClaimCoverage(
+    tour([{ id: 's1', order: 1, title: 'x', file: 'a.ts', range: [2, 2], kind: 'changed', why: '' }]),
+    multiLineFiles,
+  );
+
+  assert.deepEqual(cov.unclaimed, [{ file: 'a.ts', range: [3, 4], status: 'modified' }]);
+  assert.equal(cov.fullyClaimedChangedFiles, 0);
+});
+
+test('adjacent story claims can jointly account for one changed range', () => {
+  const multiLineDiff = [
+    'diff --git a/a.ts b/a.ts',
+    '--- a/a.ts',
+    '+++ b/a.ts',
+    '@@ -1,1 +1,4 @@',
+    ' line1',
+    '+added2',
+    '+added3',
+    '+added4',
+  ].join('\n');
+  const cov = computeStoryClaimCoverage(
+    tour([
+      { id: 's1', order: 1, title: 'one', file: 'a.ts', range: [2, 2], kind: 'changed', why: '' },
+      { id: 's2', order: 2, title: 'two', file: 'a.ts', range: [3, 4], kind: 'changed', why: '' },
+    ]),
+    parseUnifiedDiff(multiLineDiff),
+  );
+
+  assert.deepEqual(cov.unclaimed, []);
+  assert.equal(cov.fullyClaimedChangedFiles, 1);
+  assert.equal(cov.fullyClaimedChangedRanges, 1);
+});
+
+test('the whole-file deletion sentinel remains a fully claimed change', () => {
+  const deletionDiff = [
+    'diff --git a/gone.ts b/gone.ts',
+    'deleted file mode 100644',
+    '--- a/gone.ts',
+    '+++ /dev/null',
+    '@@ -1,1 +0,0 @@',
+    '-export const gone = true;',
+  ].join('\n');
+  const cov = computeStoryClaimCoverage(
+    tour([{ id: 's1', order: 1, title: 'delete', file: 'gone.ts', range: [0, 0], kind: 'changed', why: '' }]),
+    parseUnifiedDiff(deletionDiff),
+  );
+
+  assert.deepEqual(cov.unclaimed, []);
+  assert.equal(cov.fullyClaimedChangedFiles, 1);
 });

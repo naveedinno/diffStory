@@ -94,7 +94,7 @@ export function renderPicker(recents: RecentRow[], home: string, now: number): s
       (missing.length
         ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r) => recentCard(r, home, now)).join('')}</div></details>`
         : '')
-    : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Choose a folder below to start your first guided review.</p></div>`;
+    : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Open a local git repository to review its current change.</p></div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -122,17 +122,18 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:0;
 }
-.wrap{width:min(1080px,100%); margin:0 auto; padding:44px 24px 64px; display:grid; grid-template-columns:minmax(250px,320px) minmax(0,1fr); gap:34px; align-items:start}
-.hero{position:sticky; top:28px; min-height:calc(100vh - 88px); display:flex; flex-direction:column; justify-content:space-between; gap:34px}
-.head{display:flex; align-items:center; gap:14px; margin-bottom:14px}
+.wrap{width:min(860px,100%); margin:0 auto; padding:34px 24px 64px}
+.hero{display:flex;align-items:center;gap:16px;padding-bottom:24px;margin-bottom:24px;border-bottom:.5px solid var(--sep)}
+.head{display:flex; align-items:center; gap:14px; flex:none}
 .appicon{width:54px; height:54px; border-radius:14px; flex:none;
   background:var(--blue);
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
 .appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
-h1{font-size:30px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
-.hero-title{font-size:22px;line-height:1.2;font-weight:710;letter-spacing:-.02em;margin:24px 0 8px;max-width:12ch}
-.sub{color:var(--label2); font-size:15px; margin:0; max-width:31ch; line-height:1.5}
+h1{font-size:25px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
+.hero-copy{min-width:0}
+.hero-title{font-size:17px;line-height:1.25;font-weight:680;letter-spacing:-.015em;margin:0 0 3px}
+.sub{color:var(--label2); font-size:13.5px; margin:0; max-width:62ch; line-height:1.45}
 .manager{min-width:0}
 .launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
 .launchwarn[hidden]{display:none}
@@ -153,7 +154,7 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:transform .14s ease, background .14s ease, box-shadow .14s ease;}
 .repo-card:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
 .repo-card:active{transform:scale(.992)}
-.repo-card:focus-visible,.chooser:focus-visible,.add-btn:focus-visible,.remove-btn:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 38%,transparent)}
+.repo-card:focus-visible,.add-btn:focus-visible,.remove-btn:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 38%,transparent)}
 .repo-row-missing{opacity:.68}
 .remove-btn{width:38px;border:.5px solid var(--hairline);border-radius:8px;background:var(--bg-elev);color:var(--label3);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .remove-btn:hover{background:var(--red-bg);color:var(--red-fg)}
@@ -181,14 +182,6 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
 .empty-sub{font-size:13px; margin:0}
 .open{margin-top:18px;padding-top:18px;border-top:.5px solid var(--sep)}
 .quick-open{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
-.chooser{width:100%; display:flex; align-items:center; gap:11px; text-align:left; margin-top:10px;
-  background:transparent; border:.5px solid var(--hairline); border-radius:8px; padding:11px 12px;
-  transition:background .14s ease, box-shadow .14s ease}
-.chooser:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
-.chooser .tile{background:var(--tile); color:var(--tile-fg)}
-.chooser .ctext{flex:1}
-.chooser .ct1{display:block;font-size:13.5px; font-weight:650; color:var(--label)}
-.chooser .ct2{display:block;font-size:12.5px; color:var(--label2); margin-top:1px}
 .orpaste{display:flex; gap:10px; align-items:center; margin-top:12px}
 input[type=text],input[type=search]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
   background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; outline:none;
@@ -206,13 +199,10 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   background:transparent; border:.5px solid var(--hairline); border-radius:8px; cursor:pointer}
 .ghost:hover{background:var(--hover)}
 .msg{min-height:18px; margin:10px 2px 0; font-size:13px; color:var(--red-fg)}
-.steps{position:relative;display:grid;gap:0;padding:0 0 0 12px;border-left:1px solid var(--hairline)}
-.step{position:relative;padding:0 0 20px 20px}.step:last-child{padding-bottom:0}.step:before{content:"";position:absolute;left:-17px;top:1px;width:8px;height:8px;border:3px solid var(--bg);border-radius:50%;background:var(--label3)}.step:first-child:before{background:var(--blue)}
-.step-t{font-size:11px;font-weight:740;text-transform:uppercase;letter-spacing:.07em;margin:0 0 4px;color:var(--label)}
-.step-d{font-size:12px; color:var(--label2); margin:0; line-height:1.4}
 .scrim{position:fixed; inset:0; background:var(--scrim); display:none; align-items:center; justify-content:center;
   padding:20px; z-index:50}
 .scrim.show{display:flex}
+.scrim[hidden]{display:none}
 .sheet{width:100%; max-width:560px; max-height:76vh; display:flex; flex-direction:column; overflow:hidden;
   background:var(--sheet); border:.5px solid var(--hairline); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.34)}
 .sheet-head{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:.5px solid var(--sep)}
@@ -223,7 +213,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
 .crumbs{display:flex; align-items:center; flex-wrap:wrap; gap:2px; padding:9px 16px; border-bottom:.5px solid var(--sep);
   font-size:12.5px; color:var(--label2)}
 .crumb{background:none; border:none; font:inherit; color:var(--blue); cursor:pointer; padding:2px 5px; border-radius:6px}
-.crumb:hover{background:var(--hover)}
+.crumb:not(.cur):hover{background:var(--hover)}
 .crumb.cur{color:var(--label); font-weight:590; cursor:default}
 .crumb-sep{color:var(--label3); opacity:.6}
 .fssearch{padding:10px 16px;border-bottom:.5px solid var(--sep)}
@@ -233,6 +223,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
 .fssearch input::-webkit-search-cancel-button{-webkit-appearance:none}
 .fsclear{position:absolute;right:6px;width:23px;height:23px;border:0;border-radius:6px;background:var(--neutral-bg);color:var(--label2);font:inherit;font-size:13px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center}
 .fsclear.show{display:flex}
+.fsclear[hidden]{display:none}
 .fsclear:hover{background:var(--hover)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .fslist{overflow-y:auto; padding:6px; flex:1; min-height:120px}
@@ -254,38 +245,36 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   @keyframes up{to{opacity:1; transform:none}}
 }
 @media (max-width:760px){
-  .wrap{display:block;padding:28px 16px 54px}
-  .hero{position:static;min-height:0;margin-bottom:28px}
+  .wrap{padding:24px 16px 54px}
+  .hero{align-items:flex-start;padding-bottom:20px;margin-bottom:20px}
   .sub{max-width:44ch}
   .quick-open{grid-template-columns:1fr}
   .add-btn span{display:none}
 }
+@media (max-width:480px){
+  .appicon{width:44px;height:44px;border-radius:11px}.appmark{width:28px;height:28px}
+  h1{font-size:22px}.hero-title{font-size:15px}.sub{font-size:13px}
+  .section-head{align-items:center}.section{display:none}h2{font-size:21px}
+  .repo-row{position:relative;display:block}.repo-card{padding-right:54px}
+  .remove-btn{position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:2}
+  .remove-btn::after{content:"";position:absolute;inset:-5px}
+}
 </style></head>
 <body>
-<main class="wrap">
+<main class="wrap" id="pickerMain">
   <section class="hero reveal d1">
-    <div>
-      <div class="head">
-        <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
-        <div><h1>${esc(APP_BRAND)}</h1></div>
-      </div>
-      <p class="hero-title">Code review, held together.</p>
-      <p class="sub">Open a workspace and continue the review session around your current code change.</p>
+    <div class="head">
+      <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
+      <div><h1>${esc(APP_BRAND)}</h1></div>
     </div>
-
-    <section class="steps" aria-label="Review workflow">
-      <div class="step"><p class="step-t">Scope</p><p class="step-d">Choose the exact change.</p></div>
-      <div class="step"><p class="step-t">Read</p><p class="step-d">Follow evidence through the real diff.</p></div>
-      <div class="step"><p class="step-t">Resolve</p><p class="step-d">Send feedback and verify replies.</p></div>
-      <div class="step"><p class="step-t">Decide</p><p class="step-d">Approve only when the thread is clear.</p></div>
-    </section>
+    <div class="hero-copy"><p class="hero-title">Open a repository to review its current change.</p><p class="sub">Recent repositories keep branch and working-tree context visible before you enter.</p></div>
   </section>
 
   <section class="manager reveal d2">
     <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
     <div class="section-head">
-      <div><p class="section">Workspaces</p><h2>Continue a review</h2></div>
-      <button class="add-btn" id="quickAddBtn" type="button">${ICON_PLUS}<span>Open workspace</span></button>
+      <div><p class="section">Repositories</p><h2>Open a change</h2></div>
+      <button class="add-btn" id="quickAddBtn" type="button" aria-label="Open repository" title="Open repository">${ICON_PLUS}<span>Open repository</span></button>
     </div>
     <div class="stack" id="recent">${list}</div>
 
@@ -294,17 +283,12 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
         <input type="text" id="path" placeholder="Paste a repository path" autocomplete="off" spellcheck="false" aria-label="Open by path" />
         <button class="btn" id="openBtn" type="button">Open</button>
       </div>
-    <button class="chooser" id="chooseBtn" type="button">
-      <span class="tile" aria-hidden="true">${ICON_FOLDER}</span>
-      <span class="ctext"><span class="ct1">Open another workspace</span><span class="ct2">Browse to a local git repository</span></span>
-      <span class="chev" aria-hidden="true">${ICON_CHEVRON}</span>
-    </button>
       <p class="msg" id="msg" role="status"></p>
     </div>
   </section>
 </main>
 
-<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Choose a repository folder">
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Choose a repository folder" tabindex="-1" hidden>
   <div class="sheet">
     <div class="sheet-head">
       <span class="sheet-title">Open a repository</span>
@@ -314,12 +298,12 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     <div class="fssearch">
       <div class="fssearch-box">
         <span class="fssearch-icon" aria-hidden="true">${ICON_SEARCH}</span>
-        <input type="search" id="fsSearch" placeholder="Filter folders" autocomplete="off" spellcheck="false" aria-label="Filter folders in this location" aria-controls="fslist" />
-        <button class="fsclear" id="fsClear" type="button" aria-label="Clear folder filter">✕</button>
+        <input type="search" id="fsSearch" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" placeholder="Filter folders" autocomplete="off" spellcheck="false" aria-label="Filter folders in this location" aria-controls="fslist" />
+        <button class="fsclear" id="fsClear" type="button" aria-label="Clear folder filter" hidden>✕</button>
       </div>
       <span class="sr-only" id="fsSearchStatus" role="status" aria-live="polite"></span>
     </div>
-    <div class="fslist" id="fslist"></div>
+    <div class="fslist" id="fslist" role="listbox" aria-label="Folders in this location"></div>
     <div class="sheet-foot">
       <span class="foot-path" id="footPath"></span>
       <button class="btn" id="openHere" type="button" disabled>Open this folder</button>
@@ -365,12 +349,12 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     if(!path) return;
     msg.style.color=''; msg.textContent='Opening…';
     fetch('/api/repo/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
-      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.ok){ location.href=d.route||('/repo/'+encodeURIComponent(path.replace(/[\\\/]+$/,'').split(/[\\\/]/).pop()||'repo')+'/stories'); return null; } return d; }); })
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.ok){ location.href=d.route||('/repo/'+encodeURIComponent(path.replace(/[\\\/]+$/,'').split(/[\\\/]/).pop()||'repo')+'/change'); return null; } return d; }); })
       .then(function(e){ if(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.error||'Could not open that path.'; } })
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }
   function emptyRecent(){
-    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Add a local git repo to start your first guided review.</p></div>';
+    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Open a local git repository to review its current change.</p></div>';
   }
   function removeRecent(path,row){
     fetch('/api/repos/recent',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
@@ -395,21 +379,22 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       crumbs=document.getElementById('crumbs'), footPath=document.getElementById('footPath'),
       openHere=document.getElementById('openHere'), fsSearch=document.getElementById('fsSearch'),
       fsClear=document.getElementById('fsClear'), fsSearchStatus=document.getElementById('fsSearchStatus'),
-      cur=null, curGit=false, entries=[], filteredEntries=[], selectedIndex=-1, modalTrigger=null;
+      modalBackground=document.getElementById('pickerMain'),cur=null, curGit=false, entries=[], filteredEntries=[], selectedIndex=-1, modalTrigger=null;
   function el(tag,cls,txt){ var n=document.createElement(tag); if(cls) n.className=cls; if(txt!=null) n.textContent=txt; return n; }
   function ico(id){ return document.getElementById(id).content.cloneNode(true); }
 
   function browse(path){
-    fsSearch.value=''; fsClear.classList.remove('show'); entries=[]; filteredEntries=[]; selectedIndex=-1;
-    fsSearch.removeAttribute('aria-activedescendant'); fsSearchStatus.textContent='';
+    fsSearch.value=''; fsClear.hidden=true; fsClear.classList.remove('show'); entries=[]; filteredEntries=[]; selectedIndex=-1;
+    fsSearch.removeAttribute('aria-activedescendant'); fsSearchStatus.textContent='Loading folders…';
     fslist.textContent='Loading…';
     fslist.className='fslist'; fslist.style.color='var(--label3)'; fslist.style.padding='26px';
     fetch('/api/fs'+(path?('?path='+encodeURIComponent(path)):''))
       .then(function(r){return r.json();}).then(render)
-      .catch(function(){ fslist.textContent='Could not read that folder.'; });
+      .catch(function(){ fslist.textContent='Could not read that folder.'; fsSearchStatus.textContent='Could not read that folder.'; });
   }
-  function crumbFor(p){ var b=el('button','crumb',p.label);
-    if(p.cur){ b.classList.add('cur'); } else { b.addEventListener('click',function(){browse(p.path);}); } return b; }
+  function crumbFor(p){ var b=el(p.cur?'span':'button','crumb',p.label);
+    if(p.cur){ b.classList.add('cur'); b.setAttribute('aria-current','location'); }
+    else { b.type='button'; b.addEventListener('click',function(){browse(p.path);}); } return b; }
 
   function render(l){
     cur=l.path; curGit=!!l.isGit;
@@ -434,14 +419,14 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     filteredEntries=query?entries.filter(function(en){return en.name.toLocaleLowerCase().indexOf(query)!==-1;}):entries.slice();
     if(query){ selectedIndex=filteredEntries.length?Math.min(Math.max(selectedIndex,0),filteredEntries.length-1):-1; }
     else { selectedIndex=-1; }
-    fsClear.classList.toggle('show',!!fsSearch.value);
+    var hasFilter=!!fsSearch.value;fsClear.hidden=!hasFilter;fsClear.classList.toggle('show',hasFilter);
     fslist.textContent='';
     if(!filteredEntries.length){
       var emptyText=query?'No folders match “'+fsSearch.value.trim()+'”.':'No subfolders here.';
       fslist.appendChild(el('div','fsempty',emptyText));
     }
     filteredEntries.forEach(function(en,index){
-      var row=el('button','fsrow'); row.type='button';
+      var row=el('button','fsrow'); row.type='button';row.tabIndex=-1;row.setAttribute('role','option');row.setAttribute('aria-selected',index===selectedIndex?'true':'false');
       row.id='fs-entry-'+index;
       var fi=el('span','fi'); fi.appendChild(ico('ico-folder')); row.appendChild(fi);
       row.appendChild(el('span','fn',en.name));
@@ -457,7 +442,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   }
   function updateSelection(scroll){
     var rows=fslist.querySelectorAll('.fsrow');
-    rows.forEach(function(row,index){row.classList.toggle('is-selected',index===selectedIndex);});
+    rows.forEach(function(row,index){var selected=index===selectedIndex;row.classList.toggle('is-selected',selected);row.setAttribute('aria-selected',selected?'true':'false');});
     if(selectedIndex<0||!rows[selectedIndex]){fsSearch.removeAttribute('aria-activedescendant');return;}
     fsSearch.setAttribute('aria-activedescendant',rows[selectedIndex].id);
     if(scroll)rows[selectedIndex].scrollIntoView({block:'nearest'});
@@ -472,17 +457,42 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   fsSearch.addEventListener('input',function(){selectedIndex=fsSearch.value.trim()?0:-1;renderEntries();});
   fsSearch.addEventListener('keydown',function(e){
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();moveSelection(e.key==='ArrowDown'?1:-1);return;}
+    if(e.key==='Home'||e.key==='End'){e.preventDefault();selectEntry(e.key==='Home'?0:filteredEntries.length-1,true);return;}
     if(e.key==='Enter'&&selectedIndex>=0&&filteredEntries[selectedIndex]){e.preventDefault();activateEntry(filteredEntries[selectedIndex]);return;}
-    if(e.key==='Escape'&&fsSearch.value){e.preventDefault();e.stopPropagation();fsSearch.value='';selectedIndex=-1;renderEntries();}
+    if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeModal();}
   });
   fsClear.addEventListener('click',function(){fsSearch.value='';selectedIndex=-1;renderEntries();fsSearch.focus();});
-  function openModal(e){ modalTrigger=e&&e.currentTarget?e.currentTarget:document.activeElement; scrim.classList.add('show'); browse(null); fsSearch.focus(); }
-  function closeModal(){ scrim.classList.remove('show'); fsSearch.value=''; if(modalTrigger&&modalTrigger.focus)modalTrigger.focus(); modalTrigger=null; }
+  function setModalBackground(blocked){
+    if(!modalBackground)return;
+    if(blocked){modalBackground.setAttribute('inert','');modalBackground.setAttribute('aria-hidden','true');}
+    else{modalBackground.removeAttribute('inert');modalBackground.removeAttribute('aria-hidden');}
+  }
+  function modalFocusables(){
+    return [].slice.call(scrim.querySelectorAll('button:not([disabled]),input:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')).filter(function(node){return !node.hidden&&node.getAttribute('aria-hidden')!=='true'&&node.getAttribute('tabindex')!=='-1';});
+  }
+  function trapModalFocus(e){
+    if(scrim.hidden)return;
+    if(e.key==='Escape'){e.preventDefault();closeModal();return;}
+    if(e.key!=='Tab')return;
+    var items=modalFocusables();if(!items.length){e.preventDefault();scrim.focus();return;}
+    var first=items[0],last=items[items.length-1],active=document.activeElement;
+    if(e.shiftKey&&(active===first||!scrim.contains(active))){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&(active===last||!scrim.contains(active))){e.preventDefault();first.focus();}
+  }
+  function openModal(e){
+    if(!scrim.hidden)return;
+    modalTrigger=e&&e.currentTarget?e.currentTarget:document.activeElement;
+    scrim.hidden=false;scrim.classList.add('show');setModalBackground(true);fsSearch.setAttribute('aria-expanded','true');browse(null);fsSearch.focus();
+  }
+  function closeModal(){
+    if(scrim.hidden)return;
+    scrim.classList.remove('show');scrim.hidden=true;setModalBackground(false);fsSearch.value='';fsSearch.setAttribute('aria-expanded','false');fsSearch.removeAttribute('aria-activedescendant');fsClear.hidden=true;fsClear.classList.remove('show');
+    var restore=modalTrigger;modalTrigger=null;if(restore&&restore.focus)restore.focus();
+  }
   document.getElementById('quickAddBtn').addEventListener('click',openModal);
-  document.getElementById('chooseBtn').addEventListener('click',openModal);
   document.getElementById('fsClose').addEventListener('click',closeModal);
   scrim.addEventListener('click',function(e){ if(e.target===scrim) closeModal(); });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeModal(); });
+  document.addEventListener('keydown',trapModalFocus);
   openHere.addEventListener('click',function(){ if(curGit) open(cur); });
 })();
 </script>

@@ -140,6 +140,8 @@ export interface Tour {
 }
 
 export type CommentType = 'change' | 'question' | 'nit';
+/** Review impact is separate from tone: a question can still block approval. */
+export type CommentSeverity = 'blocking' | 'concern' | 'nit';
 export type CommentStatus = 'open' | 'addressed' | 'resolved';
 export type CommentSide = 'left' | 'right';
 
@@ -176,6 +178,8 @@ export interface Comment {
   /** Selected-side line range and optional columns. */
   selection?: CommentSelection;
   type: CommentType;
+  /** Reviewer-assigned impact used by readiness and feedback filters. */
+  severity?: CommentSeverity;
   body: string;
   status: CommentStatus;
   /** Review round in which the comment was created. */

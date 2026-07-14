@@ -1,21 +1,160 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { reviewStatePath } from './config.js';
+import { commentsPath, reviewStatePath } from './config.js';
 import { readWholeFile } from './git.js';
+import { InvalidCommentStoreError, loadCommentsWithHealth, } from './comments.js';
+export class UnresolvedBlockingFeedbackError extends Error {
+    blockingCommentIds;
+    constructor(blockingCommentIds) {
+        super(`Resolve ${blockingCommentIds.length} blocking ${blockingCommentIds.length === 1 ? 'comment' : 'comments'} before approval.`);
+        this.name = 'UnresolvedBlockingFeedbackError';
+        this.blockingCommentIds = blockingCommentIds;
+    }
+}
+export class ReviewFeedbackChangedError extends Error {
+    currentFeedbackVersion;
+    currentBlockingFeedbackDigest;
+    constructor(currentFeedbackVersion, currentBlockingFeedbackDigest) {
+        super('Blocking feedback changed while the decision was being saved. Reload before approval.');
+        this.name = 'ReviewFeedbackChangedError';
+        this.currentFeedbackVersion = currentFeedbackVersion;
+        this.currentBlockingFeedbackDigest = currentBlockingFeedbackDigest;
+    }
+}
 export function reviewScopeKey(base, head) {
     return createHash('sha256').update(`${base}\0${head ?? 'working-tree'}`).digest('hex').slice(0, 20);
 }
 function digest(value) {
     return createHash('sha256').update(value == null ? '\0missing' : value).digest('hex');
 }
+/**
+ * Bind decisions to the actual unresolved blocking feedback, not only API
+ * events. Agents intentionally edit comments.json directly, so an event-only
+ * counter cannot prove that the page and stored verdict saw the same threads.
+ */
+export function blockingFeedbackDigest(repo) {
+    return blockingFeedbackIdentity(loadCommentsWithHealth(repo));
+}
+function blockingFeedbackIdentity(loaded) {
+    if (loaded.health.status === 'invalid') {
+        return digest(stableJson({ invalidFeedbackSource: loaded.sourceDigest, reason: loaded.health.reason }));
+    }
+    const blocking = loaded.comments
+        .filter((comment) => comment.status !== 'resolved' &&
+        (comment.severity === 'blocking' || (!comment.severity && comment.type === 'change')))
+        .map((comment) => stableJson(comment))
+        .sort();
+    return digest(JSON.stringify(blocking));
+}
+function unresolvedBlockingCommentIds(loaded) {
+    if (loaded.health.status === 'invalid')
+        return [];
+    return loaded.comments
+        .filter((comment) => comment.status !== 'resolved' &&
+        (comment.severity === 'blocking' || (!comment.severity && comment.type === 'change')))
+        .map((comment) => comment.id);
+}
+/**
+ * The content digest identifies semantic source bytes. The filesystem stamp
+ * also detects an out-of-band add/remove cycle that restores those exact bytes
+ * before the next read. API-owned non-blocking mutations are acknowledged by
+ * recordReviewEvent, so they retain their existing non-blocking semantics.
+ */
+function feedbackObservation(repo, loaded) {
+    let sourceStamp;
+    try {
+        const stat = statSync(commentsPath(repo), { bigint: true });
+        sourceStamp = digest(stableJson({
+            sourceDigest: loaded.sourceDigest,
+            dev: stat.dev.toString(),
+            ino: stat.ino.toString(),
+            size: stat.size.toString(),
+            mtimeNs: stat.mtimeNs.toString(),
+            ctimeNs: stat.ctimeNs.toString(),
+        }));
+    }
+    catch {
+        sourceStamp = digest(stableJson({
+            sourceDigest: loaded.sourceDigest,
+            health: loaded.health.status === 'invalid' ? loaded.health.reason : loaded.health.source,
+        }));
+    }
+    return {
+        sourceDigest: loaded.sourceDigest,
+        sourceStamp,
+        blockingDigest: blockingFeedbackIdentity(loaded),
+    };
+}
+function setFeedbackObservation(scope, observation) {
+    const changed = scope.observedFeedbackSourceDigest !== observation.sourceDigest ||
+        scope.observedFeedbackSourceStamp !== observation.sourceStamp ||
+        scope.observedBlockingFeedbackDigest !== observation.blockingDigest;
+    scope.observedFeedbackSourceDigest = observation.sourceDigest;
+    scope.observedFeedbackSourceStamp = observation.sourceStamp;
+    scope.observedBlockingFeedbackDigest = observation.blockingDigest;
+    return changed;
+}
+/** Persist direct blocking transitions monotonically so an ABA restore cannot
+ * make an earlier approval current again. Different source bytes with identical
+ * blocking semantics remain non-blocking; an identical-byte rewrite advances
+ * conservatively because it can hide an unobserved add/remove cycle. */
+function synchronizeFeedbackObservation(scope, observation) {
+    const initialized = scope.observedFeedbackSourceDigest !== undefined &&
+        scope.observedFeedbackSourceStamp !== undefined &&
+        scope.observedBlockingFeedbackDigest !== undefined;
+    const sourceChanged = initialized && scope.observedFeedbackSourceDigest !== observation.sourceDigest;
+    const stampChanged = initialized && scope.observedFeedbackSourceStamp !== observation.sourceStamp;
+    const blockingChanged = initialized && scope.observedBlockingFeedbackDigest !== observation.blockingDigest;
+    const shouldAdvance = blockingChanged || (!sourceChanged && stampChanged);
+    if (shouldAdvance)
+        scope.feedbackVersion = (scope.feedbackVersion ?? 0) + 1;
+    return setFeedbackObservation(scope, observation) || shouldAdvance;
+}
+function stableJson(value) {
+    if (value === null || typeof value !== 'object')
+        return JSON.stringify(value);
+    if (Array.isArray(value))
+        return `[${value.map(stableJson).join(',')}]`;
+    const record = value;
+    return `{${Object.keys(record)
+        .filter((key) => record[key] !== undefined)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+        .join(',')}}`;
+}
+/**
+ * Stable identity for the exact stored checkpoint behind a since-feedback
+ * comparison. The snapshot id alone is not sufficient: review-state.json can
+ * be edited by another process while a page remains open.
+ */
+export function reviewSnapshotContentDigest(snapshot) {
+    return digest(stableJson({
+        id: snapshot.id,
+        round: snapshot.round,
+        createdAt: snapshot.createdAt,
+        reason: snapshot.reason,
+        base: snapshot.base,
+        head: snapshot.head ?? null,
+        diffHash: snapshot.diffHash,
+        files: snapshot.files,
+        commentIds: snapshot.commentIds ?? [],
+    }));
+}
+/** Stable identity for the exact rendered diff bytes. */
+export function reviewDiffFingerprint(diff) {
+    return digest(diff);
+}
 function snapshotId(diffHash) {
     return `r_${Date.now().toString(36)}_${diffHash.slice(0, 8)}`;
 }
 function eventId() {
     return `e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+function verdictId(diffFingerprint) {
+    return `v_${Date.now().toString(36)}_${diffFingerprint.slice(0, 8)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 function emptyState() {
     return { version: 1, scopes: {} };
@@ -55,7 +194,7 @@ function scopeFor(state, base, head) {
     const key = reviewScopeKey(base, head);
     let scope = state.scopes[key];
     if (!scope) {
-        scope = { key, base, ...(head ? { head } : {}), round: 1, snapshots: [], events: [] };
+        scope = { key, base, ...(head ? { head } : {}), round: 1, snapshots: [], events: [], verdicts: [] };
         state.scopes[key] = scope;
     }
     return scope;
@@ -69,12 +208,14 @@ function pushEvent(scope, event) {
     };
     scope.events.push(stored);
     scope.events = scope.events.slice(-100);
+    if (event.affectsApproval)
+        scope.feedbackVersion = (scope.feedbackVersion ?? 0) + 1;
     return stored;
 }
 export function captureReviewSnapshot(repo, input) {
     const state = loadState(repo);
     const scope = scopeFor(state, input.base, input.head);
-    const diffHash = digest(input.diff);
+    const diffHash = input.changeFingerprint ?? reviewDiffFingerprint(input.diff);
     const previous = scope.snapshots[scope.snapshots.length - 1];
     if (input.reason === 'opened' && previous?.diffHash === diffHash)
         return previous;
@@ -120,9 +261,123 @@ export function captureReviewSnapshot(repo, input) {
     saveState(repo, state);
     return snapshot;
 }
+/**
+ * Purely evaluate whether a stored verdict still applies. A changed scope or
+ * even one changed diff byte makes the old decision stale; history is retained.
+ */
+export function evaluateReviewVerdict(verdict, base, head, diff, currentFeedbackVersion, currentChangeFingerprint, currentBlockingFeedbackDigest) {
+    const scopeKey = reviewScopeKey(base, head);
+    const currentDiffFingerprint = currentChangeFingerprint ?? reviewDiffFingerprint(diff);
+    if (!verdict)
+        return { state: 'none', scopeKey, currentDiffFingerprint };
+    if (verdict.scopeKey !== scopeKey) {
+        return {
+            state: 'stale',
+            scopeKey,
+            currentDiffFingerprint,
+            latest: verdict,
+            invalidationReason: 'scope-changed',
+        };
+    }
+    if (verdict.diffFingerprint !== currentDiffFingerprint) {
+        return {
+            state: 'stale',
+            scopeKey,
+            currentDiffFingerprint,
+            latest: verdict,
+            invalidationReason: 'diff-changed',
+        };
+    }
+    if (currentFeedbackVersion != null && (verdict.feedbackVersion ?? 0) !== currentFeedbackVersion) {
+        return {
+            state: 'stale',
+            scopeKey,
+            currentDiffFingerprint,
+            latest: verdict,
+            invalidationReason: 'feedback-changed',
+        };
+    }
+    if (currentBlockingFeedbackDigest != null &&
+        verdict.blockingFeedbackDigest !== currentBlockingFeedbackDigest) {
+        return {
+            state: 'stale',
+            scopeKey,
+            currentDiffFingerprint,
+            latest: verdict,
+            invalidationReason: 'feedback-changed',
+        };
+    }
+    return {
+        state: 'current',
+        scopeKey,
+        currentDiffFingerprint,
+        latest: verdict,
+        current: verdict,
+    };
+}
+/** Persist a reviewer decision without discarding earlier decisions for this scope. */
+export function recordReviewVerdict(repo, input) {
+    if (input.decision !== 'approved' && input.decision !== 'changes-requested') {
+        throw new Error(`Unsupported review verdict: ${String(input.decision)}`);
+    }
+    const state = loadState(repo);
+    const scope = scopeFor(state, input.base, input.head);
+    const diffFingerprint = input.changeFingerprint ?? reviewDiffFingerprint(input.diff);
+    const note = input.note?.trim();
+    const feedback = loadCommentsWithHealth(repo);
+    const observation = feedbackObservation(repo, feedback);
+    if (synchronizeFeedbackObservation(scope, observation)) {
+        // Persist the monotonic observation even when the approval below fails.
+        // Otherwise a direct add/remove cycle could be forgotten by the next call.
+        saveState(repo, state);
+    }
+    if (input.decision === 'approved' && feedback.health.status === 'invalid') {
+        throw new InvalidCommentStoreError(feedback.health);
+    }
+    if (input.decision === 'approved') {
+        const blockingCommentIds = unresolvedBlockingCommentIds(feedback);
+        if (blockingCommentIds.length)
+            throw new UnresolvedBlockingFeedbackError(blockingCommentIds);
+        if (input.expectedFeedbackVersion !== undefined &&
+            input.expectedFeedbackVersion !== (scope.feedbackVersion ?? 0)) {
+            throw new ReviewFeedbackChangedError(scope.feedbackVersion ?? 0, observation.blockingDigest);
+        }
+        if (input.expectedBlockingFeedbackDigest !== undefined &&
+            input.expectedBlockingFeedbackDigest !== observation.blockingDigest) {
+            throw new ReviewFeedbackChangedError(scope.feedbackVersion ?? 0, observation.blockingDigest);
+        }
+    }
+    const verdict = {
+        id: verdictId(diffFingerprint),
+        decision: input.decision,
+        createdAt: new Date().toISOString(),
+        scopeKey: scope.key,
+        base: input.base,
+        ...(input.head ? { head: input.head } : {}),
+        diffFingerprint,
+        feedbackVersion: scope.feedbackVersion ?? 0,
+        blockingFeedbackDigest: observation.blockingDigest,
+        ...(input.acknowledgedExclusions?.length
+            ? { acknowledgedExclusions: input.acknowledgedExclusions.map(({ path, reason }) => ({ path, reason })) }
+            : {}),
+        ...(note ? { note } : {}),
+    };
+    scope.verdicts = [...(scope.verdicts ?? []), verdict].slice(-50);
+    pushEvent(scope, {
+        kind: 'verdict-recorded',
+        label: input.decision === 'approved' ? 'Review approved' : 'Changes requested',
+        ...(note ? { detail: note } : {}),
+    });
+    saveState(repo, state);
+    return verdict;
+}
 export function recordReviewEvent(repo, base, head, event) {
     const state = loadState(repo);
     const scope = scopeFor(state, base, head);
+    // Comment events are emitted after their file mutation. Mark that exact
+    // source generation as API-observed so known non-blocking writes do not stale
+    // approval; affectsApproval still advances the monotonic version below.
+    setFeedbackObservation(scope, feedbackObservation(repo, loadCommentsWithHealth(repo)));
     const stored = pushEvent(scope, event);
     saveState(repo, state);
     return stored;
@@ -132,21 +387,30 @@ function changedPaths(before, after) {
         .filter((path) => before[path]?.hash !== after[path]?.hash)
         .sort();
 }
-export function reviewStateSummary(repo, base, head, diff, files) {
+export function reviewStateSummary(repo, base, head, diff, files, changeFingerprint) {
     const state = loadState(repo);
     const key = reviewScopeKey(base, head);
+    const feedback = loadCommentsWithHealth(repo);
+    const observation = feedbackObservation(repo, feedback);
+    const currentBlockingFeedbackDigest = observation.blockingDigest;
     const scope = state.scopes[key];
     if (!scope) {
         return {
             scopeKey: key,
             round: 1,
-            currentDiffHash: digest(diff),
+            currentDiffHash: changeFingerprint ?? reviewDiffFingerprint(diff),
             changedFiles: [],
             hasChangesSinceReview: false,
             events: [],
             snapshots: [],
+            feedbackVersion: 0,
+            blockingFeedbackDigest: currentBlockingFeedbackDigest,
+            feedbackHealth: feedback.health,
+            verdict: evaluateReviewVerdict(undefined, base, head, diff, 0, changeFingerprint, currentBlockingFeedbackDigest),
         };
     }
+    if (synchronizeFeedbackObservation(scope, observation))
+        saveState(repo, state);
     const comparison = scope.snapshots.find((snapshot) => snapshot.id === scope.lastFeedbackSnapshotId);
     const current = currentFileSnapshots(repo, head, files, comparison ? Object.keys(comparison.files) : []);
     const changedFiles = comparison ? changedPaths(comparison.files, current) : [];
@@ -154,13 +418,24 @@ export function reviewStateSummary(repo, base, head, diff, files) {
     return {
         scopeKey: key,
         round: scope.round,
-        currentDiffHash: digest(diff),
+        currentDiffHash: changeFingerprint ?? reviewDiffFingerprint(diff),
         ...(latest ? { currentSnapshotId: latest.id } : {}),
         ...(comparison ? { compareFrom: { id: comparison.id, round: comparison.round, createdAt: comparison.createdAt } } : {}),
         changedFiles,
         hasChangesSinceReview: changedFiles.length > 0,
         events: [...scope.events].reverse(),
-        snapshots: scope.snapshots.map(({ id, round, createdAt, reason, diffHash }) => ({ id, round, createdAt, reason, diffHash })),
+        snapshots: scope.snapshots.map((snapshot) => ({
+            id: snapshot.id,
+            round: snapshot.round,
+            createdAt: snapshot.createdAt,
+            reason: snapshot.reason,
+            diffHash: snapshot.diffHash,
+            contentDigest: reviewSnapshotContentDigest(snapshot),
+        })),
+        feedbackVersion: scope.feedbackVersion ?? 0,
+        blockingFeedbackDigest: currentBlockingFeedbackDigest,
+        feedbackHealth: feedback.health,
+        verdict: evaluateReviewVerdict(scope.verdicts?.[scope.verdicts.length - 1], base, head, diff, scope.feedbackVersion ?? 0, changeFingerprint, currentBlockingFeedbackDigest),
     };
 }
 function rewritePatchHeaders(patch, path, beforeMissing, afterMissing) {

@@ -63,12 +63,113 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   assert.ok(html.includes('data-picker="commit"'), 'uses the custom commit picker');
   assert.ok(html.includes('data-picker="ref"'), 'uses the custom ref picker');
   assert.ok(html.includes('data-picker="side-commit"'), 'uses branch-scoped commit pickers for compare sides');
+  assert.equal((html.match(/role="combobox"/g) || []).length, 5, 'exposes every ref field as a combobox');
+  assert.equal((html.match(/aria-controls="refPicker"/g) || []).length, 5, 'binds every combobox to the shared listbox');
+  assert.equal((html.match(/aria-expanded="false"/g) || []).length >= 7, true, 'starts disclosure and combobox state collapsed');
+  assert.match(html, /id="refPicker" role="listbox" aria-label="Available git references"/);
   assert.ok(!html.includes('<datalist'), 'does not rely on the native datalist menu');
+  assert.match(html, />History<\/a>/, 'keeps saved review history as a secondary action');
+  assert.doesNotMatch(html, />Review sessions<\/a>/);
+  assert.match(html, /aria-controls="commitPanel" aria-expanded="false"/);
+  assert.match(html, /aria-controls="comparePanel" aria-expanded="false"/);
+  assert.match(html, /\.sopts\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);gap:6px\}/, 'keeps scope filters compact on mobile');
+  assert.match(html, /\.review-path \.active\{gap:7px;font-size:11px\}/, 'keeps the active lifecycle stage named on mobile');
   const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', diffFiles });
   assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?base='"), 'auto compare stays on the repo-named change route');
   assert.ok(routed.includes('href="/repo/demo/diff"'), 'summary opens the repo-named diff viewer');
+});
+
+test('ref combobox supports active-descendant keyboard selection and dismissal', async () => {
+  class FakeEl {
+    constructor(attrs = {}) {
+      this.attrs = { ...attrs }; this.id = attrs.id || ''; this.children = []; this.listeners = {};
+      this.hidden = !!attrs.hidden; this.style = {}; this.value = attrs.value ?? ''; this.textContent = '';
+      this.className = ''; this.classList = { add() {}, remove() {} };
+    }
+    getAttribute(name) { return this.attrs[name] ?? null; }
+    setAttribute(name, value) { this.attrs[name] = String(value); }
+    removeAttribute(name) { delete this.attrs[name]; }
+    addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); }
+    appendChild(child) { this.children.push(child); return child; }
+    replaceChildren(...children) { this.children = children; }
+    contains(target) { return target === this || this.children.includes(target); }
+    querySelectorAll(selector) { return selector === '[role="option"]' ? this.children.filter((child) => child.attrs.role === 'option') : []; }
+    dispatchEvent(ev) { (this.listeners[ev.type] || []).forEach((fn) => fn(ev)); }
+    getBoundingClientRect() { return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 }; }
+    get offsetHeight() { return 140; }
+    scrollIntoView() { this.scrolled = true; }
+  }
+
+  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'HEAD' });
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1]).find((candidate) => candidate.includes('function syncActiveOption'));
+  assert.ok(script, 'has the combobox controller');
+
+  const picker = new FakeEl({ id: 'refPicker', hidden: true });
+  const input = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD', 'aria-expanded': 'false' });
+  const panel = new FakeEl({ 'data-panel': 'commit' });
+  const elements = { refPicker: picker, commitRef: input };
+  const context = {
+    console,
+    setTimeout,
+    Event: class Event { constructor(type) { this.type = type; } },
+    fetch: async () => ({ json: async () => ({
+      current: 'main', branches: [], commits: [
+        { sha: 'abc1234', subject: 'First commit' },
+        { sha: 'def5678', subject: 'Second commit' },
+      ],
+    }) }),
+    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=HEAD' },
+    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
+    document: {
+      activeElement: input,
+      getElementById: (id) => elements[id] ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => selector === '[data-panel]' ? [panel] : selector === '[data-picker]' ? [input] : [],
+      createElement: () => new FakeEl(), addEventListener() {},
+    },
+  };
+  vm.runInNewContext(script, context);
+  input.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(input.attrs['aria-expanded'], 'true');
+  assert.equal(picker.children[0].attrs.role, 'option');
+  assert.equal(picker.children[0].attrs['aria-selected'], 'true');
+  assert.equal(input.attrs['aria-activedescendant'], picker.children[0].id);
+
+  const key = (name) => input.listeners.keydown[0]({ key: name, preventDefault() {}, stopPropagation() {} });
+  key('ArrowDown');
+  assert.equal(picker.children[1].attrs['aria-selected'], 'true');
+  assert.equal(input.attrs['aria-activedescendant'], picker.children[1].id);
+  key('End');
+  assert.equal(input.attrs['aria-activedescendant'], picker.children[2].id);
+  key('Home');
+  assert.equal(input.attrs['aria-activedescendant'], picker.children[0].id);
+  key('End'); key('Enter');
+  assert.equal(input.value, 'def5678');
+  assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=def5678');
+  assert.equal(input.attrs['aria-expanded'], 'false');
+  assert.equal(input.attrs['aria-activedescendant'], undefined);
+
+  context.location.href = '';
+  input.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+  key('Escape');
+  assert.equal(picker.hidden, true);
+  assert.equal(input.attrs['aria-expanded'], 'false');
+
+  input.listeners.focus[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+  const outside = new FakeEl({ id: 'afterRefPicker' });
+  context.document.activeElement = outside;
+  input.listeners.focusout[0]({ relatedTarget: outside });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(picker.hidden, true, 'tabbing away closes the listbox');
+  assert.equal(input.attrs['aria-expanded'], 'false');
+  assert.equal(input.attrs['aria-activedescendant'], undefined);
 });
 
 test('renderChangePage keeps generated output out of the primary reading list', () => {
@@ -120,6 +221,8 @@ test('renderChangePage shows the human scope label and highlights the active seg
   assert.ok(!html.includes('data-panel="cross"') && !html.includes('data-panel="range"'), 'no longer renders the cross/range panels');
   assert.ok(html.includes('.sopt.is-open'), 'has a distinct panel-open state separate from the selected scope');
   assert.ok(html.includes("classList.remove('is-open')"), 'opening a panel clears only the open-state marker');
+  assert.ok(html.includes("setAttribute('aria-expanded','false')"), 'keeps disclosure state in sync for assistive technology');
+  assert.ok(html.includes("setAttribute('aria-expanded','true')"), 'announces the open scope panel');
   assert.ok(!html.includes("classList.remove('on')"), 'opening a picker panel does not lie about the URL-backed selected scope');
   assert.ok(
     html.includes('.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}'),

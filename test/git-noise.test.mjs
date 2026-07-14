@@ -4,11 +4,17 @@
 // agent isn't sent chasing coverage it can't usefully narrate. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { chmodSync, mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { getDiff, noiseFiles } from '../dist/git.js';
+import {
+  excludedReviewFiles,
+  getDiff,
+  noiseFiles,
+  reviewChangeFingerprint,
+  stagedWorktreeDivergentFiles,
+} from '../dist/git.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
 
 function repo() {
@@ -32,6 +38,15 @@ test('a huge file is excluded by size; real code stays', () => {
     g(['add', '.']);
 
     assert.deepEqual(noiseFiles(d, 'HEAD'), ['generated.txt']);
+    assert.deepEqual(excludedReviewFiles(d, 'HEAD'), [
+      {
+        path: 'generated.txt',
+        reason: 'large-diff',
+        addedLines: 2000,
+        removedLines: 0,
+        changedLines: 2000,
+      },
+    ]);
     const files = parseUnifiedDiff(getDiff(d, 'HEAD')).map((f) => f.newPath);
     assert.ok(files.includes('real.sol'), 'real code stays in the diff');
     assert.ok(!files.includes('generated.txt'), 'oversized file is excluded');
@@ -49,6 +64,15 @@ test('a small generated-by-path file (abis/) is excluded even when tiny', () => 
     g(['add', '.']);
 
     assert.deepEqual(noiseFiles(d, 'HEAD'), ['abis/token.json']);
+    assert.deepEqual(excludedReviewFiles(d, 'HEAD'), [
+      {
+        path: 'abis/token.json',
+        reason: 'generated-path',
+        addedLines: 1,
+        removedLines: 0,
+        changedLines: 1,
+      },
+    ]);
     const files = parseUnifiedDiff(getDiff(d, 'HEAD')).map((f) => f.newPath);
     assert.ok(files.includes('real.ts'));
     assert.ok(!files.includes('abis/token.json'));
@@ -110,6 +134,170 @@ test('diffStory review state never appears in the reviewed diff', () => {
     writeFileSync(join(d, 'useful.ts'), 'export const useful = true;\n');
     const files = parseUnifiedDiff(getDiff(d, 'HEAD')).map((f) => f.newPath);
     assert.deepEqual(files, ['useful.ts']);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('ordinary binary and mode-only changes are explicit exclusions', () => {
+  const { d, g } = repo();
+  try {
+    writeFileSync(join(d, 'image.bin'), Buffer.from([0, 1, 2, 3]));
+    chmodSync(join(d, 'seed.txt'), 0o755);
+    assert.deepEqual(excludedReviewFiles(d, 'HEAD'), [
+      {
+        path: 'image.bin', reason: 'binary',
+        addedLines: null, removedLines: 0, changedLines: null,
+      },
+      {
+        path: 'seed.txt', reason: 'metadata-only',
+        addedLines: 0, removedLines: 0, changedLines: 0,
+      },
+    ]);
+    assert.equal(parseUnifiedDiff(getDiff(d, 'HEAD')).length, 0);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('complete-change fingerprint tracks excluded and untracked bytes without rendering them', () => {
+  const { d } = repo();
+  try {
+    mkdirSync(join(d, 'dist'));
+    writeFileSync(join(d, 'dist', 'bundle.js'), 'generated one\n');
+    writeFileSync(join(d, 'asset.bin'), Buffer.from([0, 1, 2]));
+    const first = reviewChangeFingerprint(d, 'HEAD');
+    assert.equal(getDiff(d, 'HEAD'), '', 'both files stay outside the bounded renderer');
+
+    writeFileSync(join(d, 'dist', 'bundle.js'), 'generated two\n');
+    const generatedChanged = reviewChangeFingerprint(d, 'HEAD');
+    assert.notEqual(generatedChanged, first);
+
+    writeFileSync(join(d, 'asset.bin'), Buffer.from([0, 1, 3]));
+    assert.notEqual(reviewChangeFingerprint(d, 'HEAD'), generatedChanged);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('an MM file restored to the base still exposes its staged change', () => {
+  const { d, g } = repo();
+  try {
+    writeFileSync(join(d, 'seed.txt'), 'staged value\n');
+    g(['add', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'seed\n');
+
+    assert.match(String(g(['status', '--short', 'seed.txt'])), /^MM seed\.txt/m);
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD'), ['seed.txt']);
+
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD'));
+    assert.equal(files.length, 1);
+    assert.equal(files[0].newPath, 'seed.txt');
+    assert.deepEqual(files[0].hunks[0].lines.filter((line) => line.type === 'add').map((line) => line.content), [
+      'staged value',
+    ]);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('a staged deletion restored as untracked is one explicit divergent review path', () => {
+  const { d, g } = repo();
+  try {
+    g(['rm', '--cached', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'restored worktree value\n');
+
+    assert.match(String(g(['status', '--short', 'seed.txt'])), /^D  seed\.txt\n\?\? seed\.txt$/m);
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD'), ['seed.txt']);
+
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD'));
+    assert.deepEqual(
+      files.map((file) => file.newPath || file.oldPath),
+      ['seed.txt'],
+      'the collision is gated as one path rather than rendered as duplicate delete/add files',
+    );
+    assert.equal(files[0].status, 'deleted', 'the bounded diff keeps the staged representation');
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('a staged deletion restored at an ignored path is still explicit divergence', () => {
+  const { d, g } = repo();
+  try {
+    writeFileSync(join(d, '.gitignore'), 'seed.txt\n');
+    g(['add', '.gitignore']);
+    g(['commit', '-qm', 'ignore the tracked fixture']);
+    g(['rm', '--cached', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'restored but ignored worktree value\n');
+
+    assert.match(String(g(['status', '--short', 'seed.txt'])), /^D  seed\.txt$/m);
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD'), ['seed.txt']);
+
+    const files = parseUnifiedDiff(getDiff(d, 'HEAD'));
+    assert.deepEqual(files.map((file) => file.newPath || file.oldPath), ['seed.txt']);
+    assert.equal(files[0].status, 'deleted', 'one staged identity remains visible');
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('complete-change fingerprint independently tracks index identity', () => {
+  const { d, g } = repo();
+  try {
+    writeFileSync(join(d, 'seed.txt'), 'first staged value\n');
+    g(['add', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'same worktree value\n');
+    const rendered = getDiff(d, 'HEAD');
+    const first = reviewChangeFingerprint(d, 'HEAD');
+
+    writeFileSync(join(d, 'seed.txt'), 'second staged value\n');
+    g(['add', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'same worktree value\n');
+    const second = reviewChangeFingerprint(d, 'HEAD');
+
+    assert.equal(getDiff(d, 'HEAD'), rendered, 'aggregate rendered bytes remain unchanged');
+    assert.notEqual(second, first, 'restaging different bytes invalidates exact-change identity');
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD'), ['seed.txt']);
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD', 'HEAD'), []);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('committed branch content plus an unstaged edit is not mislabeled as staged divergence', () => {
+  const { d, g } = repo();
+  try {
+    writeFileSync(join(d, 'seed.txt'), 'committed branch value\n');
+    g(['add', 'seed.txt']);
+    g(['commit', '-qm', 'branch change']);
+    writeFileSync(join(d, 'seed.txt'), 'unstaged worktree value\n');
+
+    assert.deepEqual(stagedWorktreeDivergentFiles(d, 'HEAD^'), []);
+    assert.match(getDiff(d, 'HEAD^'), /unstaged worktree value/);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('staged-only review noise remains an explicit exclusion when worktree matches the base', () => {
+  const { d, g } = repo();
+  try {
+    const staged = Array.from({ length: 2000 }, (_, i) => `staged row ${i}`).join('\n') + '\n';
+    writeFileSync(join(d, 'seed.txt'), staged);
+    g(['add', 'seed.txt']);
+    writeFileSync(join(d, 'seed.txt'), 'seed\n');
+
+    assert.deepEqual(excludedReviewFiles(d, 'HEAD'), [
+      {
+        path: 'seed.txt',
+        reason: 'large-diff',
+        addedLines: 2000,
+        removedLines: 1,
+        changedLines: 2001,
+      },
+    ]);
+    assert.equal(getDiff(d, 'HEAD'), '', 'the staged remainder is bounded by the same noise policy');
   } finally {
     rmSync(d, { recursive: true, force: true });
   }

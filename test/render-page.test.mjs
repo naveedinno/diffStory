@@ -159,9 +159,9 @@ test('overview keeps the primary walkthrough action ahead of supporting detail',
   assert.match(html, /\.ds-intro-context \.ds-intro-design\{[^}]*color:color-mix\(in srgb,var\(--text\) 70%,transparent\)/);
 });
 
-test('step narrative is labeled as story, not why-this-step', () => {
+test('step narrative tells the reviewer what to verify', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, />Story<\/span>/);
+  assert.match(html, />Verify this<\/span>/);
   assert.doesNotMatch(html, /Why this step/);
 });
 
@@ -203,10 +203,11 @@ test('story narrative is a compact reading column instead of a nested full-heigh
   assert.match(html, /@media \(max-width:1080px\)[\s\S]*\.ds-step\.is-code-step>\.ds-why\{[^}]*border:1px solid var\(--line-soft\)[^}]*border-radius:10px/);
 });
 
-test('review page can return to the story chooser', () => {
+test('review page returns to change scope and keeps saved reviews secondary', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], routeBase: '/repo/demo' });
-  assert.match(html, /class="ds-back" data-close-story href="\/repo\/demo\/stories"/);
-  assert.match(html, /Stories\s*<\/a>/);
+  assert.match(html, /class="ds-back" data-close-story href="\/repo\/demo\/change"/);
+  assert.match(html, />‹<\/span> Change\s*<\/a>/);
+  assert.match(html, /href="\/repo\/demo\/stories"[\s\S]*Saved reviews/);
   assert.match(html, /\.ds-back\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*:root\{--ds-rail-width:240px\}/);
@@ -214,7 +215,7 @@ test('review page can return to the story chooser', () => {
   assert.match(html, /getComputedStyle\(layout\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
-test('toolbar separates the persistent agent task from compact review status', () => {
+test('toolbar keeps the decision signal primary and demotes agent routing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-review-menu/);
   assert.match(html, /data-review-menu-pop/);
@@ -225,6 +226,7 @@ test('toolbar separates the persistent agent task from compact review status', (
   assert.match(html, /data-agent-target-control/);
   assert.match(html, /data-agent-target-select/);
   assert.match(html, /data-agent-target-name>Choose task</);
+  assert.match(html, /<details class="ds-review-more">[\s\S]*data-agent-target-control/);
   assert.match(html, /data-repo="/);
   assert.doesNotMatch(html, /data-send-all/);
   assert.match(html, />Resend open comments</);
@@ -232,12 +234,35 @@ test('toolbar separates the persistent agent task from compact review status', (
   assert.match(html, /ds-check">✓<\/span> Approve/);
   assert.match(html, /class="ds-reviewstatusbar" data-roundbar aria-label="Review status"/);
   assert.match(html, /class="ds-roundbadge">Round 1<\/span>/);
-  assert.match(html, /class="ds-reviewstatus-scope"><b>1<\/b> file in scope/);
-  assert.match(html, />Feedback clear<\/span>/);
+  assert.match(html, /class="ds-statussignal/);
+  assert.doesNotMatch(html, /class="ds-reviewstatus-scope"/);
+  assert.doesNotMatch(html, />Feedback clear<\/span>/);
   assert.doesNotMatch(html, /class="ds-sessionstage/);
   assert.doesNotMatch(html, /need coverage/);
   assert.doesNotMatch(html, />Question destination</);
   assert.doesNotMatch(html, />Ask for fixes</);
+});
+
+test('invalid feedback is a visible approval blocker with recovery guidance', () => {
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
+    reviewState: {
+      scopeKey: 'scope', round: 1, currentDiffHash: 'hash', changedFiles: [],
+      hasChangesSinceReview: false, events: [], snapshots: [], feedbackVersion: 0,
+      blockingFeedbackDigest: 'invalid-source-digest',
+      feedbackHealth: {
+        status: 'invalid', reason: 'invalid-entry',
+        message: '.diffstory/comments.json has an invalid comment.',
+        recovery: 'Repair or restore .diffstory/comments.json, then reload. diffStory will not overwrite the invalid file.',
+      },
+    },
+  });
+  assert.match(html, /data-feedback-health="invalid"/);
+  assert.match(html, /role="alert"><strong>Feedback file needs repair<\/strong>/);
+  assert.match(html, /Repair or restore \.diffstory\/comments\.json, then reload/);
+  assert.match(html, /data-verdict="approve" disabled/);
+  assert.match(html, /Feedback file needs repair/);
+  assert.match(html, /data-feedback-health'\)==='invalid'/);
 });
 
 test('version-aware review rounds expose full and since-review modes', () => {
@@ -256,6 +281,74 @@ test('version-aware review rounds expose full and since-review modes', () => {
   assert.match(html, /data-review-mode="full"[^>]*aria-pressed="true"/);
   assert.match(html, /data-filter-since="1"/);
   assert.match(html, /class="ds-roundbadge">Round 2<\/span>/);
+  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes\{display:flex;margin-left:auto\}/);
+  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes\{width:100%;margin-left:0\}/);
+  assert.match(html, /\.ds-reviewstatusbar>\.ds-roundmodes button\{height:32px;flex:1\}/);
+  assert.match(html, /var open=compactScreen\(\)&&!collapsed,main=\$\('\.ds-main'\),status=\$\('\.ds-reviewstatusbar'\)/);
+  assert.match(html, /if\(status\)\{if\(open\)status\.setAttribute\('inert',''\);else status\.removeAttribute\('inert'\);\}/);
+  assert.match(html, /\.ds-layout>\.ds-rail,body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{top:52px\}/);
+  assert.doesNotMatch(html, /\.ds-roundmodes\{display:none\}/);
+});
+
+test('review action feedback uses a persistent live region with assertive error escalation', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /<div class="ds-toast" id="ds-toast" role="status" aria-live="polite" aria-atomic="true" aria-relevant="additions text"><\/div>/);
+  assert.doesNotMatch(html, /id="ds-toast"[^>]* hidden/);
+  assert.match(html, /function toast\(msg,tone\)/);
+  assert.match(html, /isError=tone==='error'/);
+  assert.match(html, /setAttribute\('role',isError\?'alert':'status'\)/);
+  assert.match(html, /setAttribute\('aria-live',isError\?'assertive':'polite'\)/);
+  assert.match(html, /toastEl\.textContent='';toastEl\.classList\.remove\('is-error'\);toastEl\.setAttribute\('role','status'\);toastEl\.setAttribute\('aria-live','polite'\)/);
+  assert.match(html, /Could not save the review decision\.',\s*'error'/);
+  assert.match(html, /setTimeout\(function\(\)\{location\.reload\(\);\},5000\)/, 'keeps verdict success mounted long enough to announce');
+  assert.doesNotMatch(html, /location\.reload\(\);\},450\)/, 'does not interrupt the polite success announcement');
+  assert.match(html, /\.ds-toast\.is-error\{/);
+  assert.match(html, /\.ds-toast\{[^}]*width:max-content;max-width:min\(540px,calc\(100vw - 24px\)\);overflow-wrap:anywhere/);
+});
+
+test('server-rendered comments bootstrap the client cache without a false zero first paint', () => {
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main',
+    comments: [{
+      id: 'bootstrap-comment', file: 'a.ts', line: 1, side: 'right', type: 'question',
+      severity: 'concern', body: '</script><strong>still data</strong>', status: 'open',
+      createdAt: new Date().toISOString(),
+    }],
+  });
+
+  assert.match(html, /<script type="application\/json" id="ds-initial-comments">/);
+  assert.match(html, /"id":"bootstrap-comment"/);
+  assert.match(html, /\\u003c\/script\\u003e\\u003cstrong\\u003estill data\\u003c\/strong\\u003e/);
+  assert.doesNotMatch(html, /<script type="application\/json" id="ds-initial-comments">[^<]*<\/script><strong>/);
+});
+
+test('secondary review text tokens retain 4.5 to 1 contrast on every surface tier', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  const rolePattern = /--text:var\(--md-on-surface\); --text-secondary:(#[0-9A-F]{6}); --text-tertiary:(#[0-9A-F]{6}); --text-minimum:(#[0-9A-F]{6});/gi;
+  const roleSets = [...html.matchAll(rolePattern)].map((match) => match.slice(1));
+
+  assert.equal(roleSets.length, 2, 'dark and light schemes should define explicit semantic text roles');
+  assert.match(html, /--muted:var\(--text-secondary\); --dim:var\(--text-tertiary\); --dim2:var\(--text-minimum\); --faint:var\(--text-minimum\)/);
+
+  function luminance(hex) {
+    const channels = hex.slice(1).match(/../g).map((part) => {
+      const value = Number.parseInt(part, 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  }
+  function contrast(foreground, background) {
+    const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  }
+
+  for (const color of roleSets[0]) {
+    assert.ok(contrast(color, '#48484A') >= 4.5, `${color} must be readable on the highest dark surface`);
+  }
+  for (const color of roleSets[1]) {
+    assert.ok(contrast(color, '#E3E3E8') >= 4.5, `${color} must be readable on the highest light surface`);
+  }
 });
 
 test('review page renders feedback, timeline, filters, resume, and story repair affordances', () => {
@@ -288,7 +381,7 @@ test('submitting a comment sends it to the agent immediately', () => {
   assert.match(html, /'Save only'/);
   assert.match(html, /'Choose task & ask'/);
   assert.match(html, /data-agent-target-cta/);
-  assert.match(html, /allComments\.push\(c\);removeComposer\(box,false\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
+  assert.match(html, /allComments\.push\(c\);noteBlockingFeedbackMutation\(c\);removeComposer\(box,false\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
   assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
 });
 
@@ -311,7 +404,7 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
 
 test('compact review opens on the diff and keeps the optional sidebar as an overlay', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:48px;bottom:0;left:0/);
+  assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-layout>\.ds-rail\{position:fixed;top:56px;bottom:0;left:0/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-main\{width:100%\}/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*\.ds-rail-resizer\{display:none\}/);
   assert.match(html, /function compactScreen\(\)/);
@@ -319,7 +412,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /localStorage\.setItem\('ds-sidebar-collapsed',collapsed\?'1':'0'\)/);
   assert.match(html, /function collapseCompactSidebar\(\)/);
   assert.match(html, /data-sidebar-scrim/);
-  assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:48px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
+  assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:56px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
@@ -427,7 +520,7 @@ test('diff panels expose automatic first-change navigation controls', () => {
   assert.match(html, /\.ds-changejump\{[^}]*display:flex[^}]*align-items:center/s);
   assert.match(html, /function updateChangeNav\(holder\)/);
   assert.match(html, /function jumpToChange\(holder,index,opts\)/);
-  assert.match(html, /function jumpRelativeChange\(holder,delta\)/);
+  assert.match(html, /function jumpRelativeChange\(holder,delta,opts\)/);
   assert.match(html, /function jumpToFirstChange\(holder\)/);
   assert.match(html, /function handleChangeShortcut\(e\)/);
   assert.match(html, /b=closest\(t,'\[data-change-prev\]'\);if\(b\)\{jumpRelativeChange\(closest\(b,'.ds-filepanel'\)\|\|closest\(b,'.ds-diff'\),-1\);return;\}/);
@@ -1044,7 +1137,8 @@ test('arrow keys move through read-aloud beats and auto-advance steps', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false/);
   assert.match(html, /function activateStep\(i,autoSpeak\)/);
-  assert.match(html, /function setActive\(i\)\{activateStep\(i,true\);\}/);
+  assert.match(html, /function setActive\(i,autoSpeak\)/);
+  assert.match(html, /loadStoryStep\(i,function\(ok\)\{if\(ok&&active===i\)\{activateStep\(i,autoSpeak!==false\);loadStoryStep\(i\+1\);\}\}\);/);
   assert.match(html, /function previousSpeakableStep\(i\)/);
   assert.match(html, /function speechBeatTarget\(stepIndex,unitIndex,delta\)/);
   assert.match(html, /function moveSpeechBeat\(delta\)/);
@@ -1310,12 +1404,12 @@ test('story scope keeps excluded files visible without flagging them as unexplai
   assert.doesNotMatch(html, /<b>1<\/b> unexplained/);
   assert.doesNotMatch(html, /title="1 unexplained change"/);
   assert.match(html, /data-story-scope="focused"/);
-  assert.match(html, /Story matches this diff and covers its selected scope/);
+  assert.match(html, /Story covers its selected scope/);
   assert.match(html, /selected story scope explained/);
   assert.doesNotMatch(html, /every change explained/);
 });
 
-test('intro panel leads with the recovered intent without exposing its sources', () => {
+test('intro panel leads with recovered intent and keeps its evidence inspectable', () => {
   const intentTour = {
     ...tour,
     intent: {
@@ -1327,7 +1421,7 @@ test('intro panel leads with the recovered intent without exposing its sources',
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /class="ds-intro-lede" data-speech-overview>We wanted ops to cap runaway fees before settlement\./);
   assert.match(html, /class="ds-intro-design" data-speech-overview>The keeper clamps through one shared helper\./);
-  assert.doesNotMatch(html, /commit abc1234|PR #7 body|ds-intro-sources/);
+  assert.match(html, /<details class="ds-review-evidence">[\s\S]*commit abc1234[\s\S]*PR #7 body/);
 });
 
 test('intro panel keeps the summary as the reading map when intent exists', () => {
@@ -1365,34 +1459,138 @@ test('intent text is HTML-escaped in the intro panel', () => {
   const intentTour = { ...tour, intent: { goal: 'Guard <script> tags', sources: ['a & b'] } };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /Guard &lt;script&gt; tags/);
-  assert.doesNotMatch(html, /a &amp; b|ds-intro-sources/);
+  assert.match(html, /a &amp; b/);
+  assert.doesNotMatch(html, /a & b/);
   assert.doesNotMatch(html, /Guard <script> tags/);
 });
 
-test('all-files view exposes seen and unseen controls with visible sidebar state', () => {
+test('all-files view exposes reviewed and unreviewed controls bound to file hashes', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-file-hint>Showing selected file</);
   assert.match(html, /fileHint\.textContent=filePath\?'Viewing '\+filePath:'Showing selected file'/);
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
   assert.match(html, /data-viewed-toggle aria-pressed="false"/);
-  assert.match(html, /data-viewed-label>Mark seen</);
+  assert.match(html, /data-viewed-label>Mark reviewed</);
+  assert.match(html, /data-review-hash="[a-f0-9]{64}"/);
   assert.match(html, /class="ds-fileitem-viewed" aria-hidden="true">✓</);
   assert.match(html, /data-file-filter="all" aria-pressed="true">All<\/button>/);
-  assert.match(html, /data-file-filter="seen" aria-pressed="false">Seen<\/button>/);
-  assert.match(html, /data-file-filter="unseen" aria-pressed="false">Unseen<\/button>/);
+  assert.match(html, /data-file-filter="reviewed" aria-pressed="false">Reviewed<\/button>/);
+  assert.match(html, /data-file-filter="unreviewed" aria-pressed="false">Unreviewed<\/button>/);
   assert.match(html, /btn\.setAttribute\('aria-pressed',active\?'true':'false'\)/);
   assert.match(html, /data-rate="1\.05" class="is-active" aria-pressed="true">Normal<\/button>/);
   assert.match(html, /b\.setAttribute\('aria-pressed',active\?'true':'false'\)/);
-  assert.match(html, /data-next-unviewed[^>]*>Next unseen/);
+  assert.match(html, /data-next-unviewed[^>]*>Next unreviewed/);
   assert.doesNotMatch(html, />Unviewed<\/button>/);
   assert.doesNotMatch(html, /role="checkbox"/);
 });
 
-test('commands describe V as toggling the current file instead of advancing', () => {
+test('commands describe V as toggling exact-file review state instead of advancing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-command="toggle-viewed"[\s\S]*Toggle current file seen[\s\S]*<kbd>V<\/kbd>/);
+  assert.match(html, /data-command="toggle-viewed"[\s\S]*Toggle current file reviewed[\s\S]*<kbd>V<\/kbd>/);
   assert.doesNotMatch(html, /data-command="next-unviewed"(?:(?!<\/button>)[\s\S])*<kbd>V<\/kbd>/);
+});
+
+test('whole-change approval gates only on blocking feedback and full review mode', () => {
+  const concern = {
+    id: 'concern', file: 'a.ts', line: 1, type: 'question', severity: 'concern',
+    body: 'Please double-check this.', status: 'open', createdAt: new Date().toISOString(),
+  };
+  const concernHtml = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [concern] });
+  assert.match(concernHtml, /data-verdict="approve"(?![^>]*\sdisabled)[^>]*>/);
+  assert.match(concernHtml, /no blocking feedback remains/);
+
+  const blockingHtml = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main',
+    comments: [{ ...concern, id: 'blocking', type: 'change', severity: 'blocking' }],
+  });
+  assert.match(blockingHtml, /data-verdict="approve"[^>]*\sdisabled/);
+  assert.match(blockingHtml, /Resolve 1 blocking comment first/);
+
+  const sinceHtml = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewMode: 'since',
+  });
+  assert.match(sinceHtml, /data-verdict="approve"[^>]*\sdisabled/);
+  assert.match(sinceHtml, /Return to Full change before approving the whole change/);
+
+  const focusedHtml = renderPage({
+    repo: process.cwd(),
+    tour: { ...tour, storyScope: { includedFiles: ['a.ts'], excludedFiles: ['outside.ts'] } },
+    files,
+    baseLabel: 'main',
+    comments: [],
+  });
+  assert.match(focusedHtml, /data-verdict="approve"[^>]*\sdisabled/);
+  assert.match(focusedHtml, /This story omits changed files/);
+
+  const divergentHtml = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
+    stagedWorktreeDivergentFiles: ['a.ts'],
+  });
+  assert.match(divergentHtml, /data-verdict="approve"[^>]*\sdisabled/);
+  assert.match(divergentHtml, /Reconcile 1 staged\/working-tree mismatch before approval/);
+  assert.match(divergentHtml, /Staged state differs · 1/);
+  assert.match(divergentHtml, /<code>a\.ts<\/code>/);
+});
+
+test('storyless exclusions remain inspectable and acknowledgeable from review status', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'HEAD' },
+    files,
+    baseLabel: 'main',
+    comments: [],
+    storyless: true,
+    excludedFiles: [{
+      path: 'dist/bundle.js', reason: 'generated-path',
+      addedLines: 12, removedLines: 0, changedLines: 12,
+    }],
+  });
+  assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-trust-open/);
+  assert.match(html, /<b>1<\/b> excluded file · inspect before approval/);
+  assert.match(html, /data-exclusions-ack/);
+  assert.match(html, /No story-coverage claim is applied in this view/);
+});
+
+test('reviewed-file hash follows code identity instead of story coverage state', () => {
+  const covered = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  const uncovered = renderPage({
+    repo: process.cwd(),
+    tour: { ...tour, steps: [{ ...tour.steps[0], range: [2, 2] }] },
+    files,
+    baseLabel: 'main',
+    comments: [],
+  });
+  const coveredHash = covered.match(/class="ds-fileitem[^"]*"[^>]*data-review-hash="([^"]+)"/)?.[1];
+  const uncoveredHash = uncovered.match(/class="ds-fileitem[^"]*"[^>]*data-review-hash="([^"]+)"/)?.[1];
+  assert.ok(coveredHash);
+  assert.equal(uncoveredHash, coveredHash);
+});
+
+test('file search indexes changed code beyond the old 2400-character cutoff', () => {
+  const searchFiles = [{
+    ...files[0],
+    hunks: [{
+      ...files[0].hunks[0],
+      lines: [
+        { type: 'add', content: 'x'.repeat(2600), newNo: 1 },
+        { type: 'add', content: 'late_search_marker', newNo: 2 },
+      ],
+    }],
+  }];
+  const html = renderPage({ repo: process.cwd(), tour, files: searchFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-filter-code="[^"]*late_search_marker/);
+});
+
+test('review cues distinguish authored tags from suggested heuristics', () => {
+  const cueTour = {
+    ...tour,
+    steps: [{ ...tour.steps[0], tags: ['critical-path'], why: 'This changes fee transfer behavior.' }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: cueTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /ds-reviewcue is-authored" title="Authored story tag">Critical path/);
+  assert.match(html, /ds-reviewcue" title="Suggested from this step">Value movement/);
+  assert.match(html, /Authored and suggested cues, not a risk score/);
 });
 
 test('a new file has no expandable eof gap in the split view', () => {

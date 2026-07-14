@@ -89,20 +89,20 @@ export function renderChangePage(sum, opts) {
     const nav = navBar({
         home: '/repos',
         crumbs: [
-            { label: opts.repoName, href: `${routeBase}/stories` },
-            { label: 'Diff' },
+            { label: opts.repoName, href: `${routeBase}/change` },
+            { label: 'Scope' },
         ],
-        right: `<button class="nv-act" id="reloadBtn" type="button" title="Re-read the working tree and rebuild the diff">${REFRESH_ICON}Reload</button>` +
-            `<a class="nv-act" href="${esc(routeBase)}/stories">Review sessions</a>`,
+        right: `<button class="nv-act" id="reloadBtn" type="button" title="Re-read the working tree and rebuild the diff" aria-label="Reload current scope">${REFRESH_ICON}<span class="reload-label">Reload</span></button>` +
+            `<a class="nv-act nv-history" href="${esc(routeBase)}/stories">History</a>`,
     });
     const scopeControls = `<div class="sopts" role="group" aria-label="Review scope">` +
-        `<a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=uncommitted">` +
+        `<a class="sopt${active === 'uncommitted' ? ' on' : ''}" href="${esc(routeBase)}/change?scope=uncommitted"${active === 'uncommitted' ? ' aria-current="true"' : ''}>` +
         `<span class="sopt-k">Uncommitted</span><span class="sopt-t">Working tree vs HEAD</span>` +
         `</a>` +
-        `<button class="sopt${active === 'commit' ? ' on' : ''}" data-open-panel="commit" type="button">` +
+        `<button class="sopt${active === 'commit' ? ' on' : ''}" data-open-panel="commit" type="button" aria-controls="commitPanel" aria-expanded="${active === 'commit' ? 'true' : 'false'}">` +
         `<span class="sopt-k">Single commit</span><span class="sopt-t">Parent -> selected commit</span>` +
         `</button>` +
-        `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button">` +
+        `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button" aria-controls="comparePanel" aria-expanded="${active === 'compare' ? 'true' : 'false'}">` +
         `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Branches with optional commit pins</span>` +
         `</button>` +
         `</div>`;
@@ -120,7 +120,7 @@ export function renderChangePage(sum, opts) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 ${BRAND_HEAD_LINKS}
-<title>${esc(APP_BRAND)} — new review</title>
+<title>${esc(APP_BRAND)} — choose review scope</title>
 <style>
 ${sharedTokens()}
 :root{--bg:var(--app-bg);--elev:var(--app-elev);--label:var(--app-label);--l2:var(--app-l2);--l3:var(--app-l3);
@@ -150,7 +150,7 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 .scur b{color:var(--label);font-size:20px;line-height:1.15;font-weight:720;letter-spacing:-.02em}
 .scope-command{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--l3);background:var(--subbg);border:.5px solid var(--sep);border-radius:999px;padding:6px 10px;white-space:nowrap}
 .sopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:100%}
-.sopt{position:relative;display:flex;flex-direction:column;gap:5px;min-height:78px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:.5px solid var(--sep);cursor:pointer;padding:13px 13px 12px;border-radius:12px;text-decoration:none;white-space:normal}
+.sopt{position:relative;display:flex;flex-direction:column;gap:4px;min-height:64px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:.5px solid var(--sep);cursor:pointer;padding:10px 12px;border-radius:10px;text-decoration:none;white-space:normal}
 .sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
 .sopt:hover,.sopt.is-open{color:var(--label);border-color:var(--hair);background:var(--fill)}
 .sopt.is-open:not(.on){border-color:color-mix(in srgb,var(--blue) 30%,var(--hair));background:color-mix(in srgb,var(--blue) 8%,var(--elev))}
@@ -209,7 +209,8 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple
 @media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:980px){.scope-card,.file-card{grid-column:1}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
 @media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}}
-@media (max-width:600px){.wrap{padding:20px 14px 26px}.review-path{grid-template-columns:24px 1fr 24px 1fr 24px 1fr 24px}.review-path>b{margin:0 10px}.review-path span{gap:0;font-size:0}.review-path i{font-size:11px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:1fr;gap:8px}.sopt{min-height:66px}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
+@media (max-width:600px){.wrap{padding:20px 14px 26px}.review-path{display:flex;width:100%}.review-path>b{flex:1;min-width:12px;margin:0 10px}.review-path span{flex:none;gap:0;font-size:0}.review-path .active{gap:7px;font-size:11px}.review-path i{font-size:11px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.sopt{min-height:44px;justify-content:center;text-align:center;padding:8px 6px}.sopt-k{font-size:12px}.sopt-t{display:none}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
+@media (max-width:480px){.reload-label{display:none}.nv-history{padding-left:9px;padding-right:9px}}
 </style></head>
 <body>
 ${nav}
@@ -238,24 +239,24 @@ ${nav}
         ${scopeControls}
       </div>
       <div class="refpanel" data-panel="commit" id="commitPanel"${active === 'commit' ? '' : ' hidden'}>
-        <label class="refrow"><span>Commit</span><input id="commitRef" data-picker="commit" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Commit</span><input id="commitRef" data-picker="commit" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="HEAD or a commit SHA" value="${esc(opts.head ?? 'HEAD')}" autocomplete="off" spellcheck="false"></label>
         <p class="refhint">Shows that commit against its first parent; root commits are shown against the empty tree.</p>
       </div>
       <div class="refpanel" data-panel="compare" id="comparePanel"${active === 'compare' ? '' : ' hidden'}>
         <div class="refside" data-ref-side="left">
           <span class="refside-title">Left</span>
-          <label class="refrow"><span>Branch / ref</span><input id="cmpBaseRef" data-picker="ref" placeholder="local or remote branch" value="${esc(compareLeftValue)}" autocomplete="off" spellcheck="false"></label>
-          <label class="refrow"><span>Commit</span><input id="cmpBase" data-picker="side-commit" data-ref-input="cmpBaseRef" placeholder="Use selected ref head, or pick a commit" value="${esc(compareLeftCommitValue)}" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Branch / ref</span><input id="cmpBaseRef" data-picker="ref" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="local or remote branch" value="${esc(compareLeftValue)}" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Commit</span><input id="cmpBase" data-picker="side-commit" data-ref-input="cmpBaseRef" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="Use selected ref head, or pick a commit" value="${esc(compareLeftCommitValue)}" autocomplete="off" spellcheck="false"></label>
         </div>
         <span class="cmparrow" aria-hidden="true">→</span>
         <div class="refside" data-ref-side="right">
           <span class="refside-title">Right</span>
-          <label class="refrow"><span>Branch / ref</span><input id="cmpHeadRef" data-picker="ref" placeholder="local or remote branch" value="${esc(compareRightValue)}" autocomplete="off" spellcheck="false"></label>
-          <label class="refrow"><span>Commit</span><input id="cmpHead" data-picker="side-commit" data-ref-input="cmpHeadRef" placeholder="Use selected ref head, or pick a commit" value="${esc(compareRightCommitValue)}"${compareRightWorktree} autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Branch / ref</span><input id="cmpHeadRef" data-picker="ref" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="local or remote branch" value="${esc(compareRightValue)}" autocomplete="off" spellcheck="false"></label>
+          <label class="refrow"><span>Commit</span><input id="cmpHead" data-picker="side-commit" data-ref-input="cmpHeadRef" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="Use selected ref head, or pick a commit" value="${esc(compareRightCommitValue)}"${compareRightWorktree} autocomplete="off" spellcheck="false"></label>
         </div>
         <p class="refhint">Pick a branch/ref on each side, then optionally pin either side to a commit from that branch. Right can stay on HEAD + working tree to include the latest uncommitted edits.</p>
       </div>
-      <div class="refpicker" id="refPicker" role="listbox" hidden></div>
+      <div class="refpicker" id="refPicker" role="listbox" aria-label="Available git references" hidden></div>
     </section>
     <section class="file-card" aria-label="Changed files">
       ${cardBody}
@@ -268,11 +269,12 @@ ${nav}
   if(reloadBtn)reloadBtn.addEventListener('click',function(){reloadBtn.disabled=true;location.reload();});
   var loaded=false,loadingRefs=false,refsPromise=null,panels=[].slice.call(document.querySelectorAll('[data-panel]'));
   var refData={current:'HEAD',branches:[],commits:[]},commitCache={},commitFetches={};
-  var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[],refQueries=new WeakMap();
+  var picker=document.getElementById('refPicker'),activeInput=null,activeRows=[],activeIndex=-1,refQueries=new WeakMap();
   function showPanel(name){
     panels.forEach(function(p){p.hidden=p.getAttribute('data-panel')!==name;});
-    [].slice.call(document.querySelectorAll('.sopt')).forEach(function(el){el.classList.remove('is-open');});
+    [].slice.call(document.querySelectorAll('[data-open-panel]')).forEach(function(el){el.classList.remove('is-open');el.setAttribute('aria-expanded','false');});
     var btn=document.querySelector('[data-open-panel="'+name+'"]');if(btn)btn.classList.add('is-open');
+    if(btn)btn.setAttribute('aria-expanded','true');
     ensureRefs();
   }
   [].slice.call(document.querySelectorAll('[data-open-panel]')).forEach(function(btn){
@@ -376,33 +378,59 @@ ${nav}
   function renderPicker(){
     if(!picker||!activeInput)return;
     activeRows=filteredOptions(activeInput);
+    var currentValue=(activeInput.value||'').trim();
+    activeIndex=activeRows.length?activeRows.findIndex(function(o){
+      return o.value===currentValue||(o.value==='__WORKTREE__'&&activeInput.getAttribute('data-worktree')==='1');
+    }): -1;
+    if(activeRows.length&&activeIndex<0)activeIndex=0;
     picker.replaceChildren();
     if(!activeRows.length){
       var empty=document.createElement('div');empty.className='refpick-empty';empty.textContent='No matching refs';picker.appendChild(empty);
     }else{
       activeRows.forEach(function(o,i){
-        var row=document.createElement('button');row.type='button';row.className='refpick-row'+(i===0?' is-active':'');row.setAttribute('data-value',o.value);
+        var row=document.createElement('button');row.type='button';row.tabIndex=-1;row.id='ref-option-'+(activeInput.id||activeInput.getAttribute('id')||'input')+'-'+i;row.className='refpick-row'+(i===activeIndex?' is-active':'');row.setAttribute('role','option');row.setAttribute('aria-selected',i===activeIndex?'true':'false');row.setAttribute('data-value',o.value);
         var main=document.createElement('span');main.className='refpick-main';main.textContent=o.label;
         var meta=document.createElement('span');meta.className='refpick-meta';meta.textContent=o.meta;
         var kind=document.createElement('span');kind.className='refpick-kind';kind.textContent=o.kind;
         row.appendChild(main);row.appendChild(meta);row.appendChild(kind);
         row.addEventListener('mousedown',function(ev){ev.preventDefault();});
+        row.addEventListener('mouseenter',function(){setActiveIndex(i,false);});
         row.addEventListener('click',function(ev){ev.preventDefault();chooseRef(o.value);});
         picker.appendChild(row);
       });
     }
-    picker.hidden=false;placePicker();
+    picker.hidden=false;activeInput.setAttribute('aria-expanded','true');syncActiveOption(false);placePicker();
+  }
+  function optionNodes(){
+    if(!picker)return [];
+    return picker.querySelectorAll?[].slice.call(picker.querySelectorAll('[role="option"]')):[].slice.call(picker.children||[]);
+  }
+  function syncActiveOption(scroll){
+    var rows=optionNodes();
+    rows.forEach(function(row,i){row.className='refpick-row'+(i===activeIndex?' is-active':'');row.setAttribute('aria-selected',i===activeIndex?'true':'false');});
+    if(!activeInput||activeIndex<0||!rows[activeIndex]){if(activeInput)activeInput.removeAttribute('aria-activedescendant');return;}
+    activeInput.setAttribute('aria-activedescendant',rows[activeIndex].id);
+    if(scroll&&rows[activeIndex].scrollIntoView)rows[activeIndex].scrollIntoView({block:'nearest'});
+  }
+  function setActiveIndex(index,scroll){
+    if(!activeRows.length){activeIndex=-1;syncActiveOption(false);return;}
+    activeIndex=Math.max(0,Math.min(index,activeRows.length-1));syncActiveOption(scroll);
   }
   function openPicker(input,query){
+    if(activeInput&&activeInput!==input){activeInput.setAttribute('aria-expanded','false');activeInput.removeAttribute('aria-activedescendant');}
     activeInput=input;
+    activeIndex=-1;
+    input.setAttribute('aria-expanded','true');
     if(query!==undefined)refQueries.set(input,query);
+    renderPicker();
     ensureRefs().then(function(){
       if(input.getAttribute('data-picker')==='side-commit')return ensureSideCommits(input);
     }).then(renderPicker);
   }
   function closePicker(){
     if(picker)picker.hidden=true;
-    activeInput=null;activeRows=[];
+    if(activeInput){activeInput.setAttribute('aria-expanded','false');activeInput.removeAttribute('aria-activedescendant');}
+    activeInput=null;activeRows=[];activeIndex=-1;
   }
   function chooseRef(value){
     if(!activeInput||!value)return;
@@ -424,9 +452,25 @@ ${nav}
     input.addEventListener('focus',function(){openPicker(input,'');});
     input.addEventListener('click',function(){openPicker(input,refQueries.get(input)||'');});
     input.addEventListener('input',function(){input.removeAttribute('data-worktree');openPicker(input,input.value);});
+    input.addEventListener('focusout',function(ev){
+      var next=ev.relatedTarget;
+      if(next&&picker&&picker.contains(next))return;
+      setTimeout(function(){
+        var focused=document.activeElement;
+        if(activeInput===input&&focused!==input&&!(picker&&focused&&picker.contains(focused)))closePicker();
+      },0);
+    });
     input.addEventListener('keydown',function(ev){
-      if(ev.key==='Escape'){closePicker();return;}
-      if(ev.key==='Enter'&&activeInput===input&&activeRows[0]&&activeRows[0].value){ev.preventDefault();chooseRef(activeRows[0].value);}
+      if(ev.key==='Escape'&&activeInput===input){ev.preventDefault();ev.stopPropagation();closePicker();return;}
+      if(ev.key==='ArrowDown'||ev.key==='ArrowUp'||ev.key==='Home'||ev.key==='End'){
+        ev.preventDefault();
+        if(activeInput!==input||picker.hidden){openPicker(input,refQueries.get(input)||'');return;}
+        if(ev.key==='Home')setActiveIndex(0,true);
+        else if(ev.key==='End')setActiveIndex(activeRows.length-1,true);
+        else setActiveIndex(activeIndex+(ev.key==='ArrowDown'?1:-1),true);
+        return;
+      }
+      if(ev.key==='Enter'&&activeInput===input&&activeRows[activeIndex]&&activeRows[activeIndex].value){ev.preventDefault();chooseRef(activeRows[activeIndex].value);}
     });
   });
   document.addEventListener('mousedown',function(ev){

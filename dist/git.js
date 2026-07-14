@@ -1,9 +1,10 @@
 // Thin wrapper over the `git` CLI. No external deps — just child_process.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_CONTEXT_LINES } from './config.js';
-import { isReviewNoise } from './noise.js';
+import { reviewExclusionMetadata } from './noise.js';
 const APP_DATA_PATHSPEC = ':(exclude).diffstory/**';
 function isAppDataPath(path) {
     return path === '.diffstory' || path.startsWith('.diffstory/');
@@ -105,27 +106,233 @@ export function getDiff(repo, base, head) {
     const tracked = git(repo, args);
     if (head)
         return tracked;
+    // `git diff <base>` compares the base directly with filesystem bytes. That
+    // normally gives the useful aggregate change, but it can hide the index: an
+    // MM file whose unstaged edit restores the base has no base→worktree diff
+    // even though it still contains a staged change. Append only those missing
+    // base→index paths so every staged change remains reviewable without
+    // duplicating files already represented by the aggregate diff.
+    const stagedOnly = stagedOnlyReviewPaths(repo, base).filter((path) => !noise.has(path));
+    const staged = stagedOnly.length
+        ? git(repo, [
+            'diff',
+            '--cached',
+            '--no-color',
+            '--no-ext-diff',
+            `-U${DIFF_CONTEXT_LINES}`,
+            base,
+            '--',
+            ...stagedOnly.map(literalPathspec),
+        ])
+        : '';
+    // An index deletion restored at the same path is reported by Git as both a
+    // tracked deletion and an untracked file (`D  path` + `?? path`). The trust
+    // gate exposes that index/worktree collision explicitly, so do not append a
+    // second diff block for the same path and make the reviewed identity look
+    // like two independent files.
+    const indexDivergent = new Set(stagedWorktreeDivergentFiles(repo, base));
     const untracked = untrackedFiles(repo)
         .filter((path) => !isAppDataPath(path))
+        .filter((path) => !indexDivergent.has(path))
         .filter((path) => !noise.has(path))
         .map((path) => untrackedFileDiff(repo, path))
         .filter(Boolean);
-    return joinDiffs([tracked, ...untracked]);
+    return joinDiffs([tracked, staged, ...untracked]);
 }
 /**
- * Files nobody reviews by hand — generated/vendored by path, or so large they're
- * almost certainly machine-written (see `isReviewNoise`). Derived from `--numstat`,
- * so it's a cheap count with no file content read. The change summary folds the
- * same set into its collapsed "generated & large" group.
+ * Paths omitted from the bounded default diff. Kept for compatibility; callers
+ * that show review scope should use excludedReviewFiles() so the omission and
+ * reason remain visible.
  */
 export function noiseFiles(repo, base, head) {
+    return excludedReviewFiles(repo, base, head).map((file) => file.path);
+}
+/**
+ * Structured omissions for the bounded default diff. Derived from --numstat so
+ * callers can show the path, reason, and changed-line count without reading the
+ * excluded file contents.
+ */
+export function excludedReviewFiles(repo, base, head) {
     return numstat(repo, base, head)
-        .filter((f) => isReviewNoise(f.path, (f.added ?? 0) + (f.removed ?? 0)))
-        .map((f) => f.path);
+        .map((file) => reviewExclusionMetadata(file.path, file.added, file.removed))
+        .filter((file) => file !== null)
+        .sort((a, b) => a.path.localeCompare(b.path));
+}
+/**
+ * Fingerprint the complete review change without materialising its contents in
+ * the browser-facing diff. The bounded renderer may omit generated, oversized,
+ * binary, and metadata-only files, but none of those omissions may let an old
+ * approval survive.
+ *
+ * For fixed ref comparisons, Git's full raw diff contains exact object ids and
+ * modes. For a working-tree comparison Git intentionally writes an all-zero
+ * destination id, so we additionally hash the current bytes/mode of every
+ * changed and untracked path. `.diffstory/**` is app state, not product code.
+ */
+export function reviewChangeFingerprint(repo, base, head) {
+    const hash = createHash('sha256');
+    const resolvedBase = tryGit(repo, ['rev-parse', '--verify', `${base}^{tree}`])?.trim() ?? base;
+    const resolvedHead = head
+        ? tryGit(repo, ['rev-parse', '--verify', `${head}^{tree}`])?.trim() ?? head
+        : 'working-tree';
+    hash.update('diffstory-full-change-v2\0');
+    hash.update(resolvedBase);
+    hash.update('\0');
+    hash.update(resolvedHead);
+    hash.update('\0');
+    const args = ['diff', '--raw', '-z', '--full-index', '--no-abbrev', '--no-renames', base];
+    if (head)
+        args.push(head);
+    args.push('--', APP_DATA_PATHSPEC);
+    updateFingerprintPart(hash, 'base-to-review', git(repo, args));
+    if (!head) {
+        // Base→worktree alone does not identify the index. Hash both Git boundaries
+        // explicitly so restaging different bytes invalidates an approval even when
+        // the visible filesystem and aggregate diff do not change.
+        updateFingerprintPart(hash, 'base-to-index', git(repo, [
+            'diff',
+            '--cached',
+            '--raw',
+            '-z',
+            '--full-index',
+            '--no-abbrev',
+            '--no-renames',
+            base,
+            '--',
+            APP_DATA_PATHSPEC,
+        ]));
+        updateFingerprintPart(hash, 'index-to-worktree', git(repo, [
+            'diff',
+            '--raw',
+            '-z',
+            '--full-index',
+            '--no-abbrev',
+            '--no-renames',
+            '--',
+            APP_DATA_PATHSPEC,
+        ]));
+        const paths = [
+            ...new Set([
+                ...changedPaths(repo, [base]),
+                ...changedPaths(repo, ['--cached', base]),
+                ...changedPaths(repo, []),
+                ...untrackedFiles(repo),
+            ]),
+        ].sort();
+        for (const path of paths)
+            updateWorkingPathFingerprint(repo, path, hash);
+    }
+    return hash.digest('hex');
+}
+function updateFingerprintPart(hash, label, value) {
+    hash.update(label);
+    hash.update('\0');
+    hash.update(String(Buffer.byteLength(value)));
+    hash.update('\0');
+    hash.update(value);
+    hash.update('\0');
+}
+function updateWorkingPathFingerprint(repo, path, hash) {
+    hash.update('path\0');
+    hash.update(path);
+    hash.update('\0');
+    const abs = join(repo, path);
+    if (!existsSync(abs)) {
+        hash.update('missing\0');
+        return;
+    }
+    const stat = lstatSync(abs);
+    hash.update(`${stat.mode & 0o7777}\0`);
+    if (stat.isSymbolicLink()) {
+        hash.update('symlink\0');
+        hash.update(readlinkSync(abs));
+        hash.update('\0');
+        return;
+    }
+    if (!stat.isFile()) {
+        // Submodules and other special entries are already represented by the raw
+        // Git record. Including their filesystem type prevents accidental aliasing.
+        hash.update(`special:${stat.mode & 0o170000}\0`);
+        return;
+    }
+    const oid = tryGit(repo, ['hash-object', '--no-filters', '--', path])?.trim();
+    if (oid)
+        hash.update(`blob:${oid}\0`);
+    else
+        hash.update(readFileSync(abs));
 }
 /** Git pathspecs that subtract the given paths from a diff (`:(exclude)<path>`). */
 export function excludePathspecs(paths) {
     return paths.map((p) => `:(exclude)${p}`);
+}
+function literalPathspec(path) {
+    return `:(literal)${path}`;
+}
+/**
+ * Paths with both a staged base→index change and a separate index→worktree
+ * state. Git's ordinary diff finds tracked worktree edits, but an index deletion
+ * restored at the same path becomes untracked (`D  path` + `?? path`) and must
+ * be included explicitly. A reviewer cannot infer both states from one
+ * aggregate base→worktree diff, so callers should surface these paths and must
+ * not treat an approval as trustworthy until the index and worktree are
+ * reconciled.
+ * Fixed-ref reviews have no mutable index boundary and therefore return none.
+ */
+export function stagedWorktreeDivergentFiles(repo, base, head) {
+    if (head)
+        return [];
+    const staged = new Set(stagedChangedPaths(repo, base));
+    const worktree = new Set([...changedPaths(repo, []), ...untrackedFiles(repo)]);
+    return [...staged]
+        .filter((path) => worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path))
+        .sort();
+}
+/**
+ * `git diff` cannot report an index deletion restored as an untracked path. In
+ * particular, `ls-files --others --exclude-standard` also hides that restore
+ * when a committed ignore rule covers the formerly tracked path. Compare the
+ * staged path with the actual stage-0 index entry and filesystem instead: an
+ * index-missing path that exists in any form is a real index/worktree split.
+ */
+function stagedDeletionRestoredOnDisk(repo, path) {
+    const entries = tryGit(repo, ['ls-files', '--stage', '-z', '--', literalPathspec(path)]);
+    const hasStageZero = !!entries
+        ?.split('\0')
+        .filter(Boolean)
+        .some((entry) => /^\d+ [0-9a-f]+ 0\t/.test(entry));
+    if (hasStageZero)
+        return false;
+    try {
+        lstatSync(join(repo, path));
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+function stagedOnlyReviewPaths(repo, base) {
+    const aggregate = new Set(changedPaths(repo, [base]));
+    return stagedChangedPaths(repo, base).filter((path) => !aggregate.has(path));
+}
+/** Paths changed in the index itself, excluding commits already present at HEAD. */
+function stagedChangedPaths(repo, fallbackBase) {
+    const indexBase = tryGit(repo, ['rev-parse', '--verify', 'HEAD^{commit}']) ? 'HEAD' : fallbackBase;
+    return changedPaths(repo, ['--cached', indexBase]);
+}
+/** Run `git diff --name-only` for one boundary and return literal NUL paths. */
+function changedPaths(repo, boundary) {
+    const out = tryGit(repo, [
+        'diff',
+        '--name-only',
+        '-z',
+        '--no-renames',
+        ...boundary,
+        '--',
+        APP_DATA_PATHSPEC,
+    ]);
+    if (!out)
+        return [];
+    return out.split('\0').filter(Boolean).filter((path) => !isAppDataPath(path)).sort();
 }
 /** Branch names (local + remote), most-recently-committed first. For the picker. */
 export function listBranches(repo) {
@@ -269,8 +476,33 @@ export function numstat(repo, base, head) {
     if (head)
         args.push(head);
     args.push('--', APP_DATA_PATHSPEC);
-    const out = tryGit(repo, args);
-    const tracked = !out ? [] : out
+    const tracked = parseNumstat(tryGit(repo, args));
+    if (head)
+        return tracked;
+    // Keep omission metadata aligned with getDiff(): a large, generated, binary,
+    // or metadata-only staged remainder must still be identified even when the
+    // worktree happens to match the base.
+    const stagedOnly = stagedOnlyReviewPaths(repo, base);
+    const staged = stagedOnly.length
+        ? parseNumstat(tryGit(repo, [
+            'diff',
+            '--cached',
+            '--numstat',
+            '--no-color',
+            base,
+            '--',
+            ...stagedOnly.map(literalPathspec),
+        ]))
+        : [];
+    const indexDivergent = new Set(stagedWorktreeDivergentFiles(repo, base));
+    return [
+        ...tracked,
+        ...staged,
+        ...untrackedNumstat(repo).filter((file) => !indexDivergent.has(file.path)),
+    ];
+}
+function parseNumstat(out) {
+    return !out ? [] : out
         .split('\n')
         .filter(Boolean)
         .map((line) => {
@@ -279,9 +511,6 @@ export function numstat(repo, base, head) {
         const removed = parts[1] === '-' ? null : Number(parts[1]);
         return { path: parts.slice(2).join('\t'), added, removed };
     });
-    if (head)
-        return tracked;
-    return [...tracked, ...untrackedNumstat(repo)];
 }
 function joinDiffs(parts) {
     return parts

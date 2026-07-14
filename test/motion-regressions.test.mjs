@@ -27,7 +27,7 @@ test('shared motion primitives expose the exact dashboard timing scale', () => {
 test('change navigation uses one stable marker without keyframes or cleanup timers', () => {
   assert.match(DIFF_CSS, /\.ds-row\.is-change-jump,\.ds-urow\.is-change-jump\{box-shadow:inset 3px 0 0 var\(--accent-blue\)\}/);
   assert.doesNotMatch(DIFF_CSS, /dsChangeJump/);
-  assert.match(DIFF_JS, /\$all\('\.ds-row-add,\.ds-row-del',holder\)\.forEach\(function\(r\)\{r\.classList\.remove\('is-change-jump'\);\}\)/);
+  assert.match(DIFF_JS, /\$all\('\.ds-row-add,\.ds-row-del',holder\)\.forEach\(function\(r\)\{r\.classList\.remove\('is-change-jump'\);r\.removeAttribute\('aria-current'\);\}\)/);
   assert.doesNotMatch(DIFF_JS, /setTimeout\([^\n]*is-change-jump|1300/);
 });
 
