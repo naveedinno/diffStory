@@ -510,6 +510,52 @@ test('selected-story approval requires current metadata and full-change coverage
   }
 });
 
+test('lazy file evidence remains available when only another file changes', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'review.txt'), 'review base\n');
+  writeFileSync(join(repo, 'other.txt'), 'other base\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add review fixtures'], { cwd: repo });
+  writeFileSync(join(repo, 'review.txt'), 'review changed\n');
+  writeFileSync(join(repo, 'other.txt'), 'other changed\n');
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    const token = reviewPageToken(pageHtml);
+
+    writeFileSync(join(repo, 'other.txt'), 'other changed again\n');
+
+    const unchangedFileEndpoints = [
+      '/api/diff/file-panel?file=review.txt',
+      '/api/fullfile?file=review.txt',
+      '/api/diff/split?file=review.txt',
+      '/api/diff/context?file=review.txt&from=1&to=1&layout=unified',
+    ];
+    for (const endpoint of unchangedFileEndpoints) {
+      const response = await fetch(leased(`${base}${endpoint}`, token));
+      assert.equal(response.status, 200, `${endpoint} keeps serving unchanged file evidence`);
+    }
+
+    const changedFile = await fetch(leased(`${base}/api/diff/file-panel?file=other.txt`, token));
+    assert.equal(changedFile.status, 409, 'the file that actually moved still requires fresh evidence');
+    assert.equal((await changedFile.json()).reloadRequired, true);
+
+    const wholeReviewPanel = await fetch(leased(`${base}/api/review/step-panel?index=1`, token));
+    assert.equal(wholeReviewPanel.status, 409, 'story-wide evidence stays bound to the full change');
+
+    const verdict = await fetch(`${base}/api/review/verdict`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'changes-requested', pageToken: token }),
+    });
+    assert.equal(verdict.status, 409, 'whole-review decisions still require the current full change');
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test('lazy review evidence stays bound to its issued since-feedback snapshot and rejects drift', async () => {
   const repo = gitRepo();
   const original = Array.from({ length: 24 }, (_, index) => `line ${index + 1}`);
@@ -695,6 +741,64 @@ printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","na
   chmodSync(path, 0o755);
 }
 
+function installFakeStoryRepairClaude(binDir) {
+  const path = join(binDir, 'claude');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+node -e "const fs=require('fs');const p='.diffstory/story.json';const s=JSON.parse(fs.readFileSync(p,'utf8'));s.steps[0].why='Shortened explanation.';fs.writeFileSync(p,JSON.stringify(s,null,2)+'\\n');"
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":".diffstory/story.json"}}]}}'
+`,
+  );
+  chmodSync(path, 0o755);
+}
+
+test('POST /api/story/repair runs the selected agent and validates the rewritten story', async () => {
+  const realPath = process.env.PATH;
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-story-repair-agent-'));
+  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
+  installFakeStoryRepairClaude(fakeBin);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nchanged\n');
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 2,
+    mode: 'guided',
+    title: 'Review the changed readme',
+    summary: 'One focused change.',
+    intent: { goal: 'Explain the readme change.', sources: ['code-derived'] },
+    base: 'HEAD',
+    steps: [{
+      id: 's1', order: 1, title: 'The changed line', file: 'README.md',
+      range: [2, 2], viewport: [1, 2], highlights: [[2, 2]], kind: 'changed',
+      why: 'This explanation is deliberately too long for the focused review step.',
+    }],
+  }, null, 2)}\n`);
+
+  const { server, base } = await boot(repo);
+  try {
+    const response = await fetch(`${base}/api/story/repair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'shorten', agent: 'claude', file: 'README.md', stepId: 's1' }),
+    });
+    assert.equal(response.status, 200);
+    const events = ndjsonEvents(await response.text());
+    const done = events.find((event) => event.type === 'run_done');
+    assert.equal(done?.status, 'complete');
+    const repaired = JSON.parse(readFileSync(join(repo, '.diffstory', 'story.json'), 'utf8'));
+    assert.equal(repaired.steps[0].why, 'Shortened explanation.');
+    assert.match(repaired.diffFingerprint, /^[a-f0-9]{64}$/);
+    assert.equal(readFileSync(join(repo, 'README.md'), 'utf8'), '# hi\nchanged\n');
+  } finally {
+    server.close();
+    process.env.PATH = realPath;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
+
 async function fakeCodexDesktop(socketPath) {
   rmSync(socketPath, { force: true });
   const requests = [];
@@ -867,7 +971,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     const state = await opened.json();
     assert.equal(state.isGit, true);
     assert.equal(state.hasTour, false);
-    assert.equal(state.route, `/repo/${encodeURIComponent(basename(repo))}/change`);
+    assert.equal(state.route, `/repo/${encodeURIComponent(basename(repo))}/stories`);
 
     const stories = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/stories`);
     assert.equal(stories.status, 200);

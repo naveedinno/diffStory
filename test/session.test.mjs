@@ -35,12 +35,12 @@ test('closeSession clears everything', () => {
   assert.equal(s.chooseStory, true);
 });
 
-test('repo entry starts at scope selection instead of review history', () => {
+test('repo entry starts at review history', () => {
   const s = createSession({ repo: '/r' });
-  assert.equal(sessionEntryScreen(s), 'change');
+  assert.equal(sessionEntryScreen(s), 'stories');
 
   openSession(s, '/another');
-  assert.equal(sessionEntryScreen(s), 'change');
+  assert.equal(sessionEntryScreen(s), 'stories');
 });
 
 test('repo entry resumes only an explicitly selected review', () => {
@@ -50,7 +50,7 @@ test('repo entry resumes only an explicitly selected review', () => {
   assert.equal(sessionEntryScreen(s), 'review');
 
   s.selectedStory = null;
-  assert.equal(sessionEntryScreen(s), 'change');
+  assert.equal(sessionEntryScreen(s), 'stories');
 });
 
 test('review page leases are opaque, single-window, and cleared across repositories', () => {

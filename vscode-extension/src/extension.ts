@@ -1,14 +1,16 @@
 import * as path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import * as vscode from 'vscode';
-import { changedFiles, isGitRepository, resolveBase, reviewDiff, reviewRefs, showFile, type ChangedFile } from './git';
-import { appendReviewerFollowUp, createComment, loadComments, rangeFor, saveComments, setCommentStatus } from './comments';
-import { isLineRange, type CommentStatus, type ReviewComment, type Tour, type TourStep } from './model';
+import { changedFiles, excludedReviewFiles, isGitRepository, latestCommitComparison, resolveBase, resolveReviewRevision, reviewChangeFingerprint, reviewDiff, reviewRefs, showFile, stagedWorktreeDivergentFiles, type ChangedFile, type ReviewExclusion, type ReviewRef } from './git';
+import { appendReviewerFollowUp, commentSeverity, createComment, deleteComment, loadComments, loadCommentsWithHealth, rangeFor, saveComments, setCommentStatus } from './comments';
+import { isCodeStep, isLineRange, type CodeTourStep, type CommentSeverity, type CommentStatus, type ConceptTourStep, type ReviewComment, type Tour, type TourStep } from './model';
 import { deleteStory, listStories, loadStory, stampStoryFingerprint, type StorySummary } from './stories';
 import { availableAgents, addressPrompt, repairPrompt, startAgent, storyPrompt, type AgentName, type AgentRun } from './agent';
-import { captureReview, markReviewFileSeen, recordReviewEvent, reviewChangesSinceFeedback, reviewCursor, reviewSeenFiles, saveReviewCursor, type ReviewCursor, type ReviewSummary } from './review-state';
+import { captureReview, markReviewFileSeen, recordReviewEvent, recordReviewVerdict, reviewChangesSinceFeedback, reviewCursor, reviewHistory, reviewSeenFiles, reviewSummary, saveReviewCursor, type ReviewCursor, type ReviewHistoryEntry, type ReviewSummary } from './review-state';
 import { isReviewScope, scopeLabel, type ReviewScope } from './scope';
-import { renderDiffStoryWebview, type DiffStoryMode } from './webview';
+import { renderDiffStoryWebview, type DiffStoryMode, type DiffStoryScreen, type RepositoryListItem } from './webview';
 import { classifyGuide, diffFingerprint, type GuideStatus } from './guide';
+import { computeStoryClaimCoverage, type StoryClaimCoverage } from './coverage';
 
 const GIT_CONTENT_SCHEME = 'diffstory-git';
 const REVIEW_CONTENT_SCHEME = 'diffstory-review';
@@ -43,12 +45,16 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   private story: Tour | undefined;
   private storyId = 'story.json';
   private stories: StorySummary[] = [];
-  private review: ReviewSummary = { round: 1, changedSinceReview: 0, changedFiles: [], seenFiles: [], events: [] };
+  private review: ReviewSummary = emptyReviewSummary();
   private cursor: ReviewCursor | undefined;
   private manualScope: ReviewScope | undefined;
   private scopeWorkspace: string | undefined;
   private activeScopeLabel = 'Automatic scope';
+  private activeScopeBase = 'HEAD';
+  private activeScopeHead: string | undefined;
   private changed: ChangedFile[] = [];
+  private exclusions: ReviewExclusion[] = [];
+  private indexDivergence: string[] = [];
   private storyFiles: string[] | undefined;
   private seenFiles = new Set<string>();
   private progress: string[] = [];
@@ -60,12 +66,16 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   private refreshError: string | undefined;
   private refreshRun: Promise<void> | undefined;
   private initialMode: DiffStoryMode = 'changes';
+  private screen: DiffStoryScreen = 'review';
   private showWelcome = true;
   private agents: AgentName[] = [];
-  private canSwitchRepo = false;
+  private repositories: RepositoryListItem[] = [];
+  private history: ReviewHistoryEntry[] = [];
+  private comparisonRefs: ReviewRef[] = [];
   private guideStatus: GuideStatus | undefined;
+  private storyCoverage: StoryClaimCoverage | undefined;
 
-  constructor(private readonly workspaceState: vscode.Memento) {
+  constructor(private readonly workspaceState: vscode.Memento, private readonly globalState: vscode.Memento) {
     this.disposables.push(
       vscode.workspace.registerTextDocumentContentProvider(GIT_CONTENT_SCHEME, this),
       vscode.workspace.registerTextDocumentContentProvider(REVIEW_CONTENT_SCHEME, this),
@@ -77,6 +87,11 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       vscode.commands.registerCommand('diffstory.addComment', () => this.addComment()),
       vscode.commands.registerCommand('diffstory.resolveComment', () => this.resolveComment()),
       vscode.commands.registerCommand('diffstory.reopenComment', () => this.reopenComment()),
+      vscode.commands.registerCommand('diffstory.deleteComment', () => this.deleteCommentInteractive()),
+      vscode.commands.registerCommand('diffstory.approveReview', () => this.recordVerdict('approved')),
+      vscode.commands.registerCommand('diffstory.requestChanges', () => this.recordVerdict('changes-requested')),
+      vscode.commands.registerCommand('diffstory.openRepositories', () => this.openScreen('repositories')),
+      vscode.commands.registerCommand('diffstory.openHistory', () => this.openScreen('history')),
       vscode.commands.registerCommand('diffstory.changeScope', () => this.changeScope()),
       vscode.commands.registerCommand('diffstory.resumeReview', () => this.resumeReview()),
       vscode.commands.registerCommand('diffstory.openSinceFeedback', () => this.openSinceFeedback()),
@@ -109,6 +124,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
 
   async openReview(): Promise<void> {
     this.initialMode = 'changes';
+    this.screen = 'review';
     await vscode.commands.executeCommand(`${this.viewType}.focus`);
     await this.refresh();
   }
@@ -134,7 +150,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       this.repo = repo;
       this.agents = availableAgents();
       if (repo) await this.restoreScope(repo);
-      this.showWelcome = repo ? !this.workspaceState.get<boolean>(`diffstory.welcome.v060:${repo.fsPath}`) : true;
+      this.showWelcome = repo ? !this.workspaceState.get<boolean>(`diffstory.welcome.v070:${repo.fsPath}`) : true;
       this.stories = repo ? await listStories(repo) : [];
       const selected = this.stories.find((story) => story.id === this.storyId) ?? this.stories[0];
       this.storyId = selected?.id ?? 'story.json';
@@ -142,22 +158,38 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       if (repo) {
         const scope = await this.currentScope(repo);
         this.activeScopeLabel = scope.label;
+        this.activeScopeBase = scope.base;
+        this.activeScopeHead = scope.head;
         const files = await changedFiles(repo, scope.base, scope.head);
         this.changed = files;
+        this.exclusions = await excludedReviewFiles(repo, scope.base, scope.head);
+        this.indexDivergence = await stagedWorktreeDivergentFiles(repo, scope.base, scope.head);
         const diff = await reviewDiff(repo, scope.base, scope.head);
+        const changeFingerprint = await reviewChangeFingerprint(repo, scope.base, scope.head);
         this.guideStatus = this.story ? await this.inspectGuide(repo, scope, diff) : undefined;
-        this.review = await captureReview(repo, { base: scope.base, head: scope.head, diff, files: files.map((file) => file.path), reason: 'opened' });
+        this.storyCoverage = this.story ? computeStoryClaimCoverage(this.story, diff) : undefined;
+        await captureReview(repo, { base: scope.base, head: scope.head, diff, changeFingerprint, files: files.map((file) => file.path), reason: 'opened' });
+        this.review = await reviewSummary(repo, { base: scope.base, head: scope.head, diff, changeFingerprint, files: files.map((file) => file.path) });
+        [this.history, this.comparisonRefs] = await Promise.all([reviewHistory(repo), reviewRefs(repo)]);
         this.seenFiles = new Set(await reviewSeenFiles(repo, scope.base, scope.head));
         this.cursor = this.story ? await reviewCursor(repo, scope.base, scope.head, this.storyId) : undefined;
       } else {
-        this.review = { round: 1, changedSinceReview: 0, changedFiles: [], seenFiles: [], events: [] };
+        this.review = emptyReviewSummary();
         this.cursor = undefined;
         this.activeScopeLabel = 'Automatic scope';
+        this.activeScopeBase = 'HEAD';
+        this.activeScopeHead = undefined;
         this.changed = [];
+        this.exclusions = [];
+        this.indexDivergence = [];
         this.seenFiles.clear();
         this.guideStatus = undefined;
+        this.storyCoverage = undefined;
+        this.history = [];
+        this.comparisonRefs = [];
       }
-      this.comments = repo ? await loadComments(repo) : [];
+      this.repositories = await this.repositoryList();
+      this.comments = repo ? (await loadCommentsWithHealth(repo)).comments : [];
       await this.refreshCommentThreads(repo, this.comments);
     } catch (error) {
       this.refreshError = error instanceof Error ? error.message : String(error);
@@ -258,11 +290,29 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
 
   private async handleViewMessage(message: unknown): Promise<void> {
     if (!message || typeof message !== 'object' || Array.isArray(message)) return;
-    const event = message as { type?: unknown; stepId?: unknown; storyId?: unknown; file?: unknown; commentId?: unknown };
+    const event = message as {
+      type?: unknown;
+      stepId?: unknown;
+      storyId?: unknown;
+      file?: unknown;
+      commentId?: unknown;
+      decision?: unknown;
+      screen?: unknown;
+      path?: unknown;
+      scopeKey?: unknown;
+      preset?: unknown;
+      base?: unknown;
+      head?: unknown;
+    };
     if (event.type === 'refresh') await this.refresh();
     if (event.type === 'openGettingStarted') await vscode.commands.executeCommand('workbench.action.openWalkthrough', 'naveedinno.diffstory-vscode#diffstory.gettingStarted', false);
-    if (event.type === 'openFolder') await vscode.commands.executeCommand('vscode.openFolder');
-    if (event.type === 'switchRepo') await this.switchRepository();
+    if (event.type === 'navigate' && isDiffStoryScreen(event.screen)) await this.navigate(event.screen);
+    if (event.type === 'browseRepository') await this.browseRepository();
+    if (event.type === 'selectRepository' && typeof event.path === 'string') await this.selectRepository(event.path);
+    if (event.type === 'forgetRepository' && typeof event.path === 'string') await this.forgetRepository(event.path);
+    if (event.type === 'resumeHistory' && typeof event.scopeKey === 'string') await this.resumeHistory(event.scopeKey);
+    if (event.type === 'applyComparisonPreset' && isComparisonPreset(event.preset)) await this.applyComparisonPreset(event.preset);
+    if (event.type === 'applyComparison' && typeof event.base === 'string' && (event.head === undefined || typeof event.head === 'string')) await this.applyComparison(event.base, event.head);
     if (event.type === 'switchToGuideScope') await this.switchToGuideScope();
     if (event.type === 'openChangedFile') await this.openChangedFile();
     if (event.type === 'openFile' && typeof event.file === 'string') await this.openFile(event.file);
@@ -291,6 +341,8 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     if (event.type === 'resolveCommentId' && typeof event.commentId === 'string') await this.setCommentStatus(event.commentId, 'resolved');
     if (event.type === 'reopenCommentId' && typeof event.commentId === 'string') await this.setCommentStatus(event.commentId, 'open');
     if (event.type === 'followUpCommentId' && typeof event.commentId === 'string') await this.followUpComment(event.commentId);
+    if (event.type === 'deleteCommentId' && typeof event.commentId === 'string') await this.deleteComment(event.commentId);
+    if (event.type === 'recordVerdict' && (event.decision === 'approved' || event.decision === 'changes-requested')) await this.recordVerdict(event.decision);
   }
 
   private async openStep(step?: TourStep): Promise<void> {
@@ -300,8 +352,12 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     const selected = step ?? await this.pickStep();
     if (!selected) return;
     const scope = await this.currentScope(repo);
-    await this.openNativeDiff(repo, selected.file, scope.base, scope.head, selected);
-    await this.markFileSeen(repo, scope, selected.file);
+    if (isCodeStep(selected)) {
+      await this.openNativeDiff(repo, selected.file, scope.base, scope.head, selected);
+      await this.markFileSeen(repo, scope, selected.file);
+    } else {
+      await this.openConceptStep(selected);
+    }
     await this.dismissWelcome(repo);
     await this.showFirstCommentHint(repo);
     if (this.story) {
@@ -370,7 +426,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   private async dismissWelcome(repo: vscode.Uri): Promise<void> {
     if (!this.showWelcome) return;
     this.showWelcome = false;
-    await this.workspaceState.update(`diffstory.welcome.v060:${repo.fsPath}`, true);
+    await this.workspaceState.update(`diffstory.welcome.v070:${repo.fsPath}`, true);
     this.updateView(repo);
   }
 
@@ -401,39 +457,102 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   }
 
   private async changeScope(): Promise<void> {
+    await this.openScreen('comparison');
+  }
+
+  private async openScreen(screen: DiffStoryScreen): Promise<void> {
+    await vscode.commands.executeCommand(`${this.viewType}.focus`);
+    await this.navigate(screen);
+  }
+
+  private async navigate(screen: DiffStoryScreen): Promise<void> {
+    if ((screen === 'history' || screen === 'comparison') && !this.repo) {
+      this.screen = 'repositories';
+    } else {
+      this.screen = screen;
+    }
+    this.updateView(this.repo);
+  }
+
+  private async applyComparisonPreset(preset: 'automatic' | 'working' | 'latest'): Promise<void> {
     const repo = await this.workspaceRoot();
     if (!repo) return;
-    const choice = await vscode.window.showQuickPick([
-      { label: 'Automatic comparison', description: 'Use the configured base or the repository default', action: 'auto' as const },
-      { label: 'Working tree vs HEAD', description: 'Review uncommitted changes only', action: 'working' as const },
-      { label: 'Working tree vs a Git ref…', description: 'Choose the base branch or commit', action: 'base' as const },
-      { label: 'Compare two Git refs…', description: 'Choose both base and head without using the working tree', action: 'compare' as const },
-    ], { placeHolder: 'Choose the code comparison to review' });
-    if (!choice) return;
-    let scope: ReviewScope | undefined;
-    if (choice.action === 'working') scope = { base: 'HEAD', label: 'HEAD → working tree' };
-    if (choice.action === 'base') {
-      const base = await this.pickReviewRef(repo, 'Choose the base ref for the working-tree review');
-      if (!base) return;
-      scope = { base: base.ref, label: scopeLabel(base.ref) };
+    if (preset === 'automatic') {
+      this.manualScope = undefined;
+      await this.workspaceState.update(`diffstory.scope:${repo.fsPath}`, undefined);
+    } else if (preset === 'working') {
+      await this.saveScope(repo, { base: 'HEAD', label: scopeLabel('HEAD') });
+    } else {
+      try {
+        const latest = await latestCommitComparison(repo);
+        await this.saveScope(repo, { ...latest, label: scopeLabel(latest.base, latest.head) });
+      } catch (error) {
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+        return;
+      }
     }
-    if (choice.action === 'compare') {
-      const base = await this.pickReviewRef(repo, 'Choose the base ref');
-      if (!base) return;
-      const head = await this.pickReviewRef(repo, 'Choose the head ref', base.ref);
-      if (!head) return;
-      scope = { base: base.ref, head: head.ref, label: scopeLabel(base.ref, head.ref) };
-    }
-    this.manualScope = scope;
     this.storyFiles = undefined;
-    await this.workspaceState.update(`diffstory.scope:${repo.fsPath}`, scope);
+    this.screen = 'review';
     await this.refresh();
   }
 
-  private async pickReviewRef(repo: vscode.Uri, placeHolder: string, exclude?: string): Promise<{ ref: string } | undefined> {
-    const refs = (await reviewRefs(repo)).filter((candidate) => candidate.ref !== exclude);
-    const selected = await vscode.window.showQuickPick(refs, { placeHolder, matchOnDescription: true, matchOnDetail: true });
-    return selected ? { ref: selected.ref } : undefined;
+  private async applyComparison(baseValue: string, headValue?: string): Promise<void> {
+    const repo = await this.workspaceRoot();
+    if (!repo) return;
+    const base = baseValue.trim();
+    const head = headValue?.trim() || undefined;
+    if (!base) {
+      void vscode.window.showErrorMessage('Choose a base branch, tag, commit, or revision.');
+      return;
+    }
+    if (head && head === base) {
+      void vscode.window.showErrorMessage('Base and head must be different Git revisions.');
+      return;
+    }
+    const [validBase, validHead] = await Promise.all([
+      resolveReviewRevision(repo, base),
+      head ? resolveReviewRevision(repo, head) : Promise.resolve(undefined),
+    ]);
+    if (!validBase) {
+      void vscode.window.showErrorMessage(`Git could not resolve the base revision “${base}”.`);
+      return;
+    }
+    if (head && !validHead) {
+      void vscode.window.showErrorMessage(`Git could not resolve the head revision “${head}”.`);
+      return;
+    }
+    await this.saveScope(repo, { base, ...(head ? { head } : {}), label: scopeLabel(base, head) });
+    this.storyFiles = undefined;
+    this.screen = 'review';
+    await this.refresh();
+  }
+
+  private async saveScope(repo: vscode.Uri, scope: ReviewScope): Promise<void> {
+    this.manualScope = scope;
+    await this.workspaceState.update(`diffstory.scope:${repo.fsPath}`, scope);
+  }
+
+  private async resumeHistory(scopeKey: string): Promise<void> {
+    const repo = await this.workspaceRoot();
+    if (!repo) return;
+    const entry = this.history.find((candidate) => candidate.scopeKey === scopeKey);
+    if (!entry) {
+      void vscode.window.showWarningMessage('That saved review is no longer available. Refreshing history.');
+      await this.refresh();
+      return;
+    }
+    const [base, head] = await Promise.all([
+      resolveReviewRevision(repo, entry.base),
+      entry.head ? resolveReviewRevision(repo, entry.head) : Promise.resolve(undefined),
+    ]);
+    if (!base || (entry.head && !head)) {
+      void vscode.window.showWarningMessage('One of this review’s Git revisions no longer exists, so DiffStory cannot safely reopen it.');
+      return;
+    }
+    await this.saveScope(repo, { base: entry.base, ...(entry.head ? { head: entry.head } : {}), label: scopeLabel(entry.base, entry.head) });
+    this.storyFiles = undefined;
+    this.screen = 'review';
+    await this.refresh();
   }
 
   private async chooseStoryFiles(): Promise<boolean> {
@@ -442,11 +561,12 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     const scope = await this.currentScope(repo);
     const files = await changedFiles(repo, scope.base, scope.head);
     this.changed = files;
-    if (!files.length) {
+    const reviewable = files.filter((file) => !file.exclusion);
+    if (!reviewable.length) {
       void vscode.window.showInformationMessage('There are no changed files in this review scope to select.');
       return false;
     }
-    const selected = await vscode.window.showQuickPick(files.map((file) => ({
+    const selected = await vscode.window.showQuickPick(reviewable.map((file) => ({
       label: file.path,
       description: describeStatus(file.status),
       picked: this.storyFiles?.includes(file.path) ?? false,
@@ -459,7 +579,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       void vscode.window.showWarningMessage('Choose at least one changed file for a scoped story.');
       return false;
     }
-    this.storyFiles = selected.length === files.length ? undefined : selected.map((file) => file.label).sort();
+    this.storyFiles = selected.length === reviewable.length ? undefined : selected.map((file) => file.label).sort();
     this.updateView(repo);
     return true;
   }
@@ -575,7 +695,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     file: string,
     base: string,
     head: string | undefined,
-    step?: TourStep,
+    step?: CodeTourStep,
   ): Promise<void> {
     const changedFile = this.changed.find((candidate) => candidate.path === file);
     const left = this.virtualUri(repo, base, changedFile?.oldPath ?? file);
@@ -592,7 +712,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     if (step) await this.revealStep(right, step);
   }
 
-  private async revealStep(uri: vscode.Uri, step: TourStep): Promise<void> {
+  private async revealStep(uri: vscode.Uri, step: CodeTourStep): Promise<void> {
     await new Promise<void>((resolve) => setTimeout(resolve, 120));
     const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document.uri.toString() === uri.toString());
 
@@ -605,6 +725,25 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       .filter((range) => range[0] > 0)
       .map(toRange);
     editor.setDecorations(this.highlight, highlights);
+  }
+
+  private async openConceptStep(step: ConceptTourStep): Promise<void> {
+    const lines = [
+      `# ${step.title}`,
+      '',
+      step.body,
+      '',
+      ...(step.diagram ? [`## Diagram`, '', '```mermaid', step.diagram.source, '```', '', `_${step.diagram.caption}_`, ''] : []),
+      ...(step.preparesFor.length ? [`---`, '', `Prepares for: ${step.preparesFor.map((id) => `\`${id}\``).join(', ')}`, ''] : []),
+    ];
+    const uri = this.reviewUri(`concept/${step.id}.md`, 'concept', lines.join('\n'));
+    const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(uri), 'markdown');
+    await vscode.window.showTextDocument(document, { preview: false });
+    try {
+      await vscode.commands.executeCommand('markdown.showPreview', document.uri);
+    } catch {
+      // The readable Markdown source stays open if the built-in preview is unavailable.
+    }
   }
 
   private async addComment(): Promise<void> {
@@ -632,6 +771,17 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       placeHolder: 'What kind of feedback is this?',
     });
     if (!typeChoice) return;
+    const defaultSeverity: CommentSeverity = typeChoice.type === 'change' ? 'blocking' : typeChoice.type === 'nit' ? 'nit' : 'concern';
+    const severityChoices = [
+      { label: 'Blocking', description: 'Must be resolved before approval', severity: 'blocking' as const },
+      { label: 'Concern', description: 'Important feedback that does not block approval', severity: 'concern' as const },
+      { label: 'Nit', description: 'Small, optional improvement', severity: 'nit' as const },
+    ];
+    const severityChoice = await vscode.window.showQuickPick([
+      ...severityChoices.filter((choice) => choice.severity === defaultSeverity),
+      ...severityChoices.filter((choice) => choice.severity !== defaultSeverity),
+    ], { placeHolder: 'How much does this affect approval?' });
+    if (!severityChoice) return;
     const body = await vscode.window.showInputBox({
       prompt: 'Review feedback',
       placeHolder: 'Explain what should change or what you want clarified',
@@ -645,12 +795,19 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       selectedText,
       body,
       type: typeChoice.type,
-      step: this.story?.steps.find((step) => step.file === source.file && rangeContains(step.range, editor.selection.start.line + 1))?.id,
+      severity: severityChoice.severity ?? defaultSeverity,
+      reviewRound: this.review.round,
+      reviewSnapshotId: this.review.currentSnapshotId,
+      step: this.story?.steps.find((step) => isCodeStep(step) && step.file === source.file && rangeContains(step.range, editor.selection.start.line + 1))?.id,
       side: source.side,
     });
-    const comments = await loadComments(repo);
-    comments.push(comment);
-    await saveComments(repo, comments);
+    const loaded = await loadCommentsWithHealth(repo);
+    if (loaded.health.status === 'invalid') {
+      void vscode.window.showErrorMessage(`${loaded.health.message} ${loaded.health.recovery}`);
+      return;
+    }
+    loaded.comments.push(comment);
+    await saveComments(repo, loaded.comments, loaded.sourceDigest);
     const scope = await this.currentScope(repo);
     await recordReviewEvent(repo, {
       base: scope.base,
@@ -658,6 +815,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       kind: 'comment-added',
       label: 'Added review comment',
       detail: `${comment.file}:${comment.line}`,
+      affectsApproval: commentSeverity(comment) === 'blocking',
     });
     await this.refresh();
     void vscode.window.showInformationMessage('DiffStory review comment saved.');
@@ -703,6 +861,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       kind: status === 'resolved' ? 'comment-resolved' : 'comment-reopened',
       label: status === 'resolved' ? 'Comment verified and resolved' : 'Comment reopened',
       detail: `${updated.file}:${updated.line}`,
+      affectsApproval: commentSeverity(updated) === 'blocking',
     });
     await this.refresh();
   }
@@ -727,8 +886,110 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       kind: 'comment-reopened',
       label: 'Added follow-up and reopened comment',
       detail: `${updated.file}:${updated.line}`,
+      affectsApproval: commentSeverity(updated) === 'blocking',
     });
     await this.refresh();
+  }
+
+  private async deleteComment(id: string): Promise<void> {
+    const repo = await this.workspaceRoot();
+    const comment = this.comments.find((candidate) => candidate.id === id);
+    if (!repo || !comment) return;
+    const choice = await vscode.window.showWarningMessage('Delete this review conversation?', { modal: true }, 'Delete');
+    if (choice !== 'Delete') return;
+    if (!await deleteComment(repo, id)) return;
+    const scope = await this.currentScope(repo);
+    await recordReviewEvent(repo, {
+      base: scope.base,
+      head: scope.head,
+      kind: 'comment-deleted',
+      label: 'Deleted review comment',
+      detail: `${comment.file}:${comment.line}`,
+      affectsApproval: commentSeverity(comment) === 'blocking',
+    });
+    await this.refresh();
+  }
+
+  private async deleteCommentInteractive(): Promise<void> {
+    const selected = await vscode.window.showQuickPick(this.comments.map((comment) => ({
+      label: comment.body.split('\n')[0] || 'Untitled comment',
+      description: `${comment.file}:${comment.line} · ${commentSeverity(comment)}`,
+      comment,
+    })), { placeHolder: 'Delete a review conversation' });
+    if (selected) await this.deleteComment(selected.comment.id);
+  }
+
+  private async recordVerdict(decision: 'approved' | 'changes-requested'): Promise<void> {
+    const repo = await this.workspaceRoot();
+    if (!repo) return;
+    const scope = await this.currentScope(repo);
+    const diff = await reviewDiff(repo, scope.base, scope.head);
+    const changeFingerprint = await reviewChangeFingerprint(repo, scope.base, scope.head);
+    if (!this.review.currentDiffHash || changeFingerprint !== this.review.currentDiffHash) {
+      void vscode.window.showErrorMessage('The code changed after this review page loaded. DiffStory refreshed the comparison; review the new state before deciding.');
+      await this.refresh();
+      return;
+    }
+    const exclusions = await excludedReviewFiles(repo, scope.base, scope.head);
+    const divergence = await stagedWorktreeDivergentFiles(repo, scope.base, scope.head);
+    if (decision === 'approved' && divergence.length) {
+      void vscode.window.showErrorMessage(`Reconcile the staged and working-tree versions of ${divergence.join(', ')} before approval.`);
+      return;
+    }
+    if (decision === 'approved' && this.story && this.guideStatus?.state !== 'current') {
+      void vscode.window.showErrorMessage('Regenerate or switch the guide before approving this guided review.');
+      return;
+    }
+    if (decision === 'approved' && this.story?.storyScope?.excludedFiles?.length) {
+      void vscode.window.showErrorMessage('This guide covers only selected files. Review the full Changes list before approving the whole comparison.');
+      return;
+    }
+    const coverage = this.story ? computeStoryClaimCoverage(this.story, diff) : undefined;
+    if (decision === 'approved' && coverage?.unclaimed.length) {
+      void vscode.window.showErrorMessage(`This guide leaves ${coverage.unclaimed.length} changed ${coverage.unclaimed.length === 1 ? 'range' : 'ranges'} unexplained. Regenerate it before approving the guided review.`);
+      return;
+    }
+    let acknowledgedExclusions: Array<{ path: string; reason: string }> | undefined;
+    if (decision === 'approved' && exclusions.length) {
+      const choice = await vscode.window.showWarningMessage(
+        `${exclusions.length} generated, oversized, binary, or metadata-only ${exclusions.length === 1 ? 'file is' : 'files are'} outside the bounded guide diff. Approve only after inspecting them in Changes.`,
+        { modal: true, detail: exclusions.map((file) => `${file.path} — ${exclusionLabel(file.reason)}`).join('\n') },
+        'I inspected them — approve',
+      );
+      if (choice !== 'I inspected them — approve') return;
+      acknowledgedExclusions = exclusions.map(({ path, reason }) => ({ path, reason }));
+    }
+    const note = await vscode.window.showInputBox({
+      prompt: decision === 'approved' ? 'Optional approval note' : 'Why are changes needed?',
+      placeHolder: decision === 'approved' ? 'What you verified' : 'Summarize the remaining work',
+      validateInput: decision === 'changes-requested' ? (value) => value.trim() ? undefined : 'Explain what still needs to change.' : undefined,
+    });
+    if (note === undefined || (decision === 'changes-requested' && !note.trim())) return;
+    const confirmedDiff = await reviewDiff(repo, scope.base, scope.head);
+    const confirmedFingerprint = await reviewChangeFingerprint(repo, scope.base, scope.head);
+    if (confirmedFingerprint !== changeFingerprint) {
+      void vscode.window.showErrorMessage('The code changed while you were deciding. DiffStory did not save the decision; review the refreshed comparison first.');
+      await this.refresh();
+      return;
+    }
+    try {
+      await recordReviewVerdict(repo, {
+        base: scope.base,
+        head: scope.head,
+        diff: confirmedDiff,
+        changeFingerprint: confirmedFingerprint,
+        decision,
+        note,
+        expectedFeedbackVersion: this.review.feedbackVersion,
+        expectedBlockingFeedbackDigest: this.review.blockingFeedbackDigest,
+        acknowledgedExclusions,
+      });
+      await this.refresh();
+      void vscode.window.showInformationMessage(decision === 'approved' ? 'DiffStory review approved.' : 'DiffStory recorded that changes are needed.');
+    } catch (error) {
+      void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+      await this.refresh();
+    }
   }
 
   private async showComment(id: string): Promise<void> {
@@ -736,7 +997,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     const comment = this.comments.find((candidate) => candidate.id === id);
     if (!repo || !comment) return;
     const scope = await this.currentScope(repo);
-    const focus: TourStep = {
+    const focus: CodeTourStep = {
       id: `comment-${comment.id}`,
       order: 0,
       title: 'Review feedback',
@@ -775,31 +1036,58 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     const mode = event.mode === 'brief' || event.mode === 'detailed' ? event.mode : 'guided';
     const scope = await this.currentScope(repo);
     const currentFiles = await changedFiles(repo, scope.base, scope.head);
-    const availableFiles = new Set(currentFiles.map((file) => file.path));
+    const exclusions = await excludedReviewFiles(repo, scope.base, scope.head);
+    const excludedPaths = new Set(exclusions.map((file) => file.path));
+    const reviewableFiles = currentFiles.filter((file) => !excludedPaths.has(file.path)).map((file) => file.path);
+    const availableFiles = new Set(reviewableFiles);
     const selectedFiles = this.storyFiles?.filter((file) => availableFiles.has(file));
     if (this.storyFiles?.length && !selectedFiles?.length) {
       void vscode.window.showWarningMessage('The selected story files are no longer in this review scope. Choose them again.');
       return;
     }
+    const reviewerNote = typeof event.note === 'string' ? event.note.trim() : '';
+    const storyScope: Tour['storyScope'] | undefined = selectedFiles?.length || reviewerNote
+      ? {
+          includedFiles: selectedFiles ?? reviewableFiles,
+          ...(selectedFiles?.length && selectedFiles.length < reviewableFiles.length
+            ? { excludedFiles: reviewableFiles.filter((file) => !selectedFiles.includes(file)) }
+            : {}),
+          ...(reviewerNote ? { reviewerNote } : {}),
+        }
+      : undefined;
+    const storyPath = path.join(repo.fsPath, '.diffstory', 'story.json');
+    const storyBefore = await optionalText(storyPath);
     this.progress = ['Preparing guided story generation…'];
-    this.agentRun = startAgent(agent, 'generate', repo.fsPath, storyPrompt({ base: scope.base, head: scope.head, mode, note: typeof event.note === 'string' ? event.note : undefined, files: selectedFiles }), (line) => this.pushProgress(line));
+    this.agentRun = startAgent(agent, 'generate', repo.fsPath, storyPrompt({
+      base: scope.base,
+      head: scope.head,
+      mode,
+      note: reviewerNote || undefined,
+      files: selectedFiles,
+      excludedFiles: exclusions.map((file) => file.path),
+      allReviewableFiles: reviewableFiles,
+    }), (line) => this.pushProgress(line));
     this.updateView(repo);
     const result = await this.agentRun.done;
     this.agentRun = undefined;
-    const generated = await loadStory(repo, 'story.json');
-    if (result.ok && generated?.valid && generated.story) {
-      this.storyId = 'story.json';
-      const generatedStory = generated.story;
-      const generatedBase = await resolveBase(repo, generatedStory.base ?? scope.base);
-      const files = await changedFiles(repo, generatedBase, generatedStory.head);
-      const diff = await reviewDiff(repo, generatedBase, generatedStory.head);
-      if (!await stampStoryFingerprint(repo, 'story.json', diffFingerprint(diff))) {
+    const storyAfter = await optionalText(storyPath);
+    const storyChanged = storyAfter !== undefined && storyAfter !== storyBefore;
+    if (result.ok && storyChanged) {
+      const generatedDiff = await reviewDiff(repo, scope.base, scope.head);
+      if (!await stampStoryFingerprint(repo, 'story.json', diffFingerprint(generatedDiff), storyScope)) {
         this.progress.push('Guide was created, but DiffStory could not record its exact diff fingerprint.');
       }
-      await captureReview(repo, { base: generatedBase, head: generatedStory.head, diff, files: files.map((file) => file.path), reason: 'story-generated' });
+    }
+    const generated = await loadStory(repo, 'story.json');
+    if (result.ok && storyChanged && generated?.valid && generated.story) {
+      this.storyId = 'story.json';
+      const files = await changedFiles(repo, scope.base, scope.head);
+      const diff = await reviewDiff(repo, scope.base, scope.head);
+      const changeFingerprint = await reviewChangeFingerprint(repo, scope.base, scope.head);
+      await captureReview(repo, { base: scope.base, head: scope.head, diff, changeFingerprint, files: files.map((file) => file.path), reason: 'story-generated' });
       this.progress.push('Guided story ready.');
     } else {
-      this.progress.push(`Generation failed: ${lastLine(result.output) || 'the agent did not write a valid story.'}`);
+      this.progress.push(`Generation failed: ${!storyChanged ? 'the agent did not write a new story.' : lastLine(result.output) || 'the agent did not write a valid story.'}`);
     }
     await this.refresh();
   }
@@ -816,8 +1104,9 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     if (!agent) return;
     const scope = await this.currentScope(repo);
     const diff = await reviewDiff(repo, scope.base, scope.head);
+    const changeFingerprint = await reviewChangeFingerprint(repo, scope.base, scope.head);
     const files = await changedFiles(repo, scope.base, scope.head);
-    await captureReview(repo, { base: scope.base, head: scope.head, diff, files: files.map((file) => file.path), reason: 'feedback-sent', commentIds: comments.map((comment) => comment.id) });
+    await captureReview(repo, { base: scope.base, head: scope.head, diff, changeFingerprint, files: files.map((file) => file.path), reason: 'feedback-sent', commentIds: comments.map((comment) => comment.id) });
     this.progress = [`Sending ${comments.length} comments to ${agent}…`];
     this.agentRun = startAgent(agent, 'address', repo.fsPath, addressPrompt({ base: scope.base, head: scope.head, commentIds: comments.map((comment) => comment.id) }), (line) => this.pushProgress(line));
     this.updateView(repo);
@@ -825,7 +1114,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
     this.agentRun = undefined;
     if (result.ok) {
       const after = await changedFiles(repo, scope.base, scope.head);
-      await captureReview(repo, { base: scope.base, head: scope.head, diff: await reviewDiff(repo, scope.base, scope.head), files: after.map((file) => file.path), reason: 'agent-complete' });
+      await captureReview(repo, { base: scope.base, head: scope.head, diff: await reviewDiff(repo, scope.base, scope.head), changeFingerprint: await reviewChangeFingerprint(repo, scope.base, scope.head), files: after.map((file) => file.path), reason: 'agent-complete' });
       this.progress.push('Agent finished. Verify addressed comments before resolving them.');
     } else this.progress.push(`Agent run failed: ${lastLine(result.output) || 'see the terminal output.'}`);
     await this.refresh();
@@ -900,55 +1189,125 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   private async pickStep(): Promise<TourStep | undefined> {
     if (!this.story) return undefined;
     const choice = await vscode.window.showQuickPick(
-      this.story.steps.map((step) => ({ label: `${step.order}. ${step.title}`, description: step.file, detail: step.why, step })),
+      this.story.steps.map((step) => ({
+        label: `${step.order}. ${step.title}`,
+        description: isCodeStep(step) ? step.file : 'Concept primer',
+        detail: isCodeStep(step) ? step.why : step.body,
+        step,
+      })),
       { placeHolder: 'Open a DiffStory step' },
     );
     return choice?.step;
   }
 
-  private async workspaceRoot(showError = true, forcePick = false): Promise<vscode.Uri | undefined> {
+  private async workspaceRoot(showError = true): Promise<vscode.Uri | undefined> {
     const folders = vscode.workspace.workspaceFolders ?? [];
     if (!folders.length) {
-      this.canSwitchRepo = false;
       if (showError) void vscode.window.showErrorMessage('Open a Git workspace before starting a DiffStory review.');
       return undefined;
     }
     const candidates = await Promise.all(folders.map(async (folder) => ({ folder, git: await isGitRepository(folder.uri) })));
     const gitFolders = candidates.filter((candidate) => candidate.git).map((candidate) => candidate.folder);
-    this.canSwitchRepo = gitFolders.length > 1;
     if (gitFolders.length === 1) {
       this.repo = gitFolders[0].uri;
       await this.workspaceState.update('diffstory.repository', this.repo.fsPath);
+      await this.rememberRepository(this.repo);
       return this.repo;
     }
     if (gitFolders.length > 1) {
-      if (!forcePick) {
-        const current = this.repo && gitFolders.find((folder) => folder.uri.fsPath === this.repo?.fsPath);
-        if (current) return current.uri;
-        const stored = this.workspaceState.get<string>('diffstory.repository');
-        const restored = stored && gitFolders.find((folder) => folder.uri.fsPath === stored);
-        if (restored) {
-          this.repo = restored.uri;
-          return restored.uri;
-        }
+      const current = this.repo && gitFolders.find((folder) => folder.uri.fsPath === this.repo?.fsPath);
+      if (current) return current.uri;
+      const stored = this.workspaceState.get<string>('diffstory.repository');
+      const restored = stored && gitFolders.find((folder) => folder.uri.fsPath === stored);
+      const selected = restored ?? gitFolders[0];
+      if (selected) {
+        this.repo = selected.uri;
+        await this.workspaceState.update('diffstory.repository', this.repo.fsPath);
+        await this.rememberRepository(this.repo);
+        return this.repo;
       }
-      const selected = await vscode.window.showQuickPick(gitFolders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })));
-      if (!selected) return undefined;
-      this.repo = selected.folder.uri;
-      await this.workspaceState.update('diffstory.repository', this.repo.fsPath);
-      return this.repo;
     }
-    this.canSwitchRepo = false;
     if (showError) void vscode.window.showErrorMessage('DiffStory needs an opened Git workspace.');
     return undefined;
   }
 
-  private async switchRepository(): Promise<void> {
-    const selected = await this.workspaceRoot(true, true);
-    if (!selected) return;
-    this.repo = selected;
+  private async repositoryList(): Promise<RepositoryListItem[]> {
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+    const workspace = (await Promise.all(workspaceFolders.map(async (folder) => ({ folder, available: await isGitRepository(folder.uri) }))))
+      .filter((candidate) => candidate.available)
+      .map(({ folder }) => ({
+        name: folder.name,
+        path: folder.uri.fsPath,
+        kind: 'workspace' as const,
+        active: folder.uri.fsPath === this.repo?.fsPath,
+        available: true,
+      }));
+    const workspacePaths = new Set(workspace.map((item) => item.path));
+    const recentPaths = this.globalState.get<string[]>('diffstory.recentRepositories') ?? [];
+    const recent = await Promise.all(recentPaths.filter((recentPath) => !workspacePaths.has(recentPath)).map(async (recentPath) => ({
+      name: path.basename(recentPath) || recentPath,
+      path: recentPath,
+      kind: 'recent' as const,
+      active: recentPath === this.repo?.fsPath,
+      available: await isGitRepository(vscode.Uri.file(recentPath)),
+    })));
+    return [...workspace, ...recent];
+  }
+
+  private async rememberRepository(repo: vscode.Uri): Promise<void> {
+    const recent = this.globalState.get<string[]>('diffstory.recentRepositories') ?? [];
+    await this.globalState.update('diffstory.recentRepositories', [repo.fsPath, ...recent.filter((item) => item !== repo.fsPath)].slice(0, 12));
+  }
+
+  private async browseRepository(): Promise<void> {
+    const selected = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Open Git repository',
+      title: 'Choose a repository for DiffStory',
+    });
+    const repo = selected?.[0];
+    if (!repo) return;
+    if (!await isGitRepository(repo)) {
+      void vscode.window.showErrorMessage('That folder is not inside a Git repository. Choose a Git project folder.');
+      return;
+    }
+    await this.rememberRepository(repo);
+    const open = (vscode.workspace.workspaceFolders ?? []).find((folder) => folder.uri.fsPath === repo.fsPath);
+    if (open) {
+      await this.selectRepository(repo.fsPath);
+      return;
+    }
+    await vscode.commands.executeCommand('vscode.openFolder', repo, false);
+  }
+
+  private async selectRepository(repoPath: string): Promise<void> {
+    const candidate = this.repositories.find((item) => item.path === repoPath);
+    if (!candidate?.available) {
+      void vscode.window.showWarningMessage('That repository is no longer available. Refresh or choose another folder.');
+      return;
+    }
+    const open = (vscode.workspace.workspaceFolders ?? []).find((folder) => folder.uri.fsPath === repoPath);
+    if (!open) {
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(repoPath), false);
+      return;
+    }
+    this.repo = open.uri;
     this.scopeWorkspace = undefined;
+    this.storyId = 'story.json';
+    this.storyFiles = undefined;
+    this.screen = 'review';
+    await this.workspaceState.update('diffstory.repository', this.repo.fsPath);
+    await this.rememberRepository(this.repo);
     await this.refresh();
+  }
+
+  private async forgetRepository(repoPath: string): Promise<void> {
+    const recent = this.globalState.get<string[]>('diffstory.recentRepositories') ?? [];
+    await this.globalState.update('diffstory.recentRepositories', recent.filter((item) => item !== repoPath));
+    this.repositories = await this.repositoryList();
+    this.updateView(this.repo);
   }
 
   private async refreshCommentThreads(repo: vscode.Uri | undefined, comments: ReviewComment[]): Promise<void> {
@@ -966,7 +1325,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
       this.rememberSource(uri, repo, comment.file, comment.side ?? 'right');
       const thread = this.commentController.createCommentThread(uri, rangeFor(comment), commentsFor(comment));
       thread.contextValue = `diffstory:${comment.id}`;
-      thread.label = `DiffStory ${comment.type} · ${comment.status === 'addressed' ? 'needs verification' : comment.status}`;
+      thread.label = `DiffStory ${commentSeverity(comment)} ${comment.type} · ${comment.status === 'addressed' ? 'needs verification' : comment.status}`;
       thread.state = comment.status === 'resolved'
         ? vscode.CommentThreadState.Resolved
         : vscode.CommentThreadState.Unresolved;
@@ -1003,15 +1362,23 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
   private panelHtml(repo: vscode.Uri | undefined, story: Tour | undefined): string {
     return renderDiffStoryWebview({
       nonce: nonceValue(),
+      screen: this.screen,
       ...(repo ? { repo: { name: path.basename(repo.fsPath), path: repo.fsPath } } : {}),
-      canSwitchRepo: this.canSwitchRepo,
       scopeLabel: this.activeScopeLabel,
+      ...(repo ? { scopeBase: this.activeScopeBase } : {}),
+      ...(this.activeScopeHead ? { scopeHead: this.activeScopeHead } : {}),
+      repositories: this.repositories,
+      history: this.history,
+      comparisonRefs: this.comparisonRefs,
       files: this.changed,
+      exclusions: this.exclusions,
+      indexDivergence: this.indexDivergence,
       seenFiles: [...this.seenFiles],
       comments: this.comments,
       review: this.review,
       story,
       guideStatus: this.guideStatus,
+      storyCoverage: this.storyCoverage,
       storyId: this.storyId,
       stories: this.stories,
       cursor: this.cursor,
@@ -1034,7 +1401,7 @@ class DiffStoryController implements vscode.WebviewViewProvider, vscode.TextDocu
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(new DiffStoryController(context.workspaceState));
+  context.subscriptions.push(new DiffStoryController(context.workspaceState, context.globalState));
 }
 
 export function deactivate(): void {}
@@ -1050,6 +1417,14 @@ function decodeVirtualDocument(uri: vscode.Uri): VirtualDocument | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isDiffStoryScreen(value: unknown): value is DiffStoryScreen {
+  return value === 'review' || value === 'repositories' || value === 'history' || value === 'comparison';
+}
+
+function isComparisonPreset(value: unknown): value is 'automatic' | 'working' | 'latest' {
+  return value === 'automatic' || value === 'working' || value === 'latest';
 }
 
 function commentsFor(comment: ReviewComment): vscode.Comment[] {
@@ -1092,4 +1467,37 @@ function nonceValue(): string {
 
 function lastLine(output: string): string | undefined {
   return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1);
+}
+
+async function optionalText(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function exclusionLabel(reason: ReviewExclusion['reason']): string {
+  return ({
+    'generated-path': 'generated artifact',
+    'large-diff': 'oversized diff',
+    binary: 'binary file',
+    'metadata-only': 'metadata-only change',
+  })[reason];
+}
+
+function emptyReviewSummary(): ReviewSummary {
+  return {
+    scopeKey: '',
+    round: 1,
+    currentDiffHash: '',
+    changedSinceReview: 0,
+    changedFiles: [],
+    seenFiles: [],
+    events: [],
+    verdict: { state: 'none', scopeKey: '', currentDiffFingerprint: '' },
+    feedbackVersion: 0,
+    blockingFeedbackDigest: '',
+    feedbackHealth: { status: 'healthy', source: 'missing' },
+  };
 }

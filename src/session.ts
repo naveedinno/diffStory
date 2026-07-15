@@ -22,6 +22,10 @@ export interface ReviewPageLease {
   /** Exact content identity of the since-feedback snapshot named by `from`. */
   fromSnapshotDigest?: string;
   storyIdentity: string;
+  /** Per-file evidence rendered by this page. This lets an unchanged file stay
+   * reviewable when an unrelated file moves, without weakening whole-review
+   * actions such as approval. */
+  fileFingerprints: Record<string, string>;
 }
 
 export interface Session {
@@ -33,7 +37,7 @@ export interface Session {
   reviewPageLease?: ReviewPageLease;
 }
 
-export type SessionEntryScreen = 'change' | 'review';
+export type SessionEntryScreen = 'stories' | 'review';
 
 export function createSession(init: { repo: string | null; base?: string; head?: string }): Session {
   return {
@@ -70,12 +74,12 @@ export function clearReviewPageLease(session: Session): void {
 /**
  * Pick the repo's primary entry surface.
  *
- * Saved review history is an explicit destination, not an interstitial. A
- * session only resumes the review workspace when the user already selected a
- * concrete story; otherwise it enters through scope selection.
+ * Review history is the repo's front door. A session only resumes the review
+ * workspace when the user already selected a concrete story; otherwise it
+ * starts from the saved-review overview.
  */
 export function sessionEntryScreen(s: Session): SessionEntryScreen {
-  return !s.chooseStory && typeof s.selectedStory === 'string' ? 'review' : 'change';
+  return !s.chooseStory && typeof s.selectedStory === 'string' ? 'review' : 'stories';
 }
 
 /** Open a repo: set it and clear any prior base/head selection. */

@@ -350,28 +350,32 @@ function handle(req, res, session, home) {
             });
         }
         if (method === 'GET' && url.pathname === '/api/fullfile') {
-            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            const file = url.searchParams.get('file') ?? '';
+            const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
-            return sendLeasedHtml(res, session, page, renderFullFileResponse(page, url.searchParams.get('file') ?? ''));
+            return sendLeasedHtml(res, session, page, renderFullFileResponse(page, file), file);
         }
         if (method === 'GET' && url.pathname === '/api/diff/split') {
-            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            const file = url.searchParams.get('file') ?? '';
+            const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
-            return sendLeasedHtml(res, session, page, renderSplitResponse(page, url.searchParams.get('file') ?? ''));
+            return sendLeasedHtml(res, session, page, renderSplitResponse(page, file), file);
         }
         if (method === 'GET' && url.pathname === '/api/diff/context') {
-            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            const file = url.searchParams.get('file') ?? '';
+            const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
-            return sendLeasedHtml(res, session, page, renderContextResponse(page, url.searchParams));
+            return sendLeasedHtml(res, session, page, renderContextResponse(page, url.searchParams), file);
         }
         if (method === 'GET' && url.pathname === '/api/diff/file-panel') {
-            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            const file = url.searchParams.get('file') ?? '';
+            const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
-            return sendLeasedHtml(res, session, page, renderFilePanelResponse(page, url.searchParams.get('file') ?? ''));
+            return sendLeasedHtml(res, session, page, renderFilePanelResponse(page, file), file);
         }
         if (method === 'GET' && url.pathname === '/api/review/step-panel') {
             const page = validateReviewPageLease(session, url.searchParams.get('page'));
@@ -800,6 +804,7 @@ function diffScreen(session, params) {
         ...(reviewFrom ? { from: reviewFrom } : {}),
         ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
         storyIdentity: reviewStoryIdentity(session, tour, true),
+        fileFingerprints: reviewFileFingerprints(repo, head, files, tour, true),
     });
     return renderPage({
         repo,
@@ -874,6 +879,7 @@ function renderReview(session, params = new URLSearchParams()) {
         ...(reviewFrom ? { from: reviewFrom } : {}),
         ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
         storyIdentity: reviewStoryIdentity(session, tour, false),
+        fileFingerprints: reviewFileFingerprints(repo, head, files, tour, false),
     });
     return renderPage({
         repo,
@@ -942,12 +948,39 @@ function reviewStoryIdentity(session, tour, storyless) {
         return 'storyless';
     return diffFingerprint(`${selectedStoryPath(session)}\0${JSON.stringify(tour)}`);
 }
+/** Identity of exactly what one file panel can render. Changed files are fully
+ * identified by their parsed base-to-current diff; context-only story files
+ * fall back to their current contents. */
+function reviewFileFingerprint(repo, head, files, file) {
+    const diffFile = files.find((candidate) => candidate.newPath === file);
+    if (diffFile)
+        return diffFingerprint(JSON.stringify({ diffFile }));
+    const currentLines = readWholeFile(repo, file, head);
+    if (currentLines === null)
+        return undefined;
+    return diffFingerprint(JSON.stringify({ currentLines }));
+}
+function reviewFileFingerprints(repo, head, files, tour, storyless) {
+    const paths = new Set(files.map((file) => file.newPath));
+    if (!storyless) {
+        for (const step of tour.steps)
+            if (isCodeStep(step))
+                paths.add(step.file);
+    }
+    const fingerprints = Object.create(null);
+    for (const file of paths) {
+        const fingerprint = reviewFileFingerprint(repo, head, files, file);
+        if (fingerprint)
+            fingerprints[file] = fingerprint;
+    }
+    return fingerprints;
+}
 /**
  * Resolve an opaque page token and re-check every piece of review identity
  * against one stable live read. The stored mode/from marker is authoritative;
  * lazy callers cannot promote a since-feedback page into the full diff.
  */
-function validateReviewPageLease(session, token) {
+function validateReviewPageLease(session, token, file) {
     const lease = getReviewPageLease(session, token ?? undefined);
     if (!lease)
         return { ok: false, error: 'This review page is no longer active.' };
@@ -976,9 +1009,6 @@ function validateReviewPageLease(session, token) {
         reviewState.scopeKey !== lease.scopeKey) {
         return { ok: false, error: 'The review scope changed after this page loaded.' };
     }
-    if (data.changeFingerprint !== lease.fingerprint) {
-        return { ok: false, error: 'The change moved after this review page loaded.' };
-    }
     if (reviewStoryIdentity(session, data.tour, storyless) !== lease.storyIdentity) {
         return { ok: false, error: 'The guided review changed after this page loaded.' };
     }
@@ -996,6 +1026,15 @@ function validateReviewPageLease(session, token) {
     const files = lease.mode === 'since'
         ? parseUnifiedDiff(diffSinceReview(lease.repo, data.base, data.head, data.files, lease.from))
         : data.files;
+    if (data.changeFingerprint !== lease.fingerprint) {
+        const leasedFileFingerprint = file ? lease.fileFingerprints[file] : undefined;
+        const currentFileFingerprint = file
+            ? reviewFileFingerprint(lease.repo, data.head, files, file)
+            : undefined;
+        if (!leasedFileFingerprint || currentFileFingerprint !== leasedFileFingerprint) {
+            return { ok: false, error: 'The change moved after this review page loaded.' };
+        }
+    }
     return {
         ok: true,
         lease,
@@ -1017,8 +1056,8 @@ function sendReviewPageConflict(res, detail) {
     });
 }
 /** Re-check after synchronous rendering to close the external working-tree race. */
-function sendLeasedHtml(res, session, page, html) {
-    const confirmed = validateReviewPageLease(session, page.lease.token);
+function sendLeasedHtml(res, session, page, html, file) {
+    const confirmed = validateReviewPageLease(session, page.lease.token, file);
     if (!confirmed.ok)
         return sendReviewPageConflict(res, confirmed.error);
     sendHtml(res, html);

@@ -5,7 +5,7 @@
 // browser (GET /api/fs) instead. Self-contained; every server value is escaped.
 import { APP_BRAND } from './config.js';
 import { BRAND_HEAD_LINKS, brandMarkSvg } from './brand.js';
-import { themeBootstrapScript, themeControl, themeControlStyles } from './theme.js';
+import { sharedTokens, themeBootstrapScript, themeControl, themeControlStyles } from './theme.js';
 function esc(s) {
     return s
         .replace(/&/g, '&amp;')
@@ -84,6 +84,7 @@ ${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
+${sharedTokens()}
 :root{
   --bg:#15171b; --bg-rail:#1d2025; --bg-elev:#22252b; --label:#f4f6f8; --label2:#b3b8c2; --label3:#858c98;
   --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
@@ -184,12 +185,13 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
   background:transparent; border:.5px solid var(--hairline); border-radius:8px; cursor:pointer}
 .ghost:hover{background:var(--hover)}
 .msg{min-height:18px; margin:10px 2px 0; font-size:13px; color:var(--red-fg)}
-.scrim{position:fixed; inset:0; background:var(--scrim); display:none; align-items:center; justify-content:center;
-  padding:20px; z-index:50}
-.scrim.show{display:flex}
+.scrim{position:fixed; inset:0; background:var(--scrim); display:flex; align-items:center; justify-content:center;
+  padding:20px; z-index:50;opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--motion-duration-ui) ease,visibility 0s linear var(--motion-duration-ui)}
+.scrim.show{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
 .scrim[hidden]{display:none}
 .sheet{width:100%; max-width:560px; max-height:76vh; display:flex; flex-direction:column; overflow:hidden;
-  background:var(--sheet); border:.5px solid var(--hairline); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.34)}
+  background:var(--sheet); border:.5px solid var(--hairline); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.34);transform-origin:50% 0;transform:translateY(12px) scale(.975);opacity:0;transition:transform var(--motion-duration-spatial) var(--motion-ease-drawer),opacity var(--motion-duration-ui) ease}
+.scrim.show .sheet{transform:none;opacity:1}
 .sheet-head{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:.5px solid var(--sep)}
 .sheet-title{font-size:15px; font-weight:640; flex:1}
 .iconbtn{width:28px; height:28px; border-radius:8px; border:none; background:var(--neutral-bg); color:var(--label2);
@@ -225,10 +227,11 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
 .foot-path{flex:1; min-width:0; font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:11.5px; color:var(--label3);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 @media (prefers-reduced-motion:no-preference){
-  .reveal{opacity:0; transform:translateY(8px); animation:up .5s cubic-bezier(.22,.61,.36,1) forwards}
-  .d1{animation-delay:.02s}.d2{animation-delay:.09s}.d3{animation-delay:.16s}.d4{animation-delay:.23s}
-  @keyframes up{to{opacity:1; transform:none}}
+  .reveal{animation:up var(--motion-duration-spatial) var(--motion-ease-out) backwards}
+  .d1{animation-delay:.02s}.d2{animation-delay:.07s}.d3{animation-delay:.12s}.d4{animation-delay:.17s}
+  @keyframes up{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 }
+@media (prefers-reduced-motion:reduce){.scrim,.sheet{transition:none}.scrim.show .sheet{transform:none;opacity:1}.btn:active{transform:none}}
 @media (max-width:760px){
   .wrap{padding:24px 16px 54px}
   .hero{align-items:flex-start;padding-bottom:20px;margin-bottom:20px}
@@ -336,7 +339,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     if(!path) return;
     msg.style.color=''; msg.textContent='Opening…';
     fetch('/api/repo/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
-      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.ok){ location.href=d.route||('/repo/'+encodeURIComponent(path.replace(/[\\\/]+$/,'').split(/[\\\/]/).pop()||'repo')+'/change'); return null; } return d; }); })
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(r.ok){ location.href=d.route||('/repo/'+encodeURIComponent(path.replace(/[\\\/]+$/,'').split(/[\\\/]/).pop()||'repo')+'/stories'); return null; } return d; }); })
       .then(function(e){ if(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.error||'Could not open that path.'; } })
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }
@@ -366,7 +369,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       crumbs=document.getElementById('crumbs'), footPath=document.getElementById('footPath'),
       openHere=document.getElementById('openHere'), fsSearch=document.getElementById('fsSearch'),
       fsClear=document.getElementById('fsClear'), fsSearchStatus=document.getElementById('fsSearchStatus'),
-      modalBackground=document.getElementById('pickerMain'),cur=null, curGit=false, entries=[], filteredEntries=[], selectedIndex=-1, modalTrigger=null;
+      modalBackground=document.getElementById('pickerMain'),cur=null, curGit=false, entries=[], filteredEntries=[], selectedIndex=-1, modalTrigger=null,modalCloseTimer=0;
   function el(tag,cls,txt){ var n=document.createElement(tag); if(cls) n.className=cls; if(txt!=null) n.textContent=txt; return n; }
   function ico(id){ return document.getElementById(id).content.cloneNode(true); }
 
@@ -467,14 +470,18 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     else if(!e.shiftKey&&(active===last||!scrim.contains(active))){e.preventDefault();first.focus();}
   }
   function openModal(e){
-    if(!scrim.hidden)return;
+    if(!scrim.hidden&&!modalCloseTimer)return;
+    if(modalCloseTimer){clearTimeout(modalCloseTimer);modalCloseTimer=0;}
     modalTrigger=e&&e.currentTarget?e.currentTarget:document.activeElement;
-    scrim.hidden=false;scrim.classList.add('show');setModalBackground(true);fsSearch.setAttribute('aria-expanded','true');browse(null);fsSearch.focus();
+    scrim.hidden=false;setModalBackground(true);fsSearch.setAttribute('aria-expanded','true');browse(null);fsSearch.focus();
+    requestAnimationFrame(function(){if(!scrim.hidden)scrim.classList.add('show');});
   }
   function closeModal(){
-    if(scrim.hidden)return;
-    scrim.classList.remove('show');scrim.hidden=true;setModalBackground(false);fsSearch.value='';fsSearch.setAttribute('aria-expanded','false');fsSearch.removeAttribute('aria-activedescendant');fsClear.hidden=true;fsClear.classList.remove('show');
+    if(scrim.hidden||modalCloseTimer)return;
+    scrim.classList.remove('show');setModalBackground(false);fsSearch.value='';fsSearch.setAttribute('aria-expanded','false');fsSearch.removeAttribute('aria-activedescendant');fsClear.hidden=true;fsClear.classList.remove('show');
     var restore=modalTrigger;modalTrigger=null;if(restore&&restore.focus)restore.focus();
+    var reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    modalCloseTimer=setTimeout(function(){modalCloseTimer=0;if(!scrim.classList.contains('show'))scrim.hidden=true;},reduced?0:210);
   }
   document.getElementById('quickAddBtn').addEventListener('click',openModal);
   document.getElementById('fsClose').addEventListener('click',closeModal);

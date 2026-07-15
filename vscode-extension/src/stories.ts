@@ -53,13 +53,14 @@ export async function deleteStory(repo: vscode.Uri, id: string): Promise<boolean
 }
 
 /** Stamp agent-written stories with the same exact-diff identity used by the web app. */
-export async function stampStoryFingerprint(repo: vscode.Uri, id: string, fingerprint: string): Promise<boolean> {
+export async function stampStoryFingerprint(repo: vscode.Uri, id: string, fingerprint: string, storyScope?: Tour['storyScope']): Promise<boolean> {
   if (!safeId(id) || !/^[0-9a-f]{64}$/i.test(fingerprint)) return false;
   const uri = vscode.Uri.joinPath(dataDir(repo), ...id.split('/'));
   try {
     const parsed: unknown = JSON.parse(await readFile(uri.fsPath, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
     (parsed as Record<string, unknown>).diffFingerprint = fingerprint.toLowerCase();
+    if (storyScope) (parsed as Record<string, unknown>).storyScope = storyScope;
     await writeFile(uri.fsPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
     return true;
   } catch {

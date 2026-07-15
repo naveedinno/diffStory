@@ -81,7 +81,7 @@ async function deleteStory(repo, id) {
     }
 }
 /** Stamp agent-written stories with the same exact-diff identity used by the web app. */
-async function stampStoryFingerprint(repo, id, fingerprint) {
+async function stampStoryFingerprint(repo, id, fingerprint, storyScope) {
     if (!safeId(id) || !/^[0-9a-f]{64}$/i.test(fingerprint))
         return false;
     const uri = vscode.Uri.joinPath(dataDir(repo), ...id.split('/'));
@@ -90,6 +90,8 @@ async function stampStoryFingerprint(repo, id, fingerprint) {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
             return false;
         parsed.diffFingerprint = fingerprint.toLowerCase();
+        if (storyScope)
+            parsed.storyScope = storyScope;
         await (0, promises_1.writeFile)(uri.fsPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
         return true;
     }

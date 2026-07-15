@@ -21,7 +21,28 @@ test('shared motion primitives expose the exact dashboard timing scale', () => {
   assert.match(css, /--motion-duration-fast:150ms/);
   assert.match(css, /--motion-duration-ui:200ms/);
   assert.match(css, /--motion-duration-progress:250ms/);
+  assert.match(css, /--motion-duration-spatial:340ms/);
   assert.match(PAGE_CSS, /var\(--motion-duration-fast\)/);
+});
+
+test('workspace handoffs are interruptible and scoped to the changing surface', () => {
+  assert.match(PAGE_JS, /function runWorkspaceTransition\(kind,direction,update\)/);
+  assert.match(PAGE_JS, /if\(prefersReducedMotion\(\)\)\{update\(\);return null;\}/);
+  assert.match(PAGE_JS, /if\(typeof document\.startViewTransition!=='function'\)return runWorkspaceFallback/);
+  assert.match(PAGE_JS, /workspaceTransition\.skipTransition\(\)/);
+  assert.match(PAGE_JS, /document\.startViewTransition\(update\)/);
+  assert.match(PAGE_JS, /function runWorkspaceFallback\(kind,direction,update\)/);
+  assert.match(PAGE_JS, /workspaceFallbackTimer\)clearTimeout\(workspaceFallbackTimer\)/);
+  assert.match(PAGE_JS, /surface\.classList\.add\('is-workspace-entering'\)/);
+  assert.match(PAGE_CSS, /\.is-workspace-entering\[data-ds-enter-direction="1"\]/);
+  assert.match(PAGE_JS, /runWorkspaceTransition\('view'/);
+  assert.match(PAGE_JS, /runWorkspaceTransition\('file'/);
+  assert.match(PAGE_JS, /runWorkspaceTransition\('step'/);
+  assert.match(DIFF_JS, /runWorkspaceTransition\('mode',0,update\)/);
+  assert.match(PAGE_CSS, /view-transition-name:ds-workspace-surface/);
+  assert.match(PAGE_CSS, /::view-transition-old\(ds-workspace-surface\)/);
+  assert.match(PAGE_CSS, /::view-transition-new\(ds-workspace-surface\)/);
+  assert.doesNotMatch(PAGE_CSS, /ds-review-(?:chrome|layout)-in[^}]*\sboth/);
 });
 
 test('change navigation uses one stable marker without keyframes or cleanup timers', () => {

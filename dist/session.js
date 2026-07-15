@@ -31,12 +31,12 @@ export function clearReviewPageLease(session) {
 /**
  * Pick the repo's primary entry surface.
  *
- * Saved review history is an explicit destination, not an interstitial. A
- * session only resumes the review workspace when the user already selected a
- * concrete story; otherwise it enters through scope selection.
+ * Review history is the repo's front door. A session only resumes the review
+ * workspace when the user already selected a concrete story; otherwise it
+ * starts from the saved-review overview.
  */
 export function sessionEntryScreen(s) {
-    return !s.chooseStory && typeof s.selectedStory === 'string' ? 'review' : 'change';
+    return !s.chooseStory && typeof s.selectedStory === 'string' ? 'review' : 'stories';
 }
 /** Open a repo: set it and clear any prior base/head selection. */
 export function openSession(s, repo) {

@@ -114,18 +114,20 @@ function repoRoute(repo) {
   return `/repo/${encodeURIComponent(basename(repo))}`;
 }
 
-test('opening a repo starts from the current change and keeps review history explicit', async () => {
+test('opening a repo starts from review history and keeps the current change available', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
   const repo = repoWithChange();
   const { server, base } = await boot();
   try {
-    await fetch(`${base}/api/repo/open`, {
+    const opened = await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: repo }),
     });
     const route = repoRoute(repo);
-    const html = (await (await fetch(`${base}${route}/stories`)).text());
+    const state = await opened.json();
+    assert.equal(state.route, `${route}/stories`, 'repo selection points to review history');
+    const html = await (await fetch(`${base}${state.route}`)).text();
     assert.ok(html.includes('Start review'), 'keeps a path back to the current change');
     assert.ok(html.includes('No saved reviews'), 'shows the empty review-history state');
     assert.ok(html.includes(`href="${route}/change"`), 'new story has its own repo-named route');
@@ -152,7 +154,7 @@ test('opening a repo starts from the current change and keeps review history exp
   }
 });
 
-test('starting with a repo lands on the current change while history lists the primary story', async () => {
+test('starting with a repo lands on history and lists the primary story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -162,13 +164,12 @@ test('starting with a repo lands on the current change while history lists the p
   try {
     const route = repoRoute(repo);
     const entry = await fetch(`${base}/`);
-    assert.equal(entry.url, `${base}${route}/change`);
+    assert.equal(entry.url, `${base}${route}/stories`);
     const html = await entry.text();
-    assert.ok(html.includes('Choose what to review'), 'starts with the live change scope');
-    const history = await (await fetch(`${base}${route}/stories`)).text();
-    assert.ok(history.includes('Saved story'), 'lists the primary saved story');
-    assert.ok(history.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
-    assert.ok(history.includes('href="/repos"'), 'offers a way back to the repo picker');
+    assert.ok(html.includes('Review history'), 'starts with the saved review overview');
+    assert.ok(html.includes('Saved story'), 'lists the primary saved story');
+    assert.ok(html.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
+    assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
 
     const picker = await (await fetch(`${base}/repos`)).text();
     assert.ok(picker.includes('Open a repository'), 'switch repo returns to the app picker');
@@ -181,7 +182,7 @@ test('starting with a repo lands on the current change while history lists the p
   }
 });
 
-test('review history lists named stories even without a primary story', async () => {
+test('review history is the repo entry and lists named stories without a primary story', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -191,8 +192,8 @@ test('review history lists named stories even without a primary story', async ()
   try {
     const route = repoRoute(repo);
     const entry = await fetch(`${base}/`);
-    assert.equal(entry.url, `${base}${route}/change`);
-    const html = await (await fetch(`${base}${route}/stories`)).text();
+    assert.equal(entry.url, `${base}${route}/stories`);
+    const html = await entry.text();
     assert.ok(html.includes('Named saved story'), 'lists the named saved story');
     assert.ok(html.includes(`href="${route}/review?story=stories%2Fnative.json"`), 'named story has its own repo-named review route');
     assert.ok(!html.includes('No saved stories found'), 'does not show the empty story state');

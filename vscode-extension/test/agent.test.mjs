@@ -9,8 +9,9 @@ test('story prompt pins the exact review scope and full story contract', () => {
   assert.match(prompt, /main\.\.feature\/review/);
   assert.match(prompt, /mode to "detailed"/);
   assert.match(prompt, /Check comment recovery/);
-  assert.match(prompt, /src\/review\.ts, test\/review\.test\.ts/);
-  assert.match(prompt, /beats\.\n\nRead the actual code/);
+  assert.match(prompt, /"includedFiles":\["src\/review\.ts","test\/review\.test\.ts"\]/);
+  assert.match(prompt, /"reviewerNote":"Check comment recovery\."/);
+  assert.match(prompt, /beats, calls, and returnsTo\.\n\nRead the actual code/);
 });
 
 test('address and repair prompts keep their work narrow', () => {

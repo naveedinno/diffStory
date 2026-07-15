@@ -29,7 +29,7 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.match(html, /review-tour was renamed to diffstory-storyteller/);
   assert.match(html, /Open a repository to review its current change/);
   assert.doesNotMatch(html, /class="steps"|Choose the exact change|Approve only when the thread is clear/);
-  assert.ok(html.includes("+'/change'"), 'falls back to the scope page when the server omits a route');
+  assert.ok(html.includes("+'/stories'"), 'falls back to review history when the server omits a route');
   assert.match(html, /id="quickAddBtn"[^>]+aria-label="Open repository"/, 'keeps the icon-only mobile action named');
   assert.doesNotMatch(html, /id="chooseBtn"/, 'does not repeat the folder-browser action below the path field');
   assert.match(html, /\.remove-btn::after\{content:"";position:absolute;inset:-5px\}/, 'keeps the compact mobile remove action easy to tap');
@@ -55,10 +55,20 @@ test('folder browser enforces its aria-modal contract and restores focus', () =>
   assert.match(html, /e\.shiftKey&&\(active===first\|\|!scrim\.contains\(active\)\)/);
   assert.match(html, /!e\.shiftKey&&\(active===last\|\|!scrim\.contains\(active\)\)/);
   assert.match(html, /if\(e\.key==='Escape'\)\{e\.preventDefault\(\);closeModal\(\);return;\}/);
-  assert.match(html, /scrim\.hidden=false;scrim\.classList\.add\('show'\);setModalBackground\(true\)/);
-  assert.match(html, /scrim\.classList\.remove\('show'\);scrim\.hidden=true;setModalBackground\(false\)/);
+  assert.match(html, /scrim\.hidden=false;setModalBackground\(true\)/);
+  assert.match(html, /requestAnimationFrame\(function\(\)\{if\(!scrim\.hidden\)scrim\.classList\.add\('show'\);\}\)/);
+  assert.match(html, /scrim\.classList\.remove\('show'\);setModalBackground\(false\)/);
+  assert.match(html, /modalCloseTimer=setTimeout\(function\(\)\{modalCloseTimer=0;if\(!scrim\.classList\.contains\('show'\)\)scrim\.hidden=true;\}/);
   assert.match(html, /fsSearch\.setAttribute\('aria-expanded','true'\)/);
   assert.match(html, /fsSearch\.setAttribute\('aria-expanded','false'\);fsSearch\.removeAttribute\('aria-activedescendant'\)/);
   assert.match(html, /var restore=modalTrigger;modalTrigger=null;if\(restore&&restore\.focus\)restore\.focus\(\)/);
   assert.match(html, /document\.addEventListener\('keydown',trapModalFocus\)/);
+});
+
+test('picker motion connects the page and folder sheet without overriding reduced motion', () => {
+  const html = renderPicker([], '/Users/test', Date.now());
+  assert.match(html, /--motion-duration-spatial:340ms/);
+  assert.match(html, /\.scrim\.show \.sheet\{transform:none;opacity:1\}/);
+  assert.match(html, /\.reveal\{animation:up var\(--motion-duration-spatial\) var\(--motion-ease-out\) backwards\}/);
+  assert.match(html, /prefers-reduced-motion:reduce\)\{\.scrim,\.sheet\{transition:none\}/);
 });

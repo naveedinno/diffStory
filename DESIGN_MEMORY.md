@@ -2,7 +2,7 @@
 
 ## Approved Direction
 
-- **Review chrome:** “Integrated review frame” (Variant F).
+- **Review chrome:** “Integrated review frame” (Variant F) across raw diffs and narrated stories.
 - **Structure:** The sidebar owns navigation and repository identity; the canvas owns the document title and decisions; a semantic ledger connects them.
 - **Origin:** B’s sidebar-aligned split frame combined with E’s quiet native titlebar and review ledger.
 
@@ -41,7 +41,7 @@
 - Keep one obvious decision entry point: Review.
 - Keep Reload available but visually secondary and neutral.
 - Use progressive disclosure inside the existing Review menu for detailed status and secondary actions.
-- In storyless mode, hide narration and voice settings; do not show irrelevant controls.
+- In storyless mode, hide narration and voice settings; in narrated stories, keep them grouped quietly inside the same integrated frame.
 - Preserve direct sidebar collapse, drag resizing, persistence, keyboard resizing, and the compact overlay model.
 - Keep approval readiness independent from non-blocking unresolved comments.
 - On narrow follow-up layouts, reflow Full/Since into a second row instead of compressing the status sentence.

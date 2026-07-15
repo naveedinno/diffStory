@@ -858,3 +858,10 @@ test('change page draws from the shared --app-* tokens', () => {
   assert.match(html, /--app-bg:/);
   assert.match(html, /--bg:var\(--app-bg\)/);
 });
+
+test('change page unfolds scope controls from their source and supports reduced motion', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
+  assert.match(html, /\.refpanel:not\(\[hidden\]\)\{animation:change-panel-in var\(--motion-duration-spatial\)/);
+  assert.match(html, /\.refpicker:not\(\[hidden\]\)\{animation:change-picker-in var\(--motion-duration-ui\)/);
+  assert.match(html, /prefers-reduced-motion:reduce\)\{\.sopt,\.openreview\{transition:none\}/);
+});

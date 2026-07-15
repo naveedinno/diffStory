@@ -1,7 +1,7 @@
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
-import { themeBootstrapScript } from './theme.js';
+import { sharedTokens, themeBootstrapScript } from './theme.js';
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -99,6 +99,7 @@ ${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(opts.repoName)} review history</title>
 <style>
+${sharedTokens()}
 :root{--bg:#17181b;--elev:#24262b;--label:#f5f6f8;--l2:#b3b7c0;--l3:#858b97;--hair:rgba(255,255,255,.13);--sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--red-bg:rgba(255,69,58,.18);--red:#ff6961;--amber:#d28b26;--green:#48d597;--fill:rgba(255,255,255,.06);--chip:rgba(127,132,145,.22)}
 :root[data-theme="light"]{--bg:#f1f3f6;--elev:#fff;--label:#17191e;--l2:#5e6470;--l3:#858c99;--hair:rgba(18,23,32,.13);--sep:rgba(18,23,32,.08);--blue:#0866e5;--blue2:#0057ca;--red-bg:#fde9e7;--red:#bd2a22;--amber:#b86b00;--green:#177a51;--fill:rgba(15,23,42,.045);--chip:rgba(94,99,112,.11)}
 ${navStyles()}
@@ -133,7 +134,7 @@ h2{font-size:18px;line-height:1.1;font-weight:700;letter-spacing:-.012em;margin:
 .row-foot{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:3px;color:var(--l3);font-size:11.5px}.row-foot>span+span:before{content:"·";margin-right:8px;opacity:.55}
 .chip{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--label);background:var(--chip);padding:2px 7px;border-radius:6px;letter-spacing:0}
 .chip-bad{color:var(--red);background:var(--red-bg)}
-.resume{display:inline-flex;align-items:center;gap:4px;color:var(--blue);font-size:12.5px;font-weight:680;white-space:nowrap}.resume svg{width:14px;height:14px}
+.resume{display:inline-flex;align-items:center;gap:4px;color:var(--blue);font-size:12.5px;font-weight:680;white-space:nowrap}.resume svg{width:14px;height:14px;transition:transform var(--motion-duration-fast) var(--motion-ease-out)}.row-main:hover .resume svg{transform:translateX(2px)}
 .row-bad .row-sum{color:var(--red)}
 .row-del{width:38px;border:.5px solid var(--hair);border-radius:8px;background:var(--elev);color:var(--l3);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease-out,color .12s ease-out,transform .1s ease-out}
 .row-del:hover{background:var(--red-bg);color:var(--red)}
@@ -146,7 +147,8 @@ h2{font-size:18px;line-height:1.1;font-weight:700;letter-spacing:-.012em;margin:
 @media (max-width:760px){.wrap{padding:22px 16px 64px}.page-head{align-items:flex-start}.page-actions{flex-direction:column;align-items:flex-end;gap:10px}.row-main{grid-template-columns:1fr;padding:16px 15px 15px 19px;gap:12px}.resume{justify-self:start}}
 @media (max-width:460px){.story-row{position:relative;display:block}.row-main{padding:16px 54px 15px 19px}.row-head{align-items:flex-start;flex-direction:column}.row-title{display:-webkit-box;white-space:normal;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.28}.row-del{position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:9px}.row-del::after{content:"";position:absolute;inset:-5px}.session-facts{line-height:1.65}.session-facts>span{padding:0 8px}.row-foot{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 8px;align-items:center}.row-foot>span+span:before{display:none}.row-foot>span:nth-child(2){grid-column:1 / -1;grid-row:2;line-height:1.35}.row-foot>span:nth-child(3){grid-column:2;grid-row:1}.resume{margin-top:2px}}
 @media (max-width:560px){.page-head{display:block}.page-actions{margin-top:16px;align-items:stretch}.history-status{justify-content:space-between}.start-review{justify-content:center}.empty{max-width:none}}
-@media (prefers-reduced-motion:reduce){.row-main,.row-del,.start-review{transition:none}.row-main:active,.row-del:active{transform:none}}
+@media (prefers-reduced-motion:no-preference){.wrap{animation:history-page-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.story-row{animation:history-row-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}@keyframes history-page-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes history-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}}
+@media (prefers-reduced-motion:reduce){.row-main,.row-del,.start-review,.resume svg{transition:none}.row-main:active,.row-del:active,.row-main:hover .resume svg{transform:none}}
 @media (prefers-contrast:more){.row-main,.row-del{border-width:1px;border-color:var(--label)}}
 </style></head>
 <body>

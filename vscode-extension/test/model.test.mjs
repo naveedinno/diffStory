@@ -85,3 +85,65 @@ test('rejects malformed optional comment data before the sidebar renders it', ()
   assert.equal(isReviewComment({ ...comment, turns: [{ role: 'robot', text: 'wrong role', at: 'now' }] }), false);
   assert.equal(isReviewComment({ ...comment, selection: { startLine: 14, endLine: 12 } }), false);
 });
+
+test('loads v2 concept primers and code-flow links from web-generated stories', () => {
+  const story = parseTour({
+    version: 2,
+    title: 'Review the state machine',
+    summary: 'Learn the states before following the transition.',
+    steps: [
+      {
+        id: 'primer', order: 1, title: 'The three states', kind: 'concept',
+        body: 'A request moves from **open** to **addressed** to **resolved**.',
+        preparesFor: ['transition'],
+        diagram: { type: 'mermaid', source: 'flowchart LR\nA-->B', caption: 'The review lifecycle.' },
+      },
+      {
+        id: 'transition', order: 2, title: 'The transition is persisted', kind: 'changed',
+        file: 'src/state.ts', range: [10, 20], why: 'This is the state write.',
+        calls: ['render'], focus: { ranges: [[14, 16]], label: 'State update' },
+      },
+      {
+        id: 'render', order: 3, title: 'The UI reflects the state', kind: 'context',
+        file: 'src/view.ts', range: [4, 8], why: 'This consumes the transition.', returnsTo: 'transition',
+      },
+    ],
+  });
+
+  assert.equal(story.version, 2);
+  assert.equal(story.steps[0].kind, 'concept');
+  assert.equal(story.steps[0].diagram.caption, 'The review lifecycle.');
+  assert.deepEqual(story.steps[1].calls, ['render']);
+  assert.equal(story.steps[2].returnsTo, 'transition');
+  assert.equal(parseTour({ version: 1, title: 'No concepts', summary: '', steps: [story.steps[0]] }), undefined);
+});
+
+test('rejects unsafe diagrams and broken v2 step relationships', () => {
+  const code = { id: 'code', order: 2, title: 'Code', kind: 'changed', file: 'src/a.ts', range: [1, 2], why: 'Change' };
+  assert.equal(parseTour({
+    version: 2, title: 'Unsafe', summary: '',
+    steps: [
+      { id: 'primer', order: 1, title: 'Primer', kind: 'concept', body: 'Context', preparesFor: ['code'], diagram: { type: 'mermaid', source: 'flowchart LR\nclick A "https://example.com"', caption: 'Unsafe click.' } },
+      code,
+    ],
+  }), undefined);
+  assert.equal(parseTour({
+    version: 2, title: 'Broken flow', summary: '',
+    steps: [{ ...code, order: 1, calls: ['missing'] }],
+  }), undefined);
+  assert.equal(parseTour({
+    version: 2, title: 'Trailing primer', summary: '',
+    steps: [
+      { ...code, order: 1 },
+      { id: 'primer', order: 2, title: 'Primer', kind: 'concept', body: 'Context', preparesFor: ['code'] },
+    ],
+  }), undefined);
+});
+
+test('accepts severity and review identity on shared comments', () => {
+  assert.equal(isReviewComment({
+    id: 'c1', file: 'src/a.ts', line: 1, type: 'question', severity: 'blocking',
+    body: 'This question blocks approval.', status: 'open', reviewRound: 3,
+    reviewSnapshotId: 'r_123', createdAt: '2026-07-15T10:00:00.000Z',
+  }), true);
+});

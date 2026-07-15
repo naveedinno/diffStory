@@ -2,7 +2,7 @@
   "name": "diffstory-vscode",
   "displayName": "DiffStory",
   "description": "Review changed files, comment on exact code, and verify agent fixes without leaving VS Code.",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "publisher": "naveedinno",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
@@ -57,8 +57,28 @@
         "title": "DiffStory: Reopen review comment"
       },
       {
+        "command": "diffstory.deleteComment",
+        "title": "DiffStory: Delete review comment"
+      },
+      {
+        "command": "diffstory.approveReview",
+        "title": "DiffStory: Approve exact change"
+      },
+      {
+        "command": "diffstory.requestChanges",
+        "title": "DiffStory: Request changes"
+      },
+      {
+        "command": "diffstory.openRepositories",
+        "title": "DiffStory: Choose repository"
+      },
+      {
+        "command": "diffstory.openHistory",
+        "title": "DiffStory: Open review history"
+      },
+      {
         "command": "diffstory.changeScope",
-        "title": "DiffStory: Change review comparison",
+        "title": "DiffStory: Set up comparison",
         "icon": "$(git-compare)"
       },
       {

@@ -50,3 +50,10 @@ test('empty history keeps review creation available without making history the e
   assert.match(html, /href="\/repo\/demo\/change"/);
   assert.doesNotMatch(html, /Scope.*Read.*Resolve.*Decide/s);
 });
+
+test('review history uses the shared spatial tier and keeps reduced motion static', () => {
+  const html = renderStoryPicker({ repoName: 'demo', routeBase: '/repo/demo', now: Date.now(), stories: [] });
+  assert.match(html, /--motion-duration-spatial:340ms/);
+  assert.match(html, /\.wrap\{animation:history-page-in var\(--motion-duration-spatial\)/);
+  assert.match(html, /prefers-reduced-motion:reduce\)\{\.row-main,\.row-del,\.start-review,\.resume svg\{transition:none\}/);
+});

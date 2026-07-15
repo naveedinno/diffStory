@@ -5,22 +5,41 @@ export interface StoryBeat {
 
 export type LineRange = [number, number];
 
-export interface TourStep {
+interface TourStepBase {
   id: string;
   order: number;
   title: string;
+  tags?: string[];
+}
+
+export interface CodeTourStep extends TourStepBase {
   file: string;
   range: LineRange;
   viewport?: LineRange;
   highlights?: LineRange[];
   beats?: StoryBeat[];
+  focus?: { ranges: LineRange[]; label?: string };
   kind: 'changed' | 'context' | 'new-file';
   why: string;
-  tags?: string[];
+  calls?: string[];
+  returnsTo?: string;
+}
+
+export interface ConceptTourStep extends TourStepBase {
+  kind: 'concept';
+  body: string;
+  preparesFor: string[];
+  diagram?: { type: 'mermaid'; source: string; caption: string };
+}
+
+export type TourStep = CodeTourStep | ConceptTourStep;
+
+export function isCodeStep(step: TourStep): step is CodeTourStep {
+  return step.kind !== 'concept';
 }
 
 export interface Tour {
-  version: 1;
+  version: 1 | 2;
   diffFingerprint?: string;
   mode?: 'brief' | 'guided' | 'detailed';
   title: string;
@@ -41,6 +60,7 @@ export interface Tour {
 }
 
 export type CommentType = 'change' | 'question' | 'nit';
+export type CommentSeverity = 'blocking' | 'concern' | 'nit';
 export type CommentStatus = 'open' | 'addressed' | 'resolved';
 
 export interface ReviewComment {
@@ -57,8 +77,11 @@ export interface ReviewComment {
     endColumn?: number;
   };
   type: CommentType;
+  severity?: CommentSeverity;
   body: string;
   status: CommentStatus;
+  reviewRound?: number;
+  reviewSnapshotId?: string;
   createdAt: string;
   reply?: string;
   turns?: Array<{ role: 'user' | 'ai'; text: string; at: string }>;
@@ -76,11 +99,14 @@ export function isReviewComment(value: unknown): value is ReviewComment {
     && typeof comment.body === 'string'
     && typeof comment.createdAt === 'string'
     && ['change', 'question', 'nit'].includes(String(comment.type))
+    && (comment.severity === undefined || ['blocking', 'concern', 'nit'].includes(String(comment.severity)))
     && ['open', 'addressed', 'resolved'].includes(String(comment.status))
     && optionalString(comment.step)
     && optionalString(comment.selectedText)
     && optionalString(comment.reply)
+    && optionalString(comment.reviewSnapshotId)
     && optionalString(comment.anchorHash)
+    && (comment.reviewRound === undefined || positiveInteger(comment.reviewRound))
     && (comment.side === undefined || comment.side === 'left' || comment.side === 'right')
     && (comment.selection === undefined || isCommentSelection(comment.selection))
     && (comment.turns === undefined || (Array.isArray(comment.turns) && comment.turns.every(isCommentTurn)));
@@ -133,7 +159,7 @@ export function parseTour(value: unknown): Tour | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;
   if (
-    raw.version !== 1
+    (raw.version !== 1 && raw.version !== 2)
     || typeof raw.title !== 'string'
     || typeof raw.summary !== 'string'
     || !Array.isArray(raw.steps)
@@ -145,40 +171,66 @@ export function parseTour(value: unknown): Tour | undefined {
   for (const candidate of raw.steps) {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return undefined;
     const step = candidate as Record<string, unknown>;
-    if (
-      typeof step.id !== 'string'
-      || typeof step.order !== 'number'
-      || typeof step.title !== 'string'
-      || !isSafeRelativePath(step.file)
-      || typeof step.why !== 'string'
-      || !['changed', 'context', 'new-file'].includes(String(step.kind))
-      || !isLineRange(step.range, true)
-    ) return undefined;
-    const highlights = Array.isArray(step.highlights) && step.highlights.every((range) => isLineRange(range, true))
+    if (typeof step.id !== 'string' || !step.id.trim() || !positiveInteger(step.order) || typeof step.title !== 'string' || !step.title.trim()) return undefined;
+    const tags = Array.isArray(step.tags) && step.tags.every((tag) => typeof tag === 'string' && tag.trim())
+      ? step.tags as string[]
+      : undefined;
+    if (step.tags !== undefined && !tags) return undefined;
+    if (step.kind === 'concept') {
+      if (raw.version !== 2 || typeof step.body !== 'string' || !step.body.trim() || !Array.isArray(step.preparesFor) || !step.preparesFor.length || !step.preparesFor.every((id) => typeof id === 'string' && id.trim()) || new Set(step.preparesFor).size !== step.preparesFor.length) return undefined;
+      const diagram = parseConceptDiagram(step.diagram);
+      if (step.diagram !== undefined && !diagram) return undefined;
+      steps.push({
+        id: step.id,
+        order: step.order,
+        title: step.title,
+        kind: 'concept',
+        body: step.body,
+        preparesFor: step.preparesFor as string[],
+        ...(diagram ? { diagram } : {}),
+        ...(tags ? { tags } : {}),
+      });
+      continue;
+    }
+    const kind = step.kind === 'deleted' ? 'changed' : step.kind;
+    const allowDeletionAnchor = kind === 'changed';
+    if (!isSafeRelativePath(step.file) || typeof step.why !== 'string' || !['changed', 'context', 'new-file'].includes(String(kind)) || !isLineRange(step.range, allowDeletionAnchor)) return undefined;
+    if (step.viewport !== undefined && !isLineRange(step.viewport, allowDeletionAnchor)) return undefined;
+    const container = isLineRange(step.viewport, allowDeletionAnchor) ? step.viewport : step.range;
+    const highlights = Array.isArray(step.highlights) && step.highlights.length > 0 && step.highlights.every((range) => isLineRange(range, allowDeletionAnchor) && rangeInside(range, container))
       ? step.highlights as LineRange[]
       : undefined;
+    if (step.highlights !== undefined && !highlights) return undefined;
     const beats = Array.isArray(step.beats)
       ? step.beats.map((beat): StoryBeat | undefined => {
           if (!beat || typeof beat !== 'object' || Array.isArray(beat)) return undefined;
           const b = beat as Record<string, unknown>;
-          return typeof b.text === 'string' && Array.isArray(b.highlights) && b.highlights.every((range) => isLineRange(range, true))
+          return typeof b.text === 'string' && b.text.trim() && Array.isArray(b.highlights) && b.highlights.length > 0 && b.highlights.every((range) => isLineRange(range, allowDeletionAnchor) && rangeInside(range, container))
             ? { text: b.text, highlights: b.highlights as LineRange[] }
             : undefined;
         })
       : undefined;
-    if (beats?.some((beat) => !beat)) return undefined;
+    if (step.beats !== undefined && (!beats?.length || beats.some((beat) => !beat))) return undefined;
+    const focus = parseFocus(step.focus, allowDeletionAnchor, container);
+    if (step.focus !== undefined && !focus) return undefined;
+    const calls = Array.isArray(step.calls) && step.calls.every((id) => typeof id === 'string' && id.trim()) ? step.calls as string[] : undefined;
+    if (step.calls !== undefined && !calls) return undefined;
+    if (step.returnsTo !== undefined && (typeof step.returnsTo !== 'string' || !step.returnsTo.trim())) return undefined;
     steps.push({
       id: step.id,
       order: step.order,
       title: step.title,
       file: step.file,
       range: step.range,
-      ...(isLineRange(step.viewport, true) ? { viewport: step.viewport } : {}),
+      ...(isLineRange(step.viewport, allowDeletionAnchor) ? { viewport: step.viewport } : {}),
       ...(highlights ? { highlights } : {}),
       ...(beats ? { beats: beats as StoryBeat[] } : {}),
-      kind: step.kind as TourStep['kind'],
+      ...(focus ? { focus } : {}),
+      kind: kind as CodeTourStep['kind'],
       why: step.why,
-      ...(Array.isArray(step.tags) && step.tags.every((tag) => typeof tag === 'string') ? { tags: step.tags as string[] } : {}),
+      ...(tags ? { tags } : {}),
+      ...(calls ? { calls } : {}),
+      ...(typeof step.returnsTo === 'string' ? { returnsTo: step.returnsTo } : {}),
     });
   }
   const intent = parseIntent(raw.intent);
@@ -187,8 +239,9 @@ export function parseTour(value: unknown): Tour | undefined {
   if (raw.storyScope !== undefined && !storyScope) return undefined;
   if (raw.diffFingerprint !== undefined && (typeof raw.diffFingerprint !== 'string' || !/^[0-9a-f]{64}$/i.test(raw.diffFingerprint))) return undefined;
   if (raw.mode !== undefined && raw.mode !== 'brief' && raw.mode !== 'guided' && raw.mode !== 'detailed') return undefined;
+  if (!validTourRelations(steps, storyScope)) return undefined;
   return {
-    version: 1,
+    version: raw.version,
     ...(typeof raw.diffFingerprint === 'string' ? { diffFingerprint: raw.diffFingerprint.toLowerCase() } : {}),
     ...(raw.mode === 'brief' || raw.mode === 'guided' || raw.mode === 'detailed' ? { mode: raw.mode } : {}),
     title: raw.title,
@@ -201,12 +254,29 @@ export function parseTour(value: unknown): Tour | undefined {
   };
 }
 
+function parseFocus(value: unknown, allowDeletionAnchor: boolean, container: LineRange): CodeTourStep['focus'] | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const focus = value as Record<string, unknown>;
+  if (!Array.isArray(focus.ranges) || !focus.ranges.length || !focus.ranges.every((range) => isLineRange(range, allowDeletionAnchor) && rangeInside(range, container))) return undefined;
+  if (focus.label !== undefined && typeof focus.label !== 'string') return undefined;
+  return { ranges: focus.ranges as LineRange[], ...(typeof focus.label === 'string' ? { label: focus.label } : {}) };
+}
+
+function parseConceptDiagram(value: unknown): ConceptTourStep['diagram'] | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const diagram = value as Record<string, unknown>;
+  if (diagram.type !== 'mermaid' || typeof diagram.source !== 'string' || typeof diagram.caption !== 'string' || !diagram.caption.trim() || !safeMermaid(diagram.source)) return undefined;
+  return { type: 'mermaid', source: diagram.source, caption: diagram.caption };
+}
+
 function parseIntent(value: unknown): Tour['intent'] | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const intent = value as Record<string, unknown>;
-  if (typeof intent.goal !== 'string' || (intent.design !== undefined && typeof intent.design !== 'string')) return undefined;
-  if (intent.sources !== undefined && (!Array.isArray(intent.sources) || !intent.sources.every((source) => typeof source === 'string'))) return undefined;
+  if (typeof intent.goal !== 'string' || !intent.goal.trim() || (intent.design !== undefined && typeof intent.design !== 'string')) return undefined;
+  if (intent.sources !== undefined && (!Array.isArray(intent.sources) || !intent.sources.length || !intent.sources.every((source) => typeof source === 'string' && source.trim()))) return undefined;
   return {
     goal: intent.goal,
     ...(typeof intent.design === 'string' ? { design: intent.design } : {}),
@@ -221,9 +291,62 @@ function parseStoryScope(value: unknown): Tour['storyScope'] | undefined {
   if (!Array.isArray(scope.includedFiles) || scope.includedFiles.length === 0 || !scope.includedFiles.every(isSafeRelativePath)) return undefined;
   if (scope.excludedFiles !== undefined && (!Array.isArray(scope.excludedFiles) || !scope.excludedFiles.every(isSafeRelativePath))) return undefined;
   if (scope.reviewerNote !== undefined && typeof scope.reviewerNote !== 'string') return undefined;
+  const included = scope.includedFiles as string[];
+  const excluded = Array.isArray(scope.excludedFiles) ? scope.excludedFiles as string[] : [];
+  if (new Set(included).size !== included.length || new Set(excluded).size !== excluded.length || excluded.some((file) => included.includes(file))) return undefined;
   return {
     includedFiles: scope.includedFiles as string[],
     ...(Array.isArray(scope.excludedFiles) ? { excludedFiles: scope.excludedFiles as string[] } : {}),
     ...(typeof scope.reviewerNote === 'string' ? { reviewerNote: scope.reviewerNote } : {}),
   };
+}
+
+function rangeInside(range: LineRange, container: LineRange): boolean {
+  if (range[0] === 0 || container[0] === 0) return range[0] === 0 && range[1] === 0 && container[0] === 0 && container[1] === 0;
+  return range[0] >= container[0] && range[1] <= container[1];
+}
+
+function safeMermaid(source: string): boolean {
+  const value = source.trim();
+  const lines = value.split(/\r?\n/);
+  if (!value || value.length > 8_000 || lines.length > 80) return false;
+  const declaration = lines.find((line) => line.trim() && !line.trim().startsWith('%%'))?.trim() ?? '';
+  if (!/^(?:flowchart\s+(?:TD|TB|BT|LR|RL)|sequenceDiagram\b|stateDiagram-v2\b)/.test(declaration)) return false;
+  return ![
+    /%%\s*\{/i,
+    /\bclick\b/i,
+    /\bhref\b/i,
+    /(?:https?:|javascript:|data:)?\/\//i,
+    /(?:javascript:|data:)/i,
+    /<\/?[a-z][^>]*>/i,
+    /\b(?:image|img)\s*:/i,
+    /\b(?:classDef|linkStyle|style)\b/i,
+  ].some((pattern) => pattern.test(value));
+}
+
+function validTourRelations(steps: TourStep[], storyScope?: Tour['storyScope']): boolean {
+  if (!steps.some(isCodeStep)) return false;
+  if (new Set(steps.map((step) => step.id)).size !== steps.length) return false;
+  if (new Set(steps.map((step) => step.order)).size !== steps.length) return false;
+  const byId = new Map(steps.map((step) => [step.id, step]));
+  const included = storyScope ? new Set(storyScope.includedFiles) : undefined;
+  const ordered = [...steps].sort((a, b) => a.order - b.order);
+  for (let index = 0; index < ordered.length; index += 1) {
+    const step = ordered[index];
+    if (!isCodeStep(step)) {
+      const next = ordered[index + 1];
+      if (!next || !isCodeStep(next) || !step.preparesFor.includes(next.id)) return false;
+      for (const id of step.preparesFor) {
+        const target = byId.get(id);
+        if (!target || !isCodeStep(target) || target.order <= step.order) return false;
+      }
+      continue;
+    }
+    if (included && step.kind !== 'context' && !included.has(step.file)) return false;
+    for (const id of [...(step.calls ?? []), ...(step.returnsTo ? [step.returnsTo] : [])]) {
+      const target = byId.get(id);
+      if (!target || !isCodeStep(target)) return false;
+    }
+  }
+  return true;
 }

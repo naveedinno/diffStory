@@ -143,8 +143,9 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-gaperror{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--del-text);font-family:var(--sans);font-size:11px}
 .ds-gapretry{opacity:1;min-height:26px;color:var(--text);border-color:var(--line)}
 @media (hover:none),(pointer:coarse){.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1;min-height:28px;padding-left:11px;padding-right:11px}}
-/* mode/file switches fade in */
-.ds-filepanel-body>[data-diff-inner]:not([hidden]),.ds-filepanel-body>[data-split-inner]:not([hidden]),.ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in .16s ease}
+/* Lazy diff bodies get a small fallback reveal. Interactive mode/file handoffs
+   are owned by the interruptible workspace transition in page-assets. */
+html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),html:not([data-ds-motion]) .ds-filepanel-body>[data-split-inner]:not([hidden]),html:not([data-ds-motion]) .ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in var(--motion-duration-fast) var(--motion-ease-out)}
 @keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
 @media (max-width:1050px){.ds-viewed-toggle{width:30px;padding:0;justify-content:center}.ds-viewed-toggle-label{display:none}}
 @media (max-width:720px){
@@ -299,26 +300,26 @@ export const DIFF_JS = `
     var holder=closest(btn,'.ds-filepanel')||closest(btn,'.ds-diff');if(!holder)return;
     var file=holder.getAttribute('data-file');
     var mode=btn.getAttribute('data-mode');
-    $all('.ds-modetoggle button',holder).forEach(function(b){var active=b.getAttribute('data-mode')===mode;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',active?'true':'false');});
     var diffInner=$('[data-diff-inner]',holder),fullInner=$('[data-full-inner]',holder),splitInner=$('[data-split-inner]',holder),hint=$('[data-difthint]',holder);
     if(holder.classList.contains('ds-filepanel')&&!(opts&&opts.persist===false)){try{localStorage.setItem('ds-files-mode',mode);}catch(e){}}
-    var needsLoad=false;
-    if(mode==='full'){
-      if(hint){if(!hint.getAttribute('data-diffhint'))hint.setAttribute('data-diffhint',hint.textContent);hint.textContent='Complete file';}
-      needsLoad=fullInner&&!fullInner.getAttribute('data-loaded')&&file;
-      if(needsLoad)loadFull(fullInner,file);
-      if(diffInner)diffInner.hidden=true;if(splitInner)splitInner.hidden=true;if(fullInner)fullInner.hidden=false;
-    }else if(mode==='split'&&splitInner){
-      if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
-      needsLoad=!splitInner.getAttribute('data-loaded')&&file;
-      if(needsLoad)loadSplit(splitInner,file);
-      if(diffInner)diffInner.hidden=true;if(fullInner)fullInner.hidden=true;splitInner.hidden=false;
-    }else{
-      if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
-      if(fullInner)fullInner.hidden=true;if(splitInner)splitInner.hidden=true;if(diffInner)diffInner.hidden=false;
-    }
-    updateChangeNav(holder);
-    if(!needsLoad)jumpToFirstChange(holder);
+    var needsLoad=mode==='full'?!!(fullInner&&!fullInner.getAttribute('data-loaded')&&file):mode==='split'?!!(splitInner&&!splitInner.getAttribute('data-loaded')&&file):false;
+    if(needsLoad&&mode==='full')loadFull(fullInner,file);else if(needsLoad&&mode==='split')loadSplit(splitInner,file);
+    var update=function(){
+      $all('.ds-modetoggle button',holder).forEach(function(b){var active=b.getAttribute('data-mode')===mode;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',active?'true':'false');});
+      if(mode==='full'){
+        if(hint){if(!hint.getAttribute('data-diffhint'))hint.setAttribute('data-diffhint',hint.textContent);hint.textContent='Complete file';}
+        if(diffInner)diffInner.hidden=true;if(splitInner)splitInner.hidden=true;if(fullInner)fullInner.hidden=false;
+      }else if(mode==='split'&&splitInner){
+        if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
+        if(diffInner)diffInner.hidden=true;if(fullInner)fullInner.hidden=true;splitInner.hidden=false;
+      }else{
+        if(hint&&hint.getAttribute('data-diffhint'))hint.textContent=hint.getAttribute('data-diffhint');
+        if(fullInner)fullInner.hidden=true;if(splitInner)splitInner.hidden=true;if(diffInner)diffInner.hidden=false;
+      }
+    };
+    var transition=null;if(opts&&opts.persist===false)update();else transition=runWorkspaceTransition('mode',0,update);
+    var finish=function(){updateChangeNav(holder);if(!needsLoad)jumpToFirstChange(holder);};
+    if(transition&&transition.updateCallbackDone)Promise.resolve(transition.updateCallbackDone).then(finish,finish);else finish();
     if(typeof saveReviewPositionSoon==='function')saveReviewPositionSoon();
   }
   function loadFull(fullInner,file){

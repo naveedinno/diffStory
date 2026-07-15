@@ -1,23 +1,41 @@
 import * as path from 'node:path';
-import type { ChangedFile } from './git';
-import type { ReviewComment, Tour } from './model';
-import type { ReviewCursor, ReviewSummary } from './review-state';
+import type { ChangedFile, ReviewExclusion, ReviewRef } from './git';
+import { isCodeStep, type ReviewComment, type Tour } from './model';
+import type { ReviewCursor, ReviewHistoryEntry, ReviewSummary } from './review-state';
 import type { StorySummary } from './stories';
 import type { GuideStatus } from './guide';
+import type { StoryClaimCoverage } from './coverage';
 
 export type DiffStoryMode = 'changes' | 'guide' | 'feedback';
+export type DiffStoryScreen = 'review' | 'repositories' | 'history' | 'comparison';
+
+export interface RepositoryListItem {
+  name: string;
+  path: string;
+  kind: 'workspace' | 'recent';
+  active: boolean;
+  available: boolean;
+}
 
 export interface DiffStoryViewModel {
   nonce: string;
+  screen?: DiffStoryScreen;
   repo?: { name: string; path: string };
-  canSwitchRepo?: boolean;
   scopeLabel: string;
+  scopeBase?: string;
+  scopeHead?: string;
+  repositories?: RepositoryListItem[];
+  history?: ReviewHistoryEntry[];
+  comparisonRefs?: ReviewRef[];
   files: ChangedFile[];
+  exclusions?: ReviewExclusion[];
+  indexDivergence?: string[];
   seenFiles: string[];
   comments: ReviewComment[];
   review: ReviewSummary;
   story?: Tour;
   guideStatus?: GuideStatus;
+  storyCoverage?: StoryClaimCoverage;
   storyId: string;
   stories: StorySummary[];
   cursor?: ReviewCursor;
@@ -34,31 +52,35 @@ export function renderDiffStoryWebview(model: DiffStoryViewModel): string {
   const nonce = model.nonce;
   const counts = feedbackCounts(model.comments);
   const repo = model.repo;
+  const screen = model.screen ?? 'review';
   const initialMode = model.initialMode ?? 'changes';
   const repoName = repo ? escapeHtml(repo.name) : 'DiffStory';
-  const repoPath = repo ? escapeAttribute(repo.path) : '';
   const scope = repo
-    ? `<button class="scope-button" id="change-scope" title="Change the Git comparison">${escapeHtml(model.scopeLabel)}<span aria-hidden="true">⌄</span></button>`
+    ? `<button class="scope-button${screen === 'comparison' ? ' is-active' : ''}" data-open-screen="comparison" title="Set up the Git comparison">${escapeHtml(model.scopeLabel)}<span aria-hidden="true">⌄</span></button>`
     : '';
   const workspaceName = repo
-    ? model.canSwitchRepo
-      ? `<button class="workspace-name repo-switch" id="switch-repo" title="Switch Git repository">${repoName}<span aria-hidden="true">⌄</span></button>`
-      : `<strong class="workspace-name" title="${repoPath}">${repoName}</strong>`
+    ? `<button class="workspace-name repo-switch${screen === 'repositories' ? ' is-active' : ''}" data-open-screen="repositories" title="Choose a Git repository"><span>${repoName}</span><span aria-hidden="true">⌄</span></button>`
     : `<strong class="workspace-name">${repoName}</strong>`;
-  const tabs = repo
+  const tabs = repo && screen === 'review'
     ? `<nav class="mode-tabs" role="tablist" aria-label="DiffStory sections">
         ${modeTab('changes', 'Changes', model.files.length, initialMode)}
         ${modeTab('guide', 'Guide', model.story?.steps.length, initialMode)}
         ${modeTab('feedback', 'Feedback', counts.open + counts.addressed, initialMode, counts.addressed > 0)}
       </nav>`
     : '';
-  const main = repo
-    ? `<main>
+  const main = screen === 'repositories'
+    ? `<main>${renderRepositories(model)}</main>`
+    : screen === 'history'
+      ? `<main>${renderHistory(model)}</main>`
+      : screen === 'comparison'
+        ? `<main>${renderComparison(model)}</main>`
+        : repo
+          ? `<main>
         <section class="mode-panel" id="mode-panel-changes" data-mode-panel="changes" role="tabpanel" aria-labelledby="mode-tab-changes"${initialMode === 'changes' ? '' : ' hidden'}>${renderChanges(model)}</section>
         <section class="mode-panel" id="mode-panel-guide" data-mode-panel="guide" role="tabpanel" aria-labelledby="mode-tab-guide"${initialMode === 'guide' ? '' : ' hidden'}>${renderGuide(model)}</section>
         <section class="mode-panel" id="mode-panel-feedback" data-mode-panel="feedback" role="tabpanel" aria-labelledby="mode-tab-feedback"${initialMode === 'feedback' ? '' : ' hidden'}>${renderFeedback(model)}</section>
       </main>`
-    : `<main>${renderNoWorkspace()}</main>`;
+          : `<main>${renderNoWorkspace()}</main>`;
   const status = model.loading
     ? '<div class="app-status is-loading" role="status"><span class="spinner" aria-hidden="true"></span>Refreshing review…</div>'
     : model.error
@@ -77,8 +99,11 @@ export function renderDiffStoryWebview(model: DiffStoryViewModel): string {
 <body>
   <header class="app-header">
     <div class="brand-row">
-      <div class="wordmark" aria-label="DiffStory"><span>diff</span><strong>Story</strong></div>
-      <button class="quiet-button" id="refresh" title="Refresh review" aria-label="Refresh review">Refresh</button>
+      <button class="wordmark" data-open-screen="review" aria-label="Open DiffStory review"><span>diff</span><strong>Story</strong></button>
+      <nav class="app-nav" aria-label="DiffStory workspace">
+        <button class="quiet-button${screen === 'history' ? ' is-active' : ''}" data-open-screen="history" title="Review history">History</button>
+        <button class="quiet-button" id="refresh" title="Refresh current page" aria-label="Refresh current page">Refresh</button>
+      </nav>
     </div>
     <div class="workspace-row">
       ${workspaceName}
@@ -94,6 +119,102 @@ export function renderDiffStoryWebview(model: DiffStoryViewModel): string {
 </html>`;
 }
 
+function renderRepositories(model: DiffStoryViewModel): string {
+  const repositories = model.repositories ?? [];
+  const workspace = repositories.filter((repo) => repo.kind === 'workspace');
+  const recent = repositories.filter((repo) => repo.kind === 'recent');
+  return `<section class="destination-page repositories-page">
+    <div class="page-intro"><span class="state-mark is-repository" aria-hidden="true">⌂</span><span class="kicker">Repositories</span><h1>Choose where to review</h1><p>Use any Git repository already in this workspace, or open a recent project in this window.</p></div>
+    <button class="primary-button large-button" id="browse-repository">Open another repository…</button>
+    ${workspace.length ? `<section class="destination-section"><div class="section-heading"><div><span class="kicker">This workspace</span><strong>${workspace.length} Git ${workspace.length === 1 ? 'repository' : 'repositories'}</strong></div></div><div class="repository-list">${workspace.map(renderRepository).join('')}</div></section>` : ''}
+    ${recent.length ? `<section class="destination-section"><div class="section-heading"><div><span class="kicker">Recent</span><strong>Continue a previous review</strong></div></div><div class="repository-list">${recent.map(renderRepository).join('')}</div></section>` : ''}
+    ${!repositories.length ? '<div class="empty-inline"><b>No Git repositories yet</b><span>Open a project folder to start your first review.</span></div>' : ''}
+  </section>`;
+}
+
+function renderRepository(repo: RepositoryListItem): string {
+  const state = repo.active ? 'Current repository' : repo.available ? (repo.kind === 'workspace' ? 'Open in this workspace' : 'Recent repository') : 'Folder unavailable';
+  const action = repo.active ? 'Continue review' : repo.kind === 'workspace' ? 'Use repository' : 'Open in this window';
+  return `<article class="repository-card${repo.active ? ' is-active' : ''}${repo.available ? '' : ' is-unavailable'}">
+    <div class="repository-icon" aria-hidden="true">${repo.active ? '✓' : '⌂'}</div>
+    <div class="repository-copy"><span>${escapeHtml(state)}</span><h2>${escapeHtml(repo.name)}</h2><code title="${escapeAttribute(repo.path)}">${escapeHtml(repo.path)}</code></div>
+    <div class="repository-actions"><button class="${repo.active ? 'secondary-button' : 'primary-button'}" data-select-repository="${escapeAttribute(repo.path)}"${repo.available ? '' : ' disabled'}>${action}</button>${repo.kind === 'recent' ? `<button class="text-button" data-forget-repository="${escapeAttribute(repo.path)}">Forget</button>` : ''}</div>
+  </article>`;
+}
+
+function renderHistory(model: DiffStoryViewModel): string {
+  if (!model.repo) return `<section class="destination-page">${renderDestinationBack('Review history', 'Choose a repository before opening its review history.')}<button class="primary-button" data-open-screen="repositories">Choose repository</button></section>`;
+  const history = model.history ?? [];
+  const decisions = history.filter((entry) => entry.latestVerdict).length;
+  return `<section class="destination-page history-page">
+    ${renderDestinationBack('Review history', 'Every comparison, round, decision, and recent activity saved for this repository.')}
+    ${history.length ? `<div class="history-stats"><span><b>${history.length}</b>${plural(history.length, 'comparison')}</span><span><b>${history.reduce((sum, entry) => sum + entry.round, 0)}</b>review ${plural(history.reduce((sum, entry) => sum + entry.round, 0), 'round')}</span><span><b>${decisions}</b>saved ${plural(decisions, 'decision')}</span></div><div class="history-list">${history.map((entry) => renderHistoryEntry(entry, entry.scopeKey === model.review.scopeKey)).join('')}</div>` : `<div class="empty-inline"><b>No review history yet</b><span>Open changed files or record a review decision. DiffStory will save this comparison here.</span><button class="primary-button" data-open-screen="review">Start reviewing</button></div>`}
+  </section>`;
+}
+
+function renderDestinationBack(title: string, detail: string, heading = title): string {
+  return `<div class="page-intro"><button class="back-button" data-open-screen="review" aria-label="Back to review">← Review</button><span class="kicker">${escapeHtml(title)}</span><h1>${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div>`;
+}
+
+function renderHistoryEntry(entry: ReviewHistoryEntry, active: boolean): string {
+  const label = comparisonLabel(entry.base, entry.head);
+  const verdict = entry.latestVerdict;
+  const status = verdict ? (verdict.decision === 'approved' ? 'Approved snapshot' : 'Changes requested') : 'Review in progress';
+  const events = entry.events.slice(0, 4);
+  return `<article class="history-card${active ? ' is-active' : ''}">
+    <div class="history-head"><div><span class="history-status is-${verdict?.decision ?? 'open'}">${escapeHtml(status)}</span>${active ? '<span class="current-chip">Current</span>' : ''}</div><time datetime="${escapeAttribute(entry.lastActivityAt)}">${escapeHtml(formatReviewDate(entry.lastActivityAt))}</time></div>
+    <h2>${escapeHtml(label)}</h2>
+    <div class="history-meta"><span>Round <b>${entry.round}</b></span><span><b>${entry.latestSnapshotFiles}</b> ${plural(entry.latestSnapshotFiles, 'file')}</span><span><b>${entry.seenFiles}</b> opened</span><span><b>${entry.snapshotCount}</b> ${plural(entry.snapshotCount, 'snapshot')}</span></div>
+    ${events.length ? `<ol class="history-events">${events.map((event) => `<li><span>${escapeHtml(event.label)}</span><small>Round ${event.round}</small></li>`).join('')}</ol>` : ''}
+    <button class="${active ? 'secondary-button' : 'primary-button'}" data-resume-history="${escapeAttribute(entry.scopeKey)}">${active ? 'Return to review' : 'Resume this comparison'}</button>
+  </article>`;
+}
+
+function renderComparison(model: DiffStoryViewModel): string {
+  if (!model.repo) return `<section class="destination-page">${renderDestinationBack('Comparison setup', 'Choose a repository before deciding what code to compare.', 'What do you want to review?')}<button class="primary-button" data-open-screen="repositories">Choose repository</button></section>`;
+  const refs = model.comparisonRefs ?? [];
+  const base = model.scopeBase || 'HEAD';
+  const head = model.scopeHead || '';
+  return `<section class="destination-page comparison-page">
+    ${renderDestinationBack('Comparison setup', 'Pick a common comparison or define the exact base and head yourself.', 'What do you want to review?')}
+    <section class="preset-section"><span class="kicker">Quick setup</span><div class="comparison-presets">
+      ${comparisonPreset('automatic', 'Branch changes', 'Recommended', 'Repository base', 'Working tree', 'Use the configured base or the best matching main branch.')}
+      ${comparisonPreset('working', 'Uncommitted work', 'Focused', 'HEAD', 'Working tree', 'Review only staged, unstaged, and untracked changes.')}
+      ${comparisonPreset('latest', 'Latest commit', 'Committed', 'Parent', 'HEAD', 'Review exactly the most recent commit, including an initial commit.')}
+    </div></section>
+    <section class="custom-comparison"><span class="kicker">Custom comparison</span><h2>Compare exact Git refs</h2><p>Branches, tags, commit SHAs, and revision syntax such as <code>HEAD~3</code> are accepted.</p>
+      <form id="comparison-form">
+        <label class="field-label" for="comparison-base"><span>Base</span><small>The older side of the diff</small></label>
+        <input class="ref-input" id="comparison-base" name="base" list="comparison-refs" value="${escapeAttribute(base)}" required autocomplete="off" spellcheck="false">
+        <fieldset class="head-choice"><legend>Compare base with</legend><label><input type="radio" name="head-mode" value="working"${head ? '' : ' checked'}><span><b>Working tree</b><small>Include local staged, unstaged, and untracked changes</small></span></label><label><input type="radio" name="head-mode" value="ref"${head ? ' checked' : ''}><span><b>Another Git ref</b><small>Compare two committed points</small></span></label></fieldset>
+        <label class="field-label" for="comparison-head"><span>Head</span><small>The newer side of a committed comparison</small></label>
+        <input class="ref-input" id="comparison-head" name="head" list="comparison-refs" value="${escapeAttribute(head)}"${head ? '' : ' disabled'} autocomplete="off" spellcheck="false">
+        <datalist id="comparison-refs">${refs.map((ref) => `<option value="${escapeAttribute(ref.ref)}">${escapeHtml(ref.label)} — ${escapeHtml(ref.description)}</option>`).join('')}</datalist>
+        <div class="comparison-preview"><span>Review scope</span><code id="comparison-preview">${escapeHtml(comparisonLabel(base, head || undefined))}</code></div>
+        <button class="primary-button large-button" type="submit">Start this review</button>
+      </form>
+    </section>
+  </section>`;
+}
+
+function comparisonPreset(id: string, title: string, badge: string, from: string, to: string, detail: string): string {
+  return `<button class="comparison-preset" data-comparison-preset="${id}"><span class="preset-badge">${escapeHtml(badge)}</span><h2>${escapeHtml(title)}</h2><span class="preset-flow"><code>${escapeHtml(from)}</code><i aria-hidden="true">→</i><code>${escapeHtml(to)}</code></span><p>${escapeHtml(detail)}</p><b>Use this setup <span aria-hidden="true">→</span></b></button>`;
+}
+
+function comparisonLabel(base: string, head?: string): string {
+  return `${shortRef(base)} → ${head ? shortRef(head) : 'working tree'}`;
+}
+
+function shortRef(ref: string): string {
+  return /^[a-f0-9]{40}$/i.test(ref) ? ref.slice(0, 8) : ref;
+}
+
+function formatReviewDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()) || date.getTime() === 0) return 'Saved review';
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
 function modeTab(mode: DiffStoryMode, label: string, count: number | undefined, initial: DiffStoryMode, attention = false): string {
   return `<button class="mode-tab${mode === initial ? ' is-active' : ''}${attention ? ' has-attention' : ''}" id="mode-tab-${mode}" data-mode-tab="${mode}" role="tab" tabindex="${mode === initial ? '0' : '-1'}" aria-controls="mode-panel-${mode}" aria-selected="${mode === initial}"><span>${label}</span>${count ? `<b>${count}</b>` : ''}</button>`;
 }
@@ -104,7 +225,7 @@ function renderNoWorkspace(): string {
     <span class="kicker">Start here</span>
     <h1>Open a Git project</h1>
     <p>DiffStory reviews the code changes in an open repository. Your files stay in VS Code's native diff editor.</p>
-    <button class="primary-button" id="open-folder">Open folder…</button>
+    <button class="primary-button" data-open-screen="repositories">Choose repository</button>
   </section>`;
 }
 
@@ -147,7 +268,51 @@ function renderChanges(model: DiffStoryViewModel): string {
         ? `<div class="selection-tip"><span class="tip-key">2</span><span><b>Leave precise feedback</b><small>Select code in the diff, right-click, then choose <em>DiffStory: Add comment to selected code</em>.</small></span><button id="add-from-selection">Add from selection</button></div>`
         : '';
 
-  return `${hero}${renderWorkflow(model)}${attention}${renderFileList(model, seen)}${renderGuideTeaser(model)}`;
+  return `${hero}${renderWorkflow(model)}${attention}${renderReviewDecision(model)}${renderFileList(model, seen)}${renderGuideTeaser(model)}`;
+}
+
+function renderReviewDecision(model: DiffStoryViewModel): string {
+  const blockers = model.comments.filter((comment) => comment.status !== 'resolved' && severityOf(comment) === 'blocking').length;
+  const exclusions = model.exclusions ?? [];
+  const divergence = model.indexDivergence ?? [];
+  const feedbackHealth = model.review.feedbackHealth ?? { status: 'healthy' as const, source: 'missing' as const };
+  const feedbackInvalid = feedbackHealth.status === 'invalid';
+  const unclaimed = model.story ? model.storyCoverage?.unclaimed.length ?? 0 : 0;
+  const focused = Boolean(model.story?.storyScope?.excludedFiles?.length);
+  const guideBlocked = Boolean(model.story && model.guideStatus?.state !== 'current');
+  const verdict = model.review.verdict;
+  const current = verdict?.state === 'current' ? verdict.current : undefined;
+  const title = current?.decision === 'approved'
+    ? 'Approved for this exact change'
+    : current?.decision === 'changes-requested'
+      ? 'Changes requested'
+      : verdict?.state === 'stale'
+        ? 'Review decision is out of date'
+        : 'Finish with a clear decision';
+  const detail = current?.decision === 'approved'
+    ? 'Any code or blocking-feedback change will automatically make this approval stale.'
+    : current?.decision === 'changes-requested'
+      ? (current.note || 'The remaining work is recorded in review history.')
+      : verdict?.state === 'stale'
+        ? `The saved decision no longer matches the ${verdict.invalidationReason === 'feedback-changed' ? 'blocking feedback' : verdict.invalidationReason === 'scope-changed' ? 'comparison' : 'code'}. Review again before deciding.`
+        : 'Approve the exact code you reviewed, or record that it still needs work.';
+  const warnings = [
+    ...(feedbackInvalid ? ['Feedback file needs repair'] : []),
+    ...(blockers ? [`${blockers} unresolved blocking ${plural(blockers, 'comment')}`] : []),
+    ...(divergence.length ? [`${divergence.length} staged/worktree ${plural(divergence.length, 'mismatch')}`] : []),
+    ...(guideBlocked ? ['Guide does not match this comparison'] : []),
+    ...(focused ? ['Guide covers only selected files'] : []),
+    ...(unclaimed ? [`${unclaimed} changed ${plural(unclaimed, 'range')} not explained by the guide`] : []),
+    ...(exclusions.length ? [`${exclusions.length} excluded ${plural(exclusions.length, 'file')} to inspect`] : []),
+  ];
+  return `<section class="decision-card${current?.decision === 'approved' ? ' is-approved' : current?.decision === 'changes-requested' ? ' is-requested' : verdict?.state === 'stale' ? ' is-stale' : ''}">
+    <div class="decision-head"><span class="kicker">Review decision</span>${current ? `<span class="decision-badge">${current.decision === 'approved' ? 'Approved' : 'Changes needed'}</span>` : ''}</div>
+    <h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p>
+    ${warnings.length ? `<ul class="trust-warnings">${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : '<div class="trust-ready"><span aria-hidden="true">✓</span> No blocking feedback or index conflicts</div>'}
+    ${feedbackInvalid ? `<div class="feedback-health" role="alert"><b>${escapeHtml(feedbackHealth.message)}</b><span>${escapeHtml(feedbackHealth.recovery)}</span></div>` : ''}
+    ${exclusions.length ? `<details class="excluded-files"><summary>Files outside the bounded guide diff</summary>${exclusions.map((file) => `<button data-open-file="${escapeAttribute(file.path)}"><code>${escapeHtml(file.path)}</code><span>${escapeHtml(exclusionLabel(file.reason))}</span></button>`).join('')}</details>` : ''}
+    <div class="decision-actions"><button class="primary-button verify-button" id="approve-review"${feedbackInvalid || blockers || divergence.length || guideBlocked || focused || unclaimed ? ' disabled aria-disabled="true"' : ''}>Approve exact change</button><button class="secondary-button" id="request-changes">Request changes</button></div>
+  </section>`;
 }
 
 function renderWorkflow(model: DiffStoryViewModel): string {
@@ -183,10 +348,11 @@ function renderFileRow(file: ChangedFile, reviewed: boolean, comments: number): 
   const parsed = path.posix.parse(file.path);
   const directory = parsed.dir ? `${parsed.dir}/` : '';
   const status = statusDetails(file.status);
-  return `<button class="file-row" data-open-file="${escapeAttribute(file.path)}" data-file-reviewed="${reviewed}" data-file-commented="${comments > 0}" title="Open ${escapeAttribute(file.path)}">
+  const stat = file.addedLines == null || file.removedLines == null ? '' : `<span class="file-stat"><i>+${file.addedLines}</i><em>−${file.removedLines}</em></span>`;
+  return `<button class="file-row${file.exclusion ? ' is-excluded' : ''}" data-open-file="${escapeAttribute(file.path)}" data-file-reviewed="${reviewed}" data-file-commented="${comments > 0}" title="Open ${escapeAttribute(file.path)}">
     <span class="file-status is-${status.tone}" aria-label="${status.label}">${status.short}</span>
-    <span class="file-name"><strong>${escapeHtml(parsed.base)}</strong>${directory ? `<small>${escapeHtml(directory)}</small>` : ''}</span>
-    <span class="file-meta">${comments ? `<b>${comments} ${plural(comments, 'comment')}</b>` : reviewed ? '<b class="reviewed-mark">Opened</b>' : '<span>Open</span>'}</span>
+    <span class="file-name"><strong>${escapeHtml(parsed.base)}</strong>${directory ? `<small>${escapeHtml(directory)}</small>` : ''}${file.exclusion ? `<small class="excluded-label">${escapeHtml(exclusionLabel(file.exclusion.reason))}</small>` : ''}</span>
+    <span class="file-meta">${stat}${comments ? `<b>${comments} ${plural(comments, 'comment')}</b>` : reviewed ? '<b class="reviewed-mark">Opened</b>' : '<span>Open</span>'}</span>
   </button>`;
 }
 
@@ -228,17 +394,52 @@ function renderGuide(model: DiffStoryViewModel): string {
     <section class="current-stop${guideCurrent ? '' : ' is-blocked'}">
       <div class="stop-progress"><span>${progress ? `Stop ${progress} of ${story.steps.length}` : `${story.steps.length} stops`}</span><span>${progress ? Math.round((progress / story.steps.length) * 100) : 0}%</span></div>
       <progress class="progress-track is-guide" aria-label="Guide progress" max="${story.steps.length}" value="${progress}">${progress} of ${story.steps.length}</progress>
-      ${step ? `<div class="stop-copy"><span class="stop-number">${String(step.order).padStart(2, '0')}</span><div><h2>${escapeHtml(step.title)}</h2><code>${escapeHtml(step.file)} · ${step.range[0] === 0 ? 'deleted file' : `L${step.range[0]}–${step.range[1]}`}</code><p>${escapeHtml(step.why)}</p></div></div>` : ''}
+      ${step ? renderStopCopy(step, story) : ''}
       <button class="primary-button guide-button" id="open-guide-stop"${guideCurrent ? '' : ' disabled aria-disabled="true"'}>${found >= 0 ? 'Continue guided review' : 'Open first guide stop'} <span aria-hidden="true">→</span></button>
     </section>
     <div class="guide-actions"><button class="secondary-button" id="browse-guide"${guideCurrent ? '' : ' disabled aria-disabled="true"'}>Open another stop</button><button class="secondary-button" id="guide-options">${storyOptions}</button></div>
+    ${renderGuideMap(story, guideCurrent)}
     ${story.intent?.goal ? `<details class="story-context"><summary>Why this change exists</summary><p><b>Goal</b> ${escapeHtml(story.intent.goal)}</p>${story.intent.design ? `<p><b>Approach</b> ${escapeHtml(story.intent.design)}</p>` : ''}</details>` : ''}
   </section>`;
+}
+
+function renderGuideMap(story: Tour, guideCurrent: boolean): string {
+  const sources = story.intent?.sources?.length ? `<div class="guide-sources"><b>Intent evidence</b>${story.intent.sources.map((source) => `<span>${escapeHtml(source)}</span>`).join('')}</div>` : '';
+  const scope = story.storyScope ? `<div class="guide-scope"><b>Story scope</b><span>${story.storyScope.includedFiles.length} included${story.storyScope.excludedFiles?.length ? ` · ${story.storyScope.excludedFiles.length} intentionally outside this guide` : ''}</span></div>` : '';
+  const concepts = story.steps.filter((step) => !isCodeStep(step)).length;
+  const code = story.steps.length - concepts;
+  return `<details class="guide-map"><summary>Review map · ${story.steps.length} stops</summary><div class="guide-map-summary"><span><b>${code}</b> code ${plural(code, 'stop')}</span>${concepts ? `<span><b>${concepts}</b> concept ${plural(concepts, 'primer')}</span>` : ''}<button id="browse-guide-map"${guideCurrent ? '' : ' disabled'}>Browse every stop…</button></div>${scope}${sources}</details>`;
+}
+
+function renderStopCopy(step: Tour['steps'][number], story: Tour): string {
+  const tags = step.tags?.length ? `<div class="step-tags">${step.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : '';
+  if (isCodeStep(step)) {
+    const beats = step.beats?.length
+      ? `<details class="story-beats"><summary>${step.beats.length} narrated ${plural(step.beats.length, 'beat')}</summary><ol>${step.beats.map((beat) => `<li><p>${escapeHtml(beat.text)}</p><code>${beat.highlights.map(([start, end]) => start === 0 ? 'deleted file' : `L${start}–${end}`).join(' · ')}</code></li>`).join('')}</ol></details>`
+      : '';
+    return `<div class="stop-copy"><span class="stop-number">${String(step.order).padStart(2, '0')}</span><div><h2>${escapeHtml(step.title)}</h2>${tags}<code>${escapeHtml(step.file)} · ${step.range[0] === 0 ? 'deleted file' : `L${step.range[0]}–${step.range[1]}`}</code><p>${escapeHtml(step.why)}</p>${step.focus?.label ? `<small class="focus-label">Focus · ${escapeHtml(step.focus.label)}</small>` : ''}${beats}${renderFlowLinks(step, story)}</div></div>`;
+  }
+  const prepares = step.preparesFor.map((id) => story.steps.find((candidate) => candidate.id === id)).filter(Boolean) as Tour['steps'];
+  return `<div class="stop-copy is-concept"><span class="stop-number">${String(step.order).padStart(2, '0')}</span><div><h2>${escapeHtml(step.title)}</h2>${tags}<code>Concept primer</code><p>${escapeHtml(step.body)}</p>${step.diagram ? `<small class="concept-diagram">Includes diagram · ${escapeHtml(step.diagram.caption)}</small>` : ''}${prepares.length ? `<div class="flow-links"><span>Prepares you for</span>${prepares.map((target) => `<button data-open-guide-step="${escapeAttribute(target.id)}">${escapeHtml(target.title)} <i aria-hidden="true">→</i></button>`).join('')}</div>` : ''}</div></div>`;
+}
+
+function renderFlowLinks(step: Extract<Tour['steps'][number], { file: string }>, story: Tour): string {
+  const outgoing = (step.calls ?? []).map((id) => story.steps.find((candidate) => candidate.id === id)).filter(Boolean) as Tour['steps'];
+  const returnsTo = step.returnsTo ? story.steps.find((candidate) => candidate.id === step.returnsTo) : undefined;
+  if (!outgoing.length && !returnsTo) return '';
+  return `<div class="flow-links"><span>Code flow</span>${outgoing.map((target) => `<button data-open-guide-step="${escapeAttribute(target.id)}">Calls ${escapeHtml(target.title)} <i aria-hidden="true">→</i></button>`).join('')}${returnsTo ? `<button data-open-guide-step="${escapeAttribute(returnsTo.id)}"><i aria-hidden="true">←</i> Return to ${escapeHtml(returnsTo.title)}</button>` : ''}</div>`;
 }
 
 function renderGuideStatus(model: DiffStoryViewModel): string {
   const status = model.guideStatus ?? { state: 'unverified' as const, activeScopeLabel: model.scopeLabel, canSwitchScope: false };
   if (status.state === 'current') {
+    const unclaimed = model.storyCoverage?.unclaimed.length ?? 0;
+    if (unclaimed) {
+      const recovery = model.agents.length
+        ? '<button class="secondary-button" id="regenerate-guide">Regenerate complete guide</button>'
+        : '<button class="secondary-button" id="open-guide-agent-help">Set up an agent to regenerate</button>';
+      return `<section class="guide-trust is-warning" role="alert"><span class="warning-mark" aria-hidden="true">!</span><div><span class="kicker">Guide incomplete</span><h2>${unclaimed} changed ${plural(unclaimed, 'range')} left unexplained</h2><p>The guide matches this comparison, but its authored steps do not account for the whole bounded diff. Review the missing code directly or regenerate before approval.</p><div class="guide-recovery">${recovery}</div></div></section>`;
+    }
     return `<div class="guide-trust is-current" role="status"><span aria-hidden="true">✓</span><span><b>Guide matches this comparison</b><small>Its line targets were written for ${escapeHtml(status.activeScopeLabel)}.</small></span></div>`;
   }
   const title = status.state === 'scope-mismatch'
@@ -262,6 +463,9 @@ function renderGuideStatus(model: DiffStoryViewModel): string {
 
 function renderFeedback(model: DiffStoryViewModel): string {
   const counts = feedbackCounts(model.comments);
+  if (model.review.feedbackHealth?.status === 'invalid') {
+    return `<section class="center-state feedback-invalid" role="alert"><div class="state-mark is-danger" aria-hidden="true">!</div><span class="kicker">Feedback file needs repair</span><h1>DiffStory stopped comment writes</h1><p>${escapeHtml(model.review.feedbackHealth.message)} ${escapeHtml(model.review.feedbackHealth.recovery)}</p><button class="secondary-button" id="retry-refresh">Refresh after repair</button></section>`;
+  }
   if (!model.comments.length) {
     return `<section class="center-state feedback-empty">
       <div class="state-mark is-comment" aria-hidden="true">+</div>
@@ -321,6 +525,10 @@ function renderAgentSetup(mode: 'guide' | 'feedback'): string {
 function renderFeedbackCard(comment: ReviewComment): string {
   const reply = [...(comment.turns ?? [])].reverse().find((turn) => turn.role === 'ai')?.text ?? comment.reply;
   const replyPreview = reply ? truncateText(reply, 220) : undefined;
+  const severity = severityOf(comment);
+  const conversation = comment.turns?.length
+    ? `<details class="conversation"><summary>${comment.turns.length} conversation ${plural(comment.turns.length, 'message')}</summary>${comment.turns.map((turn) => `<div class="conversation-turn is-${turn.role}"><b>${turn.role === 'ai' ? 'Agent' : 'You'}</b><p>${escapeHtml(turn.text)}</p></div>`).join('')}</details>`
+    : '';
   const label = comment.status === 'addressed' ? 'Ready to verify' : comment.status === 'open' ? 'Needs agent' : 'Resolved';
   const secondaryAction = comment.status === 'addressed'
     ? `<button data-reopen-comment="${escapeAttribute(comment.id)}">Needs more work</button><button class="resolve-button" data-resolve-comment="${escapeAttribute(comment.id)}">Mark resolved</button>`
@@ -328,12 +536,13 @@ function renderFeedbackCard(comment: ReviewComment): string {
       ? `<button data-reopen-comment="${escapeAttribute(comment.id)}">Reopen</button>`
       : `<button data-followup-comment="${escapeAttribute(comment.id)}">Add follow-up</button>`;
   return `<article class="feedback-card is-${comment.status}" data-feedback-status="${comment.status}">
-    <div class="feedback-card-head"><span class="feedback-state">${label}</span><span class="feedback-kind is-${comment.type}">${escapeHtml(commentTypeLabel(comment.type))}</span></div>
+    <div class="feedback-card-head"><span class="feedback-state">${label}</span><span class="severity is-${severity}">${escapeHtml(severityLabel(severity))}</span><span class="feedback-kind is-${comment.type}">${escapeHtml(commentTypeLabel(comment.type))}</span></div>
     <h2>${escapeHtml(comment.body)}</h2>
     <button class="feedback-location" data-show-comment="${escapeAttribute(comment.id)}"><code>${escapeHtml(comment.file)}:${comment.line}</code><span aria-hidden="true">↗</span></button>
     ${reply && replyPreview ? `<div class="agent-reply"><span>Agent response</span><p>${escapeHtml(replyPreview)}</p>${replyPreview !== reply ? `<details><summary>Read full response</summary><p>${escapeHtml(reply)}</p></details>` : ''}</div>` : ''}
+    ${conversation}
     ${comment.selectedText ? `<details class="selected-code"><summary>Selected code</summary><pre>${escapeHtml(comment.selectedText)}</pre></details>` : ''}
-    <div class="feedback-actions"><button data-show-comment="${escapeAttribute(comment.id)}">Open change</button>${secondaryAction}</div>
+    <div class="feedback-actions"><button data-show-comment="${escapeAttribute(comment.id)}">Open change</button>${secondaryAction}<button class="delete-button" data-delete-comment="${escapeAttribute(comment.id)}">Delete</button></div>
   </article>`;
 }
 
@@ -354,6 +563,18 @@ function feedbackRank(status: ReviewComment['status']): number {
 
 function commentTypeLabel(type: ReviewComment['type']): string {
   return type === 'change' ? 'Change request' : type === 'question' ? 'Question' : 'Nit';
+}
+
+function severityOf(comment: ReviewComment): 'blocking' | 'concern' | 'nit' {
+  return comment.severity ?? (comment.type === 'change' ? 'blocking' : comment.type === 'nit' ? 'nit' : 'concern');
+}
+
+function severityLabel(severity: ReturnType<typeof severityOf>): string {
+  return severity === 'blocking' ? 'Blocking' : severity === 'concern' ? 'Concern' : 'Nit';
+}
+
+function exclusionLabel(reason: ReviewExclusion['reason']): string {
+  return ({ 'generated-path': 'Generated artifact', 'large-diff': 'Oversized diff', binary: 'Binary file', 'metadata-only': 'Metadata only' })[reason];
 }
 
 function statusDetails(status: string): { short: string; label: string; tone: string } {
@@ -408,17 +629,22 @@ function webviewCss(): string {
     .app-header { border-bottom:1px solid var(--ds-line); padding:13px 14px 11px; }
     .brand-row,.workspace-row,.section-heading,.stop-progress,.progress-copy,.feedback-card-head,.agent-running>div { align-items:center; display:flex; }
     .brand-row,.workspace-row,.section-heading,.stop-progress,.progress-copy { justify-content:space-between; }
-    .wordmark { font-size:15px; letter-spacing:-.03em; line-height:1; }
+    .wordmark { background:transparent; border:0; cursor:pointer; font-size:15px; letter-spacing:-.03em; line-height:1; padding:0; }
     .wordmark span { color:var(--ds-muted); font-weight:550; }
     .wordmark strong { color:var(--ds-text); font-weight:800; }
     .quiet-button,.text-button { background:none; border:0; color:var(--ds-muted); cursor:pointer; font-size:11px; padding:3px 4px; }
     .quiet-button:hover,.text-button:hover { color:var(--ds-text); text-decoration:underline; }
+    .app-nav { align-items:center; display:flex; gap:7px; }
+    .quiet-button.is-active { color:var(--ds-review); text-decoration:underline; }
     .workspace-row { gap:10px; margin-top:10px; }
     .workspace-name { font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .repo-switch { align-items:center; background:transparent; border:0; cursor:pointer; display:flex; gap:4px; max-width:42%; padding:0; text-align:left; }
     .repo-switch:hover { color:var(--ds-review); }
+    .repo-switch.is-active { color:var(--ds-review); }
+    .repo-switch span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .scope-button { align-items:center; background:transparent; border:0; color:var(--ds-review); cursor:pointer; display:flex; flex:none; font-family:var(--vscode-editor-font-family, monospace); font-size:10px; gap:4px; max-width:58%; overflow:hidden; padding:2px 0; text-overflow:ellipsis; white-space:nowrap; }
     .scope-button:hover { text-decoration:underline; }
+    .scope-button.is-active { color:var(--ds-text); text-decoration:underline; }
     .mode-tabs { background:var(--ds-bg); border-bottom:1px solid var(--ds-line); display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); position:sticky; top:0; z-index:4; }
     .mode-tab { align-items:center; background:transparent; border:0; border-bottom:2px solid transparent; color:var(--ds-muted); cursor:pointer; display:flex; font-size:11px; font-weight:650; gap:5px; justify-content:center; min-width:0; padding:9px 4px 8px; }
     .mode-tab:hover { background:var(--ds-raised); color:var(--ds-text); }
@@ -494,6 +720,19 @@ function webviewCss(): string {
     .selection-tip small { color:var(--ds-muted); font-size:10px; line-height:1.4; margin-top:2px; }
     .selection-tip em { color:var(--ds-text); font-style:normal; }
     .selection-tip button { background:transparent; border:0; color:var(--ds-comment); cursor:pointer; font-size:10px; grid-column:2; justify-self:start; padding:1px 0; }
+    .decision-card { background:var(--ds-surface); border:1px solid var(--ds-line); border-left:3px solid var(--ds-review); border-radius:6px; margin-top:16px; padding:12px; }
+    .decision-card.is-approved { border-left-color:var(--ds-verify); }
+    .decision-card.is-requested,.decision-card.is-stale { border-left-color:var(--ds-warning); }
+    .decision-head { align-items:center; display:flex; justify-content:space-between; }
+    .decision-badge { background:color-mix(in srgb,var(--ds-verify) 12%,var(--ds-surface)); border:1px solid color-mix(in srgb,var(--ds-verify) 48%,var(--ds-line)); border-radius:999px; color:var(--ds-verify); font-size:9px; font-weight:800; padding:2px 6px; text-transform:uppercase; }
+    .decision-card h2 { font-size:14px; margin:6px 0 5px; }
+    .decision-card>p { color:var(--ds-muted); font-size:10.5px; line-height:1.45; margin:0; }
+    .trust-ready { color:var(--ds-verify); font-size:10px; margin-top:10px; }
+    .trust-warnings { color:var(--ds-warning); display:grid; font-size:10px; gap:3px; margin:10px 0 0; padding-left:17px; }
+    .feedback-health { background:color-mix(in srgb,var(--ds-danger) 9%,var(--ds-surface)); border:1px solid color-mix(in srgb,var(--ds-danger) 45%,var(--ds-line)); border-radius:5px; display:grid; gap:3px; margin-top:10px; padding:8px; }
+    .feedback-health b { color:var(--ds-danger); font-size:10px; }.feedback-health span { color:var(--ds-muted); font-size:10px; }
+    .excluded-files { border-top:1px solid var(--ds-line); margin-top:10px; padding-top:8px; }.excluded-files summary { color:var(--ds-muted); cursor:pointer; font-size:10px; }.excluded-files button { align-items:center; background:transparent; border:0; color:var(--ds-muted); cursor:pointer; display:flex; gap:8px; justify-content:space-between; padding:6px 0; text-align:left; width:100%; }.excluded-files code { color:var(--ds-text); font-size:9px; overflow:hidden; text-overflow:ellipsis; }.excluded-files span { flex:none; font-size:9px; }
+    .decision-actions { display:grid; gap:6px; grid-template-columns:1fr 1fr; margin-top:11px; }.decision-actions button { font-size:10px; }
     .file-section,.feedback-section { margin-top:20px; }
     .section-heading { align-items:flex-end; gap:10px; margin-bottom:8px; }
     .section-heading strong { display:block; font-size:11px; margin-top:2px; }
@@ -517,6 +756,8 @@ function webviewCss(): string {
     .file-meta { color:var(--ds-muted); font-size:10px; text-align:right; white-space:nowrap; }
     .file-meta b { color:var(--ds-comment); font-weight:650; }
     .file-meta .reviewed-mark { color:var(--ds-verify); }
+    .file-stat { display:flex; gap:4px; justify-content:flex-end; }.file-stat i,.file-stat em { font-family:var(--vscode-editor-font-family, monospace); font-size:9px; font-style:normal; }.file-stat i { color:var(--ds-verify); }.file-stat em { color:var(--ds-danger); }
+    .file-row.is-excluded { background:color-mix(in srgb,var(--ds-warning) 5%,transparent); }.excluded-label { color:var(--ds-warning)!important; direction:ltr!important; }
     .show-more { background:transparent; border:0; color:var(--ds-review); cursor:pointer; font-size:10px; padding:8px 2px 0; }
     .filter-empty { color:var(--ds-muted); font-size:10px; margin:12px 0; }
     .guide-teaser { grid-template-columns:26px minmax(0,1fr) auto; }
@@ -556,6 +797,7 @@ function webviewCss(): string {
     .story-context summary,.activity-log summary { color:var(--ds-muted); cursor:pointer; font-size:10px; font-weight:650; }
     .story-context p { color:var(--ds-muted); font-size:10px; line-height:1.45; }
     .story-context b { color:var(--ds-text); }
+    .guide-map { border-top:1px solid var(--ds-line); padding-top:11px; }.guide-map>summary { color:var(--ds-muted); cursor:pointer; font-size:10px; font-weight:650; }.guide-map-summary { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:8px; }.guide-map-summary span { color:var(--ds-muted); font-size:9.5px; }.guide-map-summary span b { color:var(--ds-guide); }.guide-map-summary button { background:transparent; border:0; color:var(--ds-guide); cursor:pointer; font-size:9.5px; margin-left:auto; padding:0; }.guide-scope,.guide-sources { border-top:1px solid var(--ds-line); display:grid; gap:3px; margin-top:8px; padding-top:8px; }.guide-scope b,.guide-sources b { font-size:9px; text-transform:uppercase; }.guide-scope span,.guide-sources span { color:var(--ds-muted); font-size:9.5px; }
     .feedback-page { display:grid; gap:16px; }
     .agent-running { align-items:center; background:color-mix(in srgb, var(--ds-guide) 10%, var(--ds-surface)); border:1px solid color-mix(in srgb, var(--ds-guide) 48%, var(--ds-line)); border-radius:6px; display:flex; justify-content:space-between; margin:10px 12px 0; padding:9px 10px; }
     .agent-running>div { gap:8px; }
@@ -588,6 +830,7 @@ function webviewCss(): string {
     .feedback-kind.is-change { border-color:color-mix(in srgb, var(--ds-danger) 52%, var(--ds-line)); color:var(--ds-danger); }
     .feedback-kind.is-question { border-color:color-mix(in srgb, var(--ds-review) 52%, var(--ds-line)); color:var(--ds-review); }
     .feedback-kind.is-nit { border-color:color-mix(in srgb, var(--ds-guide) 52%, var(--ds-line)); color:var(--ds-guide); }
+    .severity { border-radius:999px; font-size:9px; font-weight:800; margin-left:auto; padding:2px 6px; text-transform:uppercase; }.severity.is-blocking { background:color-mix(in srgb,var(--ds-danger) 12%,var(--ds-surface)); color:var(--ds-danger); }.severity.is-concern { background:color-mix(in srgb,var(--ds-warning) 12%,var(--ds-surface)); color:var(--ds-warning); }.severity.is-nit { background:var(--ds-raised); color:var(--ds-muted); }.feedback-kind { margin-left:0; }
     .feedback-card h2 { font-size:12px; font-weight:650; line-height:1.4; margin:0; white-space:pre-wrap; }
     .feedback-location { align-items:center; background:transparent; border:0; color:var(--ds-review); cursor:pointer; display:flex; gap:7px; justify-content:space-between; min-width:0; padding:0; text-align:left; }
     .feedback-location code { font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -598,16 +841,100 @@ function webviewCss(): string {
     .agent-reply summary { color:var(--ds-text); cursor:pointer; font-size:10px; }
     .selected-code summary { color:var(--ds-muted); cursor:pointer; font-size:10px; }
     .selected-code pre { background:var(--vscode-textCodeBlock-background, var(--ds-surface)); color:var(--ds-muted); font-size:10px; margin:6px 0 0; max-height:90px; overflow:auto; padding:7px; white-space:pre-wrap; }
+    .conversation { border-top:1px solid var(--ds-line); padding-top:7px; }.conversation summary { color:var(--ds-muted); cursor:pointer; font-size:10px; }.conversation-turn { border-left:2px solid var(--ds-line); margin-top:7px; padding-left:8px; }.conversation-turn.is-ai { border-left-color:var(--ds-guide); }.conversation-turn b { font-size:9px; text-transform:uppercase; }.conversation-turn p { color:var(--ds-muted); font-size:10px; margin:2px 0 0; white-space:pre-wrap; }
     .feedback-actions { display:flex; flex-wrap:wrap; gap:5px; }
     .feedback-actions button { background:transparent; border:1px solid var(--ds-line); border-radius:4px; color:var(--ds-muted); cursor:pointer; font-size:10px; padding:4px 6px; }
     .feedback-actions button:hover { border-color:var(--ds-muted); color:var(--ds-text); }
     .feedback-actions .resolve-button { border-color:color-mix(in srgb, var(--ds-verify) 58%, var(--ds-line)); color:var(--ds-verify); }
+    .feedback-actions .delete-button { color:var(--ds-danger); margin-left:auto; }
+    .state-mark.is-danger { border-color:var(--ds-danger); color:var(--ds-danger); }
+    .concept-diagram { color:var(--ds-guide); display:block; font-size:9px; margin-top:6px; }
+    .step-tags { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 7px; }.step-tags span { background:var(--ds-raised); border-radius:999px; color:var(--ds-muted); font-size:8.5px; padding:2px 6px; }
+    .focus-label { color:var(--ds-review); display:block; font-size:9px; margin-top:6px; }
+    .story-beats { border-top:1px solid var(--ds-line); margin-top:9px; padding-top:7px; }.story-beats summary { color:var(--ds-muted); cursor:pointer; font-size:9.5px; }.story-beats ol { display:grid; gap:6px; margin:7px 0 0; padding-left:18px; }.story-beats li { color:var(--ds-guide); }.story-beats p { color:var(--ds-muted); font-size:9.5px; margin:0 0 2px; }.story-beats code { color:var(--ds-review); font-size:8.5px; }
+    .flow-links { border-top:1px solid var(--ds-line); display:grid; gap:5px; margin-top:9px; padding-top:7px; }.flow-links>span { color:var(--ds-muted); font-size:8.5px; font-weight:750; text-transform:uppercase; }.flow-links button { align-items:center; background:transparent; border:0; color:var(--ds-guide); cursor:pointer; display:flex; font-size:9.5px; gap:4px; padding:1px 0; text-align:left; }.flow-links i { font-style:normal; }
     .activity-log { margin-top:2px; }
     .activity-log ol { list-style:none; margin:8px 0 0; padding:0; }
     .activity-log li { align-items:center; color:var(--ds-muted); display:flex; font-size:10px; justify-content:space-between; padding:3px 0; }
     .activity-log li small { font-size:10px; }
     .agent-log { background:var(--ds-surface); margin-top:8px; max-height:160px; overflow:auto; padding:7px; }
     .agent-log p { color:var(--ds-muted); font-family:var(--vscode-editor-font-family, monospace); font-size:10px; margin:0 0 4px; }
+    .destination-page { display:grid; gap:18px; padding:18px 12px 28px; }
+    .page-intro { border-left:3px solid var(--ds-review); padding-left:12px; }
+    .page-intro .state-mark { margin-bottom:13px; }
+    .page-intro h1 { font-size:20px; }
+    .page-intro p,.custom-comparison>p { color:var(--ds-muted); font-size:11px; line-height:1.5; margin:0; }
+    .back-button { background:transparent; border:0; color:var(--ds-review); cursor:pointer; display:block; font-size:10px; margin:0 0 12px; padding:0; }
+    .back-button:hover { text-decoration:underline; }
+    .state-mark.is-repository { background:color-mix(in srgb,var(--ds-review) 12%,var(--ds-surface)); border-color:color-mix(in srgb,var(--ds-review) 52%,var(--ds-line)); }
+    .destination-section { display:grid; gap:8px; }
+    .repository-list,.history-list { display:grid; gap:8px; }
+    .repository-card { align-items:center; background:var(--ds-surface); border:1px solid var(--ds-line); border-radius:7px; display:grid; gap:9px; grid-template-columns:30px minmax(0,1fr); padding:11px; }
+    .repository-card.is-active { border-left:3px solid var(--ds-verify); }
+    .repository-card.is-unavailable { opacity:.65; }
+    .repository-icon { align-items:center; background:var(--ds-raised); border:1px solid var(--ds-line); border-radius:6px; color:var(--ds-review); display:flex; font-size:14px; height:30px; justify-content:center; width:30px; }
+    .repository-card.is-active .repository-icon { color:var(--ds-verify); }
+    .repository-copy { min-width:0; }
+    .repository-copy>span { color:var(--ds-muted); font-size:9px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
+    .repository-copy h2 { font-size:13px; margin:2px 0; }
+    .repository-copy code { color:var(--ds-muted); display:block; font-size:9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .repository-actions { align-items:center; display:flex; gap:8px; grid-column:2; }
+    .repository-actions .primary-button,.repository-actions .secondary-button { font-size:10px; padding:5px 8px; }
+    .empty-inline { align-items:flex-start; background:var(--ds-surface); border:1px dashed var(--ds-line); border-radius:7px; color:var(--ds-muted); display:flex; flex-direction:column; font-size:11px; gap:4px; padding:14px; }
+    .empty-inline b { color:var(--ds-text); font-size:12px; }
+    .empty-inline .primary-button { margin-top:9px; }
+    .history-stats { display:grid; gap:6px; grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .history-stats span { background:var(--ds-surface); border:1px solid var(--ds-line); border-radius:6px; color:var(--ds-muted); font-size:9px; padding:8px; }
+    .history-stats b { color:var(--ds-review); display:block; font-size:15px; }
+    .history-card { background:var(--ds-surface); border:1px solid var(--ds-line); border-radius:7px; display:grid; gap:10px; padding:12px; }
+    .history-card.is-active { border-left:3px solid var(--ds-review); }
+    .history-head { align-items:center; display:flex; justify-content:space-between; }
+    .history-head>div { align-items:center; display:flex; gap:5px; }
+    .history-head time { color:var(--ds-muted); font-size:9px; white-space:nowrap; }
+    .history-status,.current-chip { border-radius:999px; font-size:8px; font-weight:800; padding:2px 6px; text-transform:uppercase; }
+    .history-status.is-approved { background:color-mix(in srgb,var(--ds-verify) 12%,var(--ds-surface)); color:var(--ds-verify); }
+    .history-status.is-changes-requested { background:color-mix(in srgb,var(--ds-warning) 12%,var(--ds-surface)); color:var(--ds-warning); }
+    .history-status.is-open { background:var(--ds-raised); color:var(--ds-muted); }
+    .current-chip { border:1px solid var(--ds-review); color:var(--ds-review); }
+    .history-card h2 { font-family:var(--vscode-editor-font-family,monospace); font-size:12px; margin:0; overflow-wrap:anywhere; }
+    .history-meta { color:var(--ds-muted); display:flex; flex-wrap:wrap; font-size:9px; gap:5px 10px; }
+    .history-meta b { color:var(--ds-text); }
+    .history-events { border-top:1px solid var(--ds-line); list-style:none; margin:0; padding:7px 0 0; }
+    .history-events li { align-items:center; color:var(--ds-muted); display:flex; font-size:9px; justify-content:space-between; padding:2px 0; }
+    .history-events small { font-size:8px; }
+    .history-card>.primary-button,.history-card>.secondary-button { font-size:10px; justify-self:start; }
+    .preset-section { display:grid; gap:8px; }
+    .comparison-presets { display:grid; gap:8px; }
+    .comparison-preset { background:var(--ds-surface); border:1px solid var(--ds-line); border-left:3px solid var(--ds-review); border-radius:7px; cursor:pointer; display:grid; gap:7px; padding:11px; text-align:left; width:100%; }
+    .comparison-preset:nth-child(2) { border-left-color:var(--ds-comment); }
+    .comparison-preset:nth-child(3) { border-left-color:var(--ds-guide); }
+    .comparison-preset:hover { background:var(--ds-raised); border-color:var(--ds-review); }
+    .comparison-preset h2 { font-size:13px; margin:0; }
+    .comparison-preset p { color:var(--ds-muted); font-size:10px; line-height:1.4; margin:0; }
+    .comparison-preset>b { color:var(--ds-review); font-size:10px; }
+    .preset-badge { color:var(--ds-muted); font-size:8px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .preset-flow { align-items:center; display:flex; gap:6px; }
+    .preset-flow code { background:var(--ds-raised); border-radius:4px; color:var(--ds-text); font-size:9px; padding:3px 5px; }
+    .preset-flow i { color:var(--ds-review); font-style:normal; }
+    .custom-comparison { border-top:1px solid var(--ds-line); padding-top:16px; }
+    .custom-comparison h2 { font-size:14px; margin:4px 0 5px; }
+    .custom-comparison>p code { color:var(--ds-text); }
+    #comparison-form { display:grid; gap:8px; margin-top:14px; }
+    .field-label { align-items:end; display:flex; justify-content:space-between; }
+    .field-label span { font-size:10px; font-weight:750; }
+    .field-label small { color:var(--ds-muted); font-size:8px; }
+    .ref-input { background:var(--vscode-input-background,var(--ds-surface)); border:1px solid var(--vscode-input-border,var(--ds-line)); border-radius:4px; color:var(--vscode-input-foreground,var(--ds-text)); font-family:var(--vscode-editor-font-family,monospace); font-size:11px; min-width:0; padding:7px 8px; width:100%; }
+    .ref-input:focus { border-color:var(--ds-focus); outline:1px solid var(--ds-focus); }
+    .ref-input:disabled { opacity:.45; }
+    .head-choice { border:0; display:grid; gap:5px; margin:4px 0; padding:0; }
+    .head-choice legend { font-size:10px; font-weight:750; margin-bottom:4px; }
+    .head-choice label { align-items:flex-start; background:var(--ds-surface); border:1px solid var(--ds-line); border-radius:5px; cursor:pointer; display:flex; gap:8px; padding:8px; }
+    .head-choice input { accent-color:var(--ds-review); margin:2px 0 0; }
+    .head-choice b,.head-choice small { display:block; }
+    .head-choice b { font-size:10px; }.head-choice small { color:var(--ds-muted); font-size:9px; margin-top:2px; }
+    .comparison-preview { background:color-mix(in srgb,var(--ds-review) 8%,var(--ds-surface)); border:1px solid color-mix(in srgb,var(--ds-review) 38%,var(--ds-line)); border-radius:5px; display:grid; gap:3px; margin-top:4px; padding:8px; }
+    .comparison-preview span { color:var(--ds-muted); font-size:8px; font-weight:800; text-transform:uppercase; }
+    .comparison-preview code { color:var(--ds-review); font-size:10px; overflow-wrap:anywhere; }
     body.vscode-light { --ds-surface:var(--vscode-editor-background, #fff); --ds-raised:var(--vscode-sideBarSectionHeader-background, #eef1f5); --ds-line:var(--vscode-sideBar-border, #d6dae1); }
     body.vscode-high-contrast .primary-button,body.vscode-high-contrast .secondary-button,body.vscode-high-contrast .file-row,body.vscode-high-contrast .mode-tab { border:1px solid var(--vscode-contrastBorder); }
     @media (max-width:280px) { .workflow small,.file-meta span { display:none; } .mode-tab { font-size:10px; } .review-summary { grid-template-columns:1fr; } .review-summary>.primary-button,.review-summary>.secondary-button { width:100%; } .section-heading { align-items:flex-start; flex-direction:column; } .file-row { grid-template-columns:20px minmax(0,1fr); } .file-meta { grid-column:2; text-align:left; } }
@@ -675,10 +1002,31 @@ function webviewScript(initialMode: DiffStoryMode): string {
     }));
     document.getElementById('refresh')?.addEventListener('click', () => send('refresh'));
     document.getElementById('retry-refresh')?.addEventListener('click', () => send('refresh'));
-    document.getElementById('change-scope')?.addEventListener('click', () => send('changeScope'));
-    document.getElementById('switch-repo')?.addEventListener('click', () => send('switchRepo'));
-    document.getElementById('empty-change-scope')?.addEventListener('click', () => send('changeScope'));
-    document.getElementById('open-folder')?.addEventListener('click', () => send('openFolder'));
+    document.querySelectorAll('[data-open-screen]').forEach((button) => button.addEventListener('click', () => send('navigate', { screen: button.dataset.openScreen })));
+    document.getElementById('empty-change-scope')?.addEventListener('click', () => send('navigate', { screen: 'comparison' }));
+    document.getElementById('browse-repository')?.addEventListener('click', () => send('browseRepository'));
+    document.querySelectorAll('[data-select-repository]').forEach((button) => button.addEventListener('click', () => send('selectRepository', { path: button.dataset.selectRepository })));
+    document.querySelectorAll('[data-forget-repository]').forEach((button) => button.addEventListener('click', () => send('forgetRepository', { path: button.dataset.forgetRepository })));
+    document.querySelectorAll('[data-resume-history]').forEach((button) => button.addEventListener('click', () => send('resumeHistory', { scopeKey: button.dataset.resumeHistory })));
+    document.querySelectorAll('[data-comparison-preset]').forEach((button) => button.addEventListener('click', () => send('applyComparisonPreset', { preset: button.dataset.comparisonPreset })));
+    const comparisonForm = document.getElementById('comparison-form');
+    const comparisonBase = document.getElementById('comparison-base');
+    const comparisonHead = document.getElementById('comparison-head');
+    const comparisonPreview = document.getElementById('comparison-preview');
+    const comparisonHeadModes = [...document.querySelectorAll('input[name="head-mode"]')];
+    const updateComparison = () => {
+      const mode = comparisonHeadModes.find((input) => input.checked)?.value || 'working';
+      if (comparisonHead) comparisonHead.disabled = mode !== 'ref';
+      if (comparisonPreview) comparisonPreview.textContent = (comparisonBase?.value.trim() || 'base') + ' → ' + (mode === 'ref' ? (comparisonHead?.value.trim() || 'head') : 'working tree');
+    };
+    comparisonHeadModes.forEach((input) => input.addEventListener('change', updateComparison));
+    comparisonBase?.addEventListener('input', updateComparison);
+    comparisonHead?.addEventListener('input', updateComparison);
+    comparisonForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const headMode = comparisonHeadModes.find((input) => input.checked)?.value || 'working';
+      send('applyComparison', { base: comparisonBase?.value.trim(), head: headMode === 'ref' ? comparisonHead?.value.trim() : undefined });
+    });
     document.getElementById('start-review')?.addEventListener('click', () => send('openNextUnseenFile'));
     document.getElementById('open-next')?.addEventListener('click', () => send('openNextUnseenFile'));
     document.getElementById('review-again')?.addEventListener('click', () => send('openChangedFile'));
@@ -690,6 +1038,7 @@ function webviewScript(initialMode: DiffStoryMode): string {
     document.getElementById('create-guide')?.addEventListener('click', () => send('generateInteractive'));
     document.getElementById('open-guide-stop')?.addEventListener('click', () => send('resumeReview'));
     document.getElementById('browse-guide')?.addEventListener('click', () => send('browseGuide'));
+    document.getElementById('browse-guide-map')?.addEventListener('click', () => send('browseGuide'));
     document.getElementById('guide-options')?.addEventListener('click', () => send('storyActions'));
     document.getElementById('switch-guide-scope')?.addEventListener('click', () => send('switchToGuideScope'));
     document.getElementById('regenerate-guide')?.addEventListener('click', () => send('generateInteractive'));
@@ -699,10 +1048,14 @@ function webviewScript(initialMode: DiffStoryMode): string {
     document.getElementById('open-agent-help')?.addEventListener('click', () => send('openGettingStarted'));
     document.getElementById('stop-agent')?.addEventListener('click', () => send('stopAgent'));
     document.getElementById('inspect-since')?.addEventListener('click', () => send('openSinceFeedback'));
+    document.getElementById('approve-review')?.addEventListener('click', () => send('recordVerdict', { decision: 'approved' }));
+    document.getElementById('request-changes')?.addEventListener('click', () => send('recordVerdict', { decision: 'changes-requested' }));
     document.querySelectorAll('[data-show-comment]').forEach((button) => button.addEventListener('click', () => send('showComment', { commentId: button.dataset.showComment })));
     document.querySelectorAll('[data-resolve-comment]').forEach((button) => button.addEventListener('click', () => send('resolveCommentId', { commentId: button.dataset.resolveComment })));
     document.querySelectorAll('[data-reopen-comment]').forEach((button) => button.addEventListener('click', () => send('reopenCommentId', { commentId: button.dataset.reopenComment })));
     document.querySelectorAll('[data-followup-comment]').forEach((button) => button.addEventListener('click', () => send('followUpCommentId', { commentId: button.dataset.followupComment })));
+    document.querySelectorAll('[data-delete-comment]').forEach((button) => button.addEventListener('click', () => send('deleteCommentId', { commentId: button.dataset.deleteComment })));
+    document.querySelectorAll('[data-open-guide-step]').forEach((button) => button.addEventListener('click', () => send('openStep', { stepId: button.dataset.openGuideStep })));
     document.querySelectorAll('[data-feedback-filter]').forEach((button) => button.addEventListener('click', () => { feedbackFilter = button.dataset.feedbackFilter; applyFeedbackFilter(); }));
     window.addEventListener('message', (event) => {
       if (event.data?.type !== 'agentProgress' || !Array.isArray(event.data.lines)) return;
@@ -720,6 +1073,7 @@ function webviewScript(initialMode: DiffStoryMode): string {
     selectMode(mode, true);
     applyFileFilter();
     applyFeedbackFilter();
+    updateComparison();
     requestAnimationFrame(() => { if (saved.scrollY) window.scrollTo(0, saved.scrollY); hydrating = false; persist(); });
   `;
 }

@@ -368,4 +368,10 @@ test('targeted story repair uses the shared progress panel', () => {
   assert.match(PAGE_JS, /function repairStory\(/);
   assert.match(PAGE_JS, /runProgress\(panel,'\/api\/story\/repair'/);
   assert.match(PAGE_JS, /data-story-repair/);
+  assert.match(PAGE_JS, /function closeStoryTuneMenus\(/);
+  assert.match(PAGE_JS, /if\(!closest\(t,'\.ds-story-tune'\)\)closeStoryTuneMenus\(\)/);
+  assert.match(PAGE_JS, /var openTune=\$\('\.ds-story-tune\[open\]'\)/);
+  assert.match(PAGE_CSS, /\.ds-story-tune>summary\{[^}]*min-height:32px[^}]*padding:0 10px/);
+  assert.match(PAGE_CSS, /\.ds-story-tune\[open\]>summary\{/);
+  assert.match(PAGE_CSS, /\.ds-reviewfocus\{[^}]*grid-column:1\/-1[^}]*grid-row:2/);
 });

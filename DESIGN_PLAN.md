@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Scope:** Component-level redesign of the review chrome.
-- **Target:** The storyless review header and shared review-status ledger.
+- **Scope:** Component-level redesign of the shared review chrome.
+- **Target:** Both narrated-story and storyless review headers plus the shared review-status ledger.
 - **Winner:** Variant F, “Integrated review frame.”
 - **Source directions:** B’s sidebar-aligned frame plus E’s quiet native titlebar and semantic review ledger.
-- **Outcome:** Navigation and repository context belong to the sidebar; the diff canvas owns the document title and review actions; round/status information becomes one restrained ledger instead of a second toolbar.
+- **Outcome:** Navigation and repository context belong to the sidebar; the review canvas owns the document title and actions; narrated controls remain available only for stories; round/status information becomes one restrained ledger instead of a second toolbar.
 - **Constraint:** Preserve every existing review, approval, exclusion, comparison, reload, sidebar, and accessibility contract. Add no dependency and do not edit generated `dist/` files directly.
 
 ## Files to Change
@@ -18,10 +18,10 @@
 ## Implementation Steps
 
 1. **Create a common review-chrome grid.**
-   - Render the storyless chrome as two columns tied to `--ds-rail-width`: sidebar context and diff-canvas controls.
+   - Render raw diffs and narrated stories as two columns tied to `--ds-rail-width`: sidebar context and review-canvas controls.
    - Use a 56px title row and a 30px ledger row on desktop.
    - Let the sidebar header span both rows so its right border continues directly into the existing review rail.
-   - Keep the normal narrated-story controls intact outside storyless mode.
+   - Keep the narrated-story controls inside the shared frame and omit them only in storyless mode.
 
 2. **Move navigation and repository identity into the sidebar-owned header.**
    - Keep `[data-sidebar-toggle]` and the `/change` back link together.

@@ -15,14 +15,25 @@ export function availableAgents(): AgentName[] {
   return names;
 }
 
-export function storyPrompt(input: { base: string; head?: string; mode: 'brief' | 'guided' | 'detailed'; note?: string; files?: string[] }): string {
+export function storyPrompt(input: { base: string; head?: string; mode: 'brief' | 'guided' | 'detailed'; note?: string; files?: string[]; excludedFiles?: string[]; allReviewableFiles?: string[] }): string {
   const range = input.head ? `${input.base}..${input.head}` : `${input.base} against the working tree`;
+  const includedFiles = input.files ?? input.allReviewableFiles ?? [];
+  const intentionallyExcluded = (input.allReviewableFiles ?? []).filter((file) => !includedFiles.includes(file));
+  const reviewerNote = input.note?.trim();
+  const storyScope = input.files?.length || reviewerNote
+    ? {
+        includedFiles,
+        ...(intentionallyExcluded.length ? { excludedFiles: intentionallyExcluded } : {}),
+        ...(reviewerNote ? { reviewerNote } : {}),
+      }
+    : undefined;
   return [
     `Use the diffstory-storyteller skill to create .diffstory/story.json for ${range}.`,
-    `Set base to ${JSON.stringify(input.base)}${input.head ? ` and head to ${JSON.stringify(input.head)}` : ''}, mode to ${JSON.stringify(input.mode)}, and preserve the full guided-review schema: intent, compact summary, locally focused steps, viewport, highlights, and beats.`,
+    `Set version to 2, base to ${JSON.stringify(input.base)}${input.head ? ` and head to ${JSON.stringify(input.head)}` : ''}, mode to ${JSON.stringify(input.mode)}, and preserve the full guided-review schema: intent, concept primers when earned, compact summary, locally focused code steps, viewport, highlights, beats, calls, and returnsTo.`,
     'Read the actual code and diff before writing. Never write a changelog-style story.',
-    input.files?.length ? `Generate steps only for these changed files and persist the same exact list as storyScope.includedFiles: ${input.files.join(', ')}.` : '',
-    input.note?.trim() ? `Reviewer guidance: ${input.note.trim()}` : '',
+    storyScope ? `Generate changed/new-file steps only for storyScope.includedFiles and set top-level storyScope to exactly this JSON object: ${JSON.stringify(storyScope)}. Do not create coverage steps for storyScope.excludedFiles.` : '',
+    input.excludedFiles?.length ? `These generated, oversized, binary, or metadata-only files are outside the bounded story diff: ${input.excludedFiles.join(', ')}. Do not read or narrate them; the reviewer sees them separately.` : '',
+    reviewerNote ? `Reviewer guidance: ${reviewerNote}` : '',
     'Print short progress notes prefixed with >> while you work. Validate the JSON and changed-hunk coverage before finishing.',
   ].filter(Boolean).join('\n\n');
 }
