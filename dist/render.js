@@ -283,6 +283,12 @@ ${BRAND_HEAD_LINKS}
   </div>
 </header>
 
+<div class="ds-live-banner" data-live-banner role="status" aria-live="polite" aria-atomic="true" aria-label="Live review status" hidden>
+  <span data-live-message>Live review updated.</span>
+  <button type="button" data-live-reload>Reload</button>
+  <button type="button" data-live-dismiss aria-label="Dismiss live review status">×</button>
+</div>
+
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
 
 <div class="ds-layout">

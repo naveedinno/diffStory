@@ -88,6 +88,7 @@ test('reduced motion keeps status feedback but removes movement and pulses', () 
   assert.match(PAGE_CSS, /\.ds-readhead-fill\{transition:none!important\}/);
   assert.match(PAGE_CSS, /\.ds-agent-target\.is-busy \.ds-agent-target-icon[^}]*animation:none!important/);
   assert.match(PAGE_CSS, /prefers-reduced-motion:no-preference\)\{\.ds-voice-card:hover\{transform:translateY\(-1px\)\}/);
+  assert.match(PAGE_CSS, /\.ds-live-banner\{transition:none!important\}/);
   assert.match(DIFF_CSS, /\.ds-row\.is-voice-focus[^}]*animation:none!important;filter:none!important/);
   const progress = progressPanelStyles();
   assert.match(progress, /@media \(prefers-reduced-motion:reduce\)/);

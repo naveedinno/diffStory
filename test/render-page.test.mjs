@@ -1704,3 +1704,13 @@ test('unverified stories block approval and explain how to recover trust', () =>
   assert.match(html, /data-verdict="approve" disabled/);
   assert.match(html, /Regenerate story/);
 });
+
+test('live review banner is stable, polite, dismissible, and does not move document flow', () => {
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewPageToken: 'lease-token',
+  });
+  assert.match(html, /class="ds-live-banner" data-live-banner role="status" aria-live="polite" aria-atomic="true" aria-label="Live review status" hidden/);
+  assert.match(html, /data-live-reload>Reload</);
+  assert.match(html, /data-live-dismiss aria-label="Dismiss live review status"/);
+  assert.ok(html.indexOf('data-live-banner') < html.indexOf('class="ds-layout"'));
+});

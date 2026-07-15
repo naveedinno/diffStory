@@ -12,6 +12,11 @@ export const LEGACY_STORY_FILENAME = 'review-tour.json';
 export const COMMENTS_FILENAME = 'comments.json';
 export const REVIEW_STATE_FILENAME = 'review-state.json';
 export const DEFAULT_PORT = 7777;
+export const LIVE_DEBOUNCE_MS = 200;
+export const LIVE_POLL_MS = 4_000;
+export const LIVE_HEARTBEAT_MS = 15_000;
+export const REVIEW_PAGE_LEASE_TTL_MS = 12 * 60 * 60 * 1_000;
+export const REVIEW_PAGE_LEASE_LIMIT = 24;
 
 /** How many lines of context to ask git for around each change. */
 export const DIFF_CONTEXT_LINES = 3;

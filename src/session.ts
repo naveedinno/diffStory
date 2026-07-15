@@ -1,7 +1,8 @@
 // The one mutable thing the server holds: which repo is open and what to diff.
-// Single-window app → one session is enough, and matches the existing
-// "one agent run at a time" invariant.
+// One active repository still matches the existing "one agent run at a time"
+// invariant, while a small lease registry lets several tabs review that repo.
 import { randomBytes } from 'node:crypto';
+import { REVIEW_PAGE_LEASE_LIMIT, REVIEW_PAGE_LEASE_TTL_MS } from './config.js';
 
 export type ReviewPageMode = 'full' | 'since';
 
@@ -22,6 +23,11 @@ export interface ReviewPageLease {
   /** Exact content identity of the since-feedback snapshot named by `from`. */
   fromSnapshotDigest?: string;
   storyIdentity: string;
+  /** Selected story file watched for content drift, including storyless generation. */
+  storyPath: string;
+  /** Raw content identity at render time; "missing" is a valid initial state. */
+  storyFingerprint: string;
+  expiresAt: number;
   /** Per-file evidence rendered by this page. This lets an unchanged file stay
    * reviewable when an unrelated file moves, without weakening whole-review
    * actions such as approval. */
@@ -34,7 +40,7 @@ export interface Session {
   head?: string;
   selectedStory?: string | null;
   chooseStory: boolean;
-  reviewPageLease?: ReviewPageLease;
+  reviewPageLeases: Map<string, ReviewPageLease>;
 }
 
 export type SessionEntryScreen = 'stories' | 'review';
@@ -45,30 +51,60 @@ export function createSession(init: { repo: string | null; base?: string; head?:
     base: init.base,
     head: init.head,
     chooseStory: true,
+    reviewPageLeases: new Map(),
   };
 }
 
-/** Replace the prior single-window page lease and return the newly issued one. */
+function pruneReviewPageLeases(session: Session, now: number): void {
+  for (const [token, lease] of session.reviewPageLeases) {
+    if (lease.expiresAt <= now) session.reviewPageLeases.delete(token);
+  }
+  while (session.reviewPageLeases.size >= REVIEW_PAGE_LEASE_LIMIT) {
+    const oldest = session.reviewPageLeases.keys().next().value as string | undefined;
+    if (!oldest) break;
+    session.reviewPageLeases.delete(oldest);
+  }
+}
+
+/** Issue an opaque, bounded lease without invalidating other tabs for this repo. */
 export function issueReviewPageLease(
   session: Session,
-  input: Omit<ReviewPageLease, 'token'>,
+  input: Omit<ReviewPageLease, 'token' | 'expiresAt'>,
+  now = Date.now(),
 ): ReviewPageLease {
+  pruneReviewPageLeases(session, now);
   const lease: ReviewPageLease = {
     token: randomBytes(18).toString('base64url'),
     ...input,
+    expiresAt: now + REVIEW_PAGE_LEASE_TTL_MS,
   };
-  session.reviewPageLease = lease;
+  session.reviewPageLeases.set(lease.token, lease);
   return lease;
 }
 
-/** Resolve a caller's opaque token to the currently issued page lease. */
-export function getReviewPageLease(session: Session, token: string | undefined): ReviewPageLease | undefined {
-  if (!token || session.reviewPageLease?.token !== token) return undefined;
-  return session.reviewPageLease;
+/** Resolve and renew a caller's opaque token. Expired leases disappear eagerly. */
+export function getReviewPageLease(
+  session: Session,
+  token: string | undefined,
+  now = Date.now(),
+): ReviewPageLease | undefined {
+  if (!token) return undefined;
+  const lease = session.reviewPageLeases.get(token);
+  if (!lease) return undefined;
+  if (lease.expiresAt <= now) {
+    session.reviewPageLeases.delete(token);
+    return undefined;
+  }
+  lease.expiresAt = now + REVIEW_PAGE_LEASE_TTL_MS;
+  // Map order doubles as our LRU queue. A live tab that renews its lease should
+  // not be the next one evicted merely because it was opened first.
+  session.reviewPageLeases.delete(token);
+  session.reviewPageLeases.set(token, lease);
+  return lease;
 }
 
-export function clearReviewPageLease(session: Session): void {
-  session.reviewPageLease = undefined;
+export function clearReviewPageLeases(session: Session): void {
+  session.reviewPageLeases.clear();
 }
 
 /**
@@ -89,7 +125,7 @@ export function openSession(s: Session, repo: string): void {
   s.head = undefined;
   s.selectedStory = undefined;
   s.chooseStory = true;
-  clearReviewPageLease(s);
+  clearReviewPageLeases(s);
 }
 
 /** Close the current repo, returning to the picker. */
@@ -99,5 +135,5 @@ export function closeSession(s: Session): void {
   s.head = undefined;
   s.selectedStory = undefined;
   s.chooseStory = true;
-  clearReviewPageLease(s);
+  clearReviewPageLeases(s);
 }

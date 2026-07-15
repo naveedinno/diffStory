@@ -375,3 +375,20 @@ test('targeted story repair uses the shared progress panel', () => {
   assert.match(PAGE_CSS, /\.ds-story-tune\[open\]>summary\{/);
   assert.match(PAGE_CSS, /\.ds-reviewfocus\{[^}]*grid-column:1\/-1[^}]*grid-row:2/);
 });
+
+test('live review reconnects through the page lease and recovers durable state', () => {
+  assert.match(PAGE_JS, /new EventSource\(reviewPageUrl\('\/api\/events'\)\)/);
+  assert.match(PAGE_JS, /source\.onopen=function\(\)\{/);
+  assert.match(PAGE_JS, /refreshComments\(null,true\);refreshReviewState\(\)/);
+  assert.match(PAGE_JS, /source\.addEventListener\('state'/);
+  assert.match(PAGE_JS, /source\.addEventListener\('diff-changed'/);
+  assert.match(PAGE_JS, /source\.addEventListener\('story-synced'/);
+  assert.match(PAGE_JS, /var kinds=\['diff','story','disconnected'\]/);
+  assert.match(PAGE_JS, /data-live-diff-stale/);
+  assert.match(PAGE_JS, /fetch\(reviewPageUrl\('\/api\/review-state'\)\)/);
+  assert.match(PAGE_JS, /renderReviewTimeline\(state\.events\|\|\[\]\)/);
+  assert.match(PAGE_JS, /function aiTurnKeys\(/);
+  assert.match(PAGE_JS, /Agent replied to /);
+  assert.match(PAGE_CSS, /\.ds-live-banner\{position:fixed/);
+  assert.match(PAGE_CSS, /\.ds-live-banner button\{[^}]*min-width:44px[^}]*min-height:44px/);
+});

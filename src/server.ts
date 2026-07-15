@@ -107,6 +107,7 @@ import {
   validCodexThreadId,
 } from './codex-tasks.js';
 import { sendCodexDesktopTurn } from './codex-desktop.js';
+import { LiveEventHub, storyFileFingerprint } from './live.js';
 import {
   captureReviewSnapshot,
   diffSinceReview,
@@ -140,7 +141,11 @@ export function serve(opts: ServeOptions): Server {
     base: opts.baseOverride,
     head: opts.headOverride,
   });
-  const server = createServer((req, res) => handle(req, res, session, home));
+  const liveHub = new LiveEventHub({
+    leaseActive: (token) => !!getReviewPageLease(session, token),
+  });
+  const server = createServer((req, res) => handle(req, res, session, home, liveHub));
+  server.on('close', () => liveHub.dispose());
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
@@ -176,6 +181,15 @@ export function serve(opts: ServeOptions): Server {
 
 function noRepo(res: ServerResponse): void {
   sendJson(res, 409, { error: 'No repo is open.' });
+}
+
+/** Undefined means an unscoped legacy caller; null means a supplied dead lease. */
+function optionalRequestLease(session: Session, url: URL): ReviewPageLease | null | undefined {
+  const token = url.searchParams.get('page') ?? undefined;
+  if (!token) return undefined;
+  const lease = getReviewPageLease(session, token);
+  if (!lease || !session.repo || lease.repo !== session.repo) return null;
+  return lease;
 }
 
 function invalidFeedbackResponse(
@@ -287,7 +301,13 @@ function setLocalResponseHeaders(res: ServerResponse): void {
   res.setHeader('X-Frame-Options', 'DENY');
 }
 
-function handle(req: IncomingMessage, res: ServerResponse, session: Session, home: string): void {
+function handle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  session: Session,
+  home: string,
+  liveHub: LiveEventHub,
+): void {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const method = req.method ?? 'GET';
 
@@ -299,6 +319,16 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
   try {
     if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
       return sendMermaidBrowserAsset(res);
+    }
+    if (method === 'GET' && url.pathname === '/api/events') {
+      const lease = getReviewPageLease(session, url.searchParams.get('page') ?? undefined);
+      if (!lease || !session.repo || lease.repo !== session.repo) {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      liveHub.connect(lease, req, res);
+      return;
     }
     if (method === 'GET' && url.pathname === '/') {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
@@ -338,6 +368,7 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       return redirect(res, repoRoute(session.repo, 'stories'));
     }
     if (method === 'GET' && url.pathname === '/repos') {
+      if (session.repo) liveHub.closeRepo(session.repo);
       closeSession(session);
       return sendHtml(res, pickerStub(home));
     }
@@ -401,12 +432,14 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
         if (!path || !isGitRepo(path)) {
           return sendJson(res, 400, { error: 'Not a git repository.' });
         }
+        if (session.repo && session.repo !== path) liveHub.closeRepo(session.repo);
         openSession(session, path);
         recordRecent(home, path, nowMs());
         sendJson(res, 200, { ...inspectRepo(path), route: repoRoute(path, sessionEntryScreen(session)) });
       });
     }
     if (method === 'POST' && url.pathname === '/api/repo/close') {
+      if (session.repo) liveHub.closeRepo(session.repo);
       closeSession(session);
       return sendJson(res, 200, { ok: true });
     }
@@ -476,13 +509,18 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       return sendLeasedHtml(res, session, page, renderExcludedFileResponse(page, url.searchParams.get('file') ?? ''));
     }
     if (method === 'GET' && url.pathname === '/api/review-state') {
+      const token = url.searchParams.get('page') ?? undefined;
+      const lease = token ? getReviewPageLease(session, token) : undefined;
+      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
+        return sendReviewPageConflict(res, 'This review page is no longer active.');
+      }
       if (!session.repo) return noRepo(res);
-      const data = sessionReviewData(session);
+      const data = lease ? reviewDataForLease(lease) : sessionReviewData(session);
       return sendJson(
         res,
         200,
         reviewStateSummary(
-          session.repo,
+          lease?.repo ?? session.repo,
           data.base,
           data.head,
           data.diff,
@@ -492,8 +530,15 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       );
     }
     if (method === 'POST' && url.pathname === '/api/review/checkpoint') {
+      const token = url.searchParams.get('page') ?? undefined;
+      const lease = token ? getReviewPageLease(session, token) : undefined;
+      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
+        return sendReviewPageConflict(res, 'This review page is no longer active.');
+      }
       if (!session.repo) return noRepo(res);
-      const snapshot = captureSessionReview(session, 'opened');
+      const snapshot = lease
+        ? captureLeasedReview(lease, 'opened')
+        : captureSessionReview(session, 'opened');
       return sendJson(res, 200, {
         ok: true,
         snapshot: { id: snapshot.id, round: snapshot.round, createdAt: snapshot.createdAt },
@@ -686,25 +731,33 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       });
     }
     if (method === 'GET' && url.pathname === '/api/comments') {
-      if (!session.repo) return noRepo(res);
-      const loaded = loadCommentsWithHealth(session.repo);
+      const token = url.searchParams.get('page') ?? undefined;
+      const lease = token ? getReviewPageLease(session, token) : undefined;
+      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
+        return sendReviewPageConflict(res, 'This review page is no longer active.');
+      }
+      const repo = lease?.repo ?? session.repo;
+      if (!repo) return noRepo(res);
+      const loaded = loadCommentsWithHealth(repo);
       if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
       return sendJson(res, 200, loaded.comments);
     }
     if (method === 'POST' && url.pathname === '/api/comments') {
-      if (!session.repo) return noRepo(res);
-      const repo = session.repo;
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      const repo = lease?.repo ?? session.repo;
+      if (!repo) return noRepo(res);
       return readBody(req, res, (body) => {
         try {
           const loaded = loadCommentsWithHealth(repo);
           if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
           const input = JSON.parse(body) as NewComment;
-          const snapshot = captureSessionReview(session, 'opened');
+          const snapshot = lease ? captureLeasedReview(lease, 'opened') : captureSessionReview(session, 'opened');
           input.reviewRound = snapshot.round;
           input.reviewSnapshotId = snapshot.id;
           const comment = addComment(repo, input);
-          recordSessionEvent(
-            session,
+          recordRequestEvent(
+            session, lease,
             'comment-added',
             'Comment added',
             `${comment.file}:${comment.line}`,
@@ -738,16 +791,18 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length), home);
     }
     if (method === 'POST' && url.pathname.startsWith('/api/comments/') && url.pathname.endsWith('/message')) {
-      if (!session.repo) return noRepo(res);
-      const repo = session.repo;
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      const repo = lease?.repo ?? session.repo;
+      if (!repo) return noRepo(res);
       const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length, -'/message'.length));
       return readBody(req, res, (body) => {
         try {
           const { text } = JSON.parse(body || '{}') as { text?: string };
           const updated = appendUserMessage(repo, id, text ?? '');
           if (updated) {
-            recordSessionEvent(
-              session,
+            recordRequestEvent(
+              session, lease,
               'comment-reopened',
               'Follow-up added',
               `${updated.file}:${updated.line}`,
@@ -762,16 +817,18 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       });
     }
     if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
-      if (!session.repo) return noRepo(res);
-      const repo = session.repo;
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      const repo = lease?.repo ?? session.repo;
+      if (!repo) return noRepo(res);
       const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
       return readBody(req, res, (body) => {
         try {
           const { status } = JSON.parse(body || '{}') as { status?: string };
           const updated = setCommentStatus(repo, id, status ?? '');
           if (updated) {
-            recordSessionEvent(
-              session,
+            recordRequestEvent(
+              session, lease,
               updated.status === 'resolved' ? 'comment-resolved' : 'comment-reopened',
               updated.status === 'resolved' ? 'Comment verified' : 'Comment reopened',
               `${updated.file}:${updated.line}`,
@@ -786,16 +843,19 @@ function handle(req: IncomingMessage, res: ServerResponse, session: Session, hom
       });
     }
     if (method === 'DELETE' && url.pathname.startsWith('/api/comments/')) {
-      if (!session.repo) return noRepo(res);
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      const repo = lease?.repo ?? session.repo;
+      if (!repo) return noRepo(res);
       const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
       try {
-        const loaded = loadCommentsWithHealth(session.repo);
+        const loaded = loadCommentsWithHealth(repo);
         if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
         const deleted = loaded.comments.find((comment) => comment.id === id);
-        const ok = deleteComment(session.repo, id);
+        const ok = deleteComment(repo, id);
         if (ok && deleted) {
-          recordSessionEvent(
-            session,
+          recordRequestEvent(
+            session, lease,
             'comment-deleted',
             'Comment deleted',
             `${deleted.file}:${deleted.line}`,
@@ -948,6 +1008,7 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     ? reviewState.snapshots.find((snapshot) => snapshot.id === reviewFrom)?.contentDigest
     : undefined;
   const tour: Tour = { version: 1, title: '', summary: '', steps: [], base };
+  const storyPath = selectedStoryPath(session);
   const pageLease = issueReviewPageLease(session, {
     repo,
     base,
@@ -957,7 +1018,9 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     mode: reviewMode,
     ...(reviewFrom ? { from: reviewFrom } : {}),
     ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
-    storyIdentity: reviewStoryIdentity(session, tour, true),
+    storyIdentity: reviewStoryIdentity(storyPath, tour, true),
+    storyPath,
+    storyFingerprint: storyFileFingerprint(storyPath),
     fileFingerprints: reviewFileFingerprints(repo, head, files, tour, true),
   });
   return renderPage({
@@ -1044,6 +1107,7 @@ function renderReview(session: Session, params = new URLSearchParams()): string 
     : diffFingerprint(diff) === tour.diffFingerprint
       ? 'current'
       : 'stale';
+  const storyPath = selectedStoryPath(session);
   const pageLease = issueReviewPageLease(session, {
     repo,
     base,
@@ -1053,7 +1117,9 @@ function renderReview(session: Session, params = new URLSearchParams()): string 
     mode: reviewMode,
     ...(reviewFrom ? { from: reviewFrom } : {}),
     ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
-    storyIdentity: reviewStoryIdentity(session, tour, false),
+    storyIdentity: reviewStoryIdentity(storyPath, tour, false),
+    storyPath,
+    storyFingerprint: storyFileFingerprint(storyPath),
     fileFingerprints: reviewFileFingerprints(repo, head, files, tour, false),
   });
   return renderPage({
@@ -1134,9 +1200,34 @@ interface LeasedReviewPage {
 
 type ReviewPageLeaseResult = LeasedReviewPage | { ok: false; error: string };
 
-function reviewStoryIdentity(session: Session, tour: Tour, storyless: boolean): string {
+function reviewStoryIdentity(storyPath: string, tour: Tour, storyless: boolean): string {
   if (storyless) return 'storyless';
-  return diffFingerprint(`${selectedStoryPath(session)}\0${JSON.stringify(tour)}`);
+  return diffFingerprint(`${storyPath}\0${JSON.stringify(tour)}`);
+}
+
+/** Re-read exactly the immutable scope and story named by a page lease. */
+function reviewDataForLease(lease: ReviewPageLease): ReviewData {
+  const storyless = lease.storyIdentity === 'storyless';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tour: Tour = storyless
+      ? { version: 1, title: '', summary: '', steps: [], base: lease.base }
+      : loadTour(lease.storyPath);
+    const diff = getDiff(lease.repo, lease.base, lease.head);
+    const changeFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
+    const confirmedDiff = getDiff(lease.repo, lease.base, lease.head);
+    const confirmedFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
+    if (diff === confirmedDiff && changeFingerprint === confirmedFingerprint) {
+      return {
+        tour,
+        base: lease.base,
+        ...(lease.head ? { head: lease.head } : {}),
+        diff,
+        files: parseUnifiedDiff(diff),
+        changeFingerprint,
+      };
+    }
+  }
+  throw new Error('The change is moving too quickly to capture a stable review snapshot. Try again.');
 }
 
 /** Identity of exactly what one file panel can render. Changed files are fully
@@ -1191,13 +1282,10 @@ function validateReviewPageLease(
   }
 
   const storyless = lease.storyIdentity === 'storyless';
-  if (storyless !== (session.selectedStory === null)) {
-    return { ok: false, error: 'The selected review story changed after this page loaded.' };
-  }
 
   let data: ReviewData;
   try {
-    data = sessionReviewData(session, !storyless);
+    data = reviewDataForLease(lease);
   } catch (error) {
     return {
       ok: false,
@@ -1221,7 +1309,7 @@ function validateReviewPageLease(
   ) {
     return { ok: false, error: 'The review scope changed after this page loaded.' };
   }
-  if (reviewStoryIdentity(session, data.tour, storyless) !== lease.storyIdentity) {
+  if (reviewStoryIdentity(lease.storyPath, data.tour, storyless) !== lease.storyIdentity) {
     return { ok: false, error: 'The guided review changed after this page loaded.' };
   }
   if (lease.mode === 'since') {
@@ -1301,6 +1389,23 @@ function captureSessionReview(
   });
 }
 
+function captureLeasedReview(
+  lease: ReviewPageLease,
+  reason: ReviewSnapshotReason,
+  commentIds?: string[],
+) {
+  const data = reviewDataForLease(lease);
+  return captureReviewSnapshot(lease.repo, {
+    base: data.base,
+    head: data.head,
+    diff: data.diff,
+    changeFingerprint: data.changeFingerprint,
+    files: data.files,
+    reason,
+    commentIds,
+  });
+}
+
 function recordSessionEvent(
   session: Session,
   kind: ReviewEventKind,
@@ -1311,6 +1416,24 @@ function recordSessionEvent(
   if (!session.repo) return;
   const data = sessionReviewData(session);
   recordReviewEvent(session.repo, data.base, data.head, {
+    kind,
+    label,
+    ...(detail ? { detail } : {}),
+    ...(affectsApproval ? { affectsApproval: true } : {}),
+  });
+}
+
+function recordRequestEvent(
+  session: Session,
+  lease: ReviewPageLease | undefined,
+  kind: ReviewEventKind,
+  label: string,
+  detail?: string,
+  affectsApproval = false,
+): void {
+  if (!lease) return recordSessionEvent(session, kind, label, detail, affectsApproval);
+  const data = reviewDataForLease(lease);
+  recordReviewEvent(lease.repo, data.base, data.head, {
     kind,
     label,
     ...(detail ? { detail } : {}),
