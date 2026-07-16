@@ -21,6 +21,7 @@ const v2CodeStep = (id = 'code', order = 2, overrides = {}) => ({
   range: [1, 2],
   kind: 'changed',
   why: 'This is where the new behavior is implemented.',
+  question: 'Does this implementation prove the intended behavior?',
   ...overrides,
 });
 
@@ -93,6 +94,7 @@ test('generated-story validation keeps the changed range in frame and in at leas
       beats: [{ text: 'This only points at the caller.', highlights: [[10, 12]] }],
       kind: 'changed',
       why: 'The changed branch sits downstream.',
+      question: 'Does the changed branch return the intended result?',
     }],
   };
 
@@ -162,6 +164,34 @@ test('generated-story validation keeps each camera shot and pointing gesture loc
     }],
   };
   assert.ok(validateGeneratedTour(mismatched).includes('steps[0].highlights must match the union of steps[0].beats highlights'));
+});
+
+test('generated guided stories reject over-broad cameras and too many review beats', () => {
+  const story = {
+    version: 2,
+    mode: 'guided',
+    title: 'Broad story',
+    summary: 'Follow one broad step.',
+    intent: {
+      goal: 'Let a reviewer inspect the behavior.',
+      design: 'The route reaches one changed branch and returns the result.',
+      sources: ['conversation'],
+    },
+    steps: [{
+      id: 's1', order: 1, title: 'One broad decision', question: 'Does this decision stay bounded?',
+      file: 'x.ts', range: [20, 22], viewport: [1, 41], highlights: [[2, 2], [10, 10], [20, 22], [38, 38]],
+      beats: [
+        { text: 'First.', highlights: [[2, 2]] },
+        { text: 'Second.', highlights: [[10, 10]] },
+        { text: 'Third.', highlights: [[20, 22]] },
+        { text: 'Fourth.', highlights: [[38, 38]] },
+      ],
+      kind: 'changed', why: 'This is too broad for one guided stop.',
+    }],
+  };
+  const errors = validateGeneratedTour(story);
+  assert.ok(errors.includes('steps[0].viewport should stay within 40 lines in guided mode; split the step'));
+  assert.ok(errors.includes('steps[0].beats should contain at most 3 review points in guided mode; split the step'));
 });
 
 test('loadTour canonicalizes deleted step kind to changed', () => {

@@ -172,8 +172,8 @@ test('starting with a repo lands on history and lists the primary story', async 
     assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
 
     const picker = await (await fetch(`${base}/repos`)).text();
-    assert.ok(picker.includes('Open a repository'), 'switch repo returns to the app picker');
-    assert.ok(picker.includes('Open by path'), 'repo picker can open another folder');
+    assert.ok(picker.includes('Add repository'), 'switch repo returns to the app picker');
+    assert.ok(picker.includes('id="quickAddBtn"'), 'repo picker can open another folder');
   } finally {
     server.close();
     process.env.HOME = realHome;

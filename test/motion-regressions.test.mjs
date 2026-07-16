@@ -79,6 +79,7 @@ test('read aloud focus is static while loading state remains explicit', () => {
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /animation|filter/);
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /animation|filter/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-speaking \.ds-readaloud-ico\{animation:none;box-shadow:0 0 0 3px var\(--accent-soft\)\}/);
+  assert.match(PAGE_CSS, /\.ds-readaloud-primary\.is-active \.ds-readaloud-ico\.is-stop::before\{content:"";width:14px;height:14px;border-radius:3px;background:currentColor/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading/);
 });
 

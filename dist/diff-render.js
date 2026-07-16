@@ -75,10 +75,11 @@ export function renderSplitRow(row, opts = {}) {
     const primaryTarget = opts.rightTarget ?? opts.leftTarget;
     const attrs = reviewRowAttrs(primaryTarget, row.type, row.content, primaryTarget ? opts.stepId : undefined);
     const focusAttr = opts.focusIndex === null || opts.focusIndex === undefined ? '' : ` data-step-focus="${opts.focusIndex}"`;
+    const cameraAttr = opts.cameraIndices?.length ? ` data-step-camera="${opts.cameraIndices.join(' ')}"` : '';
     const cells = opts.single
         ? singleCell(row, opts.rightTarget)
         : `${cell('left', row, opts.leftTarget, opts.sides?.left)}<span class="ds-celldiv" aria-hidden="true"></span>${cell('right', row, opts.rightTarget, opts.sides?.right)}`;
-    return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}</div>`;
+    return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}${cameraAttr}>${cells}</div>`;
 }
 export function renderUnifiedRow(row, target, intra) {
     const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';

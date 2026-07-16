@@ -13,6 +13,7 @@ const CONCEPT_CODE_FIELDS = [
     'beats',
     'focus',
     'why',
+    'question',
     'calls',
     'returnsTo',
 ];
@@ -264,6 +265,9 @@ function validateCodeStep(step, where, storyFiles, errors) {
         errors.push(`${where}.file is required`);
     if (typeof step.why !== 'string')
         errors.push(`${where}.why is required`);
+    if (step.question !== undefined && (typeof step.question !== 'string' || !step.question.trim())) {
+        errors.push(`${where}.question must be a non-empty string`);
+    }
     validateStringArray(step.calls, `${where}.calls`, errors);
     if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
         errors.push(`${where}.returnsTo must be a string`);
@@ -386,6 +390,9 @@ export function validateTour(obj) {
         }
         if (typeof step.title !== 'string' || !step.title)
             errors.push(`${where}.title is required`);
+        if (step.chapter !== undefined && (typeof step.chapter !== 'string' || !step.chapter.trim())) {
+            errors.push(`${where}.chapter must be a non-empty string`);
+        }
         validateStringArray(step.tags, `${where}.tags`, errors);
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
@@ -535,6 +542,8 @@ export function validateGeneratedTour(tour) {
         }
         if (!step.why.trim())
             errors.push(`${where}.why must be a non-empty fallback recap`);
+        if (!step.question?.trim())
+            errors.push(`${where}.question is required for a generated story`);
         if (!step.viewport)
             errors.push(`${where}.viewport is required for a generated story`);
         if (!step.highlights?.length)
@@ -548,8 +557,19 @@ export function validateGeneratedTour(tour) {
             if (step.viewport[1] - step.viewport[0] + 1 > 60) {
                 errors.push(`${where}.viewport must stay within one 60-line camera shot`);
             }
+            if ((tour.mode === 'brief' || tour.mode === 'guided') && step.viewport[1] - step.viewport[0] + 1 > 40) {
+                errors.push(`${where}.viewport should stay within 40 lines in ${tour.mode} mode; split the step`);
+            }
+        }
+        const beatLimit = tour.mode === 'detailed' ? 5 : 3;
+        if ((step.beats?.length ?? 0) > beatLimit) {
+            errors.push(`${where}.beats should contain at most ${beatLimit} review points in ${tour.mode ?? 'guided'} mode; split the step`);
         }
         step.beats?.forEach((beat, beatIndex) => {
+            const sortedHighlights = [...beat.highlights].sort((a, b) => a[0] - b[0]);
+            if (sortedHighlights.some((range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10)) {
+                errors.push(`${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`);
+            }
             beat.highlights.forEach((highlight, highlightIndex) => {
                 if (!isDeletionAnchor(highlight) && highlight[1] - highlight[0] + 1 > 12) {
                     errors.push(`${where}.beats[${beatIndex}].highlights[${highlightIndex}] must point at at most 12 lines`);

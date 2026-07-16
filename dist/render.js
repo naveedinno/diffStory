@@ -110,7 +110,7 @@ export function renderPage(input) {
                         ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
                         : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
         : '';
-    const railCards = model.steps.map((s, i) => railCard(s, i)).join('');
+    const railCards = storyRail(model.steps);
     const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
     const stepPanels = model.steps
         // The Overview is active initially, so keep only its adjacent first step in
@@ -442,6 +442,39 @@ function railCard(s, i) {
     </span>
   </button>`;
 }
+function storyRail(steps) {
+    if (steps.length <= 10)
+        return steps.map((step, index) => railCard(step, index)).join('');
+    const explicit = steps.some((step) => step.chapter);
+    const groups = [];
+    if (explicit) {
+        steps.forEach((step, index) => {
+            const label = step.chapter || 'More to review';
+            const previous = groups[groups.length - 1];
+            if (previous?.label === label)
+                previous.items.push({ step, index });
+            else
+                groups.push({ label, items: [{ step, index }] });
+        });
+    }
+    else {
+        const size = 6;
+        for (let start = 0; start < steps.length; start += size) {
+            const groupIndex = groups.length;
+            const end = Math.min(steps.length, start + size);
+            const label = groupIndex === 0
+                ? 'Start here'
+                : end === steps.length
+                    ? 'Boundaries and proof'
+                    : `Follow the flow · ${groupIndex + 1}`;
+            groups.push({ label, items: steps.slice(start, end).map((step, offset) => ({ step, index: start + offset })) });
+        }
+    }
+    return groups.map((group, index) => `<details class="ds-railchapter" data-story-chapter${index === 0 ? ' open' : ''}>
+    <summary><span>${esc(group.label)}</span><small>${group.items.length} ${plural(group.items.length, 'step')}</small></summary>
+    <div class="ds-railchapter-steps">${group.items.map(({ step, index: stepIndex }) => railCard(step, stepIndex)).join('')}</div>
+  </details>`).join('');
+}
 // The Overview panel: the change's title and summary up front (this is the only
 // place the summary is shown in full), a few orienting facts, and one button into
 // the walkthrough. It is navigation index 0 — shown first, before any step.
@@ -541,6 +574,8 @@ function naturalList(items) {
     return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 function reviewFocus(step) {
+    if (step.kind !== 'concept')
+        return step.question;
     const phrases = reviewCues(step)
         .map((cue) => REVIEW_FOCUS_PHRASES[cue.label])
         .filter((phrase) => Boolean(phrase))
@@ -755,7 +790,7 @@ function railFileItem(f, i, depth, meta) {
         .map((row) => row.content)
         .join(' ')
         .toLowerCase();
-    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(`${f.symbols.join(' ')} ${searchCode}`)}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}${esc(declarationTitle)}">
+    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-file-path="${esc(f.file)}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(`${f.symbols.join(' ')} ${searchCode}`)}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}${esc(declarationTitle)}">
     <span class="ds-fileitem-spacer" aria-hidden="true"></span>
     <span class="ds-fileitem-icon k-${kindClass}" aria-hidden="true">${FILE_TREE_FILE}</span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
@@ -805,7 +840,7 @@ function codeStepPanel(repo, s, i, total, comments) {
     const flow = /^(Calls|Returns)/.test(s.flow)
         ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
         : '';
-    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
+    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-story-lens="focus"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
@@ -825,14 +860,21 @@ function codeStepPanel(repo, s, i, total, comments) {
       </div>
     </div>
     <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Review focus</span><span class="ds-reviewfocus">${esc(reviewFocus(s))}</span><span class="ds-flex"></span><details class="ds-story-tune"><summary aria-label="Tune explanation">Tune&nbsp;<span class="ds-story-tune-long">explanation</span></summary><div class="ds-story-tune-pop"><button type="button" data-story-repair="shorten" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}"><strong>Make shorter</strong><small>Condense this explanation without changing its meaning.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}"><strong>Split into two steps</strong><small>Break a dense explanation into two focused review stops.</small></button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button></div>
+      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Review question</span><span class="ds-reviewfocus">${esc(reviewFocus(s))}</span><span class="ds-flex"></span><details class="ds-story-tune"><summary aria-label="Repair this story step">Repair&nbsp;<span class="ds-story-tune-long">step</span></summary><div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}"><strong>Rewrite explanation</strong><small>Make the question and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(s.id)}" data-story-file="${esc(s.file)}"><strong>Split into smaller stops</strong><small>Give each review question its own local camera.</small></button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button></div>
+      ${stepHealthHtml(s)}
       ${stepStoryHtml(s, diffRegionId)}
     </div>
     <div class="ds-diffscroll">
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
-          <span class="ds-difthint" data-difthint>Showing storyteller-selected viewport</span>
+          <span class="ds-difthint" data-difthint>Active beat + nearby context</span>
           <span class="ds-flex"></span>
+          <div class="ds-storylens" role="group" aria-label="Story attention level">
+            <button class="is-active" data-story-lens="focus" aria-pressed="true">Focus</button>
+            <button data-story-lens="context" aria-pressed="false">Context</button>
+            <button data-story-lens="full" aria-pressed="false">Full</button>
+          </div>
+          <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           ${changeJumpControls()}
           <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
             <button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>
@@ -846,6 +888,16 @@ function codeStepPanel(repo, s, i, total, comments) {
       </div>
     </div>
   </section>`;
+}
+function stepHealthHtml(step) {
+    if (!step.health.broad)
+        return '';
+    return `<div class="ds-step-health" role="status">
+    <span class="ds-step-health-mark" aria-hidden="true">!</span>
+    <span class="ds-step-health-copy"><strong>Broad step</strong><small>${esc(step.health.reasons.join(' · '))}</small></span>
+    <button type="button" data-story-lens="focus">Focus this beat</button>
+    <button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}">Split step</button>
+  </div>`;
 }
 function conceptStepPanel(s, i, total, stepIndexById) {
     const nextDisabled = i === total - 1 ? ' disabled' : '';
@@ -914,7 +966,11 @@ function conceptSpeechText(s) {
 function stepStoryHtml(s, diffRegionId) {
     if (!s.beats.length)
         return `<p class="ds-why-text">${nl(esc(s.why))}</p>`;
-    return `<div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div><div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>`;
+    return `<div class="ds-beatnav">
+      <span class="ds-beatnav-current"><b data-beat-current>Beat 1</b><span>of ${s.beats.length}</span></span>
+      <span class="ds-beatnav-hint">Use ← → to move</span>
+      <span class="ds-beatnav-actions"><button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button><button type="button" data-beat-move="1" aria-label="Next review beat">→</button></span>
+    </div><div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div><div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>`;
 }
 function beatHtml(beat, file, diffRegionId) {
     const destination = beatDestination(file, beat.highlights);
@@ -936,7 +992,7 @@ function storyUnifiedDiffInner(s, comments) {
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
         return ((bi > 0 ? renderHunkGap() : '') +
-            block.map((row) => storyUnifiedRow(row, s, comments, bi, intra)).join(''));
+            block.map((row, rowIndex) => storyUnifiedRow(row, s, comments, bi, block, rowIndex, intra)).join(''));
     })
         .join('');
     const note = s.note && s.blocks.some((b) => b.length)
@@ -949,7 +1005,7 @@ function storyUnifiedHead(s) {
     const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
     return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ''}</div>`;
 }
-function storyUnifiedRow(row, s, comments, blockIndex, intra) {
+function storyUnifiedRow(row, s, comments, blockIndex, block, rowIndex, intra) {
     const target = row.type === 'del' && row.oldNo !== undefined
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : row.newNo !== undefined
@@ -959,8 +1015,10 @@ function storyUnifiedRow(row, s, comments, blockIndex, intra) {
     const side = row.type === 'del' ? intra?.get(row)?.left : row.type === 'add' ? intra?.get(row)?.right : undefined;
     const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
     const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
+    const cameraIndices = rowCameraIndices(row, s, block, rowIndex);
+    const cameraAttr = cameraIndices.length ? ` data-step-camera="${cameraIndices.join(' ')}"` : '';
     const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
-    const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
+    const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}${cameraAttr}`);
     return rowHtml + threadForTargets([target], comments);
 }
 function diffInner(s, comments) {
@@ -973,7 +1031,7 @@ function diffInner(s, comments) {
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
         return ((bi > 0 ? hunkGap() : '') +
-            block.map((row) => sbsRow(row, s, comments, bi, intra)).join(''));
+            block.map((row, rowIndex) => sbsRow(row, s, comments, bi, block, rowIndex, intra)).join(''));
     })
         .join('');
     const note = s.note && s.blocks.some((b) => b.length)
@@ -1007,7 +1065,7 @@ function diffHead(s) {
     </span>
   </div>`;
 }
-function sbsRow(row, s, comments, blockIndex, intra) {
+function sbsRow(row, s, comments, blockIndex, block, rowIndex, intra) {
     const leftTarget = !s.context && !s.newFile && row.oldNo !== undefined
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : undefined;
@@ -1017,10 +1075,35 @@ function sbsRow(row, s, comments, blockIndex, intra) {
         rightTarget,
         stepId: s.id,
         focusIndex: rowVoiceFocusIndex(row, s, blockIndex),
+        cameraIndices: rowCameraIndices(row, s, block, rowIndex),
         single: s.context || s.newFile,
         sides: intra?.get(row),
     });
     return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
+}
+function rowCameraIndices(row, step, block, rowIndex) {
+    return step.cameraGroups
+        .map((ranges, group) => ({ group, matches: ranges.some((range) => rowInCameraRange(row, block, rowIndex, step, range)) }))
+        .filter((entry) => entry.matches)
+        .map((entry) => entry.group);
+}
+function rowInCameraRange(row, block, rowIndex, step, [start, end]) {
+    if (row.newNo !== undefined)
+        return row.newNo >= start && row.newNo <= end;
+    if (step.kind !== 'changed' || row.type !== 'del')
+        return false;
+    if (start === 0 && end === 0)
+        return true;
+    const neighbors = [nearestRenderedNewLine(block, rowIndex, -1), nearestRenderedNewLine(block, rowIndex, 1)]
+        .filter((line) => line !== undefined);
+    return neighbors.some((line) => line >= start - 1 && line <= end + 1);
+}
+function nearestRenderedNewLine(block, from, direction) {
+    for (let index = from + direction; index >= 0 && index < block.length; index += direction) {
+        if (block[index].newNo !== undefined)
+            return block[index].newNo;
+    }
+    return undefined;
 }
 function rowVoiceFocusIndex(row, s, blockIndex) {
     const idx = s.focusGroups.findIndex((ranges) => ranges.some((range) => rowInFocusRange(row, s, range)));

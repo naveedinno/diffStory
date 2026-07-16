@@ -79,12 +79,14 @@ function buildCodeStep(repo, step, files, byId, total, headRef) {
         id: step.id,
         order: step.order,
         title: step.title,
+        chapter: step.chapter?.trim() || undefined,
         file: step.file,
         oldFile: diffFile?.oldPath ?? step.file,
         viewport,
         range: viewport,
         focusRanges: focusGroups.flat(),
         focusGroups,
+        cameraGroups: stepCameraGroups(viewport, focusGroups),
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
@@ -92,6 +94,8 @@ function buildCodeStep(repo, step, files, byId, total, headRef) {
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
         why: step.why,
+        question: step.question?.trim() || fallbackReviewQuestion(step.title),
+        health: stepHealth(step, viewport, focusGroups),
         beats,
         flow: flowLabel(step, byId, total),
         blocks,
@@ -103,6 +107,7 @@ function buildConceptStep(step, byId) {
         id: step.id,
         order: step.order,
         title: step.title,
+        chapter: step.chapter?.trim() || undefined,
         kind: 'concept',
         kindLabel: STEP_KIND_LABEL.concept,
         tags: step.tags ?? [],
@@ -114,6 +119,55 @@ function buildConceptStep(step, byId) {
             .map((target) => ({ id: target.id, order: target.order, title: target.title }))
             .sort((a, b) => a.order - b.order),
     };
+}
+function fallbackReviewQuestion(title) {
+    const claim = title.trim().replace(/[.?!]+$/, '');
+    return `Does the code prove this claim: ${claim}?`;
+}
+function stepCameraGroups(viewport, focusGroups) {
+    if (viewport[0] === 0 && viewport[1] === 0)
+        return focusGroups;
+    return focusGroups.map((group) => mergeRanges(group.map(([start, end]) => [
+        Math.max(viewport[0], start - 3),
+        Math.min(viewport[1], end + 3),
+    ])));
+}
+function mergeRanges(ranges) {
+    const sorted = [...ranges].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const merged = [];
+    for (const range of sorted) {
+        const previous = merged[merged.length - 1];
+        if (!previous || range[0] > previous[1] + 1)
+            merged.push([...range]);
+        else
+            previous[1] = Math.max(previous[1], range[1]);
+    }
+    return merged;
+}
+function stepHealth(step, viewport, focusGroups) {
+    const viewportLines = viewport[0] === 0 ? 0 : viewport[1] - viewport[0] + 1;
+    const beatCount = step.beats?.length ?? focusGroups.length;
+    const reasons = [];
+    if (viewportLines > 30)
+        reasons.push(`${viewportLines} lines in one step`);
+    if (beatCount > 3)
+        reasons.push(`${beatCount} separate review beats`);
+    const hasDistantFocus = focusGroups.some((group) => {
+        const sorted = [...group].sort((a, b) => a[0] - b[0]);
+        return sorted.some((range, index) => index > 0 && range[0] - sorted[index - 1][1] > 10);
+    });
+    if (hasDistantFocus)
+        reasons.push('focus jumps across distant code');
+    const widestSpan = focusGroups.reduce((widest, group) => {
+        if (!group.length || group[0][0] === 0)
+            return widest;
+        const starts = group.map((range) => range[0]);
+        const ends = group.map((range) => range[1]);
+        return Math.max(widest, Math.max(...ends) - Math.min(...starts) + 1);
+    }, 0);
+    if (widestSpan > 20)
+        reasons.push(`${widestSpan}-line focus span`);
+    return { broad: reasons.length > 0, reasons, viewportLines, beatCount };
 }
 function stepViewport(step) {
     return step.viewport ?? step.range;

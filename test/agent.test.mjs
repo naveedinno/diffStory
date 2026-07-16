@@ -82,7 +82,7 @@ test('storyPrompt pins the concept primer schema and safety contract', () => {
   assert.ok(p.includes('"kind":"concept"'));
   assert.ok(p.includes('"body"'));
   assert.ok(p.includes('"preparesFor"'));
-  assert.ok(p.includes('must not contain "file", "range", "viewport", "highlights", "beats", "why", "calls", or "returnsTo"'));
+  assert.ok(p.includes('must not contain "file", "range", "viewport", "highlights", "beats", "why", "question", "calls", or "returnsTo"'));
   assert.ok(p.includes('60-180 words'));
   assert.ok(p.includes('hard maximum is 220 words'));
   assert.ok(p.includes('Concept primers never claim diff coverage'));
@@ -105,7 +105,9 @@ test('storyPrompt asks for a context map and hard quality gates', () => {
   const p = storyPrompt('main');
   assert.ok(p.includes('private context map'));
   assert.ok(p.includes('entry -> existing owner -> changed decision -> downstream effect -> proof or risk'));
-  assert.ok(p.includes('Each code step must answer a reviewer question'));
+  assert.ok(p.includes('Each code step must include a short "question"'));
+  assert.ok(p.includes('more than 10 steps'));
+  assert.ok(p.includes('3-7 consecutive steps'));
   assert.ok(p.includes('coverage ledger'));
   assert.ok(p.includes('"range" is only the changed-line coverage anchor'));
   assert.ok(p.includes('Truth contract'));
@@ -129,7 +131,9 @@ test('storyPrompt choreographs viewport and highlights as a guided camera', () =
   assert.ok(p.includes('viewport and highlights as a guided camera'));
   assert.ok(p.includes('orientation beat'));
   assert.ok(p.includes('Context beats may and should highlight unchanged lines'));
-  assert.ok(p.includes('at most 60 lines'));
+  assert.ok(p.includes('Target 20-30 visible lines'));
+  assert.ok(p.includes('40 lines'));
+  assert.ok(p.includes('60 lines is an exceptional hard maximum'));
   assert.ok(p.includes('never more than 12'));
   assert.ok(p.includes('top-level "highlights" must match the union of the beat highlights'));
   assert.ok(p.includes('Memory test:'));
@@ -284,7 +288,9 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
   assert.ok(skill.includes('flowchart`, `sequenceDiagram`, or `stateDiagram-v2'));
   assert.ok(skill.includes('caption is required'));
   assert.ok(skill.includes('No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives'));
-  assert.ok(skill.includes('must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`'));
+  assert.ok(skill.includes('must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`'));
+  assert.ok(skill.includes('Every code step includes a short `question`'));
+  assert.ok(skill.includes('Stories longer than 10 steps'));
 });
 
 test('bundled skill schema example is a valid interleaved v2 story', () => {

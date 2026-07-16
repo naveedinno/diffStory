@@ -129,11 +129,12 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Order test: if sorting your planned steps by filename would not change how the story reads, it is not a story yet — reorder, or state in one line why file order genuinely is the clearest path.\n` +
         `- Thread rule: each code step's first beat must pick up what the previous stop established ("Now that the cap is stored, here is who reads it"); after a primer, apply its mental model directly to the code. The steps must read as one continuous story.\n` +
         `- Group related edits into one stop; do not emit one step per file or one step per hunk. Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n` +
-        `- Each code step must answer a reviewer question: where does the behavior start; what invariant changed; what is passed, rejected, stored, or rendered; what risk should the reviewer inspect; what proves this path works. Code-step titles should read like falsifiable review claims or risks, not file captions.\n\n` +
+        `- Each code step must include a short "question" the reviewer can actually answer from its highlighted evidence: where does the behavior start; what invariant changed; what is passed, rejected, stored, or rendered; what risk should the reviewer inspect; what proves this path works. Code-step titles should read like falsifiable review claims or risks, not file captions.\n` +
+        `- When the story has more than 10 steps, add a concise "chapter" label to every step. Reuse the same label across 3-7 consecutive steps so the rail becomes a handful of meaningful sections, not one flat list.\n\n` +
         `Phase 4 — Write the steps. Mechanics checklist:\n\n` +
         `Concept primer contract:\n` +
         `- Exact shape: {"id":"concept-cap-model","order":2,"title":"How the cap travels","kind":"concept","body":"...","preparesFor":["code-step-id"],"diagram":{"type":"mermaid","source":"flowchart LR\\n...","caption":"..."},"tags":["mental-model"]}. "diagram" and "tags" are optional; every other shown field is required.\n` +
-        `- A concept step must not contain "file", "range", "viewport", "highlights", "beats", "why", "calls", or "returnsTo". It also must not contain the legacy "focus" field. Use "preparesFor" for its one-way link to later code steps.\n` +
+        `- A concept step must not contain "file", "range", "viewport", "highlights", "beats", "why", "question", "calls", or "returnsTo". It also must not contain the legacy "focus" field. Use "preparesFor" for its one-way link to later code steps.\n` +
         `- Write "body" as a compact 60-180 words of restricted Markdown: short paragraphs, small lists, emphasis, and inline code. The hard maximum is 220 words. Do not paste implementation code, add Markdown links/images, or turn it into a mini design doc.\n` +
         `- Concept primers never claim diff coverage. They have no file or line location and do not replace changed/new-file coverage steps.\n` +
         `- Add the optional Mermaid diagram only when it materially clarifies three or more actors/components, a real branch, or a state transition. Skip it for a simple chain the body already explains.\n` +
@@ -142,7 +143,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Every code step must include "viewport": [startLine, endLine]. This is what the reviewer sees, chosen from the requirement and the code shape, not from the tiny diff hunk.\n` +
         `- Every code step must include "highlights": [[startLine, endLine], ...]. These are the lines the story is currently talking about and the rows diffStory should glow while reading.\n` +
         `- Pick the viewport first: usually the whole local method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement. It must answer "where am I?" before the glow asks for judgment.\n` +
-        `- A normal viewport is one screen and at most 60 lines. Split a larger function into overlapping local shots instead of asking the reviewer to hunt inside it. The [0, 0] deletion sentinel is the exception.\n` +
+        `- Target 20-30 visible lines for a normal viewport. Guided and brief steps should stay within 40 lines; 60 lines is an exceptional hard maximum reserved for detailed review. Split a larger function into overlapping local shots instead of asking the reviewer to hunt inside it. The [0, 0] deletion sentinel is the exception.\n` +
         `- Pick highlights second: the existing signature/caller/route that orients the reviewer, the exact changed decision, and the nearby call/state write/assertion/return that shows its consequence. Unchanged lines are valid highlights when they restore context.\n` +
         `- Each beat highlight should point at one fact, normally 1-8 lines and never more than 12. A broad glowing region is not a pointer; split it.\n` +
         `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
@@ -152,7 +153,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `Beat contract:\n` +
         `- Every new code step must include "beats": [{"text": "short narration", "highlights": [[startLine, endLine]]}, ...]. Concept primers use "body" instead.\n` +
         `- Each beat is a separate speech unit for read-aloud, so the code highlight can move exactly when the voice moves.\n` +
-        `- Use one beat per highlighted code part. If a step has three review points, write three beats instead of one long "why".\n` +
+        `- Use one beat per highlighted code part. Guided and brief steps should have at most three beats; detailed steps may have up to five. If there are more review points, split the step instead of hiding them in one long "why".\n` +
         `- The first beat must locate the reviewer in the existing flow unless the preceding context step already did; then point at the changed decision and its consequence in later beats.\n` +
         `- A beat may point at one small range or a few nearby related ranges, but it must stay inside the step "viewport".\n` +
         `- Do not put one big speech over several highlight groups; split it into beat-by-beat narration.\n` +
@@ -287,20 +288,22 @@ export function storyRepairPrompt(input) {
             : 'the selected story area';
     const instruction = input.action === 'explain'
         ? `Add or repair the smallest story step needed to explain the uncovered change at ${target}.`
-        : input.action === 'shorten'
-            ? `Rewrite ${target} to be shorter and sharper without dropping its review risk or causal link.`
-            : `Split ${target} into two or more locally focused steps so no step jumps between distant code islands.`;
+        : input.action === 'rewrite'
+            ? `Rewrite ${target} around one falsifiable review question, sharper beat narration, and the same exact code evidence.`
+            : input.action === 'shorten'
+                ? `Rewrite ${target} to be shorter and sharper without dropping its review risk or causal link.`
+                : `Split ${target} into two or more locally focused steps so no step jumps between distant code islands.`;
     const diff = input.head ? `${input.base}..${input.head}` : `${input.base}..working tree`;
     return (`Use the diffstory-storyteller skill to make one targeted repair to ${DATA_DIR}/story.json for ${diff}.\n\n` +
         `${instruction}\n\n` +
         `Preservation contract:\n` +
         `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
-        `- Preserve every unaffected concept primer exactly, including its body, preparesFor links, diagram, tags, and just-in-time position. Concept primers do not claim coverage.\n` +
+        `- Preserve every unaffected concept primer exactly, including its body, preparesFor links, diagram, tags, chapter, and just-in-time position. Concept primers do not claim coverage.\n` +
         `- Keep a legacy version 1 story at version 1 when the repair only edits code steps; upgrade it to version 2 only if this repair introduces a concept primer. Preserve version 2 once present.\n` +
         `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
         `- Keep the story short, informal, causal, and review-oriented.\n` +
         `- Renumber order fields and repair calls/returnsTo/preparesFor only where the targeted edit requires it.\n` +
-        `- Validate every range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
+        `- Validate every question, chapter, range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
         `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n`);
 }
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */

@@ -95,7 +95,7 @@ export function renderPicker(recents: RecentRow[], home: string, now: number): s
       (missing.length
         ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r) => recentCard(r, home, now)).join('')}</div></details>`
         : '')
-    : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Open a local git repository to review its current change.</p></div>`;
+    : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p></div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -129,18 +129,15 @@ body{
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:0;
 }
 .wrap{width:min(860px,100%); margin:0 auto; padding:34px 24px 64px}
-.hero{display:flex;align-items:center;gap:16px;padding-bottom:24px;margin-bottom:24px;border-bottom:.5px solid var(--sep)}
-.hero>.ds-theme-wrap{margin-left:auto;align-self:flex-start}
+.hero{display:flex;align-items:center;padding-bottom:20px;margin-bottom:24px;border-bottom:.5px solid var(--sep)}
+.hero>.ds-theme-wrap{margin-left:auto}
 .head{display:flex; align-items:center; gap:14px; flex:none}
-.appicon{width:54px; height:54px; border-radius:14px; flex:none;
+.appicon{width:44px; height:44px; border-radius:11px; flex:none;
   background:var(--blue);
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
 .appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
-h1{font-size:25px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
-.hero-copy{min-width:0}
-.hero-title{font-size:17px;line-height:1.25;font-weight:680;letter-spacing:-.015em;margin:0 0 3px}
-.sub{color:var(--label2); font-size:13.5px; margin:0; max-width:62ch; line-height:1.45}
+h1{font-size:22px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
 .manager{min-width:0}
 .launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
 .launchwarn[hidden]{display:none}
@@ -148,7 +145,6 @@ h1{font-size:25px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-
 .skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
 .skillfix:hover{background:var(--blue-press)}.skillfix:disabled{opacity:.55;cursor:default}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:2px 0 14px}
-.section{font-size:12px;font-weight:700;color:var(--label3);margin:0 0 5px;text-transform:uppercase;letter-spacing:.08em}
 h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018em}
 .add-btn{height:36px;padding:0 13px;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:8px;background:var(--blue);color:#fff;font:inherit;font-size:13px;font-weight:650;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .add-btn:hover{background:var(--blue-press)}
@@ -187,14 +183,11 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
   background:var(--neutral-bg); color:var(--label3); margin-bottom:10px}
 .empty-title{font-size:15px; font-weight:600; color:var(--label); margin:0 0 2px}
 .empty-sub{font-size:13px; margin:0}
-.open{margin-top:18px;padding-top:18px;border-top:.5px solid var(--sep)}
-.quick-open{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
-.orpaste{display:flex; gap:10px; align-items:center; margin-top:12px}
-input[type=text],input[type=search]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
+input[type=search]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
   background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; outline:none;
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .14s ease, border-color .14s ease;}
-input[type=text]::placeholder,input[type=search]::placeholder{color:var(--label3)}
-input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
+input[type=search]::placeholder{color:var(--label3)}
+input[type=search]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 36%,transparent)}
 .btn{height:36px; padding:0 16px; font:inherit; font-size:13.5px; font-weight:590; color:#fff; cursor:pointer;
   background:var(--blue); border:none; border-radius:8px; letter-spacing:0;
   box-shadow:0 1px 2px rgba(0,40,120,.18); transition:background .14s ease, transform .1s ease}
@@ -205,7 +198,6 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
 .ghost{height:36px; padding:0 16px; font:inherit; font-size:13.5px; font-weight:550; color:var(--label);
   background:transparent; border:.5px solid var(--hairline); border-radius:8px; cursor:pointer}
 .ghost:hover{background:var(--hover)}
-.msg{min-height:18px; margin:10px 2px 0; font-size:13px; color:var(--red-fg)}
 .scrim{position:fixed; inset:0; background:var(--scrim); display:flex; align-items:center; justify-content:center;
   padding:20px; z-index:50;opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--motion-duration-ui) ease,visibility 0s linear var(--motion-duration-ui)}
 .scrim.show{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
@@ -255,16 +247,13 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
 @media (prefers-reduced-motion:reduce){.scrim,.sheet{transition:none}.scrim.show .sheet{transform:none;opacity:1}.btn:active{transform:none}}
 @media (max-width:760px){
   .wrap{padding:24px 16px 54px}
-  .hero{align-items:flex-start;padding-bottom:20px;margin-bottom:20px}
-  .sub{max-width:44ch}
-  .quick-open{grid-template-columns:1fr}
+  .hero{padding-bottom:18px;margin-bottom:20px}
   .add-btn span{display:none}
 }
 @media (max-width:480px){
-  .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 12px}.hero>.ds-theme-wrap{grid-column:2;grid-row:1;margin-left:0}.hero-copy{grid-column:1 / -1}
-  .appicon{width:44px;height:44px;border-radius:11px}.appmark{width:28px;height:28px}
-  h1{font-size:22px}.hero-title{font-size:15px}.sub{font-size:13px}
-  .section-head{align-items:center}.section{display:none}h2{font-size:21px}
+  .hero{align-items:center}.hero>.ds-theme-wrap{margin-left:auto}
+  .appmark{width:28px;height:28px}
+  .section-head{align-items:center}h2{font-size:21px}
   .repo-row{position:relative;display:block}.repo-card{padding-right:54px}
   .remove-btn{position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:2}
   .remove-btn::after{content:"";position:absolute;inset:-5px}
@@ -277,32 +266,24 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
       <div><h1>${esc(APP_BRAND)}</h1></div>
     </div>
-    <div class="hero-copy"><p class="hero-title">Open a repository to review its current change.</p><p class="sub">Recent repositories keep branch and working-tree context visible before you enter.</p></div>
     ${themeControl()}
   </section>
 
   <section class="manager reveal d2">
     <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
     <div class="section-head">
-      <div><p class="section">Repositories</p><h2>Open a change</h2></div>
-      <button class="add-btn" id="quickAddBtn" type="button" aria-label="Open repository" title="Open repository">${ICON_PLUS}<span>Open repository</span></button>
+      <div><h2>Repositories</h2></div>
+      <button class="add-btn" id="quickAddBtn" type="button" aria-label="Add repository" title="Add repository">${ICON_PLUS}<span>Add repository</span></button>
     </div>
     <div class="stack" id="recent">${list}</div>
-
-    <div class="open">
-      <div class="quick-open">
-        <input type="text" id="path" placeholder="Paste a repository path" autocomplete="off" spellcheck="false" aria-label="Open by path" />
-        <button class="btn" id="openBtn" type="button">Open</button>
-      </div>
-      <p class="msg" id="msg" role="status"></p>
-    </div>
+    <p class="sr-only" id="msg" role="status"></p>
   </section>
 </main>
 
 <div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Choose a repository folder" tabindex="-1" hidden>
   <div class="sheet">
     <div class="sheet-head">
-      <span class="sheet-title">Open a repository</span>
+      <span class="sheet-title">Choose a repository</span>
       <button class="iconbtn" id="fsClose" type="button" aria-label="Close">✕</button>
     </div>
     <div class="crumbs" id="crumbs"></div>
@@ -365,7 +346,7 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }
   function emptyRecent(){
-    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Open a local git repository to review its current change.</p></div>';
+    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p></div>';
   }
   function removeRecent(path,row){
     fetch('/api/repos/recent',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
@@ -382,10 +363,6 @@ input[type=text]:focus,input[type=search]:focus{border-color:transparent; box-sh
     if(rb){ e.preventDefault(); e.stopPropagation(); removeRecent(rb.getAttribute('data-remove-repo'),rb.closest('.repo-row')); return; }
     var b=e.target.closest('button[data-open]'); if(b) open(b.getAttribute('data-open'));
   });
-  var input=document.getElementById('path');
-  document.getElementById('openBtn').addEventListener('click',function(){ open(input.value.trim()); });
-  input.addEventListener('keydown',function(e){ if(e.key==='Enter') open(input.value.trim()); });
-
   var scrim=document.getElementById('scrim'), fslist=document.getElementById('fslist'),
       crumbs=document.getElementById('crumbs'), footPath=document.getElementById('footPath'),
       openHere=document.getElementById('openHere'), fsSearch=document.getElementById('fsSearch'),

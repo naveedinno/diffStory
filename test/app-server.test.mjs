@@ -882,7 +882,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.match(root.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
     const rootText = (await root.text()).toLowerCase();
     assert.ok(rootText.includes('pick a repo'));
-    assert.ok(rootText.includes('open by path'));
+    assert.ok(rootText.includes('add repository'));
     assert.ok(rootText.includes('skillwarn'));
     assert.ok(rootText.includes('update skills'));
     assert.ok(rootText.includes('/api/skills/update'));

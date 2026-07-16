@@ -86,8 +86,7 @@ only needed when you want generated stories or agent-handled comments.
 The first screen is your project list.
 
 - Recent repositories appear automatically after you open them once.
-- **Add repo** and **Browse folders** let you pick another local git repo.
-- You can also paste a repository path and press **Open**.
+- **Add repository** lets you pick another local git repo.
 - Missing or non-git folders are marked so you can remove them from recents.
 
 Inside a repo, diffStory gives you two useful ways to read:

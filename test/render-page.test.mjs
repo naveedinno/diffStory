@@ -166,8 +166,8 @@ test('overview keeps the primary walkthrough action ahead of supporting detail',
 
 test('step narrative tells the reviewer what to verify', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, />Review focus<\/span>/);
-  assert.match(html, /class="ds-reviewfocus">Check /);
+  assert.match(html, />Review question<\/span>/);
+  assert.match(html, /class="ds-reviewfocus">Does the code prove this claim:/);
   assert.doesNotMatch(html, /Why this step/);
 });
 
@@ -660,6 +660,7 @@ test('read aloud start stop and preview are controlled by one speech state', () 
   assert.match(html, /activeUtterance=null/);
   assert.match(html, /function updateReadAloudButton\(\)/);
   assert.match(html, /label\.textContent=speechLoadingLabel\|\|\(readAloud\?'Stop':'Play'\)/);
+  assert.match(html, /ico\.classList\.toggle\('is-stop',readAloud&&!loading\)/);
   assert.match(html, /btn\.setAttribute\('aria-label',buttonLabel\)/);
   assert.match(html, /function restartReadAloud\(\)/);
   assert.match(html, /function speakVoicePreview\(\)/);
@@ -820,7 +821,8 @@ test('story viewport controls visible code while highlights control narration fo
   assert.match(html, /data-line="4"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
-  assert.match(html, /storyteller-selected viewport/i);
+  assert.match(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-camera="0"/);
+  assert.match(html, /Active beat \+ nearby context/i);
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -1593,28 +1595,95 @@ test('file search indexes changed code beyond the old 2400-character cutoff', ()
   assert.match(html, /data-filter-code="[^"]*late_search_marker/);
 });
 
-test('review focus translates internal tags and heuristics into one human instruction', () => {
+test('review question prefers an authored falsifiable question over tag heuristics', () => {
   const cueTour = {
     ...tour,
     steps: [{
       ...tour.steps[0],
       tags: ['entrypoint', 'caller-identity'],
+      question: 'Can an untrusted caller mutate state before authorization succeeds?',
       why: 'Authorization is checked before transaction state changes.',
     }],
   };
   const html = renderPage({ repo: process.cwd(), tour: cueTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /Review focus/);
-  assert.match(html, /Check the flow's entry point, the caller identity seen at the next boundary, permission and trust boundaries, and the state that can change\./);
+  assert.match(html, /Review question/);
+  assert.match(html, /Can an untrusted caller mutate state before authorization succeeds\?/);
   assert.doesNotMatch(html, /<h3>Review focus<\/h3>|Authored story tag|Suggested from this step|ds-reviewcue|ds-railcue|ds-reviewmap/);
 });
 
-test('story tuning is a named control with clear outcomes instead of an ellipsis', () => {
+test('story repair is a named control with rewrite shorten and split outcomes', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /<summary aria-label="Tune explanation">/);
-  assert.match(html, />Tune&nbsp;<span class="ds-story-tune-long">explanation<\/span>/);
-  assert.match(html, /<strong>Make shorter<\/strong><small>Condense this explanation without changing its meaning\.<\/small>/);
-  assert.match(html, /<strong>Split into two steps<\/strong><small>Break a dense explanation into two focused review stops\.<\/small>/);
-  assert.doesNotMatch(html, /Tune this story step|>•••<\/summary>/);
+  assert.match(html, /<summary aria-label="Repair this story step">/);
+  assert.match(html, />Repair&nbsp;<span class="ds-story-tune-long">step<\/span>/);
+  assert.match(html, /data-story-repair="rewrite"/);
+  assert.match(html, /<strong>Make shorter<\/strong><small>Condense this explanation without dropping its risk\.<\/small>/);
+  assert.match(html, /<strong>Split into smaller stops<\/strong><small>Give each review question its own local camera\.<\/small>/);
+  assert.doesNotMatch(html, />•••<\/summary>/);
+});
+
+test('story steps expose defensive attention levels and explicit beat navigation', () => {
+  const beatTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      viewport: [1, 3],
+      highlights: [[1, 1], [3, 3]],
+      beats: [
+        { text: 'Inspect the first line.', highlights: [[1, 1]] },
+        { text: 'Inspect the result.', highlights: [[3, 3]] },
+      ],
+    }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: beatTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-story-lens="focus"/);
+  assert.match(html, /aria-label="Story attention level"/);
+  assert.match(html, /data-story-lens="context"/);
+  assert.match(html, /data-story-lens="full"/);
+  assert.match(html, /data-beat-current>Beat 1/);
+  assert.match(html, /data-beat-move="-1"/);
+  assert.match(html, /function applyFocusFolds\(panel\)/);
+  assert.match(html, /outside this beat/);
+  assert.match(html, /function setStoryLens\(panel,lens,persist\)/);
+  assert.match(html, /closest\(t,'button\[data-story-lens\]'\)/);
+  assert.doesNotMatch(html, /closest\(t,'\[data-story-lens\]'\)/);
+});
+
+test('broad steps surface concrete health reasons and direct repairs', () => {
+  const broadTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      range: [1, 2],
+      viewport: [1, 45],
+      highlights: [[1, 1], [15, 15], [30, 30], [45, 45]],
+      beats: [
+        { text: 'One.', highlights: [[1, 1]] },
+        { text: 'Two.', highlights: [[15, 15]] },
+        { text: 'Three.', highlights: [[30, 30]] },
+        { text: 'Four.', highlights: [[45, 45]] },
+      ],
+    }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: broadTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /<strong>Broad step<\/strong>/);
+  assert.match(html, /45 lines in one step/);
+  assert.match(html, /4 separate review beats/);
+  assert.match(html, /data-story-repair="split"/);
+});
+
+test('long stories receive collapsible chapters while explicit chapter labels are preserved', () => {
+  const longTour = {
+    ...tour,
+    steps: Array.from({ length: 11 }, (_, index) => ({
+      ...tour.steps[0], id: `s${index + 1}`, order: index + 1,
+      title: `Review stop ${index + 1}`, chapter: index < 5 ? 'Request path' : 'Proof and boundaries',
+    })),
+  };
+  const html = renderPage({ repo: process.cwd(), tour: longTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-railchapter" data-story-chapter open/);
+  assert.match(html, />Request path<\/span><small>5 steps<\/small>/);
+  assert.match(html, />Proof and boundaries<\/span><small>6 steps<\/small>/);
+  assert.match(html, /chapter\.open=true/);
 });
 
 test('a new file has no expandable eof gap in the split view', () => {

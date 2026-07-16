@@ -36,6 +36,7 @@ function writeStory(repo, stepKind, stepOverrides = {}) {
           id: 's1',
           order: 1,
           title: 'Entry point',
+          question: 'Does this entry point prove the intended decision before downstream work runs?',
           file: 'a.txt',
           range,
           viewport: range,

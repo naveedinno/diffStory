@@ -114,6 +114,7 @@ const TOUR = `{
   "steps": [
     {
       "id": "s1", "order": 1, "title": "POST /orders keeps ownership and gains one pre-placement decision",
+      "question": "Can an over-cap order reach placeOrder(), or does the handler stop it first?",
       "file": "src/api.ts", "range": [1, 16], "viewport": [1, 16],
       "highlights": [[4, 6], [8, 12], [14, 15]], "kind": "changed",
       "why": "I keep the existing order boundary and stop over-cap requests before placeOrder() can mutate anything.",
@@ -138,6 +139,7 @@ const TOUR = `{
     },
     {
       "id": "s2", "order": 3, "title": "checkSpendingLimit() turns stored spend into the gate result",
+      "question": "Does the helper derive the intended remaining budget and handle exact equality deliberately?",
       "file": "src/limits.ts", "range": [1, 11], "viewport": [1, 11],
       "highlights": [[1, 5], [7, 10]], "kind": "new-file",
       "why": "I isolate the cap math here, with the exact-equality comparison as the review hinge.",
@@ -149,6 +151,7 @@ const TOUR = `{
     },
     {
       "id": "s3", "order": 4, "title": "Existing customer storage supplies monthlySpend",
+      "question": "Is monthlySpend read through the existing customer-state contract?",
       "file": "src/db.ts", "range": [1, 8], "viewport": [1, 8],
       "highlights": [[2, 4], [6, 8]], "kind": "context",
       "why": "Unchanged context: this store is the state contract the new helper relies on.",
@@ -160,6 +163,7 @@ const TOUR = `{
     },
     {
       "id": "s4", "order": 5, "title": "Accepted orders feed spend back into the placement path",
+      "question": "Does every accepted order record spend before the placement path returns?",
       "file": "src/orders.ts", "range": [1, 13], "viewport": [1, 13],
       "highlights": [[3, 6], [10, 13]], "kind": "changed",
       "why": "Back on the accepted path, I record the spend after storing the order so the next limit check can see it.",
@@ -172,6 +176,7 @@ const TOUR = `{
     },
     {
       "id": "s5", "order": 6, "title": "Rejection proof leaves the exact boundary exposed",
+      "question": "Which rejection behavior is proven, and which exact-cap boundary remains untested?",
       "file": "test/limits.test.ts", "range": [1, 7], "viewport": [1, 7],
       "highlights": [[1, 7]], "kind": "new-file",
       "why": "The test proves an over-cap request fails, while leaving equal-to-remaining as the missing case to review.",

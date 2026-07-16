@@ -27,14 +27,14 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.match(html, /if\(restore&&restore\.focus\)restore\.focus\(\)/);
   assert.match(html, /if\(sk\.legacyInstalled\)/);
   assert.match(html, /review-tour was renamed to diffstory-storyteller/);
-  assert.match(html, /Open a repository to review its current change/);
+  assert.doesNotMatch(html, /Open a repository to review its current change/);
   assert.doesNotMatch(html, /class="steps"|Choose the exact change|Approve only when the thread is clear/);
   assert.ok(html.includes("+'/stories'"), 'falls back to review history when the server omits a route');
-  assert.match(html, /id="quickAddBtn"[^>]+aria-label="Open repository"/, 'keeps the icon-only mobile action named');
-  assert.doesNotMatch(html, /id="chooseBtn"/, 'does not repeat the folder-browser action below the path field');
+  assert.match(html, /id="quickAddBtn"[^>]+aria-label="Add repository"/, 'keeps the icon-only mobile action named');
+  assert.doesNotMatch(html, /id="path"|id="openBtn"|Paste a repository path/, 'does not repeat repository opening controls below the primary action');
   assert.match(html, /\.remove-btn::after\{content:"";position:absolute;inset:-5px\}/, 'keeps the compact mobile remove action easy to tap');
-  assert.match(html, /\.hero\{display:grid;grid-template-columns:minmax\(0,1fr\) auto/, 'gives compact theme controls and intro copy separate rows');
-  assert.match(html, /\.hero-copy\{grid-column:1 \/ -1\}/, 'keeps the compact intro copy at a readable width');
+  assert.doesNotMatch(html, /hero-copy|hero-title|Recent repositories keep branch/, 'keeps the app bar free of repeated instructions');
+  assert.doesNotMatch(html, /Your repositories|<p class="section">/, 'uses one concise repositories heading');
 });
 
 test('folder browser enforces its aria-modal contract and restores focus', () => {

@@ -2131,8 +2131,8 @@ function runStoryRepair(res: ServerResponse, session: Session, body: string): vo
     return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
   }
   const action = input.action as StoryRepairAction;
-  if (!(['explain', 'shorten', 'split'] as StoryRepairAction[]).includes(action)) {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid story repair', 'Choose explain, shorten, or split.'));
+  if (!(['explain', 'rewrite', 'shorten', 'split'] as StoryRepairAction[]).includes(action)) {
+    return sendJson(res, 400, errorEvent('preflight', 'Invalid story repair', 'Choose explain, rewrite, shorten, or split.'));
   }
   const agents = availableAgents();
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
@@ -2152,7 +2152,13 @@ function runStoryRepair(res: ServerResponse, session: Session, body: string): vo
   }
   const storyBefore = readFileSync(storyPath, 'utf8');
   const data = sessionReviewData(session);
-  const title = action === 'explain' ? 'Explaining an uncovered change' : action === 'shorten' ? 'Shortening a story step' : 'Splitting a story step';
+  const title = action === 'explain'
+    ? 'Explaining an uncovered change'
+    : action === 'rewrite'
+      ? 'Rewriting a story step'
+      : action === 'shorten'
+        ? 'Shortening a story step'
+        : 'Splitting a story step';
   runWorkflow(res, repo, {
     workflow: 'guided_review',
     title,

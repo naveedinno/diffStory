@@ -113,3 +113,32 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.files[0].stepId, 'implementation');
   assert.equal(model.trust.uncovered.length, 0);
 });
+
+test('code steps derive a defensive camera, review question, and broad-step health', () => {
+  const tour = {
+    version: 1,
+    title: 'Defensive focus',
+    summary: '',
+    steps: [{
+      id: 's1', order: 1, title: 'External call stays bounded', chapter: 'Execution',
+      file: 'a.ts', range: [20, 22], viewport: [1, 45], highlights: [[20, 22]],
+      beats: [{ text: 'Inspect the call.', highlights: [[20, 22]] }],
+      kind: 'changed', why: 'The call is bounded.',
+    }],
+  };
+  const files = [{
+    oldPath: 'a.ts', newPath: 'a.ts', status: 'modified',
+    hunks: [{ oldStart: 20, oldLines: 0, newStart: 20, newLines: 3, lines: [
+      { type: 'add', content: 'call();', newNo: 20 },
+      { type: 'add', content: 'clear();', newNo: 21 },
+      { type: 'add', content: 'verify();', newNo: 22 },
+    ] }],
+  }];
+  const model = buildReviewModel(process.cwd(), tour, files);
+  const step = model.steps[0];
+  assert.equal(step.chapter, 'Execution');
+  assert.equal(step.question, 'Does the code prove this claim: External call stays bounded?');
+  assert.deepEqual(step.cameraGroups, [[[17, 25]]]);
+  assert.equal(step.health.broad, true);
+  assert.ok(step.health.reasons.includes('45 lines in one step'));
+});

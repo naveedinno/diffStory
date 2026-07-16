@@ -48,6 +48,10 @@ Coverage is the trust floor; restored context is the product.
 - `concept` is a short, fileless primer that teaches a mental model immediately
   before dependent code. It never claims coverage.
 - Do not reproduce code in the story. diffStory pulls code from git.
+- Every code step includes a short `question` the reviewer can answer from the
+  highlighted evidence. Concept primers do not use `question`.
+- Stories longer than 10 steps give every step a concise `chapter`; reuse each
+  chapter across 3-7 consecutive steps so the rail stays scannable.
 
 ## Detail levels
 
@@ -316,8 +320,10 @@ Viewport contract:
 - Use the whole method, storage struct, schema block, config stanza, test case,
   or small file section when that is what makes the requirement understandable.
 - The viewport must answer "where am I?" before the highlights ask for judgment.
-- A normal viewport is one screen and at most 60 lines. Split a larger function
-  into overlapping local shots. `[0, 0]` is the whole-file-deletion exception.
+- Target 20-30 visible lines for a normal viewport. Guided and brief steps stay
+  within 40 lines; 60 lines is the exceptional hard maximum for detailed review.
+  Split a larger function into overlapping local shots. `[0, 0]` is the
+  whole-file-deletion exception.
 - It is fine for `viewport` to be much wider than the changed lines.
 - Keep the visible window local to the thing being explained. If the story needs
   two distant changed blocks, write two steps instead of one step with scattered
@@ -390,8 +396,9 @@ Beat contract:
   with its own `text` and `highlights`. Concept primers use `body` instead.
 - Each beat is a separate speech unit, so the read-aloud voice and glowing code
   can move together without guessing timing.
-- Use one beat per highlighted code part. If a step has three review points,
-  write three beats instead of one long `why`.
+- Use one beat per highlighted code part. Guided and brief steps use at most
+  three beats; detailed steps may use up to five. Split additional review points
+  into another stop instead of one long `why`.
 - The first beat locates the reviewer in the existing flow unless the previous
   context step already did; after a concept primer, it applies that mental model
   to the code. Later beats point at the changed decision and its consequence.
@@ -414,6 +421,9 @@ Each code step has:
   points at its own highlighted code.
 - `kind`: `changed`, `new-file`, or `context`.
 - `title`: a sidebar-readable review claim, behavior, invariant, or risk.
+- `question`: one falsifiable question answered by this stop's evidence.
+- `chapter`: required when the story has more than 10 steps; reuse it for 3-7
+  consecutive stops.
 - `why`: the compact fallback recap for the stop.
 - `calls` / `returnsTo`: optional links for real conceptual jumps.
 
@@ -488,7 +498,7 @@ A concept step has exactly the shared identity fields plus its document fields:
 ```
 
 `diagram` and `tags` are optional. Every other field shown above is required.
-A concept step must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`. It also must not contain legacy `focus`. Link it only through `preparesFor`,
+A concept step must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`. It also must not contain legacy `focus`. Link it only through `preparesFor`,
 which must point to later code-step ids and include the immediately following
 code step. Concept primers never claim diff coverage.
 
@@ -646,6 +656,7 @@ Falsifiable checks — run each one, do not skim:
       "id": "s1",
       "order": 1,
       "title": "Entry point: settleFunding() clamps before settlement",
+      "question": "Can an over-cap rate reach balance mutation before it is clamped?",
       "file": "contracts/Funding.sol",
       "range": [128, 132],
       "viewport": [120, 145],
@@ -687,6 +698,7 @@ Falsifiable checks — run each one, do not skim:
       "id": "s2",
       "order": 3,
       "title": "Helper: _capRate() owns the boundary rule",
+      "question": "Does the shared helper enforce the intended inclusive cap before unchecked math?",
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
       "viewport": [40, 58],
@@ -710,6 +722,7 @@ Falsifiable checks — run each one, do not skim:
       "id": "s3",
       "order": 4,
       "title": "Existing marketConfig contract supplies the per-market cap",
+      "question": "Does the helper receive the cap from the matching market configuration?",
       "file": "contracts/storage/MarketConfig.sol",
       "range": [88, 94],
       "viewport": [88, 94],

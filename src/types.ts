@@ -67,6 +67,8 @@ export interface TourStepBase {
   title: string;
   /** Optional free-form labels (e.g. "entrypoint", "core", "test"). */
   tags?: string[];
+  /** Optional concise section label for grouping long reading paths. */
+  chapter?: string;
 }
 
 /** One code-backed stop whose ranges drive the diff camera and coverage gate. */
@@ -86,6 +88,8 @@ export interface CodeTourStep extends TourStepBase {
   focus?: StepFocusTarget;
   /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */
   why: string;
+  /** A short falsifiable question the reviewer should answer at this stop. */
+  question?: string;
   /** Step ids this one leads into (renders the A -> B jump links). */
   calls?: string[];
   /** Step id to return to afterwards (the B -> A jump back). */
