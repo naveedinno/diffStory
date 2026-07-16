@@ -68,12 +68,15 @@ export function sessionEntryScreen(s) {
 }
 /** Open a repo: set it and clear any prior base/head selection. */
 export function openSession(s, repo) {
+    // Only a genuine repository switch invalidates the lease registry;
+    // re-opening the already-open repo must not strand its live tabs.
+    if (s.repo !== repo)
+        clearReviewPageLeases(s);
     s.repo = repo;
     s.base = undefined;
     s.head = undefined;
     s.selectedStory = undefined;
     s.chooseStory = true;
-    clearReviewPageLeases(s);
 }
 /** Close the current repo, returning to the picker. */
 export function closeSession(s) {

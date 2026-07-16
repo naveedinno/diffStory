@@ -383,12 +383,30 @@ test('live review reconnects through the page lease and recovers durable state',
   assert.match(PAGE_JS, /source\.addEventListener\('state'/);
   assert.match(PAGE_JS, /source\.addEventListener\('diff-changed'/);
   assert.match(PAGE_JS, /source\.addEventListener\('story-synced'/);
-  assert.match(PAGE_JS, /var kinds=\['diff','story','disconnected'\]/);
+  assert.match(PAGE_JS, /var LIVE_BANNER_KINDS=\[/);
+  assert.match(PAGE_JS, /\{kind:'diff',message:/);
+  assert.match(PAGE_JS, /\{kind:'disconnected',message:/);
   assert.match(PAGE_JS, /data-live-diff-stale/);
   assert.match(PAGE_JS, /fetch\(reviewPageUrl\('\/api\/review-state'\)\)/);
-  assert.match(PAGE_JS, /renderReviewTimeline\(state\.events\|\|\[\]\)/);
+  assert.match(PAGE_JS, /renderReviewTimeline\(state\.timelineHtml\)/);
   assert.match(PAGE_JS, /function aiTurnKeys\(/);
   assert.match(PAGE_JS, /Agent replied to /);
   assert.match(PAGE_CSS, /\.ds-live-banner\{position:fixed/);
   assert.match(PAGE_CSS, /\.ds-live-banner button\{[^}]*min-width:44px[^}]*min-height:44px/);
+});
+
+test('live events survive bfcache restores and outlast the reconnect interval', () => {
+  // A Back-button (bfcache) restore revives the page with a closed EventSource;
+  // pagehide/pageshow must close and reopen the stream instead of beforeunload.
+  assert.match(PAGE_JS, /addEventListener\('pagehide'/);
+  assert.match(PAGE_JS, /addEventListener\('pageshow'/);
+  assert.match(PAGE_JS, /\.persisted/);
+  assert.doesNotMatch(PAGE_JS, /addEventListener\('beforeunload',function\(\)\{source\.close\(\);\}/);
+  // The disconnect banner may only appear after the server's retry interval
+  // (1500ms) has had a chance to reconnect — otherwise it flashes on every drop.
+  const grace = PAGE_JS.match(/setLiveIssue\('disconnected',true\);\},(\d+)\)/);
+  assert.ok(grace && Number(grace[1]) > 1500, 'disconnect grace must outlast the SSE retry interval');
+  // A dead lease (409) surfacing through a live refresh is a disconnect, not a
+  // comment-store error toast.
+  assert.match(PAGE_JS, /status===409/);
 });

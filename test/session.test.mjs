@@ -93,3 +93,17 @@ test('review page lease registry evicts its least recently used tab at the bound
   assert.equal(getReviewPageLease(s, newest.token, 1102), newest);
   assert.equal(s.reviewPageLeases.size, 24);
 });
+
+test('re-opening the same repo keeps existing review page leases', () => {
+  const s = createSession({ repo: '/r' });
+  const input = {
+    repo: '/r', base: 'HEAD', fingerprint: 'fingerprint', scopeKey: 'scope', mode: 'full',
+    storyIdentity: 'storyless', storyPath: '/r/.diffstory/story.json', storyFingerprint: 'missing',
+    fileFingerprints: {},
+  };
+  const lease = issueReviewPageLease(s, input, 1000);
+  openSession(s, '/r');
+  assert.equal(getReviewPageLease(s, lease.token, 1001), lease, 'same-repo re-open must not strand live tabs');
+  openSession(s, '/other');
+  assert.equal(getReviewPageLease(s, lease.token, 1002), undefined, 'switching repositories still clears leases');
+});

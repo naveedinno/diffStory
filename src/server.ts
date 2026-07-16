@@ -33,6 +33,7 @@ import {
   renderContextRows,
   renderFilePanelContent,
   renderStoryStepPanel,
+  reviewTimelineEventsHtml,
 } from './render.js';
 import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
@@ -145,6 +146,13 @@ export function serve(opts: ServeOptions): Server {
     leaseActive: (token) => !!getReviewPageLease(session, token),
   });
   const server = createServer((req, res) => handle(req, res, session, home, liveHub));
+  // Dispose the hub when close is REQUESTED, not on the 'close' event: the
+  // server cannot finish closing while the hub still holds SSE responses open.
+  const requestClose = server.close.bind(server);
+  server.close = ((callback?: (err?: Error) => void) => {
+    liveHub.dispose();
+    return requestClose(callback);
+  }) as typeof server.close;
   server.on('close', () => liveHub.dispose());
 
   server.on('error', (err: NodeJS.ErrnoException) => {
@@ -321,8 +329,9 @@ function handle(
       return sendMermaidBrowserAsset(res);
     }
     if (method === 'GET' && url.pathname === '/api/events') {
-      const lease = getReviewPageLease(session, url.searchParams.get('page') ?? undefined);
-      if (!lease || !session.repo || lease.repo !== session.repo) {
+      const lease = optionalRequestLease(session, url);
+      if (!lease) {
+        // 204 tells EventSource to stop reconnecting against a dead lease.
         res.statusCode = 204;
         res.end();
         return;
@@ -509,32 +518,23 @@ function handle(
       return sendLeasedHtml(res, session, page, renderExcludedFileResponse(page, url.searchParams.get('file') ?? ''));
     }
     if (method === 'GET' && url.pathname === '/api/review-state') {
-      const token = url.searchParams.get('page') ?? undefined;
-      const lease = token ? getReviewPageLease(session, token) : undefined;
-      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
-        return sendReviewPageConflict(res, 'This review page is no longer active.');
-      }
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
       if (!session.repo) return noRepo(res);
-      const data = lease ? reviewDataForLease(lease) : sessionReviewData(session);
-      return sendJson(
-        res,
-        200,
-        reviewStateSummary(
-          lease?.repo ?? session.repo,
-          data.base,
-          data.head,
-          data.diff,
-          data.files,
-          data.changeFingerprint,
-        ),
+      const data = lease ? reviewDataForLease(lease, false) : sessionReviewData(session);
+      const summary = reviewStateSummary(
+        lease?.repo ?? session.repo,
+        data.base,
+        data.head,
+        data.diff,
+        data.files,
+        data.changeFingerprint,
       );
+      return sendJson(res, 200, { ...summary, timelineHtml: reviewTimelineEventsHtml(summary.events) });
     }
     if (method === 'POST' && url.pathname === '/api/review/checkpoint') {
-      const token = url.searchParams.get('page') ?? undefined;
-      const lease = token ? getReviewPageLease(session, token) : undefined;
-      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
-        return sendReviewPageConflict(res, 'This review page is no longer active.');
-      }
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
       if (!session.repo) return noRepo(res);
       const snapshot = lease
         ? captureLeasedReview(lease, 'opened')
@@ -731,11 +731,8 @@ function handle(
       });
     }
     if (method === 'GET' && url.pathname === '/api/comments') {
-      const token = url.searchParams.get('page') ?? undefined;
-      const lease = token ? getReviewPageLease(session, token) : undefined;
-      if (token && (!lease || !session.repo || lease.repo !== session.repo)) {
-        return sendReviewPageConflict(res, 'This review page is no longer active.');
-      }
+      const lease = optionalRequestLease(session, url);
+      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
       const loaded = loadCommentsWithHealth(repo);
@@ -1206,17 +1203,25 @@ function reviewStoryIdentity(storyPath: string, tour: Tour, storyless: boolean):
 }
 
 /** Re-read exactly the immutable scope and story named by a page lease. */
-function reviewDataForLease(lease: ReviewPageLease): ReviewData {
+function reviewDataForLease(lease: ReviewPageLease, requireStory = true): ReviewData {
   const storyless = lease.storyIdentity === 'storyless';
+  let tour: Tour = { version: 1, title: '', summary: '', steps: [], base: lease.base };
+  if (!storyless) {
+    try {
+      tour = loadTour(lease.storyPath);
+    } catch (error) {
+      // A broken or missing story must not prevent comments, review state, and
+      // checkpoints from using the real diff underneath it.
+      if (requireStory) throw error;
+    }
+  }
+  // The fingerprint covers strictly more state than the diff, so an unchanged
+  // fingerprint on both sides of the diff read proves the pair is consistent.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const tour: Tour = storyless
-      ? { version: 1, title: '', summary: '', steps: [], base: lease.base }
-      : loadTour(lease.storyPath);
-    const diff = getDiff(lease.repo, lease.base, lease.head);
     const changeFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
-    const confirmedDiff = getDiff(lease.repo, lease.base, lease.head);
+    const diff = getDiff(lease.repo, lease.base, lease.head);
     const confirmedFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
-    if (diff === confirmedDiff && changeFingerprint === confirmedFingerprint) {
+    if (changeFingerprint === confirmedFingerprint) {
       return {
         tour,
         base: lease.base,
@@ -1394,7 +1399,7 @@ function captureLeasedReview(
   reason: ReviewSnapshotReason,
   commentIds?: string[],
 ) {
-  const data = reviewDataForLease(lease);
+  const data = reviewDataForLease(lease, false);
   return captureReviewSnapshot(lease.repo, {
     base: data.base,
     head: data.head,
@@ -1432,8 +1437,10 @@ function recordRequestEvent(
   affectsApproval = false,
 ): void {
   if (!lease) return recordSessionEvent(session, kind, label, detail, affectsApproval);
-  const data = reviewDataForLease(lease);
-  recordReviewEvent(lease.repo, data.base, data.head, {
+  // The lease's scope is immutable, so the event needs no diff or story read —
+  // and it runs after a mutation persisted, where a throw would falsely report
+  // the already-applied change as failed.
+  recordReviewEvent(lease.repo, lease.base, lease.head, {
     kind,
     label,
     ...(detail ? { detail } : {}),

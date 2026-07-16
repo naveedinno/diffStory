@@ -1555,17 +1555,7 @@ function feedbackDrawer(
   const cards = comments.length
     ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
     : '<div class="ds-drawer-empty">No review feedback yet.</div>';
-  const events = state.events.length
-    ? state.events
-        .map(
-          (event) => `<li class="ds-timeline-event"><span class="ds-timeline-dot kind-${event.kind}"></span><div><strong>${esc(
-            event.label,
-          )}</strong>${event.detail ? `<span>${esc(event.detail)}</span>` : ''}<small>Round ${event.round} · ${esc(
-            relativeTime(event.at),
-          )}</small></div></li>`,
-        )
-        .join('')
-    : '<li class="ds-drawer-empty">The timeline starts when this review is opened.</li>';
+  const events = reviewTimelineEventsHtml(state.events);
   return `<div class="ds-drawer-root" id="ds-feedback-drawer" hidden>
     <div class="ds-drawer-scrim" data-feedback-close></div>
     <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-feedback-title" tabindex="-1">
@@ -1619,6 +1609,21 @@ function relativeTime(iso: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+/** The one authority for review-timeline markup: the initial drawer render and
+ * the /api/review-state live refresh must never drift apart. */
+export function reviewTimelineEventsHtml(events: ReviewStateSummary['events']): string {
+  if (!events.length) return '<li class="ds-drawer-empty">The timeline starts when this review is opened.</li>';
+  return events
+    .map(
+      (event) => `<li class="ds-timeline-event"><span class="ds-timeline-dot kind-${event.kind}"></span><div><strong>${esc(
+        event.label,
+      )}</strong>${event.detail ? `<span>${esc(event.detail)}</span>` : ''}<small>Round ${event.round} · ${esc(
+        relativeTime(event.at),
+      )}</small></div></li>`,
+    )
+    .join('');
 }
 
 function commandPalette(): string {

@@ -937,13 +937,19 @@ const PAGE_JS_HEAD = `
     if(token)url.searchParams.set('page',token);
     return url.pathname+url.search;
   }
-  function livePriority(){var kinds=['diff','story','disconnected'];for(var i=0;i<kinds.length;i++){var kind=kinds[i];if(liveIssues[kind]&&liveDismissed[kind]!==liveGenerations[kind])return kind;}return '';}
+  var LIVE_BANNER_KINDS=[
+    {kind:'diff',message:'The diff changed since this review loaded.'},
+    {kind:'story',message:'The guided story was updated.'},
+    {kind:'disconnected',message:'Live updates disconnected. Reload to reconnect safely.'}
+  ];
+  function liveBannerEntry(kind){for(var i=0;i<LIVE_BANNER_KINDS.length;i++)if(LIVE_BANNER_KINDS[i].kind===kind)return LIVE_BANNER_KINDS[i];return null;}
+  function livePriority(){for(var i=0;i<LIVE_BANNER_KINDS.length;i++){var kind=LIVE_BANNER_KINDS[i].kind;if(liveIssues[kind]&&liveDismissed[kind]!==liveGenerations[kind])return kind;}return '';}
   function renderLiveBanner(){
     var banner=$('[data-live-banner]');if(!banner)return;
-    var kind=livePriority();
-    if(!kind){banner.hidden=true;banner.removeAttribute('data-live-kind');return;}
-    var message=$('[data-live-message]',banner);banner.setAttribute('data-live-kind',kind);banner.hidden=false;
-    if(message)message.textContent=kind==='diff'?'The diff changed since this review loaded.':kind==='story'?'The guided story was updated.':'Live updates disconnected. Reload to reconnect safely.';
+    var entry=liveBannerEntry(livePriority());
+    if(!entry){banner.hidden=true;banner.removeAttribute('data-live-kind');return;}
+    var message=$('[data-live-message]',banner);banner.setAttribute('data-live-kind',entry.kind);banner.hidden=false;
+    if(message)message.textContent=entry.message;
   }
   function setLiveIssue(kind,on){
     if(liveIssues[kind]===on){renderLiveBanner();return;}
@@ -965,23 +971,33 @@ const PAGE_JS_HEAD = `
   function startLiveEvents(){
     var token=document.body.getAttribute('data-review-page-token')||'';if(!token||typeof EventSource==='undefined')return;
     liveOriginalStoryFreshness=document.body.getAttribute('data-story-freshness')||'unverified';
-    var source=new EventSource(reviewPageUrl('/api/events'));liveEventSource=source;
-    source.onopen=function(){
-      if(liveDisconnectTimer){clearTimeout(liveDisconnectTimer);liveDisconnectTimer=null;}
-      setLiveIssue('disconnected',false);refreshComments(null,true);refreshReviewState();
-    };
-    source.onerror=function(){
-      if(liveDisconnectTimer)return;
-      liveDisconnectTimer=setTimeout(function(){liveDisconnectTimer=null;setLiveIssue('disconnected',true);},1200);
-    };
-    source.addEventListener('state',function(event){var data=liveEventData(event);setLiveIssue('diff',!!data.diffChanged);setLiveIssue('story',!!data.storyChanged);});
-    source.addEventListener('comments-changed',function(){refreshComments(null,true);});
-    source.addEventListener('review-state-changed',function(){refreshReviewState();});
-    source.addEventListener('story-changed',function(){setLiveIssue('story',true);});
-    source.addEventListener('story-synced',function(){setLiveIssue('story',false);});
-    source.addEventListener('diff-changed',function(){setLiveIssue('diff',true);});
-    source.addEventListener('diff-synced',function(){setLiveIssue('diff',false);refreshReviewState();});
-    window.addEventListener('beforeunload',function(){source.close();},{once:true});
+    function open(){
+      if(liveEventSource&&liveEventSource.readyState!==2)return;
+      var source=new EventSource(reviewPageUrl('/api/events'));liveEventSource=source;
+      source.onopen=function(){
+        if(liveDisconnectTimer){clearTimeout(liveDisconnectTimer);liveDisconnectTimer=null;}
+        setLiveIssue('disconnected',false);refreshComments(null,true);refreshReviewState();
+      };
+      source.onerror=function(){
+        if(liveDisconnectTimer)return;
+        // The server's retry directive is 1500ms; the banner may only appear
+        // once a healthy reconnect has had time to land, or it flashes on
+        // every transient drop.
+        liveDisconnectTimer=setTimeout(function(){liveDisconnectTimer=null;setLiveIssue('disconnected',true);},4000);
+      };
+      source.addEventListener('state',function(event){var data=liveEventData(event);setLiveIssue('diff',!!data.diffChanged);setLiveIssue('story',!!data.storyChanged);});
+      source.addEventListener('comments-changed',function(){refreshComments(null,true);});
+      source.addEventListener('review-state-changed',function(){refreshReviewState();});
+      source.addEventListener('story-changed',function(){setLiveIssue('story',true);});
+      source.addEventListener('story-synced',function(){setLiveIssue('story',false);});
+      source.addEventListener('diff-changed',function(){setLiveIssue('diff',true);});
+      source.addEventListener('diff-synced',function(){setLiveIssue('diff',false);refreshReviewState();});
+    }
+    open();
+    // A bfcache restore revives the page with the stream we closed on the way
+    // out; EventSource.close() is terminal, so reopen instead of going stale.
+    window.addEventListener('pagehide',function(){if(liveEventSource)liveEventSource.close();});
+    window.addEventListener('pageshow',function(e){if(e.persisted)open();});
   }
   function reviewLazyText(r){
     if(!r.ok){var err=new Error('Review evidence request failed');err.status=r.status;err.reloadRequired=r.status===409;throw err;}
@@ -2422,20 +2438,11 @@ const PAGE_JS_TAIL = `
   var reviewFeedbackIdentityRequest=0;
   function commentSide(c){return c&&c.side==='left'?'left':'right';}
   function commentSeverity(c){return c&&SEVERITY[c.severity]?c.severity:c&&c.type==='nit'?'nit':c&&c.type==='change'?'blocking':'concern';}
-  function liveRelativeTime(value){
-    var at=Date.parse(value||'');if(!isFinite(at))return '';
-    var seconds=Math.max(0,Math.floor((Date.now()-at)/1000));
-    if(seconds<60)return 'just now';if(seconds<3600)return Math.floor(seconds/60)+'m ago';if(seconds<86400)return Math.floor(seconds/3600)+'h ago';return Math.floor(seconds/86400)+'d ago';
-  }
-  function renderReviewTimeline(events){
-    var list=$('.ds-review-timeline');if(!list)return;list.textContent='';
-    if(!events||!events.length){list.appendChild(el('li','ds-drawer-empty','The timeline starts when this review is opened.'));return;}
-    events.forEach(function(event){
-      var item=el('li','ds-timeline-event'),dot=el('span','ds-timeline-dot kind-'+(event.kind||''));item.appendChild(dot);
-      var body=el('div','');body.appendChild(el('strong','',event.label||'Review updated'));
-      if(event.detail)body.appendChild(el('span','',event.detail));
-      var time=liveRelativeTime(event.at),meta='Round '+String(Number(event.round)||1)+(time?' · '+time:'');body.appendChild(el('small','',meta));item.appendChild(body);list.appendChild(item);
-    });
+  function renderReviewTimeline(html){
+    // The server owns timeline markup; a live refresh swaps in the same
+    // fragment the drawer was first rendered with so the two never drift.
+    var list=$('.ds-review-timeline');if(!list||typeof html!=='string')return;
+    list.innerHTML=html;
   }
   function refreshReviewState(done){
     var request=++reviewFeedbackIdentityRequest;
@@ -2448,7 +2455,7 @@ const PAGE_JS_TAIL = `
       document.body.setAttribute('data-review-round',String(Number(state.round)||1));
       document.body.setAttribute('data-review-snapshot',state.currentSnapshotId||'');
       var round=$('.ds-review-menu-title small');if(round)round.textContent='Round '+String(Number(state.round)||1);
-      renderReviewTimeline(state.events||[]);
+      renderReviewTimeline(state.timelineHtml);
       var renderedHash=document.body.getAttribute('data-current-diff-hash')||'',sameDiff=state.currentDiffHash===renderedHash;
       setLiveIssue('diff',!sameDiff);
       if(sameDiff&&state.verdict){
@@ -2728,7 +2735,7 @@ const PAGE_JS_TAIL = `
   }
   function refreshComments(done,notifyReplies,retried){
     var before=aiTurnKeys(allComments);
-    fetch(reviewPageUrl(API)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(list){
+    fetch(reviewPageUrl(API)).then(function(r){if(!r.ok){var err=new Error('HTTP '+r.status);err.status=r.status;throw err;}return r.json();}).then(function(list){
       var newReplies=0;if(notifyReplies&&Array.isArray(list)){var after=aiTurnKeys(list);Object.keys(after).forEach(function(key){if(!before[key])newReplies++;});}
       if(Array.isArray(list)){allComments=list;list.forEach(patchComment);}
       syncThreads();syncFeedbackCards();syncFileCommentFlags();
@@ -2736,7 +2743,13 @@ const PAGE_JS_TAIL = `
       syncReviewFeedbackIdentity();
       if(newReplies)toast('Agent replied to '+newReplies+' '+(newReplies===1?'comment.':'comments.'));
       if(done)done(list);
-    }).catch(function(){if(notifyReplies&&!retried){setTimeout(function(){refreshComments(done,notifyReplies,true);},250);return;}toast('Could not refresh review comments. Existing comments remain visible.','error');if(done)done(null);});
+    }).catch(function(err){
+      // A dead lease answers 409: this page can only reconnect by reloading,
+      // which is the disconnect banner's job, not a comment-store error.
+      if(err&&err.status===409){setLiveIssue('disconnected',true);if(done)done(null);return;}
+      if(notifyReplies&&!retried){setTimeout(function(){refreshComments(done,notifyReplies,true);},250);return;}
+      toast('Could not refresh review comments. Existing comments remain visible.','error');if(done)done(null);
+    });
   }
   var acAbort=null;
   function acRoot(){ return document.querySelector('.ds-pp'); }

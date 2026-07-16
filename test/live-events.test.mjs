@@ -33,6 +33,10 @@ function harness() {
     ['/repo/.diffstory/story.json', 'story-a'],
     ['/repo/.diffstory/stories/other.json', 'other-a'],
   ]);
+  const signatures = new Map([
+    ['/repo/.diffstory/comments.json', 'sig-comments-a'],
+    ['/repo/.diffstory/review-state.json', 'sig-review-a'],
+  ]);
   const active = new Set();
   const setTimer = (callback, delay) => {
     const timer = { id: nextTimer++, delay };
@@ -47,12 +51,17 @@ function harness() {
       callback();
     }
   };
+  let fingerprintCallCount = 0;
   const hub = new LiveEventHub({
     debounceMs: 200,
     pollMs: 4000,
     heartbeatMs: 15000,
-    fingerprint: (_repo, base, head) => fingerprints.get(`${base}\0${head ?? ''}`),
+    fingerprint: (_repo, base, head) => {
+      fingerprintCallCount += 1;
+      return fingerprints.get(`${base}\0${head ?? ''}`);
+    },
     storyFingerprint: (path) => stories.get(path) ?? 'missing',
+    fileSignature: (path) => signatures.get(path) ?? 'missing',
     pathExists: () => true,
     watchDirectory: (path, listener) => {
       const watcher = new FakeWatcher(listener);
@@ -75,7 +84,10 @@ function harness() {
     hub.connect(value, request, response);
     return { request, response };
   };
-  return { hub, timers, watchers, fingerprints, stories, active, run, lease, connect };
+  return {
+    hub, timers, watchers, fingerprints, stories, signatures, active, run, lease, connect,
+    fingerprintCalls: () => fingerprintCallCount,
+  };
 }
 
 test('initial state recovers missed drift and poll transitions diff back to synced', () => {
@@ -105,6 +117,7 @@ test('watch invalidations debounce and story changes target only the matching le
   const dataWatcher = h.watchers.get('/repo/.diffstory');
   const storiesWatcher = h.watchers.get('/repo/.diffstory/stories');
 
+  h.signatures.set('/repo/.diffstory/comments.json', 'sig-comments-b');
   dataWatcher.change('comments.json');
   dataWatcher.change('comments.json');
   h.run(200);
@@ -132,4 +145,41 @@ test('last disconnect disposes watchers and timers, while an evicted lease close
   h.run(4000);
   assert.equal(second.response.ended, true);
   assert.equal(h.hub.activeGroups, 0);
+});
+
+test('storyless leases receive no story invalidations', () => {
+  const h = harness();
+  h.stories.set('/repo/.diffstory/story.json', 'story-b');
+  const { response } = h.connect(h.lease({ storyIdentity: 'storyless' }));
+  assert.match(response.output, /"storyChanged":false/);
+
+  h.stories.set('/repo/.diffstory/story.json', 'story-c');
+  h.watchers.get('/repo/.diffstory').change('story.json');
+  h.run(200);
+  h.run(4000);
+  assert.doesNotMatch(response.output, /event: story-changed/);
+});
+
+test('a second tab on the same scope reuses the cached fingerprint', () => {
+  const h = harness();
+  h.connect(h.lease());
+  const before = h.fingerprintCalls();
+  h.connect(h.lease({ token: 'lease-b' }));
+  assert.equal(h.fingerprintCalls(), before, 'connect must reuse the fingerprint the group already computed');
+});
+
+test('a change the poll already broadcast is not re-broadcast by the debounce', () => {
+  const h = harness();
+  const { response } = h.connect(h.lease());
+
+  h.signatures.set('/repo/.diffstory/comments.json', 'sig-comments-b');
+  h.watchers.get('/repo/.diffstory').change('comments.json');
+  h.run(4000);
+  assert.equal((response.output.match(/event: comments-changed/g) ?? []).length, 1, 'poll observes the change');
+  h.run(200);
+  assert.equal(
+    (response.output.match(/event: comments-changed/g) ?? []).length,
+    1,
+    'the debounce must not duplicate an invalidation the poll already delivered',
+  );
 });

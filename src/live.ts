@@ -35,12 +35,23 @@ export interface LiveHubDependencies {
   heartbeatMs: number;
   fingerprint(repo: string, base: string, head?: string): string;
   storyFingerprint(path: string): string;
+  fileSignature(path: string): string;
   pathExists(path: string): boolean;
   watchDirectory(path: string, listener: (event: string, filename: string | Buffer | null) => void): WatchHandle;
   setTimer(callback: () => void, delay: number): ReturnType<typeof setTimeout>;
   clearTimer(timer: ReturnType<typeof setTimeout>): void;
   leaseActive(token: string): boolean;
 }
+
+/** Single owner of the filename → invalidation kind → event relationship.
+ * Watch classification, debounce, signature capture, and the poll fallback all
+ * derive from this table, so a new watched artifact is one entry here. */
+const WATCHED_DATA_FILES = [
+  { filename: COMMENTS_FILENAME, kind: 'comments', event: 'comments-changed' },
+  { filename: REVIEW_STATE_FILENAME, kind: 'review-state', event: 'review-state-changed' },
+] as const satisfies readonly { filename: string; kind: string; event: LiveEventType }[];
+type DataInvalidationKind = (typeof WATCHED_DATA_FILES)[number]['kind'];
+type InvalidationKind = DataInvalidationKind | 'story';
 
 interface LiveClient {
   lease: ReviewPageLease;
@@ -60,6 +71,9 @@ interface WatchGroup {
   heartbeatTimer?: ReturnType<typeof setTimeout>;
   debounceTimers: Map<string, ReturnType<typeof setTimeout>>;
   signatures: Map<string, string>;
+  /** Last diff fingerprint per (base, head) scope, refreshed by the poll so
+   * connects and reconnects never repeat the expensive git pass. */
+  scopeFingerprints: Map<string, string>;
   disposed: boolean;
 }
 
@@ -69,6 +83,7 @@ const defaultDependencies: Omit<LiveHubDependencies, 'leaseActive'> = {
   heartbeatMs: LIVE_HEARTBEAT_MS,
   fingerprint: reviewChangeFingerprint,
   storyFingerprint: storyFileFingerprint,
+  fileSignature,
   pathExists: existsSync,
   watchDirectory: (path, listener) => watch(path, listener) as FSWatcher,
   setTimer: (callback, delay) => setTimeout(callback, delay),
@@ -117,15 +132,20 @@ export class LiveEventHub {
 
   connect(lease: ReviewPageLease, request: IncomingMessage, response: ServerResponse): void {
     const group = this.groupFor(lease.repo);
-    const currentFingerprint = this.safeFingerprint(lease);
-    const currentStoryFingerprint = this.deps.storyFingerprint(lease.storyPath);
+    const storyless = lease.storyIdentity === 'storyless';
+    const scopeKey = `${lease.base}\0${lease.head ?? ''}`;
+    let currentFingerprint = group.scopeFingerprints.get(scopeKey) ?? null;
+    if (currentFingerprint === null) {
+      currentFingerprint = this.safeFingerprint(lease);
+      if (currentFingerprint !== null) group.scopeFingerprints.set(scopeKey, currentFingerprint);
+    }
     const client: LiveClient = {
       lease,
       request,
       response,
       closed: false,
       diffStale: currentFingerprint !== null && currentFingerprint !== lease.fingerprint,
-      storyStale: currentStoryFingerprint !== lease.storyFingerprint,
+      storyStale: storyless ? false : this.deps.storyFingerprint(lease.storyPath) !== lease.storyFingerprint,
     };
     group.clients.add(client);
 
@@ -164,6 +184,7 @@ export class LiveEventHub {
       clients: new Set(),
       debounceTimers: new Map(),
       signatures: new Map(),
+      scopeFingerprints: new Map(),
       disposed: false,
     };
     this.groups.set(repo, group);
@@ -183,14 +204,12 @@ export class LiveEventHub {
     if (!group.dataWatcher && this.deps.pathExists(dataPath)) {
       group.dataWatcher = this.openWatcher(group, dataPath, (_event, filename) => {
         const name = filename ? String(filename) : '';
+        const entry = WATCHED_DATA_FILES.find((candidate) => candidate.filename === name);
         if (!name) {
-          this.queueInvalidation(group, 'comments');
-          this.queueInvalidation(group, 'review-state');
+          for (const watched of WATCHED_DATA_FILES) this.queueInvalidation(group, watched.kind);
           this.queueInvalidation(group, 'story');
-        } else if (name === COMMENTS_FILENAME) {
-          this.queueInvalidation(group, 'comments');
-        } else if (name === REVIEW_STATE_FILENAME) {
-          this.queueInvalidation(group, 'review-state');
+        } else if (entry) {
+          this.queueInvalidation(group, entry.kind);
         } else if (name === STORY_FILENAME || name === LEGACY_STORY_FILENAME) {
           this.queueInvalidation(group, 'story');
         } else if (name === 'stories') {
@@ -230,28 +249,29 @@ export class LiveEventHub {
     }
   }
 
-  private queueInvalidation(group: WatchGroup, kind: 'comments' | 'review-state' | 'story'): void {
+  private queueInvalidation(group: WatchGroup, kind: InvalidationKind): void {
     const existing = group.debounceTimers.get(kind);
     if (existing) this.deps.clearTimer(existing);
     const timer = this.deps.setTimer(() => {
       group.debounceTimers.delete(kind);
       if (group.disposed) return;
-      if (kind === 'comments') {
-        group.signatures.set(COMMENTS_FILENAME, fileSignature(join(group.repo, DATA_DIR, COMMENTS_FILENAME)));
-        this.broadcast(group, 'comments-changed', {});
-      } else if (kind === 'review-state') {
-        group.signatures.set(REVIEW_STATE_FILENAME, fileSignature(join(group.repo, DATA_DIR, REVIEW_STATE_FILENAME)));
-        this.broadcast(group, 'review-state-changed', {});
-      } else {
+      if (kind === 'story') {
         this.evaluateStories(group);
+        return;
       }
+      const entry = WATCHED_DATA_FILES.find((candidate) => candidate.kind === kind);
+      if (entry) this.broadcastDataChange(group, entry);
     }, this.deps.debounceMs);
     group.debounceTimers.set(kind, timer);
   }
 
+  private dataFileSignature(group: WatchGroup, filename: string): string {
+    return this.deps.fileSignature(join(group.repo, DATA_DIR, filename));
+  }
+
   private captureSignatures(group: WatchGroup): void {
-    for (const name of [COMMENTS_FILENAME, REVIEW_STATE_FILENAME]) {
-      group.signatures.set(name, fileSignature(join(group.repo, DATA_DIR, name)));
+    for (const entry of WATCHED_DATA_FILES) {
+      group.signatures.set(entry.filename, this.dataFileSignature(group, entry.filename));
     }
   }
 
@@ -264,16 +284,19 @@ export class LiveEventHub {
     }, this.deps.pollMs);
   }
 
+  private broadcastDataChange(group: WatchGroup, entry: (typeof WATCHED_DATA_FILES)[number]): void {
+    // The signature store coordinates the watcher and poll paths: whichever
+    // observes a write first broadcasts it, and the other stays silent.
+    const signature = this.dataFileSignature(group, entry.filename);
+    if (signature === group.signatures.get(entry.filename)) return;
+    group.signatures.set(entry.filename, signature);
+    this.broadcast(group, entry.event, {});
+  }
+
   private poll(group: WatchGroup): void {
     if (group.disposed) return;
     this.attachWatchers(group);
-    for (const name of [COMMENTS_FILENAME, REVIEW_STATE_FILENAME]) {
-      const signature = fileSignature(join(group.repo, DATA_DIR, name));
-      if (signature !== group.signatures.get(name)) {
-        group.signatures.set(name, signature);
-        this.broadcast(group, name === COMMENTS_FILENAME ? 'comments-changed' : 'review-state-changed', {});
-      }
-    }
+    for (const entry of WATCHED_DATA_FILES) this.broadcastDataChange(group, entry);
 
     const fingerprints = new Map<string, string | null>();
     for (const client of [...group.clients]) {
@@ -282,7 +305,11 @@ export class LiveEventHub {
         continue;
       }
       const key = `${client.lease.base}\0${client.lease.head ?? ''}`;
-      if (!fingerprints.has(key)) fingerprints.set(key, this.safeFingerprint(client.lease));
+      if (!fingerprints.has(key)) {
+        const fresh = this.safeFingerprint(client.lease);
+        fingerprints.set(key, fresh);
+        if (fresh !== null) group.scopeFingerprints.set(key, fresh);
+      }
       const current = fingerprints.get(key);
       if (current !== null && current !== undefined) this.transitionDiff(client, current);
     }
@@ -291,6 +318,9 @@ export class LiveEventHub {
 
   private evaluateStories(group: WatchGroup): void {
     for (const client of [...group.clients]) {
+      // A storyless page renders no guided story; the default story file
+      // changing underneath it must not mark the tab stale.
+      if (client.lease.storyIdentity === 'storyless') continue;
       const current = this.deps.storyFingerprint(client.lease.storyPath);
       const stale = current !== client.lease.storyFingerprint;
       if (stale === client.storyStale) continue;

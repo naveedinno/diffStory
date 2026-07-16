@@ -99,7 +99,7 @@ measured against a large dirty repository before being treated as final.
 | event | data | client action |
 | --- | --- | --- |
 | `comments-changed` | `{}` | run existing `refreshComments()`; the client derives a toast from the refresh delta (e.g. "Agent replied to 2 comments"); no visible delta → no toast |
-| `review-state-changed` | `{}` | run lease-scoped `refreshReviewState()`; update round/snapshot/verdict identity and replace the rendered timeline |
+| `review-state-changed` | `{}` | run lease-scoped `refreshReviewState()`; update round/snapshot/verdict identity and swap in the server-rendered `timelineHtml` fragment the response carries, so timeline markup has one authority |
 | `story-changed` | `{}` | show banner: story updated |
 | `story-synced` | `{}` | clear the story banner if the selected story was restored |
 | `diff-changed` | `{ fingerprint }` | show banner: diff changed since load |
@@ -119,11 +119,19 @@ only newly observed AI turns produce "Agent replied" feedback.
 
 - One `EventSource` per leased page. The leased surfaces are the storyless
   `/diff` review and guided `/review`; the scope-picker `/change` page is not
-  leased. The "All files" tab is part of those review surfaces.
+  leased. The "All files" tab is part of those review surfaces. Storyless
+  leases never receive story invalidations — a raw-diff page has no guided
+  story to go stale.
 - `EventSource` auto-reconnect handles transient drops. `onerror` starts a
-  short grace timer before showing "live updates disconnected — reload";
-  `onopen` clears that state and runs the recovery refresh. A dead lease stops
-  reconnecting via the endpoint's `204` response.
+  grace timer that outlasts the server's `retry` interval (so a healthy
+  reconnect never flashes the banner) before showing "live updates
+  disconnected — reload"; `onopen` clears that state and runs the recovery
+  refresh. A dead lease stops reconnecting via the endpoint's `204` response,
+  and a lease-scoped refresh answered with `409` flips the same disconnected
+  state instead of a comment-store error toast.
+- The stream closes on `pagehide` and reopens on a `pageshow` bfcache restore;
+  `EventSource.close()` is terminal, so a restored page must reconnect rather
+  than silently go stale.
 - No new client framework; a small `startLiveEvents()` block wired where the
   page boots, gated on the presence of a lease token.
 

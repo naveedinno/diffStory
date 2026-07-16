@@ -86,3 +86,76 @@ test('HTTP live stream authenticates leases, keeps two tabs valid, and emits fil
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('graceful server.close() completes while a live stream is connected', async () => {
+  const repo = repoFixture();
+  const server = serve({ repo, port: 0, open: false });
+  await once(server, 'listening');
+  const base = `http://localhost:${server.address().port}`;
+  const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+  const controller = new AbortController();
+  try {
+    const token = tokenFrom(await (await fetch(`${base}${route}`)).text());
+    const stream = await fetch(`${base}/api/events?page=${encodeURIComponent(token)}`, { signal: controller.signal });
+    const reader = stream.body.getReader();
+    await readUntil(reader, /event: state/);
+
+    const outcome = await Promise.race([
+      new Promise((resolve) => server.close(() => resolve('closed'))),
+      new Promise((resolve) => { setTimeout(() => resolve('hung'), 2000).unref(); }),
+    ]);
+    assert.equal(outcome, 'closed', 'close() must end live streams instead of waiting on them forever');
+  } finally {
+    controller.abort();
+    try { server.close(() => {}); } catch { /* already closed */ }
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('lease-scoped review state and comment mutations tolerate a story mid-rewrite', async () => {
+  const repo = repoFixture();
+  writeFileSync(join(repo, '.diffstory', 'story.json'), JSON.stringify({
+    version: 1, title: 'Focused review', summary: 'Review the README change.', base: 'HEAD',
+    storyScope: { includedFiles: ['README.md'] },
+    steps: [{
+      id: 'readme', order: 1, title: 'README behavior', file: 'README.md',
+      range: [1, 1], kind: 'changed', why: 'Verify the visible documentation change.',
+    }],
+  }));
+  const server = serve({ repo, port: 0, open: false });
+  await once(server, 'listening');
+  const base = `http://localhost:${server.address().port}`;
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=${encodeURIComponent('story.json')}`;
+    const page = encodeURIComponent(tokenFrom(await (await fetch(`${base}${route}`)).text()));
+
+    // The agent rewrites the story in place; lease-scoped reads must fall back
+    // to the real diff underneath instead of failing.
+    writeFileSync(join(repo, '.diffstory', 'story.json'), '{"version":1,"title":');
+
+    const state = await fetch(`${base}/api/review-state?page=${page}`);
+    assert.equal(state.status, 200, 'review state must tolerate a story mid-rewrite');
+    const stateBody = await state.json();
+    assert.ok(
+      typeof stateBody.timelineHtml === 'string' && stateBody.timelineHtml.includes('timeline'),
+      'review state carries the server-rendered timeline fragment',
+    );
+
+    const created = await fetch(`${base}/api/comments?page=${page}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 1, type: 'question', severity: 'concern', body: 'Still fine?' }),
+    });
+    assert.equal(created.status, 201, 'comments must save while the story is mid-rewrite');
+    const comment = await created.json();
+
+    const patched = await fetch(`${base}/api/comments/${encodeURIComponent(comment.id)}?page=${page}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'resolved' }),
+    });
+    assert.equal(patched.status, 200, 'a persisted mutation must not be reported as failed');
+    assert.equal((await patched.json()).status, 'resolved');
+  } finally {
+    server.close(() => {});
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
