@@ -166,7 +166,8 @@ test('overview keeps the primary walkthrough action ahead of supporting detail',
 
 test('step narrative tells the reviewer what to verify', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, />Review question<\/span>/);
+  assert.match(html, /class="ds-review-question"/);
+  assert.match(html, /class="ds-sr-only">Review question:/);
   assert.match(html, /class="ds-reviewfocus">Does the code prove this claim:/);
   assert.doesNotMatch(html, /Why this step/);
 });
@@ -184,30 +185,43 @@ test('story text cannot take over the diff viewport when read aloud is off', () 
     ],
   };
   const html = renderPage({ repo: process.cwd(), tour: longTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-why\{[^}]*max-height:min\(24vh,190px\)[^}]*overflow-y:auto/s);
-  assert.match(html, /\.ds-diffscroll\{[^}]*min-height:180px/s);
-  assert.match(html, /@media \(max-height:760px\)\{\.ds-why\{max-height:120px\}\.ds-diffscroll\{min-height:160px\}\}/);
+  assert.match(html, /\.ds-step\.is-code-step\{[^}]*display:flex[^}]*flex-direction:column[^}]*overflow:hidden/);
+  assert.match(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*flex:1[^}]*min-height:180px/s);
+  assert.match(html, /\.ds-beatdock-note \.ds-beat-text\{[^}]*-webkit-line-clamp:2/);
 });
 
 test('the final session layout cannot re-enable horizontal story or diff scrolling', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-step\.is-code-step>\.ds-why\{[^}]*overflow-x:hidden;overflow-y:auto/);
   assert.match(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*overflow-x:hidden;overflow-y:auto/);
-  assert.doesNotMatch(html, /\.ds-step\.is-code-step>\.ds-(?:why|diffscroll)\{[^}]*overflow:auto/);
-  assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:22px minmax\(0,1fr\)/);
-  assert.match(html, /\.ds-beat-text\{[^}]*min-width:0[^}]*white-space:normal[^}]*overflow-wrap:anywhere/);
+  assert.doesNotMatch(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*overflow:auto/);
+  assert.match(html, /\.ds-beatdock-copy\{min-width:0\}/);
+  assert.match(html, /\.ds-railbeat-text\{[^}]*overflow:hidden[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
   assert.match(html, /\.ds-step-title\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
 });
 
-test('story narrative is a compact reading column instead of a nested full-height card', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-step\.is-code-step>\.ds-why\{[^}]*border:0[^}]*border-right:1px solid var\(--line-soft\)[^}]*border-radius:0[^}]*background:transparent/);
-  assert.doesNotMatch(html, /\.ds-beats::before/);
-  assert.match(html, /\.ds-why-head\{[^}]*border-bottom:0/);
-  assert.match(html, /\.ds-beat\{[^}]*grid-template-columns:30px minmax\(0,1fr\)[^}]*border-top:1px solid var\(--line-soft\)/);
-  assert.match(html, /\.ds-beat-index\{[^}]*border:0[^}]*background:transparent[^}]*font-family:var\(--mono\)/);
-  assert.match(html, /\.ds-beat\.is-selected\{[^}]*border-radius:8px[^}]*background:var\(--fill-2\)[^}]*box-shadow:none/);
-  assert.match(html, /@media \(max-width:1080px\)[\s\S]*\.ds-step\.is-code-step>\.ds-why\{[^}]*border:1px solid var\(--line-soft\)[^}]*border-radius:10px/);
+test('story narrative lives in a nested rail tree and a compact bottom dock', () => {
+  const treeTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      beats: [
+        { text: 'Inspect the changed line.', highlights: [[1, 1]] },
+        { text: 'Confirm the resulting behavior.', highlights: [[1, 1]] },
+      ],
+    }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: treeTour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /class="ds-railstory-node" data-story-step-node="1"/);
+  assert.match(html, /class="ds-railbeats" aria-label="Review beats for/);
+  assert.match(html, /\.ds-railstory-node\.is-active>\.ds-railbeats\{display:block\}/);
+  assert.match(html, /\.ds-railbeats\{[^}]*border-left:1px solid/);
+  assert.match(html, /\.ds-railbeats-head \.ds-story-tune\.is-icon\.has-health>summary::before\{display:none\}/);
+  assert.match(html, /class="ds-beatdock"/);
+  assert.match(html, /\.ds-beatdock\{[^}]*grid-template-columns:auto minmax\(0,1fr\) auto/);
+  assert.match(html, /class="ds-review-question"/);
+  assert.doesNotMatch(html, /<div class="ds-why">/);
+  assert.doesNotMatch(html, /<div class="ds-step-health/);
+  assert.match(html, /@media \(max-width:470px\)\{\.ds-step-meta\{gap:6px\}\.ds-step-count\{white-space:nowrap\}\.ds-step-meta>\.ds-dot,\.ds-step-meta>\.ds-flowchip,\.ds-step-meta>\.ds-step-pos\{display:none\}\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
 });
 
 test('review page returns to change scope and keeps saved reviews secondary', () => {
@@ -873,8 +887,10 @@ test('story beats render as separate spoken notes with exact focus groups', () =
 
   const html = renderPage({ repo: process.cwd(), tour: beatTour, files: beatFiles, baseLabel: 'main', comments: [] });
 
-  assert.match(html, /class="ds-beat"[^>]*data-speech-beat="0"[^>]*data-focus-group="0"/);
-  assert.match(html, /class="ds-beat"[^>]*data-speech-beat="1"[^>]*data-focus-group="1"/);
+  assert.match(html, /class="ds-beat ds-beatdock-note"[^>]*data-speech-beat="0"[^>]*data-focus-group="0"/);
+  assert.match(html, /class="ds-beat ds-beatdock-note"[^>]*data-speech-beat="1"[^>]*data-focus-group="1"/);
+  assert.match(html, /class="ds-railbeat"[^>]*data-rail-beat[^>]*data-focus-group="0"/);
+  assert.match(html, /class="ds-railbeat"[^>]*data-rail-beat[^>]*data-focus-group="1"/);
   assert.match(html, /First I explain the setup line\./);
   assert.match(html, /Then I explain the result line\./);
   assert.match(html, /data-line="1"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
@@ -938,7 +954,7 @@ test('story beats are keyboard controls that select and center their exact rows'
     }],
   };
   const html = renderPage({ repo: process.cwd(), tour: beatTour, files, baseLabel: 'main', comments: [] });
-  const beatTag = html.match(/<button type="button" class="ds-beat"[^>]*>/)?.[0] ?? '';
+  const beatTag = html.match(/<button type="button" class="ds-beat ds-beatdock-note"[^>]*>/)?.[0] ?? '';
 
   assert.match(beatTag, /data-story-beat/);
   assert.match(beatTag, /aria-pressed="false"/);
@@ -948,9 +964,11 @@ test('story beats are keyboard controls that select and center their exact rows'
   assert.doesNotMatch(beatTag, /voice/i);
   assert.match(html, /id="ds-story-diff-1"[^>]*data-story-diff[^>]*role="region"[^>]*aria-label="a.ts story diff"/);
   assert.match(html, /data-story-focus-status aria-live="polite" aria-atomic="true"/);
-  assert.match(html, /\.ds-beat:focus-visible/);
+  assert.match(html, /\.ds-beatdock-note:focus-visible/);
   assert.match(html, /b=closest\(t,'\[data-story-beat\]'\)/);
   assert.match(html, /selectStoryFocus\(bpi,bpg,true\)/);
+  assert.match(html, /b=closest\(t,'\[data-rail-beat\]'\)/);
+  assert.match(html, /selectStoryFocus\(rbi,rbg,true\)/);
   assert.match(html, /rows\.forEach\(function\(r\)\{r\.classList\.add\('is-story-focus'\);\}\)/);
   assert.match(html, /announceStoryFocus\(panel,beat\)/);
   assert.match(html, /status\.textContent='Story beat '/);
@@ -1613,12 +1631,12 @@ test('review question prefers an authored falsifiable question over tag heuristi
 
 test('story repair is a named control with rewrite shorten and split outcomes', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /<summary aria-label="Repair this story step">/);
-  assert.match(html, />Repair&nbsp;<span class="ds-story-tune-long">step<\/span>/);
+  assert.match(html, /<summary aria-label="Repair this story step"/);
+  assert.match(html, /class="ds-story-tune is-icon/);
+  assert.match(html, /<span aria-hidden="true">•••<\/span>/);
   assert.match(html, /data-story-repair="rewrite"/);
   assert.match(html, /<strong>Make shorter<\/strong><small>Condense this explanation without dropping its risk\.<\/small>/);
   assert.match(html, /<strong>Split into smaller stops<\/strong><small>Give each review question its own local camera\.<\/small>/);
-  assert.doesNotMatch(html, />•••<\/summary>/);
 });
 
 test('story steps expose defensive attention levels and explicit beat navigation', () => {
@@ -1639,7 +1657,8 @@ test('story steps expose defensive attention levels and explicit beat navigation
   assert.match(html, /aria-label="Story attention level"/);
   assert.match(html, /data-story-lens="context"/);
   assert.match(html, /data-story-lens="full"/);
-  assert.match(html, /data-beat-current>Beat 1/);
+  assert.match(html, /data-beat-current>01/);
+  assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
   assert.match(html, /function applyFocusFolds\(panel\)/);
   assert.match(html, /outside this beat/);
@@ -1665,7 +1684,8 @@ test('broad steps surface concrete health reasons and direct repairs', () => {
     }],
   };
   const html = renderPage({ repo: process.cwd(), tour: broadTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /<strong>Broad step<\/strong>/);
+  assert.match(html, /class="ds-railbeats-health"/);
+  assert.match(html, /<i aria-hidden="true"><\/i>Broad/);
   assert.match(html, /45 lines in one step/);
   assert.match(html, /4 separate review beats/);
   assert.match(html, /data-story-repair="split"/);

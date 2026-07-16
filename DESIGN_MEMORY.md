@@ -5,6 +5,8 @@
 - **Review chrome:** “Integrated review frame” (Variant F) across raw diffs and narrated stories.
 - **Structure:** The sidebar owns navigation and repository identity; the canvas owns the document title and decisions; a semantic ledger connects them.
 - **Origin:** B’s sidebar-aligned split frame combined with E’s quiet native titlebar and review ledger.
+- **Beat navigation:** “Beat tree + review transport” (Variant F). The active step expands concise beat children in the reading-order rail; a bottom dock carries the complete active narration and transport controls; the code remains uninterrupted between them.
+- **Beat fallback:** When the rail is collapsed or compact, the bottom transport remains the complete navigation surface.
 
 ## Brand Tone
 
@@ -43,6 +45,8 @@
 - Use progressive disclosure inside the existing Review menu for detailed status and secondary actions.
 - In storyless mode, hide narration and voice settings; in narrated stories, keep them grouped quietly inside the same integrated frame.
 - Preserve direct sidebar collapse, drag resizing, persistence, keyboard resizing, and the compact overlay model.
+- Treat beats as children of the active story step, not as a second document beside the diff. Only the active beat is verbose, and that full text belongs in the bottom transport.
+- Keep broad-step health as quiet step metadata and put rewrite/split actions in overflow instead of a persistent warning banner.
 - Keep approval readiness independent from non-blocking unresolved comments.
 - On narrow follow-up layouts, reflow Full/Since into a second row instead of compressing the status sentence.
 

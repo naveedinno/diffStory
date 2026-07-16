@@ -508,15 +508,17 @@ function introCard(model: ReviewModel): string {
 // is *not* a plain change — "Changed" on every card is noise, so it is dropped.
 function railCard(s: StepView, i: number): string {
   if (s.kind === 'concept') {
-    return `<button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
-      <span class="ds-num">${i + 1}</span>
-      <span class="ds-stepcard-body">
-        <span class="ds-stepcard-title">${esc(s.title)}</span>
-        <span class="ds-stepcard-fileline">
-          <span class="ds-stepcard-file">Concept primer</span>
+    return `<div class="ds-railstory-node" data-story-step-node="${i + 1}">
+      <button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
+        <span class="ds-num">${i + 1}</span>
+        <span class="ds-stepcard-body">
+          <span class="ds-stepcard-title">${esc(s.title)}</span>
+          <span class="ds-stepcard-fileline">
+            <span class="ds-stepcard-file">Concept primer</span>
+          </span>
         </span>
-      </span>
-    </button>`;
+      </button>
+    </div>`;
   }
   const base = splitPath(s.file)[1];
   const badge =
@@ -525,15 +527,44 @@ function railCard(s: StepView, i: number): string {
       : `<span class="ds-railbadge ds-badge-${s.kind === 'new-file' ? 'new' : 'context'}">${esc(
           s.kindLabel,
         )}</span>`;
-  return `<button class="ds-stepcard" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
-    <span class="ds-num">${i + 1}</span>
-    <span class="ds-stepcard-body">
-      <span class="ds-stepcard-title">${esc(s.title)}</span>
-      <span class="ds-stepcard-fileline">
-        <span class="ds-stepcard-file" title="${esc(s.file)}">${esc(base)}</span>${badge}
+  return `<div class="ds-railstory-node" data-story-step-node="${i + 1}">
+    <button class="ds-stepcard" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
+      <span class="ds-num">${i + 1}</span>
+      <span class="ds-stepcard-body">
+        <span class="ds-stepcard-title">${esc(s.title)}</span>
+        <span class="ds-stepcard-fileline">
+          <span class="ds-stepcard-file" title="${esc(s.file)}">${esc(base)}</span>${badge}
+        </span>
       </span>
-    </span>
-  </button>`;
+    </button>
+    ${railBeatTree(s, i + 1)}
+  </div>`;
+}
+
+function railBeatTree(step: CodeStepView, stepIndex: number): string {
+  if (!step.beats.length) return '';
+  const health = step.health.broad
+    ? `<span class="ds-railbeats-health" title="${esc(step.health.reasons.join(' · '))}"><i aria-hidden="true"></i>Broad</span>`
+    : '';
+  const beats = step.beats.map((beat) => `<button type="button" class="ds-railbeat" data-rail-beat data-rail-step-index="${stepIndex}" data-focus-group="${beat.focusGroup}" aria-pressed="false" title="${esc(beat.text)}" aria-label="Beat ${beat.focusGroup + 1}: ${esc(beat.text)}">
+      <span class="ds-railbeat-marker">${String(beat.focusGroup + 1).padStart(2, '0')}</span>
+      <span class="ds-railbeat-text">${esc(railBeatLabel(beat.text))}</span>
+    </button>`).join('');
+  return `<div class="ds-railbeats" aria-label="Review beats for ${esc(step.title)}">
+    <div class="ds-railbeats-head">
+      <span>Review beats</span>${health}<span class="ds-railbeats-count" data-rail-current>1 / ${step.beats.length}</span>
+      ${storyRepairMenu(step, true)}
+    </div>
+    <div class="ds-railbeat-list">${beats}</div>
+  </div>`;
+}
+
+function railBeatLabel(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= 64) return clean;
+  const clipped = clean.slice(0, 64);
+  const boundary = clipped.lastIndexOf(' ');
+  return `${clipped.slice(0, boundary > 42 ? boundary : 64).replace(/[,:;\s]+$/, '')}…`;
 }
 
 function storyRail(steps: StepView[]): string {
@@ -1073,16 +1104,11 @@ function codeStepPanel(
         )}</a>
       </div>
     </div>
-    <div class="ds-why">
-      <div class="ds-why-head"><span class="ds-why-ico"></span><span class="ds-why-label">Review question</span><span class="ds-reviewfocus">${esc(reviewFocus(s))}</span><span class="ds-flex"></span><details class="ds-story-tune"><summary aria-label="Repair this story step">Repair&nbsp;<span class="ds-story-tune-long">step</span></summary><div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(
-        s.id,
-      )}" data-story-file="${esc(s.file)}"><strong>Rewrite explanation</strong><small>Make the question and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(
-        s.id,
-      )}" data-story-file="${esc(s.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(
-        s.id,
-      )}" data-story-file="${esc(s.file)}"><strong>Split into smaller stops</strong><small>Give each review question its own local camera.</small></button></div></details><button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button></div>
-      ${stepHealthHtml(s)}
-      ${stepStoryHtml(s, diffRegionId)}
+    <div class="ds-review-question">
+      <span class="ds-review-question-dot" aria-hidden="true"></span>
+      <span class="ds-sr-only">Review question: </span>
+      <span class="ds-reviewfocus">${esc(reviewFocus(s))}</span>
+      ${storyRepairMenu(s, true)}
     </div>
     <div class="ds-diffscroll">
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(
@@ -1109,17 +1135,22 @@ function codeStepPanel(
         <div data-full-inner hidden></div>
       </div>
     </div>
+    ${stepStoryHtml(s, diffRegionId)}
   </section>`;
 }
 
-function stepHealthHtml(step: CodeStepView): string {
-  if (!step.health.broad) return '';
-  return `<div class="ds-step-health" role="status">
-    <span class="ds-step-health-mark" aria-hidden="true">!</span>
-    <span class="ds-step-health-copy"><strong>Broad step</strong><small>${esc(step.health.reasons.join(' · '))}</small></span>
-    <button type="button" data-story-lens="focus">Focus this beat</button>
-    <button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}">Split step</button>
-  </div>`;
+function storyRepairMenu(step: CodeStepView, iconOnly = false): string {
+  const healthTitle = step.health.broad ? ` Broad step: ${step.health.reasons.join(' · ')}.` : '';
+  return `<details class="ds-story-tune${iconOnly ? ' is-icon' : ''}${step.health.broad ? ' has-health' : ''}">
+    <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}"><span aria-hidden="true">${iconOnly ? '•••' : 'Repair step'}</span></summary>
+    <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(
+      step.id,
+    )}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the question and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(
+      step.id,
+    )}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(
+      step.id,
+    )}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each review question its own local camera.</small></button></div>
+  </details>`;
 }
 
 function conceptStepPanel(
@@ -1196,21 +1227,33 @@ function conceptSpeechText(s: ConceptStepView): string {
 }
 
 function stepStoryHtml(s: CodeStepView, diffRegionId: string): string {
-  if (!s.beats.length) return `<p class="ds-why-text">${nl(esc(s.why))}</p>`;
-  return `<div class="ds-beatnav">
-      <span class="ds-beatnav-current"><b data-beat-current>Beat 1</b><span>of ${s.beats.length}</span></span>
-      <span class="ds-beatnav-hint">Use ← → to move</span>
-      <span class="ds-beatnav-actions"><button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button><button type="button" data-beat-move="1" aria-label="Next review beat">→</button></span>
-    </div><div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div><div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>`;
+  if (!s.beats.length) return `<div class="ds-beatdock is-single">
+    <span class="ds-beatdock-count">Review note</span>
+    <p class="ds-why-text">${nl(esc(s.why))}</p>
+    <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button>
+  </div>`;
+  return `<div class="ds-beatdock" data-beat-dock>
+    <span class="ds-beatdock-count"><b data-beat-current>01</b><span>/ ${String(s.beats.length).padStart(2, '0')}</span></span>
+    <div class="ds-beatdock-copy">
+      <div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div>
+      <span class="ds-beatdock-hint">← → move beats</span>
+    </div>
+    <span class="ds-beatdock-actions">
+      <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button>
+      <button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button>
+      <button type="button" data-beat-move="1" aria-label="Next review beat">→</button>
+    </span>
+    <div class="ds-sr-only" data-story-focus-status aria-live="polite" aria-atomic="true"></div>
+  </div>`;
 }
 
 function beatHtml(beat: CodeStepView['beats'][number], file: string, diffRegionId: string): string {
   const destination = beatDestination(file, beat.highlights);
-  return `<button type="button" class="ds-beat" data-story-beat data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(
+  return `<button type="button" class="ds-beat ds-beatdock-note" data-story-beat data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(
     beat.text,
   )}" data-focus-destination="${esc(destination)}" aria-controls="${diffRegionId}" aria-pressed="false" aria-label="Focus beat ${beat.focusGroup + 1}: ${esc(
     beat.text,
-  )}"><span class="ds-beat-index">${String(beat.focusGroup + 1).padStart(2, '0')}</span><span class="ds-beat-text">${nl(esc(beat.text))}</span></button>`;
+  )}"><span class="ds-beat-text">${nl(esc(beat.text))}</span></button>`;
 }
 
 function beatDestination(file: string, highlights: Array<[number, number]>): string {
