@@ -1661,7 +1661,10 @@ test('story steps expose defensive attention levels and explicit beat navigation
   assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
   assert.match(html, /function applyFocusFolds\(panel\)/);
-  assert.match(html, /outside this beat/);
+  assert.match(html, /Active beat at full strength/);
+  assert.match(html, /data-story-lens="focus"[^}]*\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
+  assert.doesNotMatch(html, /outside this beat/);
+  assert.doesNotMatch(html, /data-story-lens="focus"[^}]*\.ds-row:not\(\.is-story-camera\)[^}]*display:none/);
   assert.match(html, /function setStoryLens\(panel,lens,persist\)/);
   assert.match(html, /closest\(t,'button\[data-story-lens\]'\)/);
   assert.doesNotMatch(html, /closest\(t,'\[data-story-lens\]'\)/);

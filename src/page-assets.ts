@@ -1552,24 +1552,10 @@ const PAGE_JS_HEAD = `
   function clearFocusFolds(panel){
     $all('[data-focus-fold]',panel||document).forEach(function(fold){fold.remove();});
   }
-  function addFocusFold(body,count,before){
-    if(!count)return;
-    var fold=document.createElement('div');fold.className='ds-focus-fold';fold.setAttribute('data-focus-fold','');
-    fold.innerHTML='<span>'+count+' '+(count===1?'line':'lines')+' outside this beat</span><button type="button" data-story-lens="context">Show context</button>';
-    body.insertBefore(fold,before||null);
-  }
   function applyFocusFolds(panel){
-    clearFocusFolds(panel);if(!panel||panel.getAttribute('data-story-lens')!=='focus')return;
-    $all('[data-diff-inner] .ds-diffbody,[data-split-inner] .ds-diffbody',panel).forEach(function(body){
-      var hidden=0,children=Array.prototype.slice.call(body.children);
-      children.forEach(function(child){
-        if(!(child.classList.contains('ds-row')||child.classList.contains('ds-urow')))return;
-        if(child.classList.contains('is-story-camera')){addFocusFold(body,hidden,child);hidden=0;}else hidden++;
-      });
-      addFocusFold(body,hidden,null);
-    });
+    clearFocusFolds(panel);
   }
-  function storyLensLabel(lens){return lens==='focus'?'Active beat + nearby context':lens==='context'?'Whole step · focus preserved':'All authored rows';}
+  function storyLensLabel(lens){return lens==='focus'?'Active beat at full strength':lens==='context'?'Whole step · beat marked':'All authored rows';}
   function setStoryLens(panel,lens,persist){
     if(!panel||['focus','context','full'].indexOf(lens)<0)return;
     panel.setAttribute('data-story-lens',lens);
