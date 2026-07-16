@@ -44,14 +44,8 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
 .ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
 .ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
-.ds-step.is-story-active .ds-row.is-story-camera,.ds-step.is-story-active .ds-urow.is-story-camera{position:relative}
 .ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-urow:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-urow:not(.is-story-focus){opacity:.46}
 .ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-hunkgap,.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-hunkgap{opacity:.5}
-.ds-step[data-story-lens="context"].is-story-active .ds-row:not(.is-story-camera) .ds-cell-add{background:color-mix(in srgb,var(--add-bg) 34%,var(--panel3))}
-.ds-step[data-story-lens="context"].is-story-active .ds-row:not(.is-story-camera) .ds-cell-del{background:color-mix(in srgb,var(--del-bg) 34%,var(--panel3))}
-.ds-step[data-story-lens="context"].is-story-active .ds-urow:not(.is-story-camera).ds-row-add{background:color-mix(in srgb,var(--add-bg) 34%,var(--panel3))}
-.ds-step[data-story-lens="context"].is-story-active .ds-urow:not(.is-story-camera).ds-row-del{background:color-mix(in srgb,var(--del-bg) 34%,var(--panel3))}
-.ds-step[data-story-lens="context"].is-story-active .ds-row:not(.is-story-camera) .ds-code,.ds-step[data-story-lens="context"].is-story-active .ds-urow:not(.is-story-camera) .ds-code{color:var(--muted)}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-cell:not(.ds-cell-empty){background-image:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}

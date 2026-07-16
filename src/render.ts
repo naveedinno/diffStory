@@ -1115,11 +1115,10 @@ function codeStepPanel(
         s.file,
       )} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
-          <span class="ds-difthint" data-difthint>Active beat + nearby context</span>
+          <span class="ds-difthint" data-difthint>Active beat at full strength</span>
           <span class="ds-flex"></span>
           <div class="ds-storylens" role="group" aria-label="Story attention level">
             <button class="is-active" data-story-lens="focus" aria-pressed="true">Focus</button>
-            <button data-story-lens="context" aria-pressed="false">Context</button>
             <button data-story-lens="full" aria-pressed="false">Full</button>
           </div>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
@@ -1273,7 +1272,7 @@ function storyUnifiedDiffInner(s: CodeStepView, comments: Comment[]): string {
       const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
       return (
         (bi > 0 ? renderHunkGap() : '') +
-        block.map((row, rowIndex) => storyUnifiedRow(row, s, comments, bi, block, rowIndex, intra)).join('')
+        block.map((row) => storyUnifiedRow(row, s, comments, bi, intra)).join('')
       );
     })
     .join('');
@@ -1299,8 +1298,6 @@ function storyUnifiedRow(
   s: CodeStepView,
   comments: Comment[],
   blockIndex: number,
-  block: SbsRow[],
-  rowIndex: number,
   intra?: Map<SbsRow, IntraSides>,
 ): string {
   const target =
@@ -1313,10 +1310,8 @@ function storyUnifiedRow(
   const side = row.type === 'del' ? intra?.get(row)?.left : row.type === 'add' ? intra?.get(row)?.right : undefined;
   const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
   const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
-  const cameraIndices = rowCameraIndices(row, s, block, rowIndex);
-  const cameraAttr = cameraIndices.length ? ` data-step-camera="${cameraIndices.join(' ')}"` : '';
   const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
-  const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}${cameraAttr}`);
+  const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
   return rowHtml + threadForTargets([target], comments);
 }
 
@@ -1331,7 +1326,7 @@ function diffInner(s: CodeStepView, comments: Comment[]): string {
       const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
       return (
         (bi > 0 ? hunkGap() : '') +
-        block.map((row, rowIndex) => sbsRow(row, s, comments, bi, block, rowIndex, intra)).join('')
+        block.map((row) => sbsRow(row, s, comments, bi, intra)).join('')
       );
     })
     .join('');
@@ -1378,8 +1373,6 @@ function sbsRow(
   s: CodeStepView,
   comments: Comment[],
   blockIndex: number,
-  block: SbsRow[],
-  rowIndex: number,
   intra?: Map<SbsRow, IntraSides>,
 ): string {
   const leftTarget =
@@ -1393,40 +1386,10 @@ function sbsRow(
     rightTarget,
     stepId: s.id,
     focusIndex: rowVoiceFocusIndex(row, s, blockIndex),
-    cameraIndices: rowCameraIndices(row, s, block, rowIndex),
     single: s.context || s.newFile,
     sides: intra?.get(row),
   });
   return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
-}
-
-function rowCameraIndices(row: SbsRow, step: CodeStepView, block: SbsRow[], rowIndex: number): number[] {
-  return step.cameraGroups
-    .map((ranges, group) => ({ group, matches: ranges.some((range) => rowInCameraRange(row, block, rowIndex, step, range)) }))
-    .filter((entry) => entry.matches)
-    .map((entry) => entry.group);
-}
-
-function rowInCameraRange(
-  row: SbsRow,
-  block: SbsRow[],
-  rowIndex: number,
-  step: CodeStepView,
-  [start, end]: [number, number],
-): boolean {
-  if (row.newNo !== undefined) return row.newNo >= start && row.newNo <= end;
-  if (step.kind !== 'changed' || row.type !== 'del') return false;
-  if (start === 0 && end === 0) return true;
-  const neighbors = [nearestRenderedNewLine(block, rowIndex, -1), nearestRenderedNewLine(block, rowIndex, 1)]
-    .filter((line): line is number => line !== undefined);
-  return neighbors.some((line) => line >= start - 1 && line <= end + 1);
-}
-
-function nearestRenderedNewLine(block: SbsRow[], from: number, direction: -1 | 1): number | undefined {
-  for (let index = from + direction; index >= 0 && index < block.length; index += direction) {
-    if (block[index].newNo !== undefined) return block[index].newNo;
-  }
-  return undefined;
 }
 
 function rowVoiceFocusIndex(row: SbsRow, s: CodeStepView, blockIndex: number): number | null {

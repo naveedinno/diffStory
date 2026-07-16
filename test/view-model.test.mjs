@@ -114,7 +114,7 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.trust.uncovered.length, 0);
 });
 
-test('code steps derive a defensive camera, review question, and broad-step health', () => {
+test('code steps derive focus groups, a review question, and broad-step health', () => {
   const tour = {
     version: 1,
     title: 'Defensive focus',
@@ -138,7 +138,7 @@ test('code steps derive a defensive camera, review question, and broad-step heal
   const step = model.steps[0];
   assert.equal(step.chapter, 'Execution');
   assert.equal(step.question, 'Does the code prove this claim: External call stays bounded?');
-  assert.deepEqual(step.cameraGroups, [[[17, 25]]]);
+  assert.deepEqual(step.focusGroups, [[[20, 22]]]);
   assert.equal(step.health.broad, true);
   assert.ok(step.health.reasons.includes('45 lines in one step'));
 });

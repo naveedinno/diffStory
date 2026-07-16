@@ -14,7 +14,7 @@
 3. Replace the large canvas beat list with one bottom transport containing position, active narration, read-aloud, and previous/next controls.
 4. Reduce the review question to one calm inline prompt above the diff.
 5. Move repair actions into a compact overflow menu and remove the large amber broad-step banner.
-6. Keep Focus, Context, Full, pointer selection, arrow keys, read-aloud auto-advance, step changes, and All files behavior intact.
+6. Keep the two-state Focus/Full control, pointer selection, arrow keys, read-aloud auto-advance, step changes, and All files behavior intact.
 7. At compact widths or with the sidebar closed, keep the bottom transport fully usable.
 
 ## Accessibility and verification

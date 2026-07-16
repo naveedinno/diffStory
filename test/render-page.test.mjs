@@ -835,8 +835,8 @@ test('story viewport controls visible code while highlights control narration fo
   assert.match(html, /data-line="4"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
-  assert.match(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-camera="0"/);
-  assert.match(html, /Active beat \+ nearby context/i);
+  assert.doesNotMatch(html, /data-step-camera=/);
+  assert.match(html, /Active beat at full strength/i);
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -1655,16 +1655,17 @@ test('story steps expose defensive attention levels and explicit beat navigation
   const html = renderPage({ repo: process.cwd(), tour: beatTour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-story-lens="focus"/);
   assert.match(html, /aria-label="Story attention level"/);
-  assert.match(html, /data-story-lens="context"/);
+  assert.doesNotMatch(html, /data-story-lens="context"/);
   assert.match(html, /data-story-lens="full"/);
+  assert.doesNotMatch(html, /nearby context/i);
   assert.match(html, /data-beat-current>01/);
   assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
-  assert.match(html, /function applyFocusFolds\(panel\)/);
   assert.match(html, /Active beat at full strength/);
+  assert.match(html, /if\(lens!==\'focus\'&&lens!==\'full\'\)lens=\'focus\'/);
   assert.match(html, /data-story-lens="focus"[^}]*\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /outside this beat/);
-  assert.doesNotMatch(html, /data-story-lens="focus"[^}]*\.ds-row:not\(\.is-story-camera\)[^}]*display:none/);
+  assert.doesNotMatch(html, /data-step-camera|is-story-camera|cameraGroups/);
   assert.match(html, /function setStoryLens\(panel,lens,persist\)/);
   assert.match(html, /closest\(t,'button\[data-story-lens\]'\)/);
   assert.doesNotMatch(html, /closest\(t,'\[data-story-lens\]'\)/);

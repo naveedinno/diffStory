@@ -90,8 +90,6 @@ export interface CodeStepView extends StepViewBase {
   focusRanges: Array<[number, number]>;
   /** Focus ranges grouped by spoken unit. */
   focusGroups: Array<Array<[number, number]>>;
-  /** Small context windows derived from each focus group for defensive Focus mode. */
-  cameraGroups: Array<Array<[number, number]>>;
   /** Whether focusRanges came from story JSON instead of the step range fallback. */
   focusExplicit: boolean;
   newFile: boolean;
@@ -253,7 +251,6 @@ function buildCodeStep(
     range: viewport,
     focusRanges: focusGroups.flat(),
     focusGroups,
-    cameraGroups: stepCameraGroups(viewport, focusGroups),
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
@@ -292,28 +289,6 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
 function fallbackReviewQuestion(title: string): string {
   const claim = title.trim().replace(/[.?!]+$/, '');
   return `Does the code prove this claim: ${claim}?`;
-}
-
-function stepCameraGroups(
-  viewport: [number, number],
-  focusGroups: Array<Array<[number, number]>>,
-): Array<Array<[number, number]>> {
-  if (viewport[0] === 0 && viewport[1] === 0) return focusGroups;
-  return focusGroups.map((group) => mergeRanges(group.map(([start, end]) => [
-    Math.max(viewport[0], start - 3),
-    Math.min(viewport[1], end + 3),
-  ])));
-}
-
-function mergeRanges(ranges: Array<[number, number]>): Array<[number, number]> {
-  const sorted = [...ranges].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const merged: Array<[number, number]> = [];
-  for (const range of sorted) {
-    const previous = merged[merged.length - 1];
-    if (!previous || range[0] > previous[1] + 1) merged.push([...range]);
-    else previous[1] = Math.max(previous[1], range[1]);
-  }
-  return merged;
 }
 
 function stepHealth(

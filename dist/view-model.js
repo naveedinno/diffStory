@@ -86,7 +86,6 @@ function buildCodeStep(repo, step, files, byId, total, headRef) {
         range: viewport,
         focusRanges: focusGroups.flat(),
         focusGroups,
-        cameraGroups: stepCameraGroups(viewport, focusGroups),
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
@@ -123,26 +122,6 @@ function buildConceptStep(step, byId) {
 function fallbackReviewQuestion(title) {
     const claim = title.trim().replace(/[.?!]+$/, '');
     return `Does the code prove this claim: ${claim}?`;
-}
-function stepCameraGroups(viewport, focusGroups) {
-    if (viewport[0] === 0 && viewport[1] === 0)
-        return focusGroups;
-    return focusGroups.map((group) => mergeRanges(group.map(([start, end]) => [
-        Math.max(viewport[0], start - 3),
-        Math.min(viewport[1], end + 3),
-    ])));
-}
-function mergeRanges(ranges) {
-    const sorted = [...ranges].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    const merged = [];
-    for (const range of sorted) {
-        const previous = merged[merged.length - 1];
-        if (!previous || range[0] > previous[1] + 1)
-            merged.push([...range]);
-        else
-            previous[1] = Math.max(previous[1], range[1]);
-    }
-    return merged;
 }
 function stepHealth(step, viewport, focusGroups) {
     const viewportLines = viewport[0] === 0 ? 0 : viewport[1] - viewport[0] + 1;

@@ -899,11 +899,10 @@ function codeStepPanel(repo, s, i, total, comments) {
     <div class="ds-diffscroll">
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
-          <span class="ds-difthint" data-difthint>Active beat + nearby context</span>
+          <span class="ds-difthint" data-difthint>Active beat at full strength</span>
           <span class="ds-flex"></span>
           <div class="ds-storylens" role="group" aria-label="Story attention level">
             <button class="is-active" data-story-lens="focus" aria-pressed="true">Focus</button>
-            <button data-story-lens="context" aria-pressed="false">Context</button>
             <button data-story-lens="full" aria-pressed="false">Full</button>
           </div>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
@@ -1034,7 +1033,7 @@ function storyUnifiedDiffInner(s, comments) {
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
         return ((bi > 0 ? renderHunkGap() : '') +
-            block.map((row, rowIndex) => storyUnifiedRow(row, s, comments, bi, block, rowIndex, intra)).join(''));
+            block.map((row) => storyUnifiedRow(row, s, comments, bi, intra)).join(''));
     })
         .join('');
     const note = s.note && s.blocks.some((b) => b.length)
@@ -1047,7 +1046,7 @@ function storyUnifiedHead(s) {
     const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
     return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ''}</div>`;
 }
-function storyUnifiedRow(row, s, comments, blockIndex, block, rowIndex, intra) {
+function storyUnifiedRow(row, s, comments, blockIndex, intra) {
     const target = row.type === 'del' && row.oldNo !== undefined
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : row.newNo !== undefined
@@ -1057,10 +1056,8 @@ function storyUnifiedRow(row, s, comments, blockIndex, block, rowIndex, intra) {
     const side = row.type === 'del' ? intra?.get(row)?.left : row.type === 'add' ? intra?.get(row)?.right : undefined;
     const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
     const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
-    const cameraIndices = rowCameraIndices(row, s, block, rowIndex);
-    const cameraAttr = cameraIndices.length ? ` data-step-camera="${cameraIndices.join(' ')}"` : '';
     const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
-    const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}${cameraAttr}`);
+    const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
     return rowHtml + threadForTargets([target], comments);
 }
 function diffInner(s, comments) {
@@ -1073,7 +1070,7 @@ function diffInner(s, comments) {
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
         return ((bi > 0 ? hunkGap() : '') +
-            block.map((row, rowIndex) => sbsRow(row, s, comments, bi, block, rowIndex, intra)).join(''));
+            block.map((row) => sbsRow(row, s, comments, bi, intra)).join(''));
     })
         .join('');
     const note = s.note && s.blocks.some((b) => b.length)
@@ -1107,7 +1104,7 @@ function diffHead(s) {
     </span>
   </div>`;
 }
-function sbsRow(row, s, comments, blockIndex, block, rowIndex, intra) {
+function sbsRow(row, s, comments, blockIndex, intra) {
     const leftTarget = !s.context && !s.newFile && row.oldNo !== undefined
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : undefined;
@@ -1117,35 +1114,10 @@ function sbsRow(row, s, comments, blockIndex, block, rowIndex, intra) {
         rightTarget,
         stepId: s.id,
         focusIndex: rowVoiceFocusIndex(row, s, blockIndex),
-        cameraIndices: rowCameraIndices(row, s, block, rowIndex),
         single: s.context || s.newFile,
         sides: intra?.get(row),
     });
     return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
-}
-function rowCameraIndices(row, step, block, rowIndex) {
-    return step.cameraGroups
-        .map((ranges, group) => ({ group, matches: ranges.some((range) => rowInCameraRange(row, block, rowIndex, step, range)) }))
-        .filter((entry) => entry.matches)
-        .map((entry) => entry.group);
-}
-function rowInCameraRange(row, block, rowIndex, step, [start, end]) {
-    if (row.newNo !== undefined)
-        return row.newNo >= start && row.newNo <= end;
-    if (step.kind !== 'changed' || row.type !== 'del')
-        return false;
-    if (start === 0 && end === 0)
-        return true;
-    const neighbors = [nearestRenderedNewLine(block, rowIndex, -1), nearestRenderedNewLine(block, rowIndex, 1)]
-        .filter((line) => line !== undefined);
-    return neighbors.some((line) => line >= start - 1 && line <= end + 1);
-}
-function nearestRenderedNewLine(block, from, direction) {
-    for (let index = from + direction; index >= 0 && index < block.length; index += direction) {
-        if (block[index].newNo !== undefined)
-            return block[index].newNo;
-    }
-    return undefined;
 }
 function rowVoiceFocusIndex(row, s, blockIndex) {
     const idx = s.focusGroups.findIndex((ranges) => ranges.some((range) => rowInFocusRange(row, s, range)));

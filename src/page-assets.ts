@@ -489,7 +489,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step[data-story-lens="focus"] .ds-beat:not(.is-selected) .ds-beat-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
 .ds-step[data-story-lens="focus"] .ds-beat:not(.is-selected){padding-top:5px;padding-bottom:5px}
 .ds-storylens{display:inline-flex;padding:2px;border:1px solid var(--line-soft);border-radius:8px;background:var(--fill-1)}.ds-storylens button{height:25px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;font-weight:740;cursor:pointer}.ds-storylens button.is-active{background:var(--panel3);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.18)}.ds-full-diff{height:29px;padding:0 8px;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;font-weight:720;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}
-.ds-step.is-code-step .ds-difftoolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px 8px;align-items:center}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}.ds-step.is-code-step .ds-difthint{grid-column:1/-1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-step.is-code-step .ds-storylens{justify-self:start}.ds-step.is-code-step .ds-full-diff{justify-self:start}.ds-step.is-code-step .ds-modetoggle{justify-self:end}.ds-step[data-story-lens="focus"] .ds-changejump,.ds-step[data-story-lens="context"] .ds-changejump{display:none!important}
+.ds-step.is-code-step .ds-difftoolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px 8px;align-items:center}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}.ds-step.is-code-step .ds-difthint{grid-column:1/-1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-step.is-code-step .ds-storylens{justify-self:start}.ds-step.is-code-step .ds-full-diff{justify-self:start}.ds-step.is-code-step .ds-modetoggle{justify-self:end}.ds-step[data-story-lens="focus"] .ds-changejump{display:none!important}
 
 /* ---- comments ---- */
 .ds-thread{position:fixed;z-index:84;top:76px;right:20px;width:min(460px,calc(100vw - 40px));max-height:calc(100vh - 96px);padding:0;
@@ -1544,28 +1544,17 @@ const PAGE_JS_HEAD = `
     var g=groups.indexOf(group)>=0?group:groups[0];
     return $all('[data-step-focus="'+g+'"]',panel);
   }
-  function cameraRowsForGroup(panel,group){
-    var groups=focusGroupsForPanel(panel);if(!groups.length)return [];
-    var g=groups.indexOf(group)>=0?group:groups[0];
-    return $all('[data-step-camera~="'+g+'"]',panel);
-  }
-  function clearFocusFolds(panel){
-    $all('[data-focus-fold]',panel||document).forEach(function(fold){fold.remove();});
-  }
-  function applyFocusFolds(panel){
-    clearFocusFolds(panel);
-  }
-  function storyLensLabel(lens){return lens==='focus'?'Active beat at full strength':lens==='context'?'Whole step · beat marked':'All authored rows';}
+  function storyLensLabel(lens){return lens==='focus'?'Active beat at full strength':'All authored rows';}
   function setStoryLens(panel,lens,persist){
-    if(!panel||['focus','context','full'].indexOf(lens)<0)return;
+    if(!panel||['focus','full'].indexOf(lens)<0)return;
     panel.setAttribute('data-story-lens',lens);
     $all('.ds-storylens [data-story-lens]',panel).forEach(function(button){var on=button.getAttribute('data-story-lens')===lens;button.classList.toggle('is-active',on);button.setAttribute('aria-pressed',on?'true':'false');});
     var hint=$('[data-difthint]',panel);if(hint)hint.textContent=storyLensLabel(lens);
-    applyFocusFolds(panel);
     if(persist!==false)try{localStorage.setItem('ds-story-lens',lens);}catch(e){}
   }
   function restoreStoryLens(panel){
     var lens='focus';try{lens=localStorage.getItem('ds-story-lens')||'focus';}catch(e){}
+    if(lens!=='focus'&&lens!=='full')lens='focus';
     setStoryLens(panel,lens,false);
   }
   function updateBeatNav(panel,selected){
@@ -1602,8 +1591,6 @@ const PAGE_JS_HEAD = `
     storyFocusIndex=-1;storyFocusGroup=-1;
     $all('.ds-step.is-story-active').forEach(function(p){p.classList.remove('is-story-active');});
     $all('.ds-row.is-story-focus,.ds-urow.is-story-focus').forEach(function(r){r.classList.remove('is-story-focus');});
-    $all('.ds-row.is-story-camera,.ds-urow.is-story-camera').forEach(function(r){r.classList.remove('is-story-camera');});
-    clearFocusFolds(document);
     $all('.ds-beat.is-selected').forEach(function(b){b.classList.remove('is-selected');b.setAttribute('aria-pressed','false');});
     $all('.ds-railbeat.is-selected').forEach(function(b){b.classList.remove('is-selected');b.classList.add('is-visited');b.setAttribute('aria-pressed','false');});
   }
@@ -1623,12 +1610,11 @@ const PAGE_JS_HEAD = `
     clearStoryFocus();
     storyFocusIndex=stepIndex;storyFocusGroup=selected;panel.classList.add('is-story-active');
     rows.forEach(function(r){r.classList.add('is-story-focus');});
-    cameraRowsForGroup(panel,selected).forEach(function(r){r.classList.add('is-story-camera');});
     var beat=$('[data-story-beat][data-focus-group="'+selected+'"]',panel);
     if(beat){beat.classList.add('is-selected');beat.setAttribute('aria-pressed','true');announceStoryFocus(panel,beat);}
     var railBeat=$('[data-rail-beat][data-rail-step-index="'+stepIndex+'"][data-focus-group="'+selected+'"]');
     if(railBeat){railBeat.classList.add('is-selected');railBeat.setAttribute('aria-pressed','true');}
-    updateBeatNav(panel,selected);applyFocusFolds(panel);
+    updateBeatNav(panel,selected);
     if(shouldScroll!==false)centerFocusRows(rows,false);
     return true;
   }
