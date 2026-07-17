@@ -112,11 +112,11 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(opts.repoName)} review history</title>
 <style>
 ${sharedTokens()}
-:root{--bg:#17181b;--elev:#24262b;--label:#f5f6f8;--l2:#b3b7c0;--l3:#858b97;--hair:rgba(255,255,255,.13);--sep:rgba(255,255,255,.08);--blue:#0a84ff;--blue2:#3395ff;--red-bg:rgba(255,69,58,.18);--red:#ff6961;--amber:#d28b26;--green:#48d597;--fill:rgba(255,255,255,.06);--chip:rgba(127,132,145,.22)}
-:root[data-theme="light"]{--bg:#f1f3f6;--elev:#fff;--label:#17191e;--l2:#5e6470;--l3:#858c99;--hair:rgba(18,23,32,.13);--sep:rgba(18,23,32,.08);--blue:#0866e5;--blue2:#0057ca;--red-bg:#fde9e7;--red:#bd2a22;--amber:#b86b00;--green:#177a51;--fill:rgba(15,23,42,.045);--chip:rgba(94,99,112,.11)}
+/* Signal 3b: alias story-picker names onto the canonical tokens (theme.ts); --bg and --amber are canonical (inherited). Aliases flip via the canonical light block. */
+:root{--elev:var(--surface);--label:var(--text);--l2:var(--text-2);--l3:var(--text-3);--hair:var(--line);--sep:var(--line-soft);--blue:var(--accent);--blue2:var(--accent-hi);--red-bg:var(--del-soft);--red:var(--del);--green:var(--add);--fill:var(--fill-2);--chip:var(--fill-3)}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:0}
+body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;letter-spacing:0}
 .wrap{width:min(960px,100%);margin:0 auto;padding:28px 24px 64px}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:28px;padding-bottom:22px;margin-bottom:22px;border-bottom:.5px solid var(--sep)}
 .page-copy{min-width:0}.page-actions{display:flex;align-items:center;gap:18px;flex:none}

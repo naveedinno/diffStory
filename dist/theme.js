@@ -50,7 +50,7 @@ export function themeBootstrapScript() {
   function apply(mode){
     var value=resolved(mode),root=document.documentElement,previous=root.getAttribute('data-theme');
     root.setAttribute('data-theme',value);root.setAttribute('data-theme-mode',mode);root.style.colorScheme=value;
-    var meta=document.querySelector('meta[data-ds-theme-color]');if(meta)meta.setAttribute('content',value==='dark'?'#15171b':'#f1f3f6');
+    var meta=document.querySelector('meta[data-ds-theme-color]');if(meta)meta.setAttribute('content',value==='dark'?'#0a0c0f':'#edf0f4');
     syncControls(mode);
     if(previous&&previous!==value&&typeof CustomEvent==='function')document.dispatchEvent(new CustomEvent('ds-theme-change',{detail:{theme:value,mode:mode}}));
   }
@@ -90,17 +90,77 @@ export function themeBootstrapScript() {
 })();
 </script>`;
 }
-// The shared graphite review palette. Dark is the no-script fallback; the head
-// bootstrap resolves System to a concrete data-theme value before first paint.
+// The shared design-token layer for every browser surface. Direction "3b Signal /
+// Thread-Ledger": ink surfaces, a single signal-blue accent, IBM Plex + Space
+// Grotesk type. This block is the CANONICAL source of truth — page-local token
+// names (--app-*, --md-*, --panel*, story-picker/picker/nav vars) alias onto
+// these. Keep the aliases one-directional (name -> canonical) so no var() cycle
+// forms. Dark is the no-script fallback; the head bootstrap resolves System to a
+// concrete data-theme value before first paint. Fonts are self-hosted woff2
+// served same-origin from /assets/fonts (satisfies the font-src 'self' CSP).
 export function sharedTokens() {
     return `
-:root{color-scheme:dark;--app-bg:#15171b;--app-elev:#22252b;--app-label:#f4f6f8;--app-l2:#b3b8c2;--app-l3:#858c98;
-  --app-hair:rgba(255,255,255,.13);--app-sep:rgba(255,255,255,.075);--app-fill:rgba(255,255,255,.075);--app-subbg:rgba(255,255,255,.035);
-  --app-blue:#4a9cff;--app-blue2:#72b2ff;--app-add:#48d597;--app-del:#ff756e;--app-addbar:#48d597;--app-delbar:#ff625b;
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:700;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-latin-700-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;src:url('/assets/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:700;font-display:swap;src:url('/assets/fonts/ibm-plex-mono-latin-700-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/space-grotesk-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;src:url('/assets/fonts/space-grotesk-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;src:url('/assets/fonts/space-grotesk-latin-700-normal.woff2') format('woff2')}
+:root{color-scheme:dark;
+  /* surfaces */
+  --bg:#0a0c0f;--surface:#14171c;--surface-2:#181b20;--surface-3:#1e232b;
+  /* text — --text-3 is lifted from the 3b mockup's #5c6675 to keep WCAG AA 4.5:1
+     on elevated surfaces (the owner asked to keep AA); don't "sync" it back down. */
+  --text:#eef1f5;--text-2:#98a2b3;--text-3:#8792a2;
+  /* lines + fills (cool alpha neutrals) */
+  --line:rgba(190,205,225,.14);--line-soft:rgba(190,205,225,.09);
+  --fill-1:rgba(190,205,225,.05);--fill-2:rgba(190,205,225,.08);--fill-3:rgba(190,205,225,.12);
+  /* signal accent */
+  --accent:#3fb2ff;--accent-hi:#7adfff;--on-accent:#06121c;--accent-soft:rgba(63,178,255,.12);--accent-line:rgba(63,178,255,.3);
+  /* semantic: evidence + state */
+  --add:#3ddc97;--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--del-soft:rgba(255,107,98,.12);
+  --amber:#ffb224;--amber-soft:rgba(255,178,36,.14);--on-amber:#241600;
+  /* thread + numerals */
+  --numeral:var(--accent);--numeral-dim:#3a4250;--thread:var(--accent);--thread-dim:rgba(63,178,255,.28);
+  --map-dot:rgba(190,205,225,.09);--accent-glow:rgba(63,178,255,.18);
+  /* diff surfaces */
+  --gutter:#12151a;--add-bg:rgba(61,220,151,.09);--del-bg:rgba(255,107,98,.09);
+  /* syntax (cool dark) */
+  --tk-k:#c79bff;--tk-t:#6fd2c2;--tk-f:#8fb4ff;--tk-s:#b7d59b;--tk-n:#e8a87c;--tk-c:#8a929e;
+  /* misc */
+  --scrim:rgba(4,6,9,.62);--shadow:0 1px 2px rgba(0,0,0,.34),0 8px 28px rgba(0,0,0,.28);--scroll:rgba(190,205,225,.22);
+  /* type: three voices, each one job */
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --font-display:'Space Grotesk','IBM Plex Sans',sans-serif;
+  --text-xs:10px;--text-sm:11px;--text-md:12.5px;--text-base:13px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;--text-numeral:26px;--text-numeral-lg:56px;
+  --tracking-kicker:.14em;--tracking-tight:-.02em;--tracking-numeral:-.03em;--leading-tight:1.25;--leading-body:1.55;
+  /* spacing + radii (4px base; controls 6/9/12 harmonize with 16px islands) */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-8:32px;--sp-10:40px;
+  --radius-sm:6px;--radius:9px;--radius-lg:12px;--radius-island:16px;--rail-width:316px;--control-h:32px;--control-h-lg:38px;--hairline-w:1px;
+  /* motion (carried over verbatim) */
   --motion-ease-out:cubic-bezier(0.23,1,0.32,1);--motion-ease-in-out:cubic-bezier(0.77,0,0.175,1);--motion-ease-drawer:cubic-bezier(0.32,0.72,0,1);
-  --motion-duration-press:120ms;--motion-duration-fast:150ms;--motion-duration-ui:200ms;--motion-duration-progress:250ms;--motion-duration-spatial:340ms}
-:root[data-theme="light"]{color-scheme:light;--app-bg:#f1f3f6;--app-elev:#ffffff;--app-label:#17191e;--app-l2:#5e6470;--app-l3:#858c99;
-  --app-hair:rgba(18,23,32,.13);--app-sep:rgba(18,23,32,.075);--app-fill:rgba(15,23,42,.055);--app-subbg:rgba(15,23,42,.028);
-  --app-blue:#0866e5;--app-blue2:#0057ca;--app-add:#177a51;--app-del:#bd2a22;--app-addbar:#2b9a68;--app-delbar:#e14a43}
+  --motion-duration-press:120ms;--motion-duration-fast:150ms;--motion-duration-ui:200ms;--motion-duration-progress:250ms;--motion-duration-spatial:340ms;
+  /* --app-* compatibility aliases (one-directional -> canonical; resolve per-theme) */
+  --app-bg:var(--bg);--app-elev:var(--surface);--app-label:var(--text);--app-l2:var(--text-2);--app-l3:var(--text-3);
+  --app-hair:var(--line);--app-sep:var(--line-soft);--app-fill:var(--fill-2);--app-subbg:var(--fill-1);
+  --app-blue:var(--accent);--app-blue2:var(--accent-hi);--app-add:var(--add);--app-del:var(--del);--app-addbar:var(--add);--app-delbar:var(--del)}
+:root[data-theme="light"]{color-scheme:light;
+  --bg:#edf0f4;--surface:#ffffff;--surface-2:#eef1f5;--surface-3:#e5eaf1;
+  --text:#14171c;--text-2:#5c6675;--text-3:#5f6976;
+  --line:rgba(20,30,45,.15);--line-soft:rgba(20,30,45,.08);
+  --fill-1:rgba(20,30,45,.035);--fill-2:rgba(20,30,45,.06);--fill-3:rgba(20,30,45,.1);
+  --accent:#0072d6;--accent-hi:#0086f0;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
+  --add:#178a52;--add-soft:rgba(23,138,82,.1);--del:#d2372e;--del-soft:rgba(210,55,46,.09);
+  --amber:#a96800;--amber-soft:rgba(199,124,0,.13);--on-amber:#ffffff;
+  --numeral-dim:#c3ccd9;--thread-dim:rgba(0,114,214,.25);--map-dot:rgba(20,40,70,.13);--accent-glow:rgba(0,114,214,.14);
+  --gutter:#edf0f5;--add-bg:rgba(23,138,82,.08);--del-bg:rgba(210,55,46,.07);
+  --tk-k:#9a2ebf;--tk-t:#0e7490;--tk-f:#2563eb;--tk-s:#297a3a;--tk-n:#b45309;--tk-c:#6b7785;
+  --scrim:rgba(15,22,32,.32);--shadow:0 1px 2px rgba(15,22,32,.12),0 8px 24px rgba(15,22,32,.1);--scroll:rgba(60,70,85,.25)}
 `;
 }

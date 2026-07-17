@@ -86,7 +86,7 @@ test('failed runs show one human error and keep diagnostics collapsed', () => {
   assert.match(css, /\.ds-pp-mile\.is-error/);
   assert.match(css, /\.ds-pp-live\.is-error\{color:var\(--pp-muted\)\}/);
   assert.match(css, /\.ds-pp-details>summary\{[^}]*color:var\(--pp-muted\)/);
-  assert.match(css, /--pp-faint:#9a9aa3/);
+  assert.match(css, /--pp-faint:#98a2b3/);
   assert.match(css, /focus-visible/);
   assert.match(css, /@media \(max-width:520px\)\{[\s\S]*\.ds-pp-head\{display:grid/);
   assert.match(css, /\.ds-pp-agent\{[^}]*text-overflow:ellipsis/);

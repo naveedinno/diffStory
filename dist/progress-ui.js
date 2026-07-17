@@ -9,12 +9,12 @@
 /** Self-contained styles (own CSS custom properties so it looks identical on both screens). */
 export function progressPanelStyles() {
     return `
-.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e;--pp-text:#f2f2f7;--pp-muted:#9a9aa3;--pp-faint:#9a9aa3;
-  --pp-line:rgba(255,255,255,.12);--pp-blue:#0a84ff;--pp-warn:#ff9f0a;--pp-err:#ff6961;--pp-ok:#30d158;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--pp-text);
+.ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b;--pp-text:#eef1f5;--pp-muted:#98a2b3;--pp-faint:#98a2b3;
+  --pp-line:rgba(190,205,225,.12);--pp-blue:#3fb2ff;--pp-warn:#ffb224;--pp-err:#ff6b62;--pp-ok:#3ddc97;
+  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--pp-text);
   background:var(--pp-bg);border:.5px solid var(--pp-line);border-radius:14px;overflow:hidden;letter-spacing:-.01em}
-@media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#1c1c1e;--pp-elev:#2c2c2e}}
-@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#1e1e21;--pp-elev:#2a2a2e;--pp-muted:#a6a6ad;--pp-faint:#a6a6ad}}
+@media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b}}
+@media (prefers-color-scheme:light){.ds-pp{--pp-bg:#181b20;--pp-elev:#242a32;--pp-muted:#a6b0bf;--pp-faint:#a6b0bf}}
 .ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(72vh,580px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
 .ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(66vh,580px)}
 .ds-pp[data-variant][hidden]{display:none}

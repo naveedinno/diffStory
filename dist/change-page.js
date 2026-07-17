@@ -125,13 +125,14 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — choose review scope</title>
 <style>
 ${sharedTokens()}
-:root{--bg:var(--app-bg);--elev:var(--app-elev);--label:var(--app-label);--l2:var(--app-l2);--l3:var(--app-l3);
+/* Signal 3b: --bg/--add/--del are canonical (inherited); alias the rest onto the shared --app-* layer, which itself aliases the canonical tokens. */
+:root{--elev:var(--app-elev);--label:var(--app-label);--l2:var(--app-l2);--l3:var(--app-l3);
   --hair:var(--app-hair);--sep:var(--app-sep);--blue:var(--app-blue);--blue2:var(--app-blue2);
-  --add:var(--app-add);--del:var(--app-del);--addbar:var(--app-addbar);--delbar:var(--app-delbar);
+  --addbar:var(--app-addbar);--delbar:var(--app-delbar);
   --fill:var(--app-fill);--subbg:var(--app-subbg)}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--label);min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 .wrap{max-width:1120px;margin:0 auto;padding:26px 24px 34px}
 .review-path{display:grid;grid-template-columns:100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px minmax(28px,1fr) 100px;align-items:center;width:min(640px,100%);margin:0 0 26px;color:var(--l3);font-size:11px;font-weight:720;text-transform:uppercase;letter-spacing:.07em}.review-path>b{height:1px;margin:0 12px;background:var(--hair)}.review-path span{display:flex;align-items:center;gap:9px;white-space:nowrap}.review-path i{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:50%;background:var(--bg);border:1px solid var(--hair);font-style:normal;color:var(--l3)}.review-path .active{color:var(--label)}.review-path .active i{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent)}
 .lede{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin:4px 0 18px}

@@ -1,68 +1,54 @@
 # Design Memory
 
-## Approved Direction
+## Approved Direction — "Signal / Thread-Ledger" (option 3b)
 
-- **Review chrome:** “Integrated review frame” (Variant F) across raw diffs and narrated stories.
-- **Structure:** The sidebar owns navigation and repository identity; the canvas owns the document title and decisions; a semantic ledger connects them.
-- **Origin:** B’s sidebar-aligned split frame combined with E’s quiet native titlebar and review ledger.
-- **Beat navigation:** “Beat tree + review transport” (Variant F). The active step expands concise beat children in the reading-order rail; a bottom dock carries the complete active narration and transport controls; the code remains uninterrupted between them.
-- **Beat fallback:** When the rail is collapsed or compact, the bottom transport remains the complete navigation surface.
+Chosen by the owner (July 2026), superseding the earlier Apple-HIG / graphite direction. An instrument-grade, developer-native evolution of the original graphite + system-blue UI: colder **ink** surfaces, one electric **signal-blue** accent, mono-typed data everywhere, and oversized **Space Grotesk** step numerals that double as the "thread" navigation nodes.
+
+The imported mockup (source of truth for values and per-screen layouts) lives at `.claude-design/lab/diffstory-ds/` — run it via the `diffstory-ds-preview` launch config. Its `readme.md` is the full design brief.
+
+- **Workflow:** Scope → Read → Resolve → Decide. Git provides evidence; the story provides reading order; the review loop records human judgment.
+- **Surfaces = islands:** app chrome floats as rounded panels (`--radius-island` 16px) on a deeper page background, separated by 12px gutters. Flat, no gradients, no glass; shadow only on overlays.
+- **The thread:** a 2px vertical line connects step numerals — solid accent up to the current position, `--thread-dim` beyond. It is the brand mark made structural.
+- **Read views:** raw diff (`AllFilesDiff`) is the ground truth and is kept as-is; the guided walkthrough (`CodeWalkthrough`) is a one-step-at-a-time filmstrip with a horizontal numeral thread. The Atlas map overview was cut — the filmstrip IS the overview.
+- **Feedback = Notes (one-shot, no rounds):** note → send. No versioned rounds/verdicts; the agent rewrites, the story regenerates, the next review starts clean. (This replaces the old `review-state.ts` rounds model — a later port sub-project.)
 
 ## Brand Tone
 
-- **Aim for:** Minimal, premium, calm, precise, and developer-native.
-- **Avoid:** Pill-heavy chrome, warning color on neutral actions, duplicated identity, equal emphasis on every control, decorative progress metaphors, and raw mixed-weight glyphs.
-
-## Layout & Spacing
-
-- Use comfortable density with a clear hierarchy, not spacious marketing-page spacing.
-- Treat the resizable review sidebar as a first-class structural seam.
-- Align sidebar-owned chrome and sidebar content with the same `--ds-rail-width` value.
-- For this review surface, the approved desktop rhythm is a quiet 56px title row plus a 30px semantic ledger.
-- Keep borders thin, surfaces mostly flat, and radii in the existing 7–10px range.
-
-## Typography
-
-- Use the SF Pro/system stack for interface text.
-- Use SF Mono/Menlo for repository names, refs, hashes, and code metadata.
-- Prefer one clear title with restrained secondary context; truncate long metadata rather than increasing chrome height.
+- **Aim for:** Minimal, premium, calm, precise, developer-native. No hype, no exclamation points, no emoji.
+- **Casing:** sentence case everywhere except uppercase mono kickers ("READING ORDER", "THE STORY OF THIS CHANGE").
+- **Avoid:** pill-heavy chrome, warning color on neutral actions, duplicated identity, equal emphasis on every control, decorative progress metaphors, glass/gradients.
 
 ## Color
 
-- Keep graphite/system surfaces and system blue for focus and primary interaction.
-- Semantic color belongs to evidence and state:
-  - amber for blockers/attention;
-  - green for ready/approved;
-  - blue for follow-up information;
-  - red for changes requested or errors.
-- Neutral actions such as Reload must not inherit warning dots or warning fills.
-- Use `--muted`, not faint small text, for repo/base metadata in light mode.
+- One interactive accent — **signal blue** `#3fb2ff` (dark) / `#0072d6` (light). Semantic color belongs to evidence + state only: amber = attention/blockers, green = add/ready, red = del/errors, blue = follow-up info.
+- Neutral actions (Reload) never borrow warning color. Use `--text-2` (muted), not faint text, for repo/base metadata.
 
-## Interaction Patterns
+## Typography
 
-- Keep one obvious decision entry point: Review.
-- Keep Reload available but visually secondary and neutral.
-- Use progressive disclosure inside the existing Review menu for detailed status and secondary actions.
-- In storyless mode, hide narration and voice settings; in narrated stories, keep them grouped quietly inside the same integrated frame.
-- Preserve direct sidebar collapse, drag resizing, persistence, keyboard resizing, and the compact overlay model.
-- Treat beats as children of the active story step, not as a second document beside the diff. Only the active beat is verbose, and that full text belongs in the bottom transport.
-- Keep broad-step health as quiet step metadata and put rewrite/split actions in overflow instead of a persistent warning banner.
-- Keep approval readiness independent from non-blocking unresolved comments.
-- On narrow follow-up layouts, reflow Full/Since into a second row instead of compressing the status sentence.
+- **IBM Plex Sans** for UI text; **IBM Plex Mono** for code, refs, hashes, data, and uppercase kickers (tracking .14em); **Space Grotesk** for oversized numerals and page display titles only.
+- Numerals as structure: zero-padded ("01"–"06"), active = accent, inactive = `--numeral-dim`. Oversized numerals are reserved for steps; sub-step beats use small segment dots, never a second counter.
 
-## Accessibility Rules
+## Layout & Spacing
 
-- Compact interactive targets are at least 44×44px.
-- Controls keep stable accessible names when visible labels collapse to icons.
-- Popovers and drawers synchronize ARIA state and return focus on close.
-- The compact sidebar makes covered content inert while open.
-- Maintain system-blue focus-visible treatment and WCAG AA contrast in light and dark themes.
-- Respect reduced motion, reduced transparency, and increased contrast.
+- Comfortable density, hierarchy-first — not marketing spacing. 48px chrome rows, 316px rail (`--ds-rail-width` / `--rail-width`).
+- Controls round at 6/9/12px (`--radius-sm`/`--radius`/`--radius-lg`) to harmonize with 16px islands. Thin 1px hairlines (`--line`, `--line-soft`).
+
+## Accessibility Rules (retained from HIG rigor)
+
+- Compact interactive targets ≥ 44×44px. Controls keep stable accessible names when labels collapse to icons.
+- Popovers/drawers sync ARIA state and return focus on close; the compact sidebar makes covered content inert.
+- 3px `--accent-soft` focus-visible ring (box-shadow, no outline). **WCAG AA (4.5:1) in light and dark** — note: `--text-3` is lifted from the mockup's dim `#5c6675`/`#8b95a5` to `#8792a2`/`#5f6976` so the faint tier still clears AA on elevated surfaces (don't sync it back down). Verified by `test/render-page.test.mjs`.
+- Respect reduced motion, reduced transparency, increased contrast.
 
 ## Repo Conventions
 
-- Review markup is server-rendered in `src/render.ts`.
-- Review CSS and client behavior live in the inline asset string in `src/page-assets.ts`.
-- Render contracts belong in `test/render-page.test.mjs`.
-- Edit `src/` only; `dist/` is generated by the build.
-- Add no UI dependency for this redesign; use existing tokens and inline vector markup.
+- **Canonical tokens live in `src/theme.ts` `sharedTokens()`** (the 3b block for both schemes + `@font-face`). Page-local names (`--app-*`, `--md-*`, `--panel*`, story-picker/picker/nav vars) ALIAS onto the canonical tokens — keep aliases one-directional (name → canonical) so no `var()` cycle forms.
+- **Fonts are self-hosted** woff2 under `assets/fonts/`, copied to `dist/assets/fonts/` by `scripts/build-browser-assets.mjs`, served same-origin via the `/assets/fonts/*.woff2` route in `src/server.ts` (satisfies the `font-src 'self'` CSP — do not add Google Fonts).
+- Review markup is server-rendered in `src/render.ts`; review CSS + client JS in the inline string in `src/page-assets.ts`; other routes in `src/picker.ts`, `src/change-page.ts`, `src/story-picker.ts`.
+- Edit `src/` only; `dist/` is generated by the build and committed. After editing the client JS template (`PAGE_JS`), `node --check` the emitted JS.
+- The app draws its own inline stroke SVGs; use Lucide (1.5 stroke) or copy the app's vectors for new work. The old blue rounded-square app icon is retired in the design (use the Thread-Path mark + wordmark) — brand swap is a later sub-project.
+
+## Port Status (as of 2026-07-17)
+
+- **Done — Foundation:** canonical 3b token layer + self-hosted type ported into `src/` across all four routes + `/review`, light & dark. Spec: `docs/superpowers/specs/2026-07-17-diffstory-signal-foundation-design.md`.
+- **Pending — per-screen sub-projects:** island layout/gutters, the numeral-thread nav + filmstrip walkthrough, ReviewHistory as a first-class screen, the Notes (one-shot) model replacing rounds, consolidated SystemStates, and the Thread-Path brand swap. Each gets its own spec → plan → implementation.

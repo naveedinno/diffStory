@@ -10,70 +10,35 @@ const PAGE_CSS_CORE = `
    surface, primary, secondary, outline, and state-layer roles. */
 :root{
   color-scheme:dark;
-  /* Apple-HIG palette (dark default): neutral system grays + system blue accent.
-     The --md-* role names are kept so existing component CSS keeps resolving; only
-     the values changed (purple/Google → gray/blue/SF). */
-  --md-primary:var(--app-blue); --md-on-primary:#FFFFFF; --md-primary-container:#0A3A66; --md-on-primary-container:#D6E9FF;
-  --md-secondary:#AEAEB2; --md-secondary-container:rgba(10,132,255,0.22); --md-on-secondary-container:#D6E9FF;
-  --md-tertiary:#FF375F; --md-error:#FF453A; --md-on-error:#FFFFFF; --md-error-container:rgba(255,69,58,0.22);
-  --md-surface:var(--app-bg); --md-surface-container-low:var(--app-bg); --md-surface-container:var(--app-elev);
-  --md-surface-container-high:#3A3A3C; --md-surface-container-highest:#48484A;
-  --md-on-surface:var(--app-label); --md-on-surface-variant:var(--text-secondary); --md-outline:#8E8E93; --md-outline-variant:rgba(255,255,255,0.16);
-  --accent:var(--md-primary); --accent-hi:#409CFF; --accent-soft:rgba(10,132,255,0.16);
-  --accent-text:#6CB4FF; --accent-blue:var(--md-primary); --on-accent:var(--md-on-primary);
-  --add:var(--app-addbar); --add-bg:rgba(48,209,88,0.14); --add-bd:#30D158; --add-text:#7EE29A;
-  --del:var(--app-delbar); --del-bg:rgba(255,69,58,0.14); --del-text:#FFB3AC;
-  --amber:#FF9F0A; --amber-soft:rgba(255,159,10,0.14); --amber-text:#FFCC80; --on-amber:#2A1800;
-  --green:#30D158; --green-hi:#5EE07F; --on-green:#00250C;
-  --bg:var(--md-surface); --panel:var(--md-surface-container-low); --panel2:var(--md-surface-container);
-  --panel3:var(--md-surface); --panel4:var(--md-surface-container-high);
-  --text:var(--md-on-surface); --text-secondary:#C2C6CE; --text-tertiary:#BABFC8; --text-minimum:#B4B9C3;
-  --muted:var(--text-secondary); --dim:var(--text-tertiary); --dim2:var(--text-minimum); --faint:var(--text-minimum);
-  --line:rgba(255,255,255,0.18); --line-soft:rgba(255,255,255,0.10);
-  --fill-1:rgba(255,255,255,0.035); --fill-2:rgba(255,255,255,0.06); --fill-3:rgba(255,255,255,0.10);
-  --hairline:rgba(255,255,255,0.12);
-  --gutter:#161618; --gutter-hi:#1f1f22; --diff-rule:#2b2e36;
-  --add-rail:#30D158; --del-rail:#FF453A;
-  --material:var(--md-surface-container); --scrim:rgba(0,0,0,0.6); --shadow:0 1px 2px rgba(0,0,0,0.34),0 2px 8px rgba(0,0,0,0.24);
-  --scroll:rgba(235,235,245,0.24); --scroll-hi:rgba(235,235,245,0.38);
-  /* syntax (Xcode-flavored) */
-  --tk-k:#C79BFF; --tk-t:#6FD2C2; --tk-f:#8FB4FF; --tk-s:#B7D59B; --tk-n:#E8A87C; --tk-c:#8A929E;
+  /* Signal / Thread-Ledger (direction 3b). This block only ALIASES page-local
+     names onto the canonical tokens defined in sharedTokens() (theme.ts).
+     Canonical names (--bg,--surface,--text,--accent,--add,--del,--line,--fill-*,
+     --gutter,--add-bg,--del-bg,--amber*,--scrim,--shadow,--scroll,--tk-*,fonts,
+     motion,radii) are INHERITED, not redefined here — redefining them would form
+     a var() cycle. Light values come from the canonical [data-theme="light"]
+     block, so every alias below flips automatically and no light block is needed. */
+  /* Material role names kept so existing component CSS keeps resolving */
+  --md-primary:var(--accent); --md-on-primary:var(--on-accent); --md-primary-container:var(--accent-soft); --md-on-primary-container:var(--accent-hi);
+  --md-secondary:var(--text-2); --md-secondary-container:var(--accent-soft); --md-on-secondary-container:var(--accent-hi);
+  --md-tertiary:var(--del); --md-error:var(--del); --md-on-error:var(--on-accent); --md-error-container:var(--del-soft);
+  --md-surface:var(--bg); --md-surface-container-low:var(--bg); --md-surface-container:var(--surface-2);
+  --md-surface-container-high:var(--surface-3); --md-surface-container-highest:var(--surface-3);
+  --md-on-surface:var(--text); --md-on-surface-variant:var(--text-2); --md-outline:var(--text-3); --md-outline-variant:var(--line);
+  --accent-text:var(--accent-hi); --accent-blue:var(--accent);
+  --add-bd:var(--add); --add-text:var(--add);
+  --del-text:var(--del);
+  --amber-text:var(--amber);
+  --green:var(--add); --green-hi:var(--add); --on-green:var(--on-accent);
+  --panel:var(--bg); --panel2:var(--surface-2); --panel3:var(--surface); --panel4:var(--surface-3);
+  --text-secondary:var(--text-2); --text-tertiary:var(--text-3); --text-minimum:var(--text-3);
+  --muted:var(--text-2); --dim:var(--text-3); --dim2:var(--text-3); --faint:var(--text-3);
+  --hairline:var(--line);
+  --gutter-hi:var(--surface-2); --diff-rule:var(--line-soft);
+  --add-rail:var(--add); --del-rail:var(--del);
+  --material:var(--surface-2); --scroll-hi:var(--text-3);
   --ds-rail-width:316px;
   --ds-split:50;
-  --mono:"SF Mono",ui-monospace,Menlo,Monaco,"Cascadia Mono",Consolas,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;
-}
-:root[data-theme="light"]{
-    --md-on-primary:#FFFFFF; --md-primary-container:#D5E7FF; --md-on-primary-container:#003E80;
-    --md-secondary:#6E6E73; --md-secondary-container:rgba(0,122,255,0.14); --md-on-secondary-container:#0061CC;
-    --md-tertiary:#FF2D55; --md-error:#FF3B30; --md-on-error:#FFFFFF; --md-error-container:rgba(255,59,48,0.12);
-    --md-surface-container-high:#ECECF0; --md-surface-container-highest:#E3E3E8;
-    --md-on-surface-variant:var(--text-secondary); --md-outline:#C6C6C8; --md-outline-variant:rgba(60,60,67,0.18);
-    --accent:var(--md-primary); --accent-hi:#3395FF; --accent-soft:rgba(0,122,255,0.12);
-    --accent-text:#0067D6; --accent-blue:var(--md-primary); --on-accent:var(--md-on-primary);
-    /* --add/--del are KEPT light overrides on purpose: they are the darker,
-       text-legible hues for light mode and deliberately differ from the shared
-       --app-addbar/--app-delbar (the brighter bar/tint colors). Don't "tidy"
-       these away as redundant with the token unification — that reintroduces
-       color drift on the light-scheme review page. */
-    --add:#248A3D; --add-bg:rgba(52,199,89,0.14); --add-bd:#248A3D; --add-text:#1A6B30;
-    --del:var(--md-error); --del-bg:rgba(255,59,48,0.10); --del-text:#C4271F;
-    --amber:#B25000; --amber-soft:rgba(255,149,0,0.16); --amber-text:#8A5300; --on-amber:#FFFFFF;
-    --green:#248A3D; --green-hi:#1A6B30; --on-green:#FFFFFF;
-    --bg:var(--md-surface); --panel:var(--md-surface-container-low); --panel2:var(--md-surface-container);
-    --panel3:var(--md-surface); --panel4:var(--md-surface-container-high);
-    --text:var(--md-on-surface); --text-secondary:#565C67; --text-tertiary:#5A606B; --text-minimum:#5E6470;
-    --muted:var(--text-secondary); --dim:var(--text-tertiary); --dim2:var(--text-minimum); --faint:var(--text-minimum);
-    --line:rgba(0,0,0,0.16); --line-soft:rgba(0,0,0,0.08);
-    --fill-1:rgba(0,0,0,0.025); --fill-2:rgba(0,0,0,0.05); --fill-3:rgba(0,0,0,0.08);
-    --hairline:rgba(0,0,0,0.12);
-    --material:var(--md-surface-container); --scrim:rgba(0,0,0,0.32); --shadow:0 1px 2px rgba(0,0,0,0.16),0 2px 6px rgba(0,0,0,0.10);
-    --scroll:rgba(60,60,67,0.24); --scroll-hi:rgba(60,60,67,0.38);
-    /* Diff gutter rail: the dark-default values (#161618 …) are near-black and
-       would paint a black line-number column on the light-scheme diff, so give
-       them light equivalents here. */
-    --gutter:#ECECF0; --gutter-hi:#E3E3E8; --diff-rule:rgba(0,0,0,0.10);
-    --tk-k:#9A2EBF; --tk-t:#0E7490; --tk-f:#2563EB; --tk-s:#297A3A; --tk-n:#B45309; --tk-c:#6B7785;
+  --mono:var(--font-mono); --sans:var(--font-sans);
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%}
@@ -82,7 +47,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 body.ds-noscroll{overflow:hidden}
 button{font-family:inherit}
 a{color:inherit;text-decoration:none}
-::selection{background:rgba(10,132,255,0.32)}
+::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
 ::-webkit-scrollbar{width:11px;height:11px}
 ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:8px;border:3px solid transparent;background-clip:content-box}
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll-hi);background-clip:content-box}
@@ -241,8 +206,8 @@ a{color:inherit;text-decoration:none}
 .ds-speed-row button{flex:1;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font-size:12px;font-weight:800;padding:8px 10px;cursor:pointer}
 .ds-speed-row button:hover{background:var(--fill-2);color:var(--text)}
 .ds-speed-row button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border-color:transparent}
-.ds-playstep{margin-left:auto;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(10,132,255,0.3);background:rgba(10,132,255,0.08);color:var(--accent-blue);cursor:pointer;font-size:10px;padding:0;line-height:1}
-.ds-playstep:hover{background:rgba(10,132,255,0.18)}
+.ds-playstep{margin-left:auto;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent-blue);cursor:pointer;font-size:10px;padding:0;line-height:1}
+.ds-playstep:hover{background:color-mix(in srgb,var(--accent) 18%,transparent)}
 .ds-story-tune{position:relative;flex:none}.ds-story-tune>summary{list-style:none;min-height:32px;display:flex;align-items:center;justify-content:center;padding:0 10px;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-size:11.5px;font-weight:700;white-space:nowrap}.ds-story-tune>summary::-webkit-details-marker{display:none}.ds-story-tune>summary:hover{border-color:var(--line);background:var(--fill-2);color:var(--text)}.ds-story-tune[open]>summary{border-color:color-mix(in srgb,var(--accent-blue) 45%,var(--line));background:var(--accent-soft);color:var(--accent-text)}
 .ds-story-tune-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:6;width:236px;padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--material);box-shadow:var(--shadow)}
 .ds-story-tune button{display:grid;gap:3px;width:100%;border:0;border-radius:7px;background:transparent;color:var(--text);font:inherit;text-align:left;padding:9px 10px;cursor:pointer}.ds-story-tune button:hover{background:var(--fill-2)}.ds-story-tune button strong{font-size:11.5px;font-weight:750}.ds-story-tune button small{color:var(--muted);font-size:10.5px;font-weight:500;line-height:1.35}
@@ -334,7 +299,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-flowchip{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--dim);padding:2px 7px;border-radius:5px;background:var(--fill-1)}
 .ds-flowico{color:var(--dim2);font-size:9px}
 .ds-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px;letter-spacing:0.02em;white-space:nowrap}
-.ds-badge-changed{background:rgba(10,132,255,0.13);color:var(--accent-blue)}
+.ds-badge-changed{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent-blue)}
 .ds-badge-new{background:rgba(48,209,88,0.16);color:var(--add)}
 .ds-badge-context{background:var(--fill-2);color:var(--muted)}
 /* ---- overview (step 0) ---- */
@@ -389,9 +354,9 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-field-detail>legend{padding:0;margin:0 0 3px}
 .ds-depthchoices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:4px}
 .ds-depthchoice{position:relative;min-width:0;min-height:142px;display:flex;flex-direction:column;align-items:stretch;gap:9px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--panel3);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:border-color var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease,box-shadow var(--motion-duration-fast) ease}
-.ds-depthchoice:hover{border-color:rgba(10,132,255,.45);background:var(--fill-1)}
-.ds-depthchoice:focus-visible{outline:none;border-color:rgba(10,132,255,.78);box-shadow:0 0 0 3px var(--accent-soft)}
-.ds-depthchoice.is-active{border-color:var(--accent-blue);background:var(--accent-soft);box-shadow:inset 0 0 0 1px rgba(10,132,255,.16)}
+.ds-depthchoice:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--fill-1)}
+.ds-depthchoice:focus-visible{outline:none;border-color:color-mix(in srgb,var(--accent) 78%,transparent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-depthchoice.is-active{border-color:var(--accent-blue);background:var(--accent-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
 .ds-depthchoice-top{display:flex;align-items:center;gap:7px;min-width:0}
 .ds-depthchoice-top strong{font-size:12.5px;font-weight:850;line-height:1.2}
 .ds-depthchoice-radio{width:15px;height:15px;flex:none;border:1.5px solid var(--dim2);border-radius:50%;background:transparent}
@@ -402,8 +367,8 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-depthchoice-meta{margin-top:auto;font-size:10.5px;font-weight:800;color:var(--accent-blue);letter-spacing:.01em}
 .ds-field-scope,.ds-field-note{grid-column:1 / -1}
 .ds-choice{min-width:0;min-height:34px;border:1px solid var(--line);border-radius:10px;background:var(--panel3);color:var(--muted);font:inherit;font-size:12px;font-weight:800;cursor:pointer;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ds-choice:hover{border-color:rgba(10,132,255,0.45);color:var(--text);background:var(--fill-1)}
-.ds-choice:focus-visible{outline:none;border-color:rgba(10,132,255,0.72);box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-choice:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--text);background:var(--fill-1)}
+.ds-choice:focus-visible{outline:none;border-color:color-mix(in srgb,var(--accent) 72%,transparent);box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-choice.is-active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .ds-field-agent.is-wide{grid-column:1 / -1}
 .ds-storygen-agent-state{min-height:16px;margin:0;color:var(--muted);font-size:10.5px;font-weight:650;line-height:1.4}.ds-storygen-agent-state[hidden]{display:none}.ds-storygen-agent-state.is-error{color:var(--del-text)}.ds-storygen-agent-state:focus{outline:2px solid var(--accent-blue);outline-offset:2px;border-radius:3px}
@@ -417,12 +382,12 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-storyscope-edit{color:var(--accent-blue);font-weight:800}.ds-storyscope-caret{font-size:16px;color:var(--dim);transform:rotate(0deg);transition:transform var(--motion-duration-fast) var(--motion-ease-in-out)}.ds-storyscope[open] .ds-storyscope-caret{transform:rotate(180deg)}
 .ds-storyscope-body{display:grid;gap:10px;padding:12px 14px 14px;border-top:1px solid var(--line-soft)}
 .ds-storyfile-search{height:34px;display:flex;align-items:center;gap:7px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel3);color:var(--dim)}
-.ds-storyfile-search:focus-within{border-color:rgba(10,132,255,.72);box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-storyfile-search:focus-within{border-color:color-mix(in srgb,var(--accent) 72%,transparent);box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-storyfile-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:12px;font-weight:650}
 .ds-storyfile-search input::placeholder{color:var(--dim)}
 .ds-storyscope-actions{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
 .ds-scopechip{flex:none;border:1px solid var(--line);border-radius:999px;background:var(--panel3);color:var(--muted);font:inherit;font-size:11.5px;font-weight:800;min-height:28px;padding:0 10px;cursor:pointer;white-space:nowrap}
-.ds-scopechip:hover{border-color:rgba(10,132,255,0.45);color:var(--text);background:var(--fill-1)}
+.ds-scopechip:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--text);background:var(--fill-1)}
 .ds-storyfiles{max-height:240px;overflow:auto;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel2)}
 .ds-storyfile{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:center;min-height:34px;padding:7px 10px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--text);font-weight:650}
 .ds-storyfile:last-child{border-bottom:none}
@@ -430,7 +395,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-storyfile-path{font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-storyfile-stat{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
 .ds-field-note textarea{width:100%;min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:10px;background:var(--panel3);color:var(--text);font:inherit;font-size:12.5px;font-weight:600;line-height:1.45;padding:10px 11px}
-.ds-field-note textarea:focus{outline:none;border-color:rgba(10,132,255,0.72);box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-field-note textarea:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 72%,transparent);box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-storyscope-error{margin:0;padding:9px 10px;border-radius:8px;background:var(--del-bg);color:var(--del-text);font-size:11.5px;font-weight:700}.ds-storyscope-error[hidden]{display:none}.ds-storyscope-error:focus{outline:2px solid var(--del);outline-offset:2px}
 .ds-storygen-button{margin:18px 20px 20px;width:calc(100% - 40px)}
 .ds-storygen-button:disabled{opacity:.5;cursor:not-allowed}
@@ -465,9 +430,9 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step-title{min-width:0;max-width:100%;font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
 .ds-step-file{font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;min-width:0}
 .ds-step-file:hover{color:var(--accent-blue);text-decoration:underline}
-.ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:rgba(10,132,255,0.07);border:1px solid rgba(10,132,255,0.2);flex:none;max-height:min(24vh,190px);overflow-y:auto}
+.ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);flex:none;max-height:min(24vh,190px);overflow-y:auto}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.ds-why-ico{width:15px;height:15px;border-radius:4px;background:rgba(10,132,255,0.2);display:flex;align-items:center;justify-content:center;position:relative}
+.ds-why-ico{width:15px;height:15px;border-radius:4px;background:color-mix(in srgb,var(--accent) 20%,transparent);display:flex;align-items:center;justify-content:center;position:relative}
 .ds-why-ico::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent-blue)}
 .ds-why-label{font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent-blue);font-weight:600}
 .ds-why-text{margin:0;font-size:14px;line-height:1.58;color:var(--text);text-wrap:pretty}
@@ -479,8 +444,8 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-beat-text{display:block;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:normal}
 .ds-beat:hover{background:var(--fill-2)}
 .ds-beat:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}
-.ds-beat-index{width:22px;height:22px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:rgba(10,132,255,0.12);color:var(--accent-blue);font-size:11px;font-weight:800}
-.ds-beat.is-selected{border-color:rgba(10,132,255,0.28);background:rgba(10,132,255,0.07)}
+.ds-beat-index{width:22px;height:22px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-blue);font-size:11px;font-weight:800}
+.ds-beat.is-selected{border-color:color-mix(in srgb,var(--accent) 28%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .ds-beat.is-selected .ds-beat-index{box-shadow:inset 0 0 0 1px var(--accent-blue)}
 .ds-beat.is-active .ds-beat-index{background:var(--accent-blue);color:var(--on-accent)}
 .ds-beat.is-active .ds-beat-text{color:var(--accent-text)}
@@ -503,7 +468,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-chat-nav button{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer}.ds-chat-nav button:hover:not(:disabled){background:var(--fill-2);border-color:var(--line-soft);color:var(--text)}.ds-chat-nav button:disabled{opacity:.28;cursor:default}
 .ds-chat-close{flex:none;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:16px;cursor:pointer}
 .ds-chat-close:hover{background:var(--fill-2);color:var(--text)}
-.ds-comment-pin{position:absolute;z-index:7;top:50%;right:8px;transform:translateY(-50%);height:28px;min-width:28px;padding:0 8px;border:1px solid rgba(10,132,255,.5);border-radius:999px;
+.ds-comment-pin{position:absolute;z-index:7;top:50%;right:8px;transform:translateY(-50%);height:28px;min-width:28px;padding:0 8px;border:1px solid color-mix(in srgb,var(--accent) 50%,transparent);border-radius:999px;
   background:var(--material);box-shadow:0 3px 10px rgba(0,0,0,.28);color:var(--accent-blue);font:inherit;font-size:10.5px;font-weight:800;cursor:pointer}
 .ds-comment-pin:hover,.ds-comment-pin[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .ds-comment{padding:12px 14px 14px;background:transparent;border:0;font-family:var(--sans)}
@@ -511,13 +476,13 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-comment+.ds-comment{border-top:1px solid var(--line)}
 .ds-comment-card{display:flex;flex-direction:column;gap:10px;border:0;border-radius:0;overflow:visible;background:transparent}
 .flavor-change{border-color:rgba(255,69,58,0.45)}
-.flavor-question{border-color:rgba(10,132,255,0.5)}
+.flavor-question{border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
 .flavor-nit{border-color:rgba(255,159,10,0.45)}
 .ds-comment-head{align-self:stretch;max-width:none;display:flex;align-items:center;gap:7px;padding:0;color:var(--muted)}
 .flavor-change .ds-comment-head,.flavor-question .ds-comment-head,.flavor-nit .ds-comment-head{background:transparent}
 .ds-flavor-ico{width:18px;height:18px;border-radius:5px;color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
 .flavor-change .ds-flavor-ico{background:rgba(255,69,58,0.45)}
-.flavor-question .ds-flavor-ico{background:rgba(10,132,255,0.5)}
+.flavor-question .ds-flavor-ico{background:color-mix(in srgb,var(--accent) 50%,transparent)}
 .flavor-nit .ds-flavor-ico{background:rgba(255,159,10,0.45)}
 .ds-flavor-label{font-size:12px;font-weight:600}
 .flavor-change .ds-flavor-label{color:var(--del-text)}
@@ -533,7 +498,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-statusbadge{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:6px}
 .status-open .ds-statusbadge{color:var(--amber);background:rgba(255,159,10,0.12)}
 .status-open .ds-statusbadge .ds-dot{background:var(--amber)}
-.status-addressed .ds-statusbadge{color:var(--accent-blue);background:rgba(10,132,255,0.12)}
+.status-addressed .ds-statusbadge{color:var(--accent-blue);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .status-addressed .ds-statusbadge .ds-dot{background:var(--accent-blue)}
 .status-resolved .ds-statusbadge{color:var(--add);background:rgba(48,209,88,0.14)}
 .status-resolved .ds-statusbadge .ds-dot{background:var(--add)}
@@ -545,8 +510,8 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-reply-main{min-width:0;max-width:min(900px,calc(100% - 38px))}
 .ds-reply-who{display:flex;align-items:center;gap:7px;margin-bottom:3px}
 .ds-reply-name{font-size:12px;font-weight:600;color:var(--accent-blue)}
-.ds-ai-badge{font-size:9.5px;font-weight:700;letter-spacing:0.04em;color:var(--accent-blue);background:rgba(10,132,255,0.14);padding:1px 6px;border-radius:4px}
-.ds-reply-body{padding:12px 14px;border:1px solid rgba(10,132,255,0.24);border-radius:8px 8px 8px 2px;background:rgba(10,132,255,0.06);
+.ds-ai-badge{font-size:9.5px;font-weight:700;letter-spacing:0.04em;color:var(--accent-blue);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:1px 6px;border-radius:4px}
+.ds-reply-body{padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 24%,transparent);border-radius:8px 8px 8px 2px;background:color-mix(in srgb,var(--accent) 6%,transparent);
   font-size:13px;line-height:1.58;color:var(--text)}
 .ds-md{white-space:normal;overflow-wrap:anywhere}
 .ds-md p{margin:0}
@@ -564,7 +529,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-comment-menu-pop{position:absolute;z-index:5;top:34px;right:0;width:156px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--md-surface-container-high);box-shadow:var(--shadow)}
 .ds-comment-menu-pop button{width:100%;display:block;border:0;border-radius:7px;background:transparent;color:var(--text);font:inherit;font-size:11.5px;font-weight:650;text-align:left;padding:8px 9px;cursor:pointer}.ds-comment-menu-pop button:hover{background:var(--fill-2)}.ds-comment-menu-pop .ds-del{color:var(--del-text)}.ds-comment-menu-pop .ds-del:hover{background:var(--del-bg)}
 .ds-send{color:var(--accent-blue)}
-.ds-addall{font:inherit;font-size:11.5px;font-weight:600;color:var(--accent-blue);background:rgba(10,132,255,0.10);border:1px solid var(--line);padding:4px 10px;border-radius:7px;cursor:pointer}
+.ds-addall{font:inherit;font-size:11.5px;font-weight:600;color:var(--accent-blue);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid var(--line);padding:4px 10px;border-radius:7px;cursor:pointer}
 .ds-addall:disabled{opacity:.45;cursor:default}
 .ds-ghost{font-size:12px;font-weight:500;color:var(--text);padding:6px 12px;border-radius:7px;border:1px solid var(--line);background:transparent;cursor:pointer}
 .ds-ghost:hover{background:var(--fill-2)}
@@ -580,14 +545,14 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
   border:1px solid var(--line);background:transparent;color:var(--muted)}
 .ds-composer-tab .ds-flavor-ico{background:var(--line);color:var(--muted)}
 .ds-composer-tab[data-flavor="change"].is-active{border-color:rgba(255,69,58,0.45);background:rgba(255,69,58,0.12);color:var(--del-text)}
-.ds-composer-tab[data-flavor="question"].is-active{border-color:rgba(10,132,255,0.5);background:rgba(10,132,255,0.12);color:var(--accent-text)}
+.ds-composer-tab[data-flavor="question"].is-active{border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-text)}
 .ds-composer-tab[data-flavor="nit"].is-active{border-color:rgba(255,159,10,0.45);background:rgba(255,159,10,0.12);color:var(--amber-text)}
 .ds-composer-tab[data-flavor="change"].is-active .ds-flavor-ico{background:rgba(255,69,58,0.45);color:var(--on-accent)}
-.ds-composer-tab[data-flavor="question"].is-active .ds-flavor-ico{background:rgba(10,132,255,0.5);color:var(--on-accent)}
+.ds-composer-tab[data-flavor="question"].is-active .ds-flavor-ico{background:color-mix(in srgb,var(--accent) 50%,transparent);color:var(--on-accent)}
 .ds-composer-tab[data-flavor="nit"].is-active .ds-flavor-ico{background:rgba(255,159,10,0.45);color:var(--on-accent)}
 .ds-composer-ta{width:100%;box-sizing:border-box;resize:vertical;background:var(--panel3);border:1px solid var(--line);border-radius:8px;
   padding:9px 11px;color:var(--text);font-size:13px;font-family:var(--sans);line-height:1.5;outline:none}
-.ds-composer-ta:focus{border-color:rgba(10,132,255,0.5)}
+.ds-composer-ta:focus{border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
 .ds-agent-route{min-width:0;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;line-height:1.2}
 .ds-agent-route-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);font-size:9px}
 .ds-agent-route strong{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:11.5px}

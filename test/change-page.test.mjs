@@ -856,7 +856,7 @@ test('change page does not embed the generation progress panel', () => {
 test('change page draws from the shared --app-* tokens', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
   assert.match(html, /--app-bg:/);
-  assert.match(html, /--bg:var\(--app-bg\)/);
+  assert.match(html, /--elev:var\(--app-elev\)/);
 });
 
 test('change page unfolds scope controls from their source and supports reduced motion', () => {

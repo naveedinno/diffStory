@@ -59,13 +59,13 @@ export function navBar(opts: { home?: string; crumbs?: Crumb[]; right?: string }
 /** Styles for the bar. Include once per page, inside the page's own <style>. */
 export function navStyles(): string {
   return `
+/* Signal 3b: alias nav names onto the canonical tokens; only the translucent nav bg needs a per-theme value (the rest flip via canonical). */
 :root{
-  --nv-bg:rgba(28,28,30,.80);--nv-bd:rgba(255,255,255,.12);--nv-fg:#f5f5f7;--nv-mut:#aeaeb2;--nv-dim:#8e8e93;
-  --nv-blue:#0a84ff;--nv-blue2:#3395ff;--nv-fill:rgba(255,255,255,.07);--nv-fill2:rgba(255,255,255,.12);
+  --nv-bg:rgba(16,19,24,.8);--nv-bd:var(--line);--nv-fg:var(--text);--nv-mut:var(--text-2);--nv-dim:var(--text-3);
+  --nv-blue:var(--accent);--nv-blue2:var(--accent-hi);--nv-fill:var(--fill-2);--nv-fill2:var(--fill-3);
 }
 :root[data-theme="light"]{
-  --nv-bg:rgba(246,246,248,.82);--nv-bd:rgba(0,0,0,.10);--nv-fg:#1d1d1f;--nv-mut:#6e6e73;--nv-dim:#8e8e93;
-  --nv-blue:#007aff;--nv-blue2:#0067d6;--nv-fill:rgba(0,0,0,.05);--nv-fill2:rgba(0,0,0,.09);
+  --nv-bg:rgba(237,240,244,.82);
 }
 ${themeControlStyles()}
 .ds-nav{position:sticky;top:0;z-index:30;height:52px;display:flex;align-items:center;gap:11px;padding:0 18px;

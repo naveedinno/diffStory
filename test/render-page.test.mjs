@@ -360,11 +360,14 @@ test('server-rendered comments bootstrap the client cache without a false zero f
 
 test('secondary review text tokens retain 4.5 to 1 contrast on every surface tier', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  const rolePattern = /--text:var\(--md-on-surface\); --text-secondary:(#[0-9A-F]{6}); --text-tertiary:(#[0-9A-F]{6}); --text-minimum:(#[0-9A-F]{6});/gi;
-  const roleSets = [...html.matchAll(rolePattern)].map((match) => match.slice(1));
+  // Signal 3b: the readable de-emphasized tiers live in the canonical layer per
+  // scheme (--text-2 muted, --text-3 faint); page-local --muted/--dim/--faint alias
+  // onto them. Verify both tiers stay AA (4.5:1) on the lightest surface tier.
+  const rolePattern = /--text:(#[0-9a-f]{6});--text-2:(#[0-9a-f]{6});--text-3:(#[0-9a-f]{6});/gi;
+  const roleSets = [...html.matchAll(rolePattern)].map((match) => [match[2], match[3]]);
 
   assert.equal(roleSets.length, 2, 'dark and light schemes should define explicit semantic text roles');
-  assert.match(html, /--muted:var\(--text-secondary\); --dim:var\(--text-tertiary\); --dim2:var\(--text-minimum\); --faint:var\(--text-minimum\)/);
+  assert.match(html, /--muted:var\(--text-2\); --dim:var\(--text-3\); --dim2:var\(--text-3\); --faint:var\(--text-3\)/);
 
   function luminance(hex) {
     const channels = hex.slice(1).match(/../g).map((part) => {
@@ -379,10 +382,10 @@ test('secondary review text tokens retain 4.5 to 1 contrast on every surface tie
   }
 
   for (const color of roleSets[0]) {
-    assert.ok(contrast(color, '#48484A') >= 4.5, `${color} must be readable on the highest dark surface`);
+    assert.ok(contrast(color, '#1e232b') >= 4.5, `${color} must be readable on the highest dark surface`);
   }
   for (const color of roleSets[1]) {
-    assert.ok(contrast(color, '#E3E3E8') >= 4.5, `${color} must be readable on the highest light surface`);
+    assert.ok(contrast(color, '#e5eaf1') >= 4.5, `${color} must be readable on the highest light surface`);
   }
 });
 

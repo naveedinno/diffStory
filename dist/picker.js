@@ -85,26 +85,20 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 ${sharedTokens()}
+/* Signal 3b: alias picker names onto the canonical tokens (theme.ts); --bg and --scrim are canonical (inherited). Aliases flip via the canonical light block. */
 :root{
-  --bg:#15171b; --bg-rail:#1d2025; --bg-elev:#22252b; --label:#f4f6f8; --label2:#b3b8c2; --label3:#858c98;
-  --sep:rgba(255,255,255,.09); --hairline:rgba(255,255,255,.13); --hover:rgba(255,255,255,.06);
-  --blue:#0a84ff; --blue-press:#3395ff; --green-bg:rgba(53,199,89,.16); --green-fg:#35c759;
-  --neutral-bg:rgba(127,132,145,.22); --neutral-fg:#aeb4bf; --red-bg:rgba(255,69,58,.18); --red-fg:#ff6961;
-  --tile:rgba(10,132,255,.18); --tile-fg:#0a84ff; --scrim:rgba(0,0,0,.55); --sheet:#25272c;
-}
-:root[data-theme="light"]{
-  --bg:#f1f3f6; --bg-rail:#e8ebf0; --bg-elev:#ffffff; --label:#17191e; --label2:#5e6470; --label3:#858c99;
-  --sep:rgba(20,24,32,.09); --hairline:rgba(20,24,32,.12); --hover:rgba(0,0,0,.045);
-  --blue:#0866e5; --blue-press:#0057ca; --green-bg:#e2f6e9; --green-fg:#16783a;
-  --neutral-bg:rgba(95,99,109,.12); --neutral-fg:#656a75; --red-bg:#fde9e7; --red-fg:#bd2a22;
-  --tile:rgba(0,122,255,.10); --tile-fg:#007aff; --scrim:rgba(0,0,0,.36); --sheet:#ffffff;
+  --bg-rail:var(--surface-2); --bg-elev:var(--surface); --label:var(--text); --label2:var(--text-2); --label3:var(--text-3);
+  --sep:var(--line-soft); --hairline:var(--line); --hover:var(--fill-2);
+  --blue:var(--accent); --blue-press:var(--accent-hi); --green-bg:var(--add-soft); --green-fg:var(--add);
+  --neutral-bg:var(--fill-3); --neutral-fg:var(--text-2); --red-bg:var(--del-soft); --red-fg:var(--del);
+  --tile:var(--accent-soft); --tile-fg:var(--accent); --sheet:var(--surface-3);
 }
 ${themeControlStyles()}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{
   background:var(--bg); color:var(--label); min-height:100vh;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
+  font-family:var(--font-sans);
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:0;
 }
 .wrap{width:min(860px,100%); margin:0 auto; padding:34px 24px 64px}

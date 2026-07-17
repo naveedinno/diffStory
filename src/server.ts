@@ -328,6 +328,9 @@ function handle(
     if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
       return sendMermaidBrowserAsset(res);
     }
+    if (method === 'GET' && url.pathname.startsWith('/assets/fonts/')) {
+      return sendFontAsset(res, basename(url.pathname));
+    }
     if (method === 'GET' && url.pathname === '/api/events') {
       const lease = optionalRequestLease(session, url);
       if (!lease) {
@@ -2420,6 +2423,44 @@ function sendMermaidBrowserAsset(res: ServerResponse): void {
   res.setHeader('Content-Length', String(stat.size));
   res.setHeader('Cache-Control', 'public, max-age=3600');
   createReadStream(MERMAID_BROWSER_ASSET).pipe(res);
+}
+
+// Self-hosted woff2 for the Signal / Thread-Ledger type system. Served
+// same-origin so the font-src 'self' CSP needs no change. The allowlist is the
+// path-traversal guard: only these exact filenames resolve, everything else 404s.
+const FONT_ASSET_DIR = new URL('./assets/fonts/', import.meta.url);
+const FONT_ASSET_FILES = new Set([
+  'ibm-plex-sans-latin-400-normal.woff2',
+  'ibm-plex-sans-latin-500-normal.woff2',
+  'ibm-plex-sans-latin-600-normal.woff2',
+  'ibm-plex-sans-latin-700-normal.woff2',
+  'ibm-plex-mono-latin-400-normal.woff2',
+  'ibm-plex-mono-latin-500-normal.woff2',
+  'ibm-plex-mono-latin-600-normal.woff2',
+  'ibm-plex-mono-latin-700-normal.woff2',
+  'space-grotesk-latin-500-normal.woff2',
+  'space-grotesk-latin-600-normal.woff2',
+  'space-grotesk-latin-700-normal.woff2',
+]);
+
+function sendFontAsset(res: ServerResponse, name: string): void {
+  if (!FONT_ASSET_FILES.has(name)) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const asset = new URL(name, FONT_ASSET_DIR);
+  if (!existsSync(asset)) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const stat = statSync(asset);
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'font/woff2');
+  res.setHeader('Content-Length', String(stat.size));
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  createReadStream(asset).pipe(res);
 }
 
 function sendHtml(res: ServerResponse, html: string, status = 200): void {

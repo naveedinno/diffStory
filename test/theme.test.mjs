@@ -27,8 +27,10 @@ test('theme palettes use a resolved data attribute instead of an OS-only media q
   const tokens = sharedTokens();
   const navCss = navStyles();
 
-  assert.match(tokens, /:root\{color-scheme:dark;--app-bg:#15171b/);
-  assert.match(tokens, /:root\[data-theme="light"\]\{color-scheme:light;--app-bg:#f1f3f6/);
+  assert.match(tokens, /:root\{color-scheme:dark;/);
+  assert.match(tokens, /--bg:#0a0c0f/);
+  assert.match(tokens, /:root\[data-theme="light"\]\{color-scheme:light;/);
+  assert.match(tokens, /--bg:#edf0f4/);
   assert.match(navCss, /:root\[data-theme="light"\]/);
   assert.doesNotMatch(tokens, /prefers-color-scheme/);
   assert.doesNotMatch(navCss, /prefers-color-scheme/);
