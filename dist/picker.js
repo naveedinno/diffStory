@@ -75,7 +75,7 @@ export function renderPicker(recents, home, now) {
             (missing.length
                 ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r) => recentCard(r, home, now)).join('')}</div></details>`
                 : '')
-        : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p></div>`;
+        : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Point diffStory at any local Git repository — it reads the working tree directly, nothing is uploaded.</p></div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
@@ -153,11 +153,11 @@ h2{font-family:var(--font-display);font-size:26px;line-height:1.1;font-weight:70
 .pill-ready{background:var(--green-bg); color:var(--green-fg)}
 .pill-none{background:var(--neutral-bg); color:var(--neutral-fg)}
 .pill-missing{background:var(--red-bg); color:var(--red-fg)}
-.empty{text-align:center; padding:30px 16px; border:.5px dashed var(--hairline); border-radius:8px; color:var(--label2)}
-.empty-mark{display:inline-flex; width:44px; height:44px; border-radius:8px; align-items:center; justify-content:center;
-  background:var(--neutral-bg); color:var(--label3); margin-bottom:10px}
-.empty-title{font-size:15px; font-weight:600; color:var(--label); margin:0 0 2px}
-.empty-sub{font-size:13px; margin:0}
+.empty{text-align:center; padding:40px 20px; border:1px dashed var(--line); border-radius:var(--radius-island); color:var(--label2)}
+.empty-mark{display:inline-flex; width:52px; height:52px; border-radius:var(--radius-island); align-items:center; justify-content:center;
+  background:var(--fill-1); color:var(--label3); margin-bottom:14px}
+.empty-title{font-family:var(--font-display); font-size:20px; font-weight:700; letter-spacing:-.02em; color:var(--label); margin:0 0 6px}
+.empty-sub{font-size:12.5px; line-height:1.55; margin:0 auto; max-width:42ch}
 input[type=search]{width:100%;height:36px; padding:0 12px; font:inherit; font-size:13px; color:var(--label);
   background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; outline:none;
   box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .14s ease, border-color .14s ease;}
@@ -324,7 +324,7 @@ input[type=search]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mi
       .catch(function(){ msg.style.color='var(--red-fg)'; msg.textContent='Could not reach the server.'; });
   }
   function emptyRecent(){
-    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p></div>';
+    return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Point diffStory at any local Git repository — it reads the working tree directly, nothing is uploaded.</p></div>';
   }
   function removeRecent(path,row){
     fetch('/api/repos/recent',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
