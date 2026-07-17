@@ -50,5 +50,13 @@ The imported mockup (source of truth for values and per-screen layouts) lives at
 
 ## Port Status (as of 2026-07-17)
 
-- **Done — Foundation:** canonical 3b token layer + self-hosted type ported into `src/` across all four routes + `/review`, light & dark. Spec: `docs/superpowers/specs/2026-07-17-diffstory-signal-foundation-design.md`.
-- **Pending — per-screen sub-projects:** island layout/gutters, the numeral-thread nav + filmstrip walkthrough, ReviewHistory as a first-class screen, the Notes (one-shot) model replacing rounds, consolidated SystemStates, and the Thread-Path brand swap. Each gets its own spec → plan → implementation.
+**Done (shipped on `main`, both themes):**
+- **Foundation** — canonical 3b token layer + self-hosted woff2 across all routes. Spec: `docs/superpowers/specs/2026-07-17-diffstory-signal-foundation-design.md`.
+- **Islands** — `/review` shell (chrome, ledger, rail, main/stage) as floating `--surface` islands on the ink page. Spec: `…-islands-review-design.md`.
+- **Brand** — retired the blue app-icon square; Thread-Path mark + wordmark throughout; favicon retinted to signal blue.
+- **Filmstrip** — CodeWalkthrough: centered numeral stage + bottom numeral thread + ghost prev/next, replacing the beat-tree rail. Spec: `…-filmstrip-walkthrough-design.md`.
+- **Content routes** — WorkspacePicker (picker.ts), ChangeScope (change-page.ts), ReviewHistory (story-picker.ts): Space Grotesk display headings, flat 16px islands, mono via `--font-mono`, on-accent primary buttons, the wordmark + "the story of this change" kicker, and the Scope→Read→Resolve→Decide stage numerals.
+
+**Deferred (needs owner decision — do NOT do unsupervised):**
+- **Notes / one-shot model** — the design removes versioned rounds + verdicts (`review-state.ts`, 45 refs; verdict/timeline UI in render.ts/server.ts/comments.ts) for one-shot "note → send". This deletes working functionality (approve/request-changes decisions, rounds, verification) and can't be verified without an agent driving the note→send→regenerate loop. It's a product/data-model decision the owner should confirm awake, not a visual reskin.
+- **SystemStates** — the scattered loading/empty/error states are 3b-colored via the foundation but not consolidated to the mockup's narrated-loading (thread-draw) aesthetic. Low visibility; a follow-up.
