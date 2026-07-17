@@ -429,6 +429,8 @@ ${BRAND_HEAD_LINKS}
     <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
       ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour, storyFreshness, routeBase)}
       ${storyless ? '' : stepPanels}
+      ${storyless ? '' : `<button type="button" class="ds-ghost ds-ghost-prev" data-ghost-prev hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button><button type="button" class="ds-ghost ds-ghost-next" data-ghost-next hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button>`}
+      ${storyless ? '' : filmstripThread(model.steps)}
     </div>
     <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
       <div class="ds-filedetail" id="ds-file-detail">
@@ -595,6 +597,34 @@ function storyRail(steps: StepView[]): string {
     <summary><span>${esc(group.label)}</span><small>${group.items.length} ${plural(group.items.length, 'step')}</small></summary>
     <div class="ds-railchapter-steps">${group.items.map(({ step, index: stepIndex }) => railCard(step, stepIndex)).join('')}</div>
   </details>`).join('');
+}
+
+// Filmstrip navigation (Signal 3b): a horizontal numeral thread that is the whole
+// Story-view navigation. Node 0 is the Overview; nodes 1..N are the steps. Wired to
+// setActive via data-goto-step; activateStep syncs active/read/unread + the line fill.
+function filmNodeLabel(s: StepView): string {
+  if (s.kind === 'concept') return 'Concept';
+  return splitPath(s.file)[1];
+}
+function filmstripThread(steps: StepView[]): string {
+  const nodes = [
+    `<button type="button" class="ds-filmnode is-overview is-active" data-thread-node="0" data-goto-step="0" aria-label="Overview">
+      <span class="ds-filmnode-num" aria-hidden="true">◆</span><span class="ds-filmnode-label">Overview</span>
+    </button>`,
+    ...steps.map(
+      (s, i) => `<button type="button" class="ds-filmnode" data-thread-node="${i + 1}" data-goto-step="${i + 1}" aria-label="Step ${i + 1}: ${esc(s.title)}" title="${esc(s.title)}">
+      <span class="ds-filmnode-num" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
+      <span class="ds-filmnode-label">${esc(filmNodeLabel(s))}</span>
+    </button>`,
+    ),
+  ].join('');
+  return `<nav class="ds-filmthread" data-filmthread aria-label="Reading order" style="--thread-pct:0%">
+    <div class="ds-filmthread-scroll">
+      <div class="ds-filmthread-line" aria-hidden="true"></div>
+      <div class="ds-filmthread-nodes">${nodes}</div>
+    </div>
+    <button type="button" class="ds-filmthread-allfiles" data-open-all-files>All files <span aria-hidden="true">→</span></button>
+  </nav>`;
 }
 
 // The Overview panel: the change's title and summary up front (this is the only
@@ -1085,6 +1115,7 @@ function codeStepPanel(
     s.focusExplicit ? ' data-story-focus="authored"' : ''
   } hidden>
     <div class="ds-step-top">
+      <div class="ds-stage-num" aria-hidden="true">${String(s.order).padStart(2, '0')}</div>
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
         <span class="ds-dot"></span>
@@ -1184,6 +1215,7 @@ function conceptStepPanel(
   const speech = conceptSpeechText(s);
   return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
     <div class="ds-step-top">
+      <div class="ds-stage-num" aria-hidden="true">${String(s.order).padStart(2, '0')}</div>
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
         <span class="ds-dot"></span>
