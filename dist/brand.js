@@ -15,7 +15,7 @@ export function brandStoryMarkSvg(className, width, height) {
     return brandMarkSvg(className, width, height, 'mono');
 }
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
-    `<style>:root{--path:#007aff;--node:#1d1d1f;--mid:#64d2ff}@media (prefers-color-scheme:dark){:root{--path:#0a84ff;--node:#f5f5f7;--mid:#64d2ff}}</style>` +
+    `<style>:root{--path:#0072d6;--node:#14171c;--mid:#7adfff}@media (prefers-color-scheme:dark){:root{--path:#3fb2ff;--node:#eef1f5;--mid:#7adfff}}</style>` +
     `<path d="${THREAD_PATH_D}" fill="none" stroke="var(--path)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>` +
     `<circle cx="6.6" cy="5.4" r="2.35" fill="var(--node)"/>` +
     `<circle cx="15.3" cy="12.6" r="2.35" fill="var(--mid)"/>` +
@@ -30,4 +30,4 @@ function svgDataUri(svg) {
 export const BRAND_FAVICON_HREF = svgDataUri(FAVICON_SVG);
 export const BRAND_MASK_ICON_HREF = svgDataUri(MASK_ICON_SVG);
 export const BRAND_HEAD_LINKS = `<link rel="icon" type="image/svg+xml" href="${BRAND_FAVICON_HREF}">` +
-    `<link rel="mask-icon" href="${BRAND_MASK_ICON_HREF}" color="#007aff">`;
+    `<link rel="mask-icon" href="${BRAND_MASK_ICON_HREF}" color="#0072d6">`;

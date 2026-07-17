@@ -126,11 +126,9 @@ body{
 .hero{display:flex;align-items:center;padding-bottom:20px;margin-bottom:24px;border-bottom:.5px solid var(--sep)}
 .hero>.ds-theme-wrap{margin-left:auto}
 .head{display:flex; align-items:center; gap:14px; flex:none}
-.appicon{width:44px; height:44px; border-radius:11px; flex:none;
-  background:var(--blue);
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 4px 14px rgba(0,90,200,.30), inset 0 1px 0 rgba(255,255,255,.28);}
-.appmark{display:block;--ds-brand-path:#fff;--ds-brand-node-a:#fff;--ds-brand-node-b:#d6e9ff;--ds-brand-node-c:#fff}
+/* Signal 3b: the old blue rounded-square app icon is retired — show the Thread-Path mark directly. */
+.appicon{flex:none;display:flex;align-items:center;justify-content:center}
+.appmark{display:block;--ds-brand-path:var(--accent);--ds-brand-node-a:var(--label);--ds-brand-node-b:var(--accent-hi);--ds-brand-node-c:var(--label)}
 h1{font-size:22px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
 .manager{min-width:0}
 .launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
