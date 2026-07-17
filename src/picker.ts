@@ -130,6 +130,10 @@ body{
 .appicon{flex:none;display:flex;align-items:center;justify-content:center}
 .appmark{display:block;--ds-brand-path:var(--accent);--ds-brand-node-a:var(--label);--ds-brand-node-b:var(--accent-hi);--ds-brand-node-c:var(--label)}
 h1{font-size:22px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-.022em}
+.brandlock{display:flex;flex-direction:column;gap:2px;min-width:0}
+h1.wordmark{font-family:var(--font-display);font-size:24px;font-weight:400;line-height:1;letter-spacing:-.03em}
+.wm-diff{color:var(--label2);font-weight:400}.wm-story{color:var(--label);font-weight:700}
+.brandkicker{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
 .manager{min-width:0}
 .launchwarn{margin:0 0 18px;padding:10px 12px;border:.5px solid rgba(255,159,10,.42);border-radius:8px;background:rgba(255,159,10,.13);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
 .launchwarn[hidden]{display:none}
@@ -137,7 +141,7 @@ h1{font-size:22px; line-height:1.05; font-weight:700; margin:0; letter-spacing:-
 .skillfix{flex:none;font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--blue);border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
 .skillfix:hover{background:var(--blue-press)}.skillfix:disabled{opacity:.55;cursor:default}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:2px 0 14px}
-h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018em}
+h2{font-family:var(--font-display);font-size:26px;line-height:1.1;font-weight:700;margin:0;letter-spacing:-.02em}
 .add-btn{height:36px;padding:0 13px;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:8px;background:var(--blue);color:#fff;font:inherit;font-size:13px;font-weight:650;cursor:pointer;box-shadow:0 1px 2px rgba(0,40,120,.18)}
 .add-btn:hover{background:var(--blue-press)}
 .stack>*+*{margin-top:8px}
@@ -145,9 +149,9 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
 .repo-card,.fsrow{font:inherit; color:inherit; cursor:pointer}
 .repo-row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:8px;align-items:stretch}
 .repo-card{width:100%; display:flex; align-items:center; gap:13px; text-align:left;
-  background:var(--bg-elev); border:.5px solid var(--hairline); border-radius:8px; padding:13px 14px;
-  box-shadow:0 1px 2px rgba(0,0,0,.04); transition:transform .14s ease, background .14s ease, box-shadow .14s ease;}
-.repo-card:hover{background:linear-gradient(0deg,var(--hover),var(--hover)),var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.08)}
+  background:var(--surface-2); border:1px solid var(--line-soft); border-radius:var(--radius-island); padding:14px 16px;
+  transition:transform .14s ease, background .14s ease, border-color .14s ease;}
+.repo-card:hover{background:var(--fill-1); border-color:var(--line)}
 .repo-card:active{transform:scale(.992)}
 .repo-card:focus-visible,.add-btn:focus-visible,.remove-btn:focus-visible{outline:none; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 38%,transparent)}
 .repo-row-missing{opacity:.68}
@@ -159,7 +163,7 @@ h2{font-size:24px;line-height:1.1;font-weight:720;margin:0;letter-spacing:-.018e
 .card-body{flex:1; min-width:0; display:flex; flex-direction:column; gap:3px}
 .card-top{display:flex; align-items:center; gap:8px}
 .name{font-size:15px; font-weight:590; letter-spacing:-.012em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.path{font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:12px; color:var(--label2);
+.path{font-family:var(--font-mono); font-size:12px; color:var(--label2);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .card-meta{display:flex; align-items:center; flex-wrap:wrap; gap:7px; color:var(--label3); font-size:12px; margin-top:1px}
 .meta{display:inline-flex; align-items:center; gap:4px}
@@ -256,7 +260,10 @@ input[type=search]:focus{border-color:transparent; box-shadow:0 0 0 4px color-mi
   <section class="hero reveal d1">
     <div class="head">
       <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
-      <div><h1>${esc(APP_BRAND)}</h1></div>
+      <span class="brandlock">
+        <h1 class="wordmark"><span class="wm-diff">diff</span><span class="wm-story">Story</span></h1>
+        <span class="brandkicker">the story of this change</span>
+      </span>
     </div>
     ${themeControl()}
   </section>
