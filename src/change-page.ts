@@ -148,7 +148,12 @@ export function renderChangePage(
 
   const cardBody = sum.hasChanges
     ? renderFileSummary(sum, diffHref)
-    : `<div class="card"><div class="empty">Nothing to review for <b>${esc(label)}</b>. Pick another scope above, or make a change.</div></div>`;
+    : `<div class="card"><div class="empty">
+        <p class="empty-clean">✓ working tree clean</p>
+        <h2 class="empty-title">Nothing to review for ${esc(label)}</h2>
+        <p class="empty-sub">Pick another scope above, or make a change. When your agent writes code, the changes appear here.</p>
+        <div class="empty-actions"><button class="empty-recheck" type="button" onclick="location.reload()">Re-check</button><a class="empty-history" href="${esc(routeBase)}/stories">Review history →</a></div>
+      </div></div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -244,8 +249,15 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .add{color:var(--add)}.del{color:var(--del);margin-left:6px}
 .notice{background:var(--amber-soft);border:1px solid var(--amber);color:var(--label);border-radius:var(--radius-lg);padding:12px 15px;margin-bottom:16px;font-size:13.5px;line-height:1.5}
 .notice b{font-weight:600}
-.empty{padding:34px 16px;text-align:center;color:var(--l2);font-size:14px}
+.empty{padding:34px 16px 38px;text-align:center;color:var(--l2);font-size:14px}
 .empty b{color:var(--label);font-weight:600}
+.empty-clean{margin:0 0 12px;font-family:var(--font-mono);font-size:11px;color:var(--add)}
+.empty .empty-title{font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:var(--tracking-tight);color:var(--label);margin:0 0 8px}
+.empty .empty-sub{font-size:12.5px;color:var(--l2);line-height:1.6;max-width:46ch;margin:0 auto 20px}
+.empty-actions{display:flex;gap:8px;justify-content:center;align-items:center}
+.empty-recheck,.empty-history{display:inline-flex;align-items:center;height:var(--control-h);padding:0 13px;font:inherit;font-size:12.5px;font-weight:600;color:var(--label);background:transparent;border:1px solid var(--hair);border-radius:var(--radius);cursor:pointer;text-decoration:none}
+.empty-recheck:hover,.empty-history:hover{background:var(--fill)}
+.empty-recheck:focus-visible,.empty-history:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 @media (prefers-reduced-motion:no-preference){.wrap{animation:change-page-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.refpanel:not([hidden]){animation:change-panel-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.refpicker:not([hidden]){animation:change-picker-in var(--motion-duration-ui) var(--motion-ease-out) backwards}@keyframes change-page-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes change-panel-in{from{opacity:0;clip-path:inset(0 0 100% round 12px);transform:translateY(-5px)}to{opacity:1;clip-path:inset(0 round 12px);transform:none}}@keyframes change-picker-in{from{opacity:0;clip-path:inset(0 0 100% round 10px);transform:translateY(-4px) scale(.985)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
 @media (prefers-reduced-motion:reduce){.sopt,.openreview{transition:none}.sopt:active,.openreview:active{transform:none}}
 @media (prefers-contrast:more){.card,.sopt,.refpanel,.refpanel input,.scope-command,.notice,.metric{border-color:var(--label)}}

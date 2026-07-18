@@ -23,7 +23,7 @@ export function progressPanelStyles(): string {
 .ds-pp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--pp-line);border-top-color:var(--pp-blue);animation:ds-pp-spin .7s linear infinite;flex:none}
 .ds-pp-spin[hidden]{display:none}
 @keyframes ds-pp-spin{to{transform:rotate(360deg)}}
-.ds-pp-title{font-size:14px;font-weight:600}
+.ds-pp-title{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--pp-blue)}
 .ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:1px solid var(--pp-line);border-radius:6px;padding:2px 7px;
   max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-pp-agent:empty{display:none}
@@ -39,15 +39,16 @@ export function progressPanelStyles(): string {
 .ds-pp-task-link[hidden]{display:none}
 .ds-pp-plan{list-style:none;margin:0;padding:6px 14px 4px;overflow:auto;flex:1;min-height:40px}
 .ds-pp-plan:empty{display:none}
-.ds-pp-step{display:flex;align-items:flex-start;gap:10px;padding:5px 0}
-.ds-pp-mark{flex:none;width:16px;height:16px;border-radius:50%;box-sizing:border-box;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px}
-.ds-pp-step.is-done .ds-pp-mark{background:var(--pp-ok);color:#0b2a14}
-.ds-pp-step.is-active .ds-pp-mark{border:2px solid var(--pp-blue)}
-.ds-pp-step.is-active .ds-pp-mark::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
-.ds-pp-step.is-pending .ds-pp-mark{border:1.5px solid rgba(255,255,255,.22)}
-.ds-pp-step-tx{font-size:13px;line-height:1.4}
+.ds-pp-step{display:flex;align-items:baseline;gap:10px;padding:4px 0;font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:11px;line-height:1.55}
+.ds-pp-mark{flex:none;width:14px;text-align:left;font-size:11px;line-height:inherit}
+.ds-pp-step.is-done .ds-pp-mark{color:var(--pp-ok)}
+.ds-pp-step.is-active .ds-pp-mark{color:var(--pp-blue);animation:ds-pp-pulse 1.2s ease-in-out infinite}
+.ds-pp-step.is-active .ds-pp-mark::before{content:"●"}
+.ds-pp-step.is-pending .ds-pp-mark{color:var(--pp-faint)}
+.ds-pp-step.is-pending .ds-pp-mark::before{content:"○"}
+.ds-pp-step-tx{min-width:0;font-size:11px}
 .ds-pp-step.is-done .ds-pp-step-tx{color:var(--pp-faint)}
-.ds-pp-step.is-active .ds-pp-step-tx{color:var(--pp-text);font-weight:500}
+.ds-pp-step.is-active .ds-pp-step-tx{color:var(--pp-text)}
 .ds-pp-step.is-pending .ds-pp-step-tx{color:var(--pp-muted)}
 .ds-pp-step-now{display:block;font-size:11.5px;color:var(--pp-faint);font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;margin-top:2px;word-break:break-word}
 .ds-pp-step-now:empty{display:none}
@@ -67,7 +68,7 @@ export function progressPanelStyles(): string {
 .ds-pp-error-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   color:var(--pp-err);background:color-mix(in srgb,var(--pp-err) 12%,transparent);font-size:12px;font-weight:700}
 .ds-pp-error-title{font-size:13px;line-height:1.35;font-weight:600;color:var(--pp-text);overflow-wrap:anywhere}
-.ds-pp-error-detail{margin-top:3px;font-size:12px;line-height:1.45;color:var(--pp-muted);overflow-wrap:anywhere}
+.ds-pp-error-detail{margin-top:5px;font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.6;color:var(--pp-muted);overflow-wrap:anywhere}
 .ds-pp-error-detail:empty{display:none}
 .ds-pp-details{border-top:1px solid var(--pp-line);padding:8px 14px 10px}
 .ds-pp-details[hidden]{display:none}
@@ -79,23 +80,29 @@ export function progressPanelStyles(): string {
 .ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:600;color:#06121c;background:var(--pp-blue);border:none;border-radius:9px;padding:6px 11px;cursor:pointer}
 .ds-pp-foot .ds-pp-secondary{font:inherit;font-size:12px;font-weight:600;color:var(--pp-text);background:transparent;
   border:1px solid var(--pp-line);border-radius:9px;padding:6px 11px;cursor:pointer}
-.ds-pp-miles{list-style:none;display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:10px 14px 2px}
+/* The milestone row is the thread made structural: a 2px line through small nodes,
+   accent up to the live position, dim beyond — the 3b narrated-loading treatment. */
+.ds-pp-miles{list-style:none;display:flex;align-items:flex-start;margin:0;padding:12px 14px 2px}
 .ds-pp-miles[hidden]{display:none}
-.ds-pp-mile{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pp-faint)}
-.ds-pp-mile-dot{flex:none;width:7px;height:7px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25);box-sizing:border-box}
+.ds-pp-mile{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
+  font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--pp-faint)}
+.ds-pp-mile::before{content:'';position:absolute;top:3px;left:calc(-50% + 8px);right:calc(50% + 8px);height:2px;background:var(--pp-line)}
+.ds-pp-mile:first-child::before{display:none}
+.ds-pp-mile-dot{flex:none;width:7px;height:7px;border-radius:50%;border:1.5px solid var(--pp-line);background:var(--pp-bg);box-sizing:border-box;z-index:1}
 .ds-pp-mile.is-done{color:var(--pp-muted)}
-.ds-pp-mile.is-done .ds-pp-mile-dot{background:var(--pp-ok);border-color:var(--pp-ok)}
-.ds-pp-mile.is-active{color:var(--pp-text);font-weight:600}
+.ds-pp-mile.is-done::before,.ds-pp-mile.is-active::before{background:var(--pp-blue)}
+.ds-pp-mile.is-done .ds-pp-mile-dot{background:var(--pp-blue);border-color:var(--pp-blue)}
+.ds-pp-mile.is-active{color:var(--pp-text)}
 .ds-pp-mile.is-active .ds-pp-mile-dot{background:var(--pp-blue);border-color:var(--pp-blue);animation:ds-pp-pulse 1.1s ease-in-out infinite}
-.ds-pp-mile.is-error{color:var(--pp-err);font-weight:600}
+.ds-pp-mile.is-error{color:var(--pp-err)}
 .ds-pp-mile.is-error .ds-pp-mile-dot{background:var(--pp-err);border-color:var(--pp-err);animation:none}
 .ds-pp.is-finished .ds-pp-mile-dot{animation:none}
 .ds-pp-note{padding:10px 14px 2px;font-size:13px;line-height:1.45;color:var(--pp-text)}
 .ds-pp-note[hidden]{display:none}
 .ds-pp[data-variant="stage"]{margin-top:28px;display:flex;flex-direction:column;max-height:none}
-.ds-pp[data-variant="stage"] .ds-pp-title{font-size:15px}
-.ds-pp[data-variant="stage"] .ds-pp-miles{padding:12px 16px 4px;gap:8px 16px}
-.ds-pp[data-variant="stage"] .ds-pp-mile{font-size:12.5px}
+.ds-pp[data-variant="stage"] .ds-pp-title{font-size:11.5px}
+.ds-pp[data-variant="stage"] .ds-pp-miles{padding:14px 16px 4px}
+.ds-pp[data-variant="stage"] .ds-pp-mile{font-size:9.5px}
 .ds-pp[data-variant="stage"] .ds-pp-note{font-size:14px;padding:12px 16px 4px}
 @media (prefers-reduced-motion:reduce){
   .ds-pp-spin,.ds-pp-step.is-active .ds-pp-mark::before,.ds-pp-live-dot,.ds-pp-mile.is-active .ds-pp-mile-dot{animation:none!important}
