@@ -24,21 +24,18 @@ test('compact session cards preserve trust and review facts on mobile', () => {
       current: true,
       openComments: 2,
       addressedComments: 0,
-      reviewRound: 3,
-      changedSinceReview: 5,
       updatedAt: Date.now(),
     }],
   });
 
   assert.match(html, /<b>7<\/b> code stops \+ 1 primer/);
-  assert.match(html, /<b>Round 3<\/b>/);
-  assert.match(html, /<b>2<\/b> open feedback/);
-  assert.match(html, />5 files changed since feedback</);
+  assert.doesNotMatch(html, /Round /);
+  assert.match(html, /<b>2<\/b> open notes/);
   assert.doesNotMatch(html, /session-facts>span:nth-child/);
   assert.match(html, /\.row-del::after\{content:"";position:absolute;inset:-5px\}/);
   assert.equal((html.match(/>Start review</g) || []).length, 1, 'offers one clear new-review action');
   assert.match(html, /Review history/);
-  assert.match(html, /<b>1<\/b> review needs feedback/, 'makes clear this is a review count, not a thread count');
+  assert.match(html, /<b>1<\/b> review has open notes/, 'makes clear this is a review count, not a note count');
   assert.doesNotMatch(html, /class="review-path"|Every session keeps the scope/, 'does not repeat the review tutorial');
 });
 

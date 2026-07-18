@@ -32,18 +32,16 @@ function storyRow(s: StorySummary, now: number, routeBase: string): string {
   const state = !s.valid
     ? { label: 'Needs repair', cls: 'bad', detail: 'Story file cannot be read' }
     : s.openComments
-      ? { label: 'Resolve feedback', cls: 'feedback', detail: `${plural(s.openComments, 'open thread')} waiting` }
+      ? { label: 'In review', cls: 'feedback', detail: `${plural(s.openComments, 'open note')} waiting` }
       : s.freshness === 'stale'
-        ? { label: 'Diff changed', cls: 'warn', detail: 'Regenerate before approval' }
+        ? { label: 'Diff changed', cls: 'warn', detail: 'Regenerate the story for the current diff' }
         : s.freshness === 'unverified'
           ? { label: 'Verify scope', cls: 'warn', detail: 'Story has no exact diff fingerprint' }
-          : { label: 'Ready to decide', cls: 'ready', detail: 'Current diff is verified' };
+          : { label: 'Current', cls: 'ready', detail: 'Story matches the current diff' };
 
-  const activity = s.changedSinceReview
-    ? `${plural(s.changedSinceReview, 'file')} changed since feedback`
-    : s.addressedComments
-      ? `${plural(s.addressedComments, 'reply')} ready to verify`
-      : state.detail;
+  const activity = s.addressedComments
+    ? `${plural(s.addressedComments, 'reply')} ready to verify`
+    : state.detail;
 
   const summary = esc(s.valid ? s.summary || 'No summary yet.' : s.error || 'This story file could not be read.');
 
@@ -58,8 +56,7 @@ function storyRow(s: StorySummary, now: number, routeBase: string): string {
       `<span><b>${s.liveFiles || s.files}</b> files</span>` +
       `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` +
       `<span><b>${Math.max(0, s.steps - s.primers)}</b> code stops${s.primers ? ` + ${plural(s.primers, 'primer')}` : ''}</span>` +
-      `<span><b>Round ${s.reviewRound}</b></span>` +
-      (s.openComments ? `<span><b>${s.openComments}</b> open feedback</span>` : '') +
+      (s.openComments ? `<span><b>${s.openComments}</b> open ${s.openComments === 1 ? 'note' : 'notes'}</span>` : '') +
     `</span>` +
     `<span class="row-foot"><span class="chip"${s.scope.command ? ` title="${esc(s.scope.command)}"` : ''}>${esc(s.scope.label)}</span><span>${esc(activity)}</span><span>${relTime(s.updatedAt, now)}</span></span>` +
     `</span>` +
@@ -77,7 +74,6 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
     ? opts.stories.map((s) => storyRow(s, opts.now, rb)).join('')
     : '';
   const openFeedback = opts.stories.filter((s) => s.openComments).length;
-  const readyToDecide = opts.stories.filter((s) => s.current && !s.openComments).length;
 
   const nav = navBar({
     home: '/repos',
@@ -86,9 +82,9 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
   });
 
   const body = `<header class="page-head">
-      <div class="page-copy"><p class="kicker">${esc(opts.repoName)}</p><h1>Review history</h1><p class="sub">Resume a saved review when you need its scope, feedback, or prior decision.</p></div>
+      <div class="page-copy"><p class="kicker">${esc(opts.repoName)}</p><h1>Review history</h1><p class="sub">Resume a saved review when you need its scope or its notes.</p></div>
       <div class="page-actions">
-        ${hasStories ? `<span class="history-status" aria-label="Review history status"><span><b>${openFeedback}</b> ${openFeedback === 1 ? 'review needs' : 'reviews need'} feedback</span><span><b>${readyToDecide}</b> ready to decide</span></span>` : ''}
+        ${hasStories && openFeedback ? `<span class="history-status" aria-label="Review history status"><span><b>${openFeedback}</b> ${openFeedback === 1 ? 'review has' : 'reviews have'} open notes</span></span>` : ''}
         <a class="start-review" href="${esc(rb)}/change">Start review</a>
       </div>
     </header>` +

@@ -6,7 +6,6 @@ import { loadTour } from './tour.js';
 import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { loadComments } from './comments.js';
-import { reviewStateSummary } from './review-state.js';
 import { isCodeStep, type StoryMode } from './types.js';
 
 export interface StorySummary {
@@ -36,8 +35,6 @@ export interface StorySummary {
   deletions: number;
   openComments: number;
   addressedComments: number;
-  reviewRound: number;
-  changedSinceReview: number;
 }
 
 export interface StoryScope {
@@ -145,8 +142,6 @@ function storySummary(repo: string, id: string): StorySummary | null {
       deletions: 0,
       openComments: 0,
       addressedComments: 0,
-      reviewRound: 1,
-      changedSinceReview: 0,
     };
   }
 }
@@ -169,8 +164,6 @@ function storySession(
   | 'deletions'
   | 'openComments'
   | 'addressedComments'
-  | 'reviewRound'
-  | 'changedSinceReview'
 > {
   const empty = {
     freshness: 'unverified' as const,
@@ -179,15 +172,12 @@ function storySession(
     deletions: 0,
     openComments: 0,
     addressedComments: 0,
-    reviewRound: 1,
-    changedSinceReview: 0,
   };
   try {
     const resolvedBase = resolveBase(repo, base);
     const diff = getDiff(repo, resolvedBase, head);
     const files = parseUnifiedDiff(diff);
     const comments = loadComments(repo);
-    const state = reviewStateSummary(repo, resolvedBase, head, diff, files);
     let additions = 0;
     let deletions = 0;
     for (const file of files) {
@@ -205,8 +195,6 @@ function storySession(
       deletions,
       openComments: comments.filter((comment) => comment.status === 'open').length,
       addressedComments: comments.filter((comment) => comment.status === 'addressed').length,
-      reviewRound: state.round,
-      changedSinceReview: state.changedFiles.length,
     };
   } catch {
     return empty;

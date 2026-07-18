@@ -211,20 +211,15 @@ test('patching a lazy comment updates the canonical cache before refreshing coun
   assert.match(PAGE_JS, /if\(!found\)allComments\.push\(c\)/);
 });
 
-test('approval posts the issued page identity, exact change, and live feedback identity', () => {
-  assert.match(PAGE_JS, /pageToken:document\.body\.getAttribute\('data-review-page-token'\)\|\|''/);
-  assert.match(PAGE_JS, /expectedFingerprint:document\.body\.getAttribute\('data-current-diff-hash'\)\|\|''/);
-  assert.match(PAGE_JS, /expectedScopeKey:document\.body\.getAttribute\('data-review-scope'\)\|\|''/);
-  assert.match(PAGE_JS, /expectedFeedbackVersion:Number\(document\.body\.getAttribute\('data-feedback-version'\)\|\|0\)/);
-  assert.match(PAGE_JS, /expectedBlockingFeedbackDigest:document\.body\.getAttribute\('data-blocking-feedback-digest'\)\|\|''/);
-  assert.match(PAGE_JS, /mode:mode/);
-  assert.match(PAGE_JS, /if\(kind==='approve'&&mode!=='full'\)/);
-  assert.match(PAGE_JS, /data-index-divergence-count/);
-  assert.match(PAGE_JS, /Reconcile staged and working-tree versions before approval/);
+test('notes are one-shot: no verdict or checkpoint machinery in the client', () => {
+  assert.doesNotMatch(PAGE_JS, /\/api\/review\/verdict/);
+  assert.doesNotMatch(PAGE_JS, /\/api\/review\/checkpoint/);
+  assert.doesNotMatch(PAGE_JS, /data-verdict/);
+  assert.doesNotMatch(PAGE_JS, /data-review-mode/);
   assert.match(PAGE_JS, /commentSeverity\(c\)==='blocking'/);
   assert.match(PAGE_JS, /function noteBlockingFeedbackMutation\(comment\)/);
   assert.match(PAGE_JS, /function syncReviewFeedbackIdentity\(\)/);
-  assert.match(PAGE_JS, /data-blocking-feedback-digest/);
+  assert.match(PAGE_JS, /data-index-divergence-count/);
 });
 
 test('the new-comment composer shows its agent task and separates save from send', () => {
@@ -346,12 +341,12 @@ test('ordinary selection stays quiet while right click and keyboard actions rema
   assert.doesNotMatch(PAGE_CSS, /\.ds-selection-quick/);
 });
 
-test('review feedback has a verification inbox and timeline', () => {
+test('the notes drawer verifies replies and resolves without a timeline', () => {
   assert.match(PAGE_JS, /function openFeedbackDrawer\(/);
   assert.match(PAGE_JS, /function updateCommentStatus\(/);
   assert.match(PAGE_JS, /data-accept-fix/);
   assert.match(PAGE_JS, /data-reopen-comment/);
-  assert.match(PAGE_CSS, /\.ds-review-timeline/);
+  assert.doesNotMatch(PAGE_CSS, /\.ds-review-timeline/);
 });
 
 test('file filters, resume state, and keyboard commands stay local to the review', () => {
@@ -388,7 +383,6 @@ test('live review reconnects through the page lease and recovers durable state',
   assert.match(PAGE_JS, /\{kind:'disconnected',message:/);
   assert.match(PAGE_JS, /data-live-diff-stale/);
   assert.match(PAGE_JS, /fetch\(reviewPageUrl\('\/api\/review-state'\)\)/);
-  assert.match(PAGE_JS, /renderReviewTimeline\(state\.timelineHtml\)/);
   assert.match(PAGE_JS, /function aiTurnKeys\(/);
   assert.match(PAGE_JS, /Agent replied to /);
   assert.match(PAGE_CSS, /\.ds-live-banner\{position:fixed/);

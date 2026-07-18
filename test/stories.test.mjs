@@ -154,7 +154,6 @@ test('listStories calls a story current only when its exact diff fingerprint mat
   assert.equal(stories[0].additions, 1);
   assert.equal(stories[0].deletions, 1);
   assert.equal(stories[0].openComments, 0);
-  assert.equal(stories[0].reviewRound, 1);
   assert.equal(stories[1].freshness, 'unverified');
 
   writeFileSync(join(repo, 'a.txt'), 'three\n');

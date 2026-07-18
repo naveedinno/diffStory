@@ -256,7 +256,7 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.match(html, /data-review-menu/);
   assert.match(html, /data-review-menu-pop/);
   assert.match(html, />Review</);
-  assert.match(html, /aria-label="Review, 0 unresolved comments(?:, [^"]+)?"/);
+  assert.match(html, /aria-label="Review, 0 unresolved notes(?:, [^"]+)?"/);
   assert.match(html, /data-unexplained-count="\d+"/);
   assert.match(html, /ds-review-summary/);
   assert.match(html, /data-agent-target-control/);
@@ -267,8 +267,8 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.doesNotMatch(html, /data-send-all/);
   assert.match(html, />Resend open comments</);
   assert.match(html, />More review actions/);
-  assert.match(html, /ds-check">✓<\/span> Approve/);
-  assert.match(html, /class="ds-review-menu-title"><span>Review<\/span><small>Round 1<\/small><\/div>/);
+  assert.doesNotMatch(html, /data-verdict/);
+  assert.match(html, /class="ds-review-menu-title"><span>Review<\/span><\/div>/);
   assert.doesNotMatch(html, /class="ds-reviewstatusbar[^>]*data-roundbar/);
   assert.doesNotMatch(html, /class="ds-review-menu-coverage"/);
   assert.doesNotMatch(html, /class="ds-reviewstatus-scope"/);
@@ -296,33 +296,22 @@ test('invalid feedback is a visible approval blocker with recovery guidance', ()
   assert.match(html, /data-feedback-health="invalid"/);
   assert.match(html, /role="alert"><strong>Feedback file needs repair<\/strong>/);
   assert.match(html, /Repair or restore \.diffstory\/comments\.json, then reload/);
-  assert.match(html, /data-verdict="approve" disabled/);
   assert.match(html, /Feedback file needs repair/);
-  assert.match(html, /data-feedback-health'\)==='invalid'/);
+  assert.match(html, /data-feedback-health'\)!=='invalid'/);
 });
 
-test('version-aware review rounds expose full and since-review modes', () => {
+test('one-shot notes: no rounds, verdicts, or since-review modes anywhere', () => {
   const html = renderPage({
-    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewMode: 'full',
-    reviewState: {
-      scopeKey: 'scope', round: 2, currentDiffHash: 'hash', currentSnapshotId: 'r2',
-      compareFrom: { id: 'r1', round: 1, createdAt: new Date().toISOString() },
-      changedFiles: ['a.ts'], hasChangesSinceReview: true, events: [], snapshots: [],
-    },
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
+    reviewState: { scopeKey: 'scope', currentDiffHash: 'hash', feedbackHealth: { status: 'healthy', source: 'missing' } },
   });
-  assert.match(html, /Round 2/);
-  assert.match(html, /1 file changed since your feedback/);
-  assert.match(html, /data-review-mode="full"/);
-  assert.match(html, /data-review-mode="since"/);
-  assert.match(html, /data-review-mode="full"[^>]*aria-pressed="true"/);
-  assert.match(html, /data-filter-since="1"/);
-  assert.match(html, /class="ds-roundmodes ds-review-menu-modes" role="group" aria-label="Review comparison"/);
-  assert.match(html, /class="ds-review-menu-title"><span>Review<\/span><small>Round 2<\/small><\/div>/);
-  assert.match(html, /\.ds-review-menu-modes\{width:100%;margin:0 0 8px\}/);
-  assert.doesNotMatch(html, /class="ds-reviewstatusbar[^>]*data-roundbar/);
+  assert.doesNotMatch(html, /data-review-mode/);
+  assert.doesNotMatch(html, /data-verdict/);
+  assert.doesNotMatch(html, /ds-roundmodes/);
+  assert.doesNotMatch(html, /ds-review-timeline/);
+  assert.doesNotMatch(html, /Since review/);
   assert.match(html, /var open=compactScreen\(\)&&!collapsed,main=\$\('\.ds-main'\),chrome=\$\('\.ds-reviewchrome-main'\)/);
   assert.match(html, /\.ds-layout>\.ds-rail,body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{top:52px\}/);
-  assert.doesNotMatch(html, /\.ds-roundmodes\{display:none\}/);
 });
 
 test('review action feedback uses a persistent live region with assertive error escalation', () => {
@@ -335,9 +324,6 @@ test('review action feedback uses a persistent live region with assertive error 
   assert.match(html, /setAttribute\('role',isError\?'alert':'status'\)/);
   assert.match(html, /setAttribute\('aria-live',isError\?'assertive':'polite'\)/);
   assert.match(html, /toastEl\.textContent='';toastEl\.classList\.remove\('is-error'\);toastEl\.setAttribute\('role','status'\);toastEl\.setAttribute\('aria-live','polite'\)/);
-  assert.match(html, /Could not save the review decision\.',\s*'error'/);
-  assert.match(html, /setTimeout\(function\(\)\{location\.reload\(\);\},5000\)/, 'keeps verdict success mounted long enough to announce');
-  assert.doesNotMatch(html, /location\.reload\(\);\},450\)/, 'does not interrupt the polite success announcement');
   assert.match(html, /\.ds-toast\.is-error\{/);
   assert.match(html, /\.ds-toast\{[^}]*width:max-content;max-width:min\(540px,calc\(100vw - 24px\)\);overflow-wrap:anywhere/);
 });
@@ -389,14 +375,14 @@ test('secondary review text tokens retain 4.5 to 1 contrast on every surface tie
   }
 });
 
-test('review page renders feedback, timeline, filters, resume, and story repair affordances', () => {
+test('review page renders notes, filters, resume, and story repair affordances', () => {
   const comments = [{
     id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'addressed',
     createdAt: new Date().toISOString(), selectedText: 'return 1', turns: [{ role: 'ai', text: 'Fixed it', at: new Date().toISOString() }],
   }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
   assert.match(html, /data-feedback-open="feedback"/);
-  assert.match(html, /data-feedback-view="timeline"/);
+  assert.doesNotMatch(html, /data-feedback-view="timeline"/);
   assert.match(html, /Needs verification/);
   assert.match(html, /data-file-search/);
   assert.match(html, /data-resume-review/);
@@ -1525,44 +1511,23 @@ test('commands describe V as toggling exact-file review state instead of advanci
   assert.doesNotMatch(html, /data-command="next-unviewed"(?:(?!<\/button>)[\s\S])*<kbd>V<\/kbd>/);
 });
 
-test('whole-change approval gates only on blocking feedback and full review mode', () => {
+test('review status stays honest without a verdict: blocking notes and divergence stay visible', () => {
   const concern = {
     id: 'concern', file: 'a.ts', line: 1, type: 'question', severity: 'concern',
     body: 'Please double-check this.', status: 'open', createdAt: new Date().toISOString(),
   };
-  const concernHtml = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [concern] });
-  assert.match(concernHtml, /data-verdict="approve"(?![^>]*\sdisabled)[^>]*>/);
-  assert.match(concernHtml, /no blocking feedback remains/);
-
   const blockingHtml = renderPage({
     repo: process.cwd(), tour, files, baseLabel: 'main',
     comments: [{ ...concern, id: 'blocking', type: 'change', severity: 'blocking' }],
   });
-  assert.match(blockingHtml, /data-verdict="approve"[^>]*\sdisabled/);
-  assert.match(blockingHtml, /Resolve 1 blocking comment first/);
-
-  const sinceHtml = renderPage({
-    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewMode: 'since',
-  });
-  assert.match(sinceHtml, /data-verdict="approve"[^>]*\sdisabled/);
-  assert.match(sinceHtml, /Return to Full change before approving the whole change/);
-
-  const focusedHtml = renderPage({
-    repo: process.cwd(),
-    tour: { ...tour, storyScope: { includedFiles: ['a.ts'], excludedFiles: ['outside.ts'] } },
-    files,
-    baseLabel: 'main',
-    comments: [],
-  });
-  assert.match(focusedHtml, /data-verdict="approve"[^>]*\sdisabled/);
-  assert.match(focusedHtml, /This story omits changed files/);
+  assert.match(blockingHtml, /1 unresolved note/);
+  assert.doesNotMatch(blockingHtml, /data-verdict/);
 
   const divergentHtml = renderPage({
     repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
     stagedWorktreeDivergentFiles: ['a.ts'],
   });
-  assert.match(divergentHtml, /data-verdict="approve"[^>]*\sdisabled/);
-  assert.match(divergentHtml, /Reconcile 1 staged\/working-tree mismatch before approval/);
+  assert.match(divergentHtml, /staged\/working-tree mismatch · reconcile before deciding/);
   assert.match(divergentHtml, /Staged state differs · 1/);
   assert.match(divergentHtml, /<code>a\.ts<\/code>/);
 });
@@ -1581,7 +1546,7 @@ test('storyless exclusions remain inspectable and acknowledgeable from review st
     }],
   });
   assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-trust-open/);
-  assert.match(html, /<b>1<\/b> excluded file · inspect before approval/);
+  assert.match(html, /<b>1<\/b> excluded file · inspect before deciding/);
   assert.match(html, /data-exclusions-ack/);
   assert.match(html, /No story-coverage claim is applied in this view/);
 });
@@ -1785,7 +1750,7 @@ test('adjacent hunks render a bare, non-expandable gap between them', () => {
   assert.match(html, /data-gap-from="10" data-gap-to="eof"/);
 });
 
-test('unverified stories block approval and explain how to recover trust', () => {
+test('unverified stories stay visible and explain how to recover trust', () => {
   const html = renderPage({
     repo: process.cwd(),
     tour,
@@ -1795,9 +1760,8 @@ test('unverified stories block approval and explain how to recover trust', () =>
     routeBase: '/repo/demo',
     storyFreshness: 'unverified',
   });
-  assert.match(html, /Unverified<\/b> story · regenerate before approval/);
+  assert.match(html, /Unverified<\/b> story · regenerate it/);
   assert.match(html, /This older story has no exact diff fingerprint/);
-  assert.match(html, /data-verdict="approve" disabled/);
   assert.match(html, /Regenerate story/);
 });
 

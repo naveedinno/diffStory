@@ -84,7 +84,6 @@ test('every lazy evidence request carries the issued page lease and offers a saf
   assert.match(PAGE_JS, /err\.reloadRequired=r\.status===409/);
   assert.match(PAGE_JS, /data-review-reload/);
   assert.match(PAGE_JS, /location\.reload\(\)/);
-  assert.match(PAGE_JS, /pageToken:document\.body\.getAttribute\('data-review-page-token'\)/);
   for (const endpoint of [
     '/api/review/step-panel?index=',
     '/api/diff/file-panel?file=',

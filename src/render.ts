@@ -41,14 +41,10 @@ export interface RenderInput {
   repoName?: string;
   /** Render the diff with no story: All-files default, Story tab → Generate. */
   storyless?: boolean;
-  /** Version-aware local review state for rounds, verification, and timeline. */
+  /** Scope identity, diff fingerprint, and feedback health for this page. */
   reviewState?: ReviewStateSummary;
-  /** Render the complete change or only the delta since feedback was sent. */
-  reviewMode?: 'full' | 'since';
   /** Opaque server-issued identity for lazy requests from this exact page. */
   reviewPageToken?: string;
-  /** Snapshot marker used when reviewMode is `since`. */
-  reviewFrom?: string;
   /** Whether this story was generated for the exact diff currently on screen. */
   storyFreshness?: 'current' | 'stale' | 'unverified';
   /** Files intentionally omitted from the bounded renderer, never hidden from scope. */
@@ -106,17 +102,10 @@ export function renderPage(input: RenderInput): string {
   const { repo, tour, files, baseLabel, comments, headRef } = input;
   const routeBase = input.routeBase ?? '';
   const storyless = input.storyless ?? false;
-  const reviewMode = input.reviewMode ?? 'full';
   const storyFreshness = storyless ? 'current' : (input.storyFreshness ?? 'current');
   const reviewState = input.reviewState ?? {
     scopeKey: '',
-    round: 1,
     currentDiffHash: '',
-    changedFiles: [],
-    hasChangesSinceReview: false,
-    events: [],
-    snapshots: [],
-    blockingFeedbackDigest: '',
     feedbackHealth: { status: 'healthy' as const, source: 'missing' as const },
   };
   const excludedFiles = input.excludedFiles ?? [];
@@ -138,17 +127,13 @@ export function renderPage(input: RenderInput): string {
   const feedbackRecovery = reviewState.feedbackHealth?.status === 'invalid'
     ? reviewState.feedbackHealth.recovery
     : '';
-  const verdictEvaluation = reviewState.verdict;
-  const currentVerdict = verdictEvaluation?.state === 'current' ? verdictEvaluation.current : undefined;
-  const currentApproved = currentVerdict?.decision === 'approved';
-  const approveReady =
+  const reviewClean =
     feedbackHealthy &&
     blockingOpenCount === 0 &&
     uncoveredCount === 0 &&
     storyFreshness === 'current' &&
     excludedFiles.length === 0 &&
     indexDivergentFiles.length === 0 &&
-    reviewMode === 'full' &&
     !focusedStory;
   // No story → no coverage to report, so the coverage row is meaningless; hide it.
   const showTrustPill = !storyless || excludedFiles.length > 0 || indexDivergentFiles.length > 0;
@@ -156,11 +141,11 @@ export function renderPage(input: RenderInput): string {
   const trustPill = showTrustPill
     ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-trust-open title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${
         indexDivergentFiles.length
-          ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before approval</span><span class="ds-review-row-arrow">›</span>`
+          ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before deciding</span><span class="ds-review-row-arrow">›</span>`
           : storyless && excludedFiles.length
-            ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before approval</span><span class="ds-review-row-arrow">›</span>`
+            ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
           : storyFreshness !== 'current'
-          ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate before approval</span><span class="ds-review-row-arrow">›</span>`
+          ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate it</span><span class="ds-review-row-arrow">›</span>`
           : uncoveredCount
           ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
           : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`
@@ -168,7 +153,7 @@ export function renderPage(input: RenderInput): string {
     : '';
 
   const railCards = storyRail(model.steps);
-  const railFiles = railFileTree(model.files, comments, reviewState.changedFiles);
+  const railFiles = railFileTree(model.files, comments, []);
   const stepPanels = model.steps
     // The Overview is active initially, so keep only its adjacent first step in
     // the document. Later steps load when approached instead of multiplying a
@@ -180,18 +165,6 @@ export function renderPage(input: RenderInput): string {
     )
     .join('');
   const filePanels = model.files.map((f, i) => filePanel(f, i, stepIndexById)).join('');
-  const reviewModeControls = reviewState.compareFrom
-    ? `<div class="ds-roundmodes ds-review-menu-modes" role="group" aria-label="Review comparison" title="${
-        reviewState.changedFiles.length
-          ? `${reviewState.changedFiles.length} ${plural(reviewState.changedFiles.length, 'file')} changed since your feedback`
-          : 'No code changes since your feedback'
-      }">
-        <button type="button" data-review-mode="full" class="${reviewMode === 'full' ? 'is-active' : ''}" aria-pressed="${reviewMode === 'full'}">Full change</button>
-        <button type="button" data-review-mode="since" class="${reviewMode === 'since' ? 'is-active' : ''}"${
-          reviewState.changedFiles.length ? '' : ' disabled'
-        } aria-pressed="${reviewMode === 'since'}">Since review</button>
-      </div>`
-    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -205,16 +178,12 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|${reviewMode}`)}" data-review-scope="${esc(
+<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(
     reviewState.scopeKey,
-  )}" data-review-round="${reviewState.round}" data-feedback-version="${reviewState.feedbackVersion ?? 0}" data-blocking-feedback-digest="${esc(
-    reviewState.blockingFeedbackDigest ?? '',
-  )}" data-review-snapshot="${esc(
-    reviewState.currentSnapshotId ?? '',
   )}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(
     input.reviewPageToken ?? '',
-  )}"${input.reviewFrom ? ` data-review-from="${esc(input.reviewFrom)}"` : ''} data-verdict-state="${verdictEvaluation?.state ?? 'none'}" data-verdict-decision="${currentVerdict?.decision ?? ''}" data-current-review-mode="${reviewMode}"${reviewMode === 'since' ? ' data-initial-view="files"' : ''}>
-<header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}${reviewState.compareFrom ? ' has-review-modes' : ''}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>
+  )}">
+<header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>
   <div class="ds-reviewchrome-rail">
     <div class="ds-reviewchrome-nav">
       <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
@@ -258,79 +227,27 @@ ${BRAND_HEAD_LINKS}
         : ''
     }
     <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu${approveReady ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'comment')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration before approval' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} require acknowledgement` : ''}" title="Open review status">
+      <button class="ds-review-menu${reviewClean ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}" title="Open review status">
         <span class="ds-ui-icon ds-review-menu-icon" aria-hidden="true">${reviewChromeIcon('review')}</span>
         <span class="ds-review-menu-label">Review</span>
         <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"${openCount ? '' : ' hidden'}><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
         <span class="ds-ui-icon ds-review-menu-caret" aria-hidden="true">${reviewChromeIcon('chevron')}</span>
       </button>
       <div class="ds-review-menu-pop" data-review-menu-pop role="dialog" aria-label="Review status and actions" tabindex="-1" hidden>
-        <div class="ds-review-menu-title"><span>Review</span><small>Round ${reviewState.round}</small></div>
-        ${reviewModeControls}
+        <div class="ds-review-menu-title"><span>Review</span></div>
         <div class="ds-review-summary">
-          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'comment')}</span></span>
+          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
           ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
           ${trustPill}
         </div>
         <div class="ds-review-section">
         <button class="ds-review-option" data-feedback-open="feedback"${comments.length ? '' : ' disabled'}>
-          <span class="ds-review-option-title">Feedback <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span></span>
-          <span class="ds-review-option-desc">Verify replies and resolve comments.</span>
-        </button>
-        <button class="ds-review-option" data-feedback-open="timeline">
-          <span class="ds-review-option-title">Timeline</span>
-          <span class="ds-review-option-desc">Review rounds, comments, and agent runs.</span>
+          <span class="ds-review-option-title">Notes <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span></span>
+          <span class="ds-review-option-desc">Verify replies and resolve notes.</span>
         </button>
         <button class="ds-review-option" data-feedback-open="challenge">
           <span class="ds-review-option-title">Challenge pass</span>
           <span class="ds-review-option-desc">Re-read failure paths, boundaries, and missing tests before deciding.</span>
-        </button>
-        </div>
-        <div class="ds-review-decision">
-          <div class="ds-review-section-label">Decision</div>
-          ${verdictSummary(reviewState)}
-          <label class="ds-verdict-note"><span>Decision note <small>optional</small></span><textarea data-verdict-note rows="2" placeholder="Why are you approving or requesting changes?"></textarea></label>
-        <button class="ds-review-option ds-review-option-approve${currentApproved ? ' is-current' : ''}" data-verdict="approve"${approveReady && !currentApproved ? '' : ' disabled'} title="${
-          approveReady
-            ? 'This exact full diff is covered and has no unresolved blocking feedback'
-            : reviewMode === 'since'
-              ? 'Return to Full change before making a whole-change decision'
-              : !feedbackHealthy
-                ? 'Repair .diffstory/comments.json and reload before approval'
-              : indexDivergentFiles.length
-                ? 'Reconcile staged and working-tree versions before approval'
-              : focusedStory
-                ? 'This story covers only a selected scope; use a full-change review before approval'
-            : storyFreshness !== 'current'
-              ? 'Regenerate the story for this exact diff before approval'
-              : excludedFiles.length
-                ? 'Inspect and acknowledge files omitted from the bounded renderer first'
-                : 'Resolve open comments and make sure every rendered change is explained first'
-        }">
-          <span class="ds-review-option-title"><span class="ds-check">✓</span> ${currentApproved ? 'Approved' : 'Approve'}</span>
-          <span class="ds-review-option-desc" data-approve-desc>${
-            approveReady
-              ? 'The full rendered diff is covered, exclusions are clear, and no blocking feedback remains.'
-              : reviewMode === 'since'
-                ? 'Return to Full change before approving the whole change.'
-                : !feedbackHealthy
-                  ? feedbackRecovery
-                : indexDivergentFiles.length
-                  ? `Reconcile ${indexDivergentFiles.length} staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} before approval.`
-                : focusedStory
-                  ? 'This story omits changed files. Review the full change before approving.'
-              : blockingOpenCount
-                ? `Resolve ${blockingOpenCount} blocking ${plural(blockingOpenCount, 'comment')} first.`
-                : storyFreshness !== 'current'
-                  ? 'Regenerate the story for this exact diff first.'
-                : excludedFiles.length
-                  ? `Inspect and acknowledge ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} first.`
-                  : `Explain ${uncoveredCount} more ${plural(uncoveredCount, 'change')} in the story first.`
-          }</span>
-        </button>
-        <button class="ds-review-option ds-review-option-request" data-verdict="changes-requested">
-          <span class="ds-review-option-title">Request changes</span>
-          <span class="ds-review-option-desc">Save a durable decision for this exact diff. Open comments remain the actionable detail.</span>
         </button>
         </div>
         <details class="ds-review-more">
@@ -406,7 +323,6 @@ ${BRAND_HEAD_LINKS}
             <button data-file-filter="comments" aria-pressed="false">Comments</button>
             <button data-file-filter="unexplained" aria-pressed="false">Unexplained</button>
             <button data-file-filter="tests" aria-pressed="false">Tests</button>
-            ${reviewState.compareFrom ? '<button data-file-filter="since" aria-pressed="false">Since review</button>' : ''}
           </div>
         </details>
         <button class="ds-next-unviewed" data-next-unviewed type="button">Next unreviewed <span aria-hidden="true">→</span></button>
@@ -441,7 +357,7 @@ ${BRAND_HEAD_LINKS}
 </div>
 
 ${trustDrawer(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
-${feedbackDrawer(repo, headRef, comments, reviewState, model)}
+${feedbackDrawer(repo, headRef, comments, model)}
 ${commandPalette()}
 <div class="ds-selection-menu" data-selection-menu role="menu" hidden>
   <button type="button" role="menuitem" data-selection-action="question">Ask</button>
@@ -470,28 +386,6 @@ function reviewChromeIcon(name: 'menu' | 'back' | 'refresh' | 'review' | 'chevro
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">${paths[name]}</svg>`;
 }
 
-function verdictSummary(state: ReviewStateSummary): string {
-  const verdict = state.verdict;
-  if (!verdict || verdict.state === 'none') {
-    return '<div class="ds-verdict-state is-none">No decision saved for this diff.</div>';
-  }
-  if (verdict.state === 'stale') {
-    const previous = verdict.latest?.decision === 'approved' ? 'approval' : 'change request';
-    const reason = verdict.invalidationReason === 'scope-changed'
-      ? 'the review scope changed'
-      : verdict.invalidationReason === 'feedback-changed'
-        ? 'blocking feedback changed'
-        : 'the diff changed';
-    return `<div class="ds-verdict-state is-stale">Previous ${previous} is stale because ${reason}.</div>`;
-  }
-  const current = verdict.current;
-  if (!current) return '<div class="ds-verdict-state is-none">No decision saved for this diff.</div>';
-  return `<div class="ds-verdict-state ${current.decision === 'approved' ? 'is-approved' : 'is-requested'}"><strong>${
-    current.decision === 'approved' ? 'Approved' : 'Changes requested'
-  }</strong><span>Bound to this exact diff · ${esc(relativeTime(current.createdAt))}</span>${
-    current.note ? `<small>${esc(current.note)}</small>` : ''
-  }</div>`;
-}
 
 // The Overview sits above the numbered steps as navigation index 0 — the calm
 // entry point that answers "what is this change?" before the walkthrough begins.
@@ -680,7 +574,7 @@ function introPanel(
     ? ''
     : `<div class="ds-freshness-callout" role="status"><span><b>${
         freshness === 'stale' ? 'The diff changed after this story was generated.' : 'This older story has no exact diff fingerprint.'
-      }</b> Review the current diff without relying on coverage, or regenerate the story before approval.</span><a href="${esc(routeBase)}/change">Regenerate story</a></div>`;
+      }</b> Review the current diff without relying on coverage, or regenerate the story.</span><a href="${esc(routeBase)}/change">Regenerate story</a></div>`;
   const start = first
     ? `<button class="ds-intro-start" data-goto-step="1">
         <span class="ds-intro-start-main">Start the walkthrough <span class="ds-intro-arrow">→</span></span>
@@ -1691,24 +1585,21 @@ function feedbackDrawer(
   repo: string,
   headRef: string | undefined,
   comments: Comment[],
-  state: ReviewStateSummary,
   model: ReviewModel,
 ): string {
   const addressed = comments.filter((comment) => comment.status === 'addressed').length;
   const cards = comments.length
     ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
-    : '<div class="ds-drawer-empty">No review feedback yet.</div>';
-  const events = reviewTimelineEventsHtml(state.events);
+    : '<div class="ds-drawer-empty">No notes yet.</div>';
   return `<div class="ds-drawer-root" id="ds-feedback-drawer" hidden>
     <div class="ds-drawer-scrim" data-feedback-close></div>
     <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-feedback-title" tabindex="-1">
       <div class="ds-drawer-head">
-        <div><div class="ds-drawer-title" id="ds-feedback-title">Review loop</div><div class="ds-drawer-sub">Verify what changed, reopen anything unresolved, and keep the rounds honest.</div></div>
-        <button class="ds-drawer-x" data-feedback-close title="Close" aria-label="Close review loop">×</button>
+        <div><div class="ds-drawer-title" id="ds-feedback-title">Notes</div><div class="ds-drawer-sub">Send notes to the agent, verify replies, and resolve what is done.</div></div>
+        <button class="ds-drawer-x" data-feedback-close title="Close" aria-label="Close notes">×</button>
       </div>
       <div class="ds-drawer-tabs" role="tablist">
-        <button class="is-active" id="ds-feedback-tab" data-feedback-panel="feedback" role="tab" aria-selected="true" aria-controls="ds-feedback-panel" tabindex="0">Feedback${addressed ? ` <span>${addressed}</span>` : ''}</button>
-        <button id="ds-timeline-tab" data-feedback-panel="timeline" role="tab" aria-selected="false" aria-controls="ds-timeline-panel" tabindex="-1">Timeline</button>
+        <button class="is-active" id="ds-feedback-tab" data-feedback-panel="feedback" role="tab" aria-selected="true" aria-controls="ds-feedback-panel" tabindex="0">Notes${addressed ? ` <span>${addressed}</span>` : ''}</button>
         <button id="ds-challenge-tab" data-feedback-panel="challenge" role="tab" aria-selected="false" aria-controls="ds-challenge-panel" tabindex="-1">Challenge</button>
       </div>
       <div class="ds-feedback-filters" data-feedback-tools>
@@ -1720,7 +1611,6 @@ function feedbackDrawer(
         <button data-feedback-filter="resolved">Resolved</button>
       </div>
       <div class="ds-drawer-body ds-feedback-list" id="ds-feedback-panel" role="tabpanel" aria-labelledby="ds-feedback-tab" data-feedback-view="feedback">${cards}</div>
-      <div class="ds-drawer-body" id="ds-timeline-panel" role="tabpanel" aria-labelledby="ds-timeline-tab" data-feedback-view="timeline" hidden><ol class="ds-review-timeline">${events}</ol></div>
       <div class="ds-drawer-body ds-challenge-panel" id="ds-challenge-panel" role="tabpanel" aria-labelledby="ds-challenge-tab" data-feedback-view="challenge" hidden>${challengeChecklist(model)}</div>
     </div>
   </div>`;
@@ -1742,39 +1632,11 @@ function challengeChecklist(model: ReviewModel): string {
   return `<div class="ds-challenge-head"><strong>Adversarial review pass</strong><p>This checklist structures a human second pass; it does not certify the change.</p></div><div class="ds-challenge-list">${items}</div>${targets ? `<div class="ds-challenge-targets"><span>Cue-specific targets</span>${targets}</div>` : ''}`;
 }
 
-function relativeTime(iso: string): string {
-  const time = Date.parse(iso);
-  if (!Number.isFinite(time)) return 'recently';
-  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-/** The one authority for review-timeline markup: the initial drawer render and
- * the /api/review-state live refresh must never drift apart. */
-export function reviewTimelineEventsHtml(events: ReviewStateSummary['events']): string {
-  if (!events.length) return '<li class="ds-drawer-empty">The timeline starts when this review is opened.</li>';
-  return events
-    .map(
-      (event) => `<li class="ds-timeline-event"><span class="ds-timeline-dot kind-${event.kind}"></span><div><strong>${esc(
-        event.label,
-      )}</strong>${event.detail ? `<span>${esc(event.detail)}</span>` : ''}<small>Round ${event.round} · ${esc(
-        relativeTime(event.at),
-      )}</small></div></li>`,
-    )
-    .join('');
-}
-
 function commandPalette(): string {
   const commands = [
     ['story', 'Open Story', 'J / K', 'Move through the guided walkthrough'],
     ['files', 'Open All files', '/', 'Search and filter the changed files'],
-    ['feedback', 'Review feedback', '', 'Verify agent replies and reopen comments'],
-    ['timeline', 'Open review timeline', '', 'See rounds, comments, and agent runs'],
+    ['feedback', 'Review notes', '', 'Verify agent replies and reopen notes'],
     ['next-unviewed', 'Next unreviewed file', '', 'Keep the review moving'],
     ['toggle-viewed', 'Toggle current file reviewed', 'V', 'Bind completion to this exact file diff'],
     ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],

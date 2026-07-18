@@ -6,7 +6,6 @@ import { loadTour } from './tour.js';
 import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { loadComments } from './comments.js';
-import { reviewStateSummary } from './review-state.js';
 import { isCodeStep } from './types.js';
 const NAMED_STORIES_DIR = 'stories';
 /** Stories saved for a repo, in the order the app should present them. */
@@ -106,8 +105,6 @@ function storySummary(repo, id) {
             deletions: 0,
             openComments: 0,
             addressedComments: 0,
-            reviewRound: 1,
-            changedSinceReview: 0,
         };
     }
 }
@@ -123,15 +120,12 @@ function storySession(repo, base, head, expected) {
         deletions: 0,
         openComments: 0,
         addressedComments: 0,
-        reviewRound: 1,
-        changedSinceReview: 0,
     };
     try {
         const resolvedBase = resolveBase(repo, base);
         const diff = getDiff(repo, resolvedBase, head);
         const files = parseUnifiedDiff(diff);
         const comments = loadComments(repo);
-        const state = reviewStateSummary(repo, resolvedBase, head, diff, files);
         let additions = 0;
         let deletions = 0;
         for (const file of files) {
@@ -151,8 +145,6 @@ function storySession(repo, base, head, expected) {
             deletions,
             openComments: comments.filter((comment) => comment.status === 'open').length,
             addressedComments: comments.filter((comment) => comment.status === 'addressed').length,
-            reviewRound: state.round,
-            changedSinceReview: state.changedFiles.length,
         };
     }
     catch {

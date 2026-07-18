@@ -136,10 +136,9 @@ test('lease-scoped review state and comment mutations tolerate a story mid-rewri
     const state = await fetch(`${base}/api/review-state?page=${page}`);
     assert.equal(state.status, 200, 'review state must tolerate a story mid-rewrite');
     const stateBody = await state.json();
-    assert.ok(
-      typeof stateBody.timelineHtml === 'string' && stateBody.timelineHtml.includes('timeline'),
-      'review state carries the server-rendered timeline fragment',
-    );
+    assert.equal(typeof stateBody.scopeKey, 'string', 'review state carries the scope identity');
+    assert.equal(typeof stateBody.currentDiffHash, 'string', 'review state carries the diff fingerprint');
+    assert.ok(stateBody.feedbackHealth && stateBody.feedbackHealth.status, 'review state carries feedback health');
 
     const created = await fetch(`${base}/api/comments?page=${page}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },

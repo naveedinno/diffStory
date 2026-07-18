@@ -8,7 +8,7 @@ import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour } from '
 import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, stagedWorktreeDivergentFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile, renderSplitHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, reviewTimelineEventsHtml, } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, } from './render.js';
 import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
@@ -38,7 +38,7 @@ import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro
 import { codexTaskBinary, listCodexStoryModels, listCodexTasks, nameCodexTask, validCodexThreadId, } from './codex-tasks.js';
 import { sendCodexDesktopTurn } from './codex-desktop.js';
 import { LiveEventHub, storyFileFingerprint } from './live.js';
-import { captureReviewSnapshot, diffSinceReview, recordReviewEvent, reviewStateSummary, recordReviewVerdict, ReviewFeedbackChangedError, UnresolvedBlockingFeedbackError, } from './review-state.js';
+import { reviewStateSummary } from './review-state.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
@@ -118,19 +118,6 @@ function invalidFeedbackResponse(res, health) {
 function sendCommentMutationError(res, error) {
     if (error instanceof InvalidCommentStoreError)
         return invalidFeedbackResponse(res, error.health);
-    if (error instanceof UnresolvedBlockingFeedbackError) {
-        return sendJson(res, 409, {
-            error: error.message,
-            blockingCommentIds: error.blockingCommentIds,
-        });
-    }
-    if (error instanceof ReviewFeedbackChangedError) {
-        return sendJson(res, 409, {
-            error: error.message,
-            currentFeedbackVersion: error.currentFeedbackVersion,
-            currentBlockingFeedbackDigest: error.currentBlockingFeedbackDigest,
-        });
-    }
     sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
 }
 function repoRouteBase(repo) {
@@ -439,172 +426,7 @@ function handle(req, res, session, home, liveHub) {
                 return noRepo(res);
             const data = lease ? reviewDataForLease(lease, false) : sessionReviewData(session);
             const summary = reviewStateSummary(lease?.repo ?? session.repo, data.base, data.head, data.diff, data.files, data.changeFingerprint);
-            return sendJson(res, 200, { ...summary, timelineHtml: reviewTimelineEventsHtml(summary.events) });
-        }
-        if (method === 'POST' && url.pathname === '/api/review/checkpoint') {
-            const lease = optionalRequestLease(session, url);
-            if (lease === null)
-                return sendReviewPageConflict(res, 'This review page is no longer active.');
-            if (!session.repo)
-                return noRepo(res);
-            const snapshot = lease
-                ? captureLeasedReview(lease, 'opened')
-                : captureSessionReview(session, 'opened');
-            return sendJson(res, 200, {
-                ok: true,
-                snapshot: { id: snapshot.id, round: snapshot.round, createdAt: snapshot.createdAt },
-            });
-        }
-        if (method === 'POST' && url.pathname === '/api/review/verdict') {
-            if (!session.repo)
-                return noRepo(res);
-            return readBody(req, res, (body) => {
-                try {
-                    const input = JSON.parse(body || '{}');
-                    if (input.decision !== 'approved' && input.decision !== 'changes-requested') {
-                        return sendJson(res, 400, { error: 'Decision must be approved or changes-requested.' });
-                    }
-                    const page = validateReviewPageLease(session, typeof input.pageToken === 'string' ? input.pageToken : null);
-                    if (!page.ok)
-                        return sendReviewPageConflict(res, page.error);
-                    const data = {
-                        tour: page.tour,
-                        base: page.base,
-                        head: page.head,
-                        diff: page.diff,
-                        files: page.fullFiles,
-                        changeFingerprint: page.lease.fingerprint,
-                    };
-                    const currentFingerprint = data.changeFingerprint;
-                    if (typeof input.expectedFingerprint !== 'string' || input.expectedFingerprint !== currentFingerprint) {
-                        return sendJson(res, 409, {
-                            error: 'The change moved since this page loaded. Reload before saving a review decision.',
-                            currentFingerprint,
-                        });
-                    }
-                    const currentReviewState = reviewStateSummary(session.repo, data.base, data.head, data.diff, data.files, currentFingerprint);
-                    if (typeof input.expectedScopeKey !== 'string' || input.expectedScopeKey !== currentReviewState.scopeKey) {
-                        return sendJson(res, 409, {
-                            error: 'The review scope changed since this page loaded. Reload before saving a decision.',
-                            currentScopeKey: currentReviewState.scopeKey,
-                        });
-                    }
-                    if (input.decision === 'approved' && currentReviewState.feedbackHealth.status === 'invalid') {
-                        return invalidFeedbackResponse(res, currentReviewState.feedbackHealth);
-                    }
-                    if (input.decision === 'approved' &&
-                        (!Number.isInteger(input.expectedFeedbackVersion) || input.expectedFeedbackVersion !== currentReviewState.feedbackVersion)) {
-                        return sendJson(res, 409, {
-                            error: 'Blocking feedback changed since this page loaded. Reload before approval.',
-                            currentFeedbackVersion: currentReviewState.feedbackVersion,
-                        });
-                    }
-                    if (input.decision === 'approved' &&
-                        input.expectedBlockingFeedbackDigest !== currentReviewState.blockingFeedbackDigest) {
-                        return sendJson(res, 409, {
-                            error: 'Blocking feedback changed since this page loaded. Reload before approval.',
-                            currentBlockingFeedbackDigest: currentReviewState.blockingFeedbackDigest,
-                        });
-                    }
-                    if (input.decision === 'approved' && page.lease.mode !== 'full') {
-                        return sendJson(res, 409, {
-                            error: 'Approval is only available in the full-change view. Switch from “Since feedback” to “Full change”.',
-                        });
-                    }
-                    const stagedWorktreeDivergence = stagedWorktreeDivergentFiles(session.repo, data.base, data.head);
-                    if (input.decision === 'approved' && stagedWorktreeDivergence.length) {
-                        return sendJson(res, 409, {
-                            error: 'Staged and working-tree versions differ. Reconcile them before approval so the reviewed code matches the pending commit.',
-                            stagedWorktreeDivergentFiles: stagedWorktreeDivergence,
-                        });
-                    }
-                    const comments = loadComments(session.repo);
-                    const blocking = comments.filter((comment) => comment.status !== 'resolved' && isBlockingComment(comment));
-                    if (input.decision === 'approved' && blocking.length) {
-                        return sendJson(res, 409, {
-                            error: `Resolve ${blocking.length} blocking ${blocking.length === 1 ? 'comment' : 'comments'} before approval.`,
-                            blockingCommentIds: blocking.map((comment) => comment.id),
-                        });
-                    }
-                    const hasStory = data.tour.steps.length > 0 || !!data.tour.title.trim();
-                    if (input.decision === 'approved' && hasStory) {
-                        const focusedStoryFiles = data.tour.storyScope?.excludedFiles ?? [];
-                        if (focusedStoryFiles.length) {
-                            return sendJson(res, 409, {
-                                error: 'This story covers a selected scope, not the full change. Open a full-change review before approval.',
-                                focusedStoryFiles,
-                            });
-                        }
-                        const storyIsCurrent = !!data.tour.diffFingerprint && diffFingerprint(data.diff) === data.tour.diffFingerprint;
-                        if (!storyIsCurrent) {
-                            return sendJson(res, 409, { error: 'Regenerate the story for the current full change before approval.' });
-                        }
-                        const coverage = computeCoverage(data.tour, data.files);
-                        if (coverage.unclaimed.length) {
-                            return sendJson(res, 409, {
-                                error: `The story does not explain ${coverage.unclaimed.length} changed ${coverage.unclaimed.length === 1 ? 'range' : 'ranges'} in the full change.`,
-                                unclaimed: coverage.unclaimed,
-                            });
-                        }
-                    }
-                    const excluded = excludedReviewFiles(session.repo, data.base, data.head);
-                    const acknowledged = new Set(Array.isArray(input.acknowledgedExclusions)
-                        ? input.acknowledgedExclusions.filter((path) => typeof path === 'string')
-                        : []);
-                    const missing = excluded.filter((file) => !acknowledged.has(file.path));
-                    if (input.decision === 'approved' && missing.length) {
-                        return sendJson(res, 409, {
-                            error: `Inspect and acknowledge ${missing.length} excluded ${missing.length === 1 ? 'file' : 'files'} before approval.`,
-                            missing: missing.map((file) => file.path),
-                        });
-                    }
-                    // Re-check the issued evidence and live feedback immediately before
-                    // persisting. External tools can edit both the worktree and the
-                    // handoff file while the local server is handling a request.
-                    const confirmedPage = validateReviewPageLease(session, page.lease.token);
-                    if (!confirmedPage.ok)
-                        return sendReviewPageConflict(res, confirmedPage.error);
-                    if (input.decision === 'approved') {
-                        const confirmedReviewState = reviewStateSummary(session.repo, confirmedPage.base, confirmedPage.head, confirmedPage.diff, confirmedPage.fullFiles, confirmedPage.lease.fingerprint);
-                        if (confirmedReviewState.feedbackHealth.status === 'invalid') {
-                            return invalidFeedbackResponse(res, confirmedReviewState.feedbackHealth);
-                        }
-                        if (input.expectedFeedbackVersion !== confirmedReviewState.feedbackVersion ||
-                            input.expectedBlockingFeedbackDigest !== confirmedReviewState.blockingFeedbackDigest) {
-                            return sendJson(res, 409, {
-                                error: 'Blocking feedback changed while the decision was being saved. Reload before approval.',
-                            });
-                        }
-                        const finalBlocking = loadComments(session.repo)
-                            .filter((comment) => comment.status !== 'resolved' && isBlockingComment(comment));
-                        if (finalBlocking.length) {
-                            return sendJson(res, 409, {
-                                error: `Resolve ${finalBlocking.length} blocking ${finalBlocking.length === 1 ? 'comment' : 'comments'} before approval.`,
-                                blockingCommentIds: finalBlocking.map((comment) => comment.id),
-                            });
-                        }
-                    }
-                    const verdict = recordReviewVerdict(session.repo, {
-                        base: data.base,
-                        head: data.head,
-                        diff: data.diff,
-                        changeFingerprint: currentFingerprint,
-                        acknowledgedExclusions: input.decision === 'approved'
-                            ? excluded.map(({ path, reason }) => ({ path, reason }))
-                            : undefined,
-                        decision: input.decision,
-                        note: typeof input.note === 'string' ? input.note : undefined,
-                        expectedFeedbackVersion: input.decision === 'approved' ? input.expectedFeedbackVersion : undefined,
-                        expectedBlockingFeedbackDigest: input.decision === 'approved'
-                            ? input.expectedBlockingFeedbackDigest
-                            : undefined,
-                    });
-                    return sendJson(res, 201, { ok: true, verdict });
-                }
-                catch (error) {
-                    return sendCommentMutationError(res, error);
-                }
-            });
+            return sendJson(res, 200, summary);
         }
         if (method === 'GET' && url.pathname === '/api/comments') {
             const lease = optionalRequestLease(session, url);
@@ -631,11 +453,7 @@ function handle(req, res, session, home, liveHub) {
                     if (loaded.health.status === 'invalid')
                         return invalidFeedbackResponse(res, loaded.health);
                     const input = JSON.parse(body);
-                    const snapshot = lease ? captureLeasedReview(lease, 'opened') : captureSessionReview(session, 'opened');
-                    input.reviewRound = snapshot.round;
-                    input.reviewSnapshotId = snapshot.id;
                     const comment = addComment(repo, input);
-                    recordRequestEvent(session, lease, 'comment-added', 'Comment added', `${comment.file}:${comment.line}`, isBlockingComment(comment));
                     sendJson(res, 201, comment);
                 }
                 catch (e) {
@@ -676,10 +494,8 @@ function handle(req, res, session, home, liveHub) {
                 try {
                     const { text } = JSON.parse(body || '{}');
                     const updated = appendUserMessage(repo, id, text ?? '');
-                    if (updated) {
-                        recordRequestEvent(session, lease, 'comment-reopened', 'Follow-up added', `${updated.file}:${updated.line}`, isBlockingComment(updated));
+                    if (updated)
                         sendJson(res, 200, updated);
-                    }
                     else
                         sendJson(res, 404, { error: 'no such comment' });
                 }
@@ -701,7 +517,6 @@ function handle(req, res, session, home, liveHub) {
                     const { status } = JSON.parse(body || '{}');
                     const updated = setCommentStatus(repo, id, status ?? '');
                     if (updated) {
-                        recordRequestEvent(session, lease, updated.status === 'resolved' ? 'comment-resolved' : 'comment-reopened', updated.status === 'resolved' ? 'Comment verified' : 'Comment reopened', `${updated.file}:${updated.line}`, isBlockingComment(updated));
                         sendJson(res, 200, updated);
                     }
                     else
@@ -724,11 +539,7 @@ function handle(req, res, session, home, liveHub) {
                 const loaded = loadCommentsWithHealth(repo);
                 if (loaded.health.status === 'invalid')
                     return invalidFeedbackResponse(res, loaded.health);
-                const deleted = loaded.comments.find((comment) => comment.id === id);
                 const ok = deleteComment(repo, id);
-                if (ok && deleted) {
-                    recordRequestEvent(session, lease, 'comment-deleted', 'Comment deleted', `${deleted.file}:${deleted.line}`, isBlockingComment(deleted));
-                }
                 res.statusCode = ok ? 204 : 404;
                 res.end();
             }
@@ -772,7 +583,7 @@ function reviewScreen(session, params) {
         try {
             loadTour(storyFile);
             applyScope(session, params);
-            return renderReview(session, params);
+            return renderReview(session);
         }
         catch (e) {
             return changeScreen(session, params, e.message);
@@ -851,16 +662,7 @@ function diffScreen(session, params) {
     const data = sessionReviewData(session);
     const { base, head, diff, files: fullFiles } = data;
     const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles, data.changeFingerprint);
-    const reviewMode = params.get('review') === 'since' && reviewState.compareFrom ? 'since' : 'full';
-    const reviewFrom = reviewMode === 'since'
-        ? params.get('from') || reviewState.compareFrom?.id
-        : undefined;
-    const files = reviewMode === 'since'
-        ? parseUnifiedDiff(diffSinceReview(repo, base, head, fullFiles, reviewFrom))
-        : fullFiles;
-    const fromSnapshotDigest = reviewMode === 'since'
-        ? reviewState.snapshots.find((snapshot) => snapshot.id === reviewFrom)?.contentDigest
-        : undefined;
+    const files = fullFiles;
     const tour = { version: 1, title: '', summary: '', steps: [], base };
     const storyPath = selectedStoryPath(session);
     const pageLease = issueReviewPageLease(session, {
@@ -869,9 +671,7 @@ function diffScreen(session, params) {
         ...(head ? { head } : {}),
         fingerprint: data.changeFingerprint,
         scopeKey: reviewState.scopeKey,
-        mode: reviewMode,
-        ...(reviewFrom ? { from: reviewFrom } : {}),
-        ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
+        mode: 'full',
         storyIdentity: reviewStoryIdentity(storyPath, tour, true),
         storyPath,
         storyFingerprint: storyFileFingerprint(storyPath),
@@ -888,8 +688,6 @@ function diffScreen(session, params) {
         repoName: basename(repo),
         storyless: true,
         reviewState,
-        reviewMode,
-        reviewFrom,
         reviewPageToken: pageLease.token,
         stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
         excludedFiles: excludedReviewFiles(repo, base, head),
@@ -920,21 +718,12 @@ function loadReview(session) {
     const files = parseUnifiedDiff(diff);
     return { tour, base, head, diff, files };
 }
-function renderReview(session, params = new URLSearchParams()) {
+function renderReview(session) {
     const repo = session.repo;
     const data = sessionReviewData(session, true);
     const { tour, base, head, files: fullFiles, diff } = data;
     const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles, data.changeFingerprint);
-    const reviewMode = params.get('review') === 'since' && reviewState.compareFrom ? 'since' : 'full';
-    const reviewFrom = reviewMode === 'since'
-        ? params.get('from') || reviewState.compareFrom?.id
-        : undefined;
-    const files = reviewMode === 'since'
-        ? parseUnifiedDiff(diffSinceReview(repo, base, head, fullFiles, reviewFrom))
-        : fullFiles;
-    const fromSnapshotDigest = reviewMode === 'since'
-        ? reviewState.snapshots.find((snapshot) => snapshot.id === reviewFrom)?.contentDigest
-        : undefined;
+    const files = fullFiles;
     const storyFreshness = !tour.diffFingerprint
         ? 'unverified'
         : diffFingerprint(diff) === tour.diffFingerprint
@@ -947,9 +736,7 @@ function renderReview(session, params = new URLSearchParams()) {
         ...(head ? { head } : {}),
         fingerprint: data.changeFingerprint,
         scopeKey: reviewState.scopeKey,
-        mode: reviewMode,
-        ...(reviewFrom ? { from: reviewFrom } : {}),
-        ...(fromSnapshotDigest ? { fromSnapshotDigest } : {}),
+        mode: 'full',
         storyIdentity: reviewStoryIdentity(storyPath, tour, false),
         storyPath,
         storyFingerprint: storyFileFingerprint(storyPath),
@@ -965,8 +752,6 @@ function renderReview(session, params = new URLSearchParams()) {
         headRef: head,
         comments: loadComments(repo),
         reviewState,
-        reviewMode,
-        reviewFrom,
         reviewPageToken: pageLease.token,
         storyFreshness,
         stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
@@ -1117,20 +902,7 @@ function validateReviewPageLease(session, token, file) {
     if (reviewStoryIdentity(lease.storyPath, data.tour, storyless) !== lease.storyIdentity) {
         return { ok: false, error: 'The guided review changed after this page loaded.' };
     }
-    if (lease.mode === 'since') {
-        const snapshot = lease.from
-            ? reviewState.snapshots.find((candidate) => candidate.id === lease.from)
-            : undefined;
-        if (!snapshot || !lease.fromSnapshotDigest) {
-            return { ok: false, error: 'The since-feedback comparison is no longer available.' };
-        }
-        if (snapshot.contentDigest !== lease.fromSnapshotDigest) {
-            return { ok: false, error: 'The since-feedback checkpoint changed after this page loaded.' };
-        }
-    }
-    const files = lease.mode === 'since'
-        ? parseUnifiedDiff(diffSinceReview(lease.repo, data.base, data.head, data.files, lease.from))
-        : data.files;
+    const files = data.files;
     if (data.changeFingerprint !== lease.fingerprint) {
         const leasedFileFingerprint = file ? lease.fileFingerprints[file] : undefined;
         const currentFileFingerprint = file
@@ -1166,58 +938,6 @@ function sendLeasedHtml(res, session, page, html, file) {
     if (!confirmed.ok)
         return sendReviewPageConflict(res, confirmed.error);
     sendHtml(res, html);
-}
-function captureSessionReview(session, reason, commentIds) {
-    const repo = session.repo;
-    const data = sessionReviewData(session);
-    return captureReviewSnapshot(repo, {
-        base: data.base,
-        head: data.head,
-        diff: data.diff,
-        changeFingerprint: data.changeFingerprint,
-        files: data.files,
-        reason,
-        commentIds,
-    });
-}
-function captureLeasedReview(lease, reason, commentIds) {
-    const data = reviewDataForLease(lease, false);
-    return captureReviewSnapshot(lease.repo, {
-        base: data.base,
-        head: data.head,
-        diff: data.diff,
-        changeFingerprint: data.changeFingerprint,
-        files: data.files,
-        reason,
-        commentIds,
-    });
-}
-function recordSessionEvent(session, kind, label, detail, affectsApproval = false) {
-    if (!session.repo)
-        return;
-    const data = sessionReviewData(session);
-    recordReviewEvent(session.repo, data.base, data.head, {
-        kind,
-        label,
-        ...(detail ? { detail } : {}),
-        ...(affectsApproval ? { affectsApproval: true } : {}),
-    });
-}
-function recordRequestEvent(session, lease, kind, label, detail, affectsApproval = false) {
-    if (!lease)
-        return recordSessionEvent(session, kind, label, detail, affectsApproval);
-    // The lease's scope is immutable, so the event needs no diff or story read —
-    // and it runs after a mutation persisted, where a throw would falsely report
-    // the already-applied change as failed.
-    recordReviewEvent(lease.repo, lease.base, lease.head, {
-        kind,
-        label,
-        ...(detail ? { detail } : {}),
-        ...(affectsApproval ? { affectsApproval: true } : {}),
-    });
-}
-function isBlockingComment(comment) {
-    return comment.severity === 'blocking' || (!comment.severity && comment.type === 'change');
 }
 /** The lazily-loaded "Full file" side-by-side view for one file. Works with or
  *  without a story: story-less, there's no coverage to flag, so it's just the
@@ -1647,7 +1367,6 @@ function runAddress(res, session, body) {
         ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
         : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
     const before = currentDiff(session);
-    captureSessionReview(session, 'feedback-sent', targetIds);
     // The diff's two sides, resolved exactly as the review page rendered them, so the
     // agent grounds its answers in both — not just the tree it has checked out. `head`
     // is set only for two-ref comparisons; otherwise the current side is the working
@@ -1722,8 +1441,6 @@ function runAddress(res, session, body) {
             else if (!codeChanged && !addressCtx.historical) {
                 events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
             }
-            if (status === 'complete')
-                captureSessionReview(session, 'agent-complete');
             if (status === 'complete' && agent === 'codex' && input.newCodexTask === true && r.threadId) {
                 void nameCodexTask(r.threadId, `diffStory review · ${basename(repo)}`).catch(() => {
                     // Naming is presentation-only; the persisted id still keeps continuity.
@@ -1881,8 +1598,6 @@ function runStoryRepair(res, session, body) {
                 stampStoryMetadata(storyPath, diffFingerprint(data.diff));
             }
             const finished = finishStoryGeneration(result, storyPath, session, storyBefore, storyWasModern);
-            if (finished.status === 'complete')
-                captureSessionReview(session, 'story-repaired');
             return finished;
         },
         fileScope: { repoPath: repo, changedFiles: data.files.map((file) => file.newPath) },
