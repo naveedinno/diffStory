@@ -12,30 +12,30 @@ export function progressPanelStyles(): string {
   return `
 .ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b;--pp-text:#eef1f5;--pp-muted:#98a2b3;--pp-faint:#98a2b3;
   --pp-line:rgba(190,205,225,.12);--pp-blue:#3fb2ff;--pp-warn:#ffb224;--pp-err:#ff6b62;--pp-ok:#3ddc97;
-  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--pp-text);
-  background:var(--pp-bg);border:.5px solid var(--pp-line);border-radius:14px;overflow:hidden;letter-spacing:-.01em}
+  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:var(--pp-text);
+  background:var(--pp-bg);border:1px solid var(--pp-line);border-radius:16px;overflow:hidden;letter-spacing:-.01em}
 @media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b}}
 @media (prefers-color-scheme:light){.ds-pp{--pp-bg:#181b20;--pp-elev:#242a32;--pp-muted:#a6b0bf;--pp-faint:#a6b0bf}}
 .ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(72vh,580px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
 .ds-pp[data-variant="inline"]{margin-top:20px;display:flex;flex-direction:column;max-height:min(66vh,580px)}
 .ds-pp[data-variant][hidden]{display:none}
-.ds-pp-head{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:.5px solid var(--pp-line)}
+.ds-pp-head{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--pp-line)}
 .ds-pp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--pp-line);border-top-color:var(--pp-blue);animation:ds-pp-spin .7s linear infinite;flex:none}
 .ds-pp-spin[hidden]{display:none}
 @keyframes ds-pp-spin{to{transform:rotate(360deg)}}
-.ds-pp-title{font-size:14px;font-weight:650}
-.ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:.5px solid var(--pp-line);border-radius:6px;padding:2px 7px;
+.ds-pp-title{font-size:14px;font-weight:600}
+.ds-pp-agent{font-size:11.5px;color:var(--pp-muted);background:var(--pp-elev);border:1px solid var(--pp-line);border-radius:6px;padding:2px 7px;
   max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-pp-agent:empty{display:none}
 .ds-pp-flex{flex:1}
-.ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:550;color:var(--pp-text);background:transparent;border:.5px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
+.ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:500;color:var(--pp-text);background:transparent;border:1px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
 .ds-pp-stop[hidden],.ds-pp-close[hidden]{display:none}
-.ds-pp-stop:focus-visible,.ds-pp-close:focus-visible,.ds-pp-foot button:focus-visible{outline:2px solid var(--pp-blue);outline-offset:2px}
+.ds-pp-stop:focus-visible,.ds-pp-close:focus-visible,.ds-pp-foot button:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pp-blue) 12%,transparent)}
 .ds-pp-sub{padding:9px 14px 2px;display:flex;align-items:flex-start;gap:10px}
-.ds-pp-repo{flex:1;min-width:0;font-size:11.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.ds-pp-repo{flex:1;min-width:0;font-size:11.5px;color:var(--pp-muted);font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
 .ds-pp-repo:empty{display:none}
-.ds-pp-task-link{flex:none;margin-left:auto;font-size:11.5px;font-weight:650;color:var(--pp-blue);text-decoration:none;white-space:nowrap}
-.ds-pp-task-link:hover{text-decoration:underline}.ds-pp-task-link:focus-visible{outline:2px solid var(--pp-blue);outline-offset:2px;border-radius:3px}
+.ds-pp-task-link{flex:none;margin-left:auto;font-size:11.5px;font-weight:600;color:var(--pp-blue);text-decoration:none;white-space:nowrap}
+.ds-pp-task-link:hover{text-decoration:underline}.ds-pp-task-link:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pp-blue) 12%,transparent);border-radius:3px}
 .ds-pp-task-link[hidden]{display:none}
 .ds-pp-plan{list-style:none;margin:0;padding:6px 14px 4px;overflow:auto;flex:1;min-height:40px}
 .ds-pp-plan:empty{display:none}
@@ -47,13 +47,13 @@ export function progressPanelStyles(): string {
 .ds-pp-step.is-pending .ds-pp-mark{border:1.5px solid rgba(255,255,255,.22)}
 .ds-pp-step-tx{font-size:13px;line-height:1.4}
 .ds-pp-step.is-done .ds-pp-step-tx{color:var(--pp-faint)}
-.ds-pp-step.is-active .ds-pp-step-tx{color:var(--pp-text);font-weight:560}
+.ds-pp-step.is-active .ds-pp-step-tx{color:var(--pp-text);font-weight:500}
 .ds-pp-step.is-pending .ds-pp-step-tx{color:var(--pp-muted)}
-.ds-pp-step-now{display:block;font-size:11.5px;color:var(--pp-faint);font-family:"SF Mono",ui-monospace,Menlo,monospace;margin-top:2px;word-break:break-word}
+.ds-pp-step-now{display:block;font-size:11.5px;color:var(--pp-faint);font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;margin-top:2px;word-break:break-word}
 .ds-pp-step-now:empty{display:none}
-.ds-pp-now{padding:8px 14px;font-size:12.5px;color:var(--pp-muted);font-family:"SF Mono",ui-monospace,Menlo,monospace;word-break:break-word;overflow:auto;flex:1;min-height:24px}
+.ds-pp-now{padding:8px 14px;font-size:12.5px;color:var(--pp-muted);font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;word-break:break-word;overflow:auto;flex:1;min-height:24px}
 .ds-pp-now[hidden]{display:none}
-.ds-pp-live{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:11.5px;color:var(--pp-faint);font-variant-numeric:tabular-nums}
+.ds-pp-live{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--pp-line);font-size:11.5px;color:var(--pp-faint);font-variant-numeric:tabular-nums}
 .ds-pp-live[hidden]{display:none}
 .ds-pp-live-dot{width:6px;height:6px;border-radius:50%;background:var(--pp-ok);flex:none;animation:ds-pp-pulse 1.6s ease-in-out infinite}
 .ds-pp-live.is-error .ds-pp-live-dot{background:var(--pp-err);animation:none}
@@ -62,23 +62,23 @@ export function progressPanelStyles(): string {
 .ds-pp-live-count{margin-left:auto}
 @keyframes ds-pp-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .ds-pp-error{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;margin:12px 14px 2px;padding:11px 12px;
-  background:rgba(255,105,97,.08);border:.5px solid rgba(255,105,97,.28);border-radius:10px}
+  background:color-mix(in srgb,var(--pp-err) 8%,transparent);border:1px solid color-mix(in srgb,var(--pp-err) 28%,transparent);border-radius:12px}
 .ds-pp-error[hidden]{display:none}
 .ds-pp-error-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  color:var(--pp-err);background:rgba(255,105,97,.12);font-size:12px;font-weight:750}
-.ds-pp-error-title{font-size:13px;line-height:1.35;font-weight:650;color:var(--pp-text);overflow-wrap:anywhere}
+  color:var(--pp-err);background:color-mix(in srgb,var(--pp-err) 12%,transparent);font-size:12px;font-weight:700}
+.ds-pp-error-title{font-size:13px;line-height:1.35;font-weight:600;color:var(--pp-text);overflow-wrap:anywhere}
 .ds-pp-error-detail{margin-top:3px;font-size:12px;line-height:1.45;color:var(--pp-muted);overflow-wrap:anywhere}
 .ds-pp-error-detail:empty{display:none}
-.ds-pp-details{border-top:.5px solid var(--pp-line);padding:8px 14px 10px}
+.ds-pp-details{border-top:1px solid var(--pp-line);padding:8px 14px 10px}
 .ds-pp-details[hidden]{display:none}
 .ds-pp-details>summary{font-size:10.5px;color:var(--pp-muted);cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
 .ds-pp-raw{margin:6px 0 0;max-height:160px;overflow:auto;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--pp-faint);white-space:pre-wrap;word-break:break-word}
-.ds-pp-foot{padding:10px 14px;border-top:.5px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.ds-pp-foot{padding:10px 14px;border-top:1px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .ds-pp-foot[hidden]{display:none}
 .ds-pp-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:650;color:#fff;background:var(--pp-blue);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
+.ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:600;color:#06121c;background:var(--pp-blue);border:none;border-radius:9px;padding:6px 11px;cursor:pointer}
 .ds-pp-foot .ds-pp-secondary{font:inherit;font-size:12px;font-weight:600;color:var(--pp-text);background:transparent;
-  border:.5px solid var(--pp-line);border-radius:8px;padding:6px 11px;cursor:pointer}
+  border:1px solid var(--pp-line);border-radius:9px;padding:6px 11px;cursor:pointer}
 .ds-pp-miles{list-style:none;display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:10px 14px 2px}
 .ds-pp-miles[hidden]{display:none}
 .ds-pp-mile{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--pp-faint)}

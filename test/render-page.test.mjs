@@ -128,7 +128,7 @@ test('agent activity console starts hidden and idle', () => {
 test('rail step numbers stay stable after visiting steps', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /c\.classList\.toggle\('is-visited',isV\)/);
-  assert.match(html, /num\.textContent=String\(idx\)/);
+  assert.match(html, /num\.textContent=\('0'\+idx\)\.slice\(-2\)/);
   assert.doesNotMatch(html, /isD\?'✓'/);
 });
 
@@ -427,7 +427,7 @@ test('review sidebar can be grabbed, resized, and remembered', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-sidebar-resizer/);
   assert.match(html, /role="separator" aria-orientation="vertical"/);
-  assert.match(html, /--ds-rail-width:316px/);
+  assert.match(html, /--ds-rail-width:var\(--rail-width\)/);
   assert.match(html, /\.ds-rail\{[^}]*width:var\(--ds-rail-width,316px\)/s);
   assert.match(html, /\.ds-rail-resizer\{[^}]*cursor:col-resize/s);
   assert.match(html, /body\.ds-sidebar-resizing/);

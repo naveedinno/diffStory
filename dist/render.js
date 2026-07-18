@@ -135,7 +135,7 @@ export function renderPage(input) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#15171b" data-ds-theme-color>
+<meta name="theme-color" content="#0a0c0f" data-ds-theme-color>
 ${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
@@ -422,7 +422,7 @@ function railCard(s, i) {
     if (s.kind === 'concept') {
         return `<div class="ds-railstory-node" data-story-step-node="${i + 1}">
       <button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
-        <span class="ds-num">${i + 1}</span>
+        <span class="ds-num">${String(i + 1).padStart(2, '0')}</span>
         <span class="ds-stepcard-body">
           <span class="ds-stepcard-title">${esc(s.title)}</span>
           <span class="ds-stepcard-fileline">
@@ -438,7 +438,7 @@ function railCard(s, i) {
         : `<span class="ds-railbadge ds-badge-${s.kind === 'new-file' ? 'new' : 'context'}">${esc(s.kindLabel)}</span>`;
     return `<div class="ds-railstory-node" data-story-step-node="${i + 1}">
     <button class="ds-stepcard" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
-      <span class="ds-num">${i + 1}</span>
+      <span class="ds-num">${String(i + 1).padStart(2, '0')}</span>
       <span class="ds-stepcard-body">
         <span class="ds-stepcard-title">${esc(s.title)}</span>
         <span class="ds-stepcard-fileline">
@@ -528,8 +528,7 @@ function filmstripThread(steps) {
     ].join('');
     return `<nav class="ds-filmthread" data-filmthread aria-label="Reading order" style="--thread-pct:0%">
     <div class="ds-filmthread-scroll">
-      <div class="ds-filmthread-line" aria-hidden="true"></div>
-      <div class="ds-filmthread-nodes">${nodes}</div>
+      <div class="ds-filmthread-nodes"><div class="ds-filmthread-line" aria-hidden="true"></div>${nodes}</div>
     </div>
     <button type="button" class="ds-filmthread-allfiles" data-open-all-files>All files <span aria-hidden="true">→</span></button>
   </nav>`;

@@ -38,9 +38,9 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   assert.ok(html.includes('src/api.ts'));
   assert.ok(!html.includes('class="dv-file"'), 'does not render full diff hunks on the change summary');
   assert.ok(html.includes('Start review'), 'links into the real review workspace');
-  assert.match(html, /aria-current="step"><i>1<\/i>Scope/, 'exposes the current lifecycle stage to assistive technology');
-  assert.match(html, /<i>2<\/i>Read/, 'makes the full review lifecycle visible before opening the diff');
-  assert.match(html, /grid-template-columns:100px minmax\(28px,1fr\) 100px/, 'uses equal fixed-width step groups');
+  assert.match(html, /aria-current="step"><i>01<\/i>Scope/, 'exposes the current lifecycle stage to assistive technology');
+  assert.match(html, /<i>02<\/i>Read/, 'makes the full review lifecycle visible before opening the diff');
+  assert.match(html, /\.review-path i\{[^}]*font-family:var\(--font-display\)[^}]*color:var\(--numeral-dim\)/, 'stage markers are Space Grotesk numerals, not circled badges');
   assert.equal((html.match(/<b aria-hidden="true"><\/b>/g) || []).length, 3, 'renders exactly three explicit connectors');
   assert.ok(html.includes('id="reloadBtn"') && html.includes('location.reload()'), 'has a wired reload control');
   assert.ok(html.includes('main (abc123)'));
@@ -73,7 +73,7 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   assert.match(html, /aria-controls="commitPanel" aria-expanded="false"/);
   assert.match(html, /aria-controls="comparePanel" aria-expanded="false"/);
   assert.match(html, /\.sopts\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);gap:6px\}/, 'keeps scope filters compact on mobile');
-  assert.match(html, /\.review-path \.active\{gap:7px;font-size:11px\}/, 'keeps the active lifecycle stage named on mobile');
+  assert.match(html, /\.review-path \.active\{gap:7px;font-size:10\.5px\}/, 'keeps the active lifecycle stage named on mobile');
   const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', diffFiles });
   assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
   assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');

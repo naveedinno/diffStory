@@ -31,7 +31,9 @@ test('theme palettes use a resolved data attribute instead of an OS-only media q
   assert.match(tokens, /--bg:#0a0c0f/);
   assert.match(tokens, /:root\[data-theme="light"\]\{color-scheme:light;/);
   assert.match(tokens, /--bg:#edf0f4/);
-  assert.match(navCss, /:root\[data-theme="light"\]/);
+  // Nav vars alias the canonical tokens one-directionally, so they flip with the
+  // canonical light block and need no per-theme literals of their own.
+  assert.match(navCss, /--nv-bg:var\(--surface\)/);
   assert.doesNotMatch(tokens, /prefers-color-scheme/);
   assert.doesNotMatch(navCss, /prefers-color-scheme/);
 });
