@@ -348,7 +348,7 @@ ${BRAND_HEAD_LINKS}
       ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour, storyFreshness, routeBase)}
       ${storyless ? '' : stepPanels}
       ${storyless ? '' : `<button type="button" class="ds-ghost ds-ghost-prev" data-ghost-prev hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button><button type="button" class="ds-ghost ds-ghost-next" data-ghost-next hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button>`}
-      ${storyless ? '' : filmstripThread(model.steps)}
+      ${storyless ? storylessThread() : filmstripThread(model.steps)}
     </div>
     <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
       <div class="ds-filedetail" id="ds-file-detail">
@@ -530,6 +530,15 @@ function filmstripThread(steps) {
     <div class="ds-filmthread-scroll">
       <div class="ds-filmthread-nodes"><div class="ds-filmthread-line" aria-hidden="true"></div>${nodes}</div>
     </div>
+    <button type="button" class="ds-filmthread-allfiles" data-open-all-files>All files <span aria-hidden="true">→</span></button>
+  </nav>`;
+}
+// Storyless Story view has no numerals to walk, but it still needs the thread bar's
+// "All files" escape — the rail (and its tabs) is hidden outside the files view, so
+// without this the generate screen would be a navigation dead end.
+function storylessThread() {
+    return `<nav class="ds-filmthread is-storyless" data-filmthread aria-label="Review navigation">
+    <div class="ds-filmthread-scroll"></div>
     <button type="button" class="ds-filmthread-allfiles" data-open-all-files>All files <span aria-hidden="true">→</span></button>
   </nav>`;
 }

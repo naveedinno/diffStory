@@ -41,9 +41,9 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-row[data-review-row]:focus-visible,.ds-urow[data-review-row]:focus-visible{outline:none;box-shadow:inset 0 0 0 3px var(--accent-soft);z-index:3}
 .ds-row.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue)}
 .ds-row.is-story-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
-.ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
+.ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
 .ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
-.ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:800}
+.ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
 .ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-urow:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-urow:not(.is-story-focus){opacity:.46}
 .ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-hunkgap,.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-hunkgap{opacity:.5}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
@@ -54,10 +54,10 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary)}
 .ds-row.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
 .ds-row.is-voice-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
-.ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:800}
+.ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-urow.is-voice-focus{position:relative;box-shadow:inset 3px 0 0 var(--md-primary);background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-urow.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
-.ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:800}
+.ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:rgba(18,150,111,0.14);box-shadow:inset 3px 0 0 var(--add-rail)}
@@ -96,7 +96,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-changebtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-changebtn:disabled{opacity:.35;cursor:default}
 .ds-changecount{min-width:40px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
-.ds-viewed-toggle{height:30px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--diff-rule);border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:650;cursor:pointer;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
+.ds-viewed-toggle{height:30px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--diff-rule);border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
 .ds-viewed-toggle:hover{background:var(--fill-2);color:var(--text)}
 .ds-viewed-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-viewed-toggle-icon{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dim2);border-radius:50%;color:transparent;font-size:10px;line-height:1;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
@@ -123,7 +123,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-diffretry{min-height:30px;padding:5px 11px;border:1px solid var(--line);border-radius:7px;background:var(--fill-2);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
 .ds-diffretry:hover{background:var(--fill-3)}
 .ds-diffretry:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
-.ds-fileitem-viewed{flex:none;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--add);color:var(--ds-reviewed-check-fg);font-size:9px;font-weight:850;opacity:0;transform:scale(.72);transition:opacity var(--motion-duration-fast) ease,transform var(--motion-duration-fast) var(--motion-ease-in-out)}
+.ds-fileitem-viewed{flex:none;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--add);color:var(--ds-reviewed-check-fg);font-size:9px;font-weight:700;opacity:0;transform:scale(.72);transition:opacity var(--motion-duration-fast) ease,transform var(--motion-duration-fast) var(--motion-ease-in-out)}
 .ds-fileitem.is-viewed .ds-fileitem-viewed,.ds-fileitem.is-reviewed .ds-fileitem-viewed{opacity:1;transform:scale(1)}
 .ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat,.ds-fileitem.is-reviewed .ds-fileitem-path,.ds-fileitem.is-reviewed .ds-fileitem-stat{opacity:.55}
 .ds-hunkgap.is-expandable:not(.ds-hunkgap-split){display:flex;align-items:center;justify-content:center;gap:10px}
