@@ -1039,7 +1039,7 @@ function codeStepPanel(
       </div>
     </div>
     <div class="ds-review-question">
-      <span class="ds-review-question-dot" aria-hidden="true"></span>
+      <span class="ds-review-question-kicker" aria-hidden="true">Check</span>
       <span class="ds-sr-only">Review question: </span>
       <span class="ds-reviewfocus">${esc(reviewFocus(s))}</span>
       ${storyRepairMenu(s, true)}

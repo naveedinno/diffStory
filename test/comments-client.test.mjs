@@ -368,7 +368,8 @@ test('targeted story repair uses the shared progress panel', () => {
   assert.match(PAGE_JS, /var openTune=\$\('\.ds-story-tune\[open\]'\)/);
   assert.match(PAGE_CSS, /\.ds-story-tune>summary\{[^}]*min-height:32px[^}]*padding:0 10px/);
   assert.match(PAGE_CSS, /\.ds-story-tune\[open\]>summary\{/);
-  assert.match(PAGE_CSS, /\.ds-review-question \.ds-reviewfocus\{[^}]*min-width:0[^}]*text-overflow:ellipsis/);
+  assert.match(PAGE_CSS, /\.ds-review-question-kicker\{[^}]*text-transform:uppercase/);
+  assert.match(PAGE_CSS, /\.ds-review-question \.ds-reviewfocus\{[^}]*-webkit-line-clamp:2/);
 });
 
 test('live review reconnects through the page lease and recovers durable state', () => {
