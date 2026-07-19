@@ -10,3 +10,7 @@ node_modules/
 # Keep them local by default — they describe a single review session.
 .diffstory/
 .superpowers/
+.macos-build/
+macos/DiffStoryApp/target/
+macos/DiffStoryApp/gen/
+macos/DiffStoryApp/icons/icon.png

@@ -418,8 +418,6 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-iconbtn:disabled{opacity:0.32;cursor:default}
 .ds-step-titlerow{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
 .ds-step-title{min-width:0;max-width:100%;font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
-.ds-step-file{font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;min-width:0}
-.ds-step-file:hover{color:var(--accent-blue);text-decoration:underline}
 .ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);flex:none;max-height:min(24vh,190px);overflow-y:auto}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ds-why-ico{width:15px;height:15px;border-radius:4px;background:color-mix(in srgb,var(--accent) 20%,transparent);display:flex;align-items:center;justify-content:center;position:relative}
@@ -2183,7 +2181,7 @@ const PAGE_JS_HEAD = `
     if(!panel)return;
     var stored=null;try{stored=localStorage.getItem('ds-files-mode');}catch(e){}
     var active=$('.ds-modetoggle button.is-active',panel);
-    var want=stored||(active?active.getAttribute('data-mode'):null);
+    var want=stored||(compactScreen()?'diff':'split');
     if(!want)return;
     var btn=$('.ds-modetoggle button[data-mode="'+want+'"]',panel)||active;
     if(btn)setMode(btn,{persist:false});
@@ -2412,7 +2410,18 @@ const PAGE_JS_TAIL = `
     var file=card.getAttribute('data-comment-file'),step=card.getAttribute('data-comment-step');closeFeedbackDrawer();
     if(step){setView('tour');var stepCard=$('.ds-stepcard[data-step-id="'+step+'"]');if(stepCard)setActive(Number(stepCard.getAttribute('data-step-index')));}
     else{setView('files');selectFileByPath(file);}
-    setTimeout(function(){var wraps=$all('.ds-comment[data-comment-id="'+id+'"]');for(var i=0;i<wraps.length;i++){var surface=closest(wraps[i],'.ds-thread'),row=surface&&surface.previousElementSibling,launcher=row&&$('[data-comment-launcher]',row);if(launcher&&launcher.offsetParent){scrollReviewRowVertically(row);openCommentSurface(surface,launcher,true,id);break;}}},80);
+    var attempt=0;
+    function openWhenMounted(){
+      var wraps=$all('.ds-comment[data-comment-id="'+id+'"]');
+      for(var i=0;i<wraps.length;i++){
+        var surface=closest(wraps[i],'.ds-thread'),row=surface&&surface.previousElementSibling,launcher=row&&$('[data-comment-launcher]',row);
+        if(launcher&&launcher.offsetParent){scrollReviewRowVertically(row);openCommentSurface(surface,launcher,true,id);return;}
+      }
+      // A note can target a lazily mounted step or file. Keep the one user action
+      // alive until that evidence arrives instead of silently landing on bare code.
+      if(++attempt<50)setTimeout(openWhenMounted,80);
+    }
+    setTimeout(openWhenMounted,80);
   }
   function openCommands(){
     setReviewMenu(false);if(!commandRoot||!commandRoot.hidden)return;
@@ -2526,6 +2535,9 @@ const PAGE_JS_TAIL = `
         ensureThreadSurface(row,th);
       }
     }
+    // Lazy story/file panels can arrive after the repository target was chosen.
+    // Bring every newly mounted composer up to date before it is shown.
+    applyAgentTargetTo(scope,readAgentTarget());
   }
   function syncThreads(){ mountThreads(document); }
   function buildComment(c){

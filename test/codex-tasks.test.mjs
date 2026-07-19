@@ -8,6 +8,7 @@ import {
   codexTaskBinary,
   listCodexStoryModels,
   listCodexTasks,
+  nameCodexTask,
   validCodexThreadId,
 } from '../dist/codex-tasks.js';
 
@@ -92,6 +93,46 @@ process.stdin.on('data', (chunk) => {
     });
     assert.equal(tasks[1].title, 'Improve the story prompt with better context.');
     assert.equal(tasks[1].source, 'Codex CLI');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('new Codex tasks are named through the current app-server contract', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ds-codex-task-name-'));
+  const fake = join(dir, 'codex');
+  writeFileSync(
+    fake,
+    `#!/usr/bin/env node
+let buffer = '';
+process.stdin.on('data', (chunk) => {
+  buffer += chunk.toString();
+  const lines = buffer.split('\\n');
+  buffer = lines.pop() || '';
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const message = JSON.parse(line);
+    if (message.id === 1) process.stdout.write(JSON.stringify({ id: 1, result: {} }) + '\\n');
+    if (message.id === 2) {
+      if (message.method !== 'thread/name/set') {
+        process.stdout.write(JSON.stringify({ id: 2, error: { message: 'wrong method: ' + message.method } }) + '\\n');
+        continue;
+      }
+      if (message.params?.threadId !== '019f5079-f420-7423-8aa8-cf9f6a079e03') process.exit(4);
+      if (message.params?.name !== 'diffStory review · example') process.exit(5);
+      process.stdout.write(JSON.stringify({ id: 2, result: {} }) + '\\n');
+    }
+  }
+});
+`,
+  );
+  chmodSync(fake, 0o755);
+  try {
+    await nameCodexTask(
+      '019f5079-f420-7423-8aa8-cf9f6a079e03',
+      'diffStory review · example',
+      { binary: fake, timeoutMs: 3000 },
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

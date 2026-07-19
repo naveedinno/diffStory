@@ -1,7 +1,6 @@
 // Turn a validated tour + the parsed diff into a single review page. Authored
 // text and code are escaped server-side. The one client-side HTML insertion is
 // locally rendered Mermaid SVG, parsed and sanitized before it reaches the DOM.
-import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
@@ -160,7 +159,7 @@ export function renderPage(input: RenderInput): string {
     // large story's highlighted diff rows in the initial DOM.
     .map((s, i) =>
       i === 0
-        ? stepPanel(repo, s, i, model.totalSteps, comments, stepIndexById)
+        ? stepPanel(s, i, model.totalSteps, comments, stepIndexById)
         : lazyStepPanel(s, i),
     )
     .join('');
@@ -973,7 +972,7 @@ function lazyStepPanel(step: StepView, i: number): string {
 
 /** Render one story step for the lazy review-step endpoint. */
 export function renderStoryStepPanel(
-  repo: string,
+  _repo: string,
   model: ReviewModel,
   comments: Comment[],
   stepIndex: number,
@@ -981,11 +980,10 @@ export function renderStoryStepPanel(
   const step = model.steps[stepIndex];
   if (!step) return '<div class="ds-diffnote">That story step does not exist.</div>';
   const stepIndexById = new Map(model.steps.map((candidate, index) => [candidate.id, index + 1]));
-  return stepPanel(repo, step, stepIndex, model.totalSteps, comments, stepIndexById);
+  return stepPanel(step, stepIndex, model.totalSteps, comments, stepIndexById);
 }
 
 function stepPanel(
-  repo: string,
   step: StepView,
   i: number,
   total: number,
@@ -994,17 +992,15 @@ function stepPanel(
 ): string {
   return step.kind === 'concept'
     ? conceptStepPanel(step, i, total, stepIndexById)
-    : codeStepPanel(repo, step, i, total, comments);
+    : codeStepPanel(step, i, total, comments);
 }
 
 function codeStepPanel(
-  repo: string,
   s: CodeStepView,
   i: number,
   total: number,
   comments: Comment[],
 ): string {
-  const editor = vscodeLink(repo, s.file, 1);
   const diffRegionId = `ds-story-diff-${i + 1}`;
   const nextDisabled = i === total - 1 ? ' disabled' : '';
   // Call-flow lives here now (not on every rail card). Only show the meaningful
@@ -1033,9 +1029,6 @@ function codeStepPanel(
       </div>
       <div class="ds-step-titlerow">
         <h1 class="ds-step-title">${esc(s.title)}</h1>
-        <a class="ds-step-file" href="${editor}" title="Open ${esc(s.file)} in your editor">${esc(
-          s.file,
-        )}</a>
       </div>
     </div>
     <div class="ds-review-question">
@@ -1058,13 +1051,13 @@ function codeStepPanel(
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           ${changeJumpControls()}
           <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
-            <button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>
-            <button data-mode="split" aria-pressed="false">Split</button>
+            <button data-mode="diff" aria-pressed="false">Unified</button>
+            <button class="is-active" data-mode="split" aria-pressed="true">Split</button>
             <button data-mode="full" aria-pressed="false">Full file</button>
           </div>
         </div>
-        <div data-diff-inner>${storyUnifiedDiffInner(s, comments)}</div>
-        <div data-split-inner data-loaded="1" hidden>${diffInner(s, comments)}</div>
+        <div data-diff-inner hidden>${storyUnifiedDiffInner(s, comments)}</div>
+        <div data-split-inner data-loaded="1">${diffInner(s, comments)}</div>
         <div data-full-inner hidden></div>
       </div>
     </div>
@@ -1456,12 +1449,12 @@ export function renderFilePanelContent(f: FileView, _stepIndexById: Map<string, 
         })
         .join('') + gapAfterLast
     : '<div class="ds-diffnote">No diff to show.</div>';
-  // Unified is the review-first default. Full-file and split views stay available
-  // but are fetched only when the reviewer asks for them.
+  // Split is the review-first default. Unified stays immediately available;
+  // split and full-file evidence are fetched only when their panel is mounted.
   const toggle = f.hasFull
-    ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button><button data-mode="split" aria-pressed="false">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
+    ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
     : f.hunks.length
-      ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button><button data-mode="split" aria-pressed="false">Split</button></div>`
+      ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button></div>`
       : '';
   return `<div class="ds-filepanel-head">
       <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(
@@ -1475,8 +1468,8 @@ export function renderFilePanelContent(f: FileView, _stepIndexById: Map<string, 
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
-      <div data-diff-inner><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
-      <div data-split-inner hidden></div>
+      <div data-diff-inner hidden><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-split-inner><div class="ds-diffnote" role="status">Loading the split view…</div></div>
       <div data-full-inner hidden></div>
     </div>
   `;
@@ -1878,10 +1871,6 @@ function readingOrderLabel(model: ReviewModel): string {
     model.conceptSteps,
     'primer',
   )}`;
-}
-
-function vscodeLink(repo: string, file: string, line: number): string {
-  return `vscode://file${encodeURI(join(repo, file))}:${line}`;
 }
 
 function esc(s: string): string {

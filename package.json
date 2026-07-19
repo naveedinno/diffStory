@@ -32,6 +32,7 @@
     "setup:kokoro": "sh scripts/setup-kokoro.sh",
     "start": "node dist/cli.js",
     "demo": "npm run build && node examples/demo.mjs",
+    "ui:atlas": "npm run build && node scripts/capture-ui-atlas.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
     "release:check": "npm run check && npm pack --dry-run --json",
     "prepublishOnly": "npm run check"
@@ -56,6 +57,7 @@
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.1",
     "mermaid": "^11.16.0",
+    "playwright-core": "^1.61.1",
     "typescript": "^5.6.0"
   }
 }

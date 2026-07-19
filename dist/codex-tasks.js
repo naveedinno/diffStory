@@ -196,5 +196,5 @@ export async function nameCodexTask(threadId, name, options = {}) {
     const cleanName = compact(name, 100);
     if (!cleanName)
         throw new Error('Codex task name is required.');
-    await appServerRequest(options.binary ?? codexTaskBinary(), 'thread/setName', { threadId, name: cleanName }, options.timeoutMs ?? 8000);
+    await appServerRequest(options.binary ?? codexTaskBinary(), 'thread/name/set', { threadId, name: cleanName }, options.timeoutMs ?? 8000);
 }

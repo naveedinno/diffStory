@@ -169,6 +169,8 @@ test('step narrative tells the reviewer what to verify', () => {
   assert.match(html, /class="ds-review-question"/);
   assert.match(html, /class="ds-sr-only">Review question:/);
   assert.match(html, /class="ds-reviewfocus">Does the code prove this claim:/);
+  assert.doesNotMatch(html, /class="ds-step-file"/);
+  assert.match(html, /class="ds-diffhead-path">a\.ts<\/span>/);
   assert.doesNotMatch(html, /Why this step/);
 });
 
@@ -478,7 +480,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /\.ds-comment-pin\{[^}]*height:44px;min-width:44px/);
   assert.match(html, /\.ds-changebtn\{width:44px;height:44px/);
   assert.match(html, /\.ds-viewed-toggle\{height:44px/);
-  assert.match(html, /\.ds-modetoggle button\{[^}]*min-height:44px/);
+  assert.match(html, /@media \(hover:none\),\(pointer:coarse\)\{\.ds-modetoggle button\{[^}]*min-height:44px/);
   assert.match(html, /\.ds-modetoggle button\{[^}]*min-width:44px/);
 });
 
@@ -994,15 +996,15 @@ test('story beats are keyboard controls that select and center their exact rows'
   assert.match(html, /status\.textContent='Story beat '/);
 });
 
-test('story steps default to a real unified diff while split stays opt-in', () => {
+test('story steps default to split while compact review keeps code readable in unified mode', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
 
   assert.match(html, /class="ds-modetoggle" role="group" aria-label="Diff display mode"/);
-  assert.match(html, /data-mode="diff" aria-pressed="true">Unified<\/button>/);
-  assert.match(html, /data-mode="split" aria-pressed="false">Split<\/button>/);
+  assert.match(html, /data-mode="diff" aria-pressed="false">Unified<\/button>/);
+  assert.match(html, /class="is-active" data-mode="split" aria-pressed="true">Split<\/button>/);
   assert.match(html, /data-playstep title="Read this step aloud" aria-label="Read this step aloud"/);
-  assert.match(html, /<div data-diff-inner>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
-  assert.match(html, /<div data-split-inner data-loaded="1" hidden>[\s\S]*class="ds-diffbody"/);
+  assert.match(html, /<div data-diff-inner hidden>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
+  assert.match(html, /<div data-split-inner data-loaded="1">[\s\S]*class="ds-diffbody"/);
   assert.match(html, /function applyResponsiveStoryMode\(panel\)/);
   assert.match(html, /if\(!panel\|\|!compactScreen\(\)\)return;/);
   assert.match(html, /holder\.hasAttribute\('data-mode-user-set'\)/);
@@ -1521,6 +1523,9 @@ test('all-files view exposes reviewed and unreviewed controls bound to file hash
   assert.match(html, /class="ds-cardpath"/);
   assert.match(html, /class="ds-changejump"/);
   assert.match(html, /class="ds-modetoggle"/);
+  assert.match(html, /class="ds-filepanel[\s\S]*?class="is-active" data-mode="split" aria-pressed="true">Split<\/button>/);
+  assert.match(html, /class="ds-filepanel-body">[\s\S]*?<div data-diff-inner hidden>[\s\S]*?<div data-split-inner><div class="ds-diffnote" role="status">Loading the split view…<\/div>/);
+  assert.match(html, /var want=stored\|\|\(compactScreen\(\)\?'diff':'split'\)/);
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
   assert.match(html, /data-viewed-toggle aria-pressed="false"/);

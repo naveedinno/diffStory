@@ -19,9 +19,11 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-difftoolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
-.ds-modetoggle{display:flex;gap:0;padding:2px;border-radius:7px;background:var(--fill-2);border:none}
-.ds-modetoggle button{min-width:44px;min-height:44px;font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
-.ds-modetoggle button.is-active{background:var(--panel4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.28)}
+.ds-modetoggle{display:inline-flex;align-items:center;gap:1px;padding:2px;border:1px solid var(--line-soft);border-radius:7px;background:transparent}
+.ds-modetoggle button{min-width:44px;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:var(--dim);font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
+.ds-modetoggle button:hover{background:var(--fill-1);color:var(--text)}
+.ds-modetoggle button.is-active{background:var(--fill-2);color:var(--text);box-shadow:none}
+.ds-modetoggle button:focus-visible{outline:2px solid var(--accent-blue);outline-offset:1px}
 .ds-diffhead{display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
 .ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 14px;overflow:hidden}
@@ -164,6 +166,7 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head>.ds-modetoggle{order:9;margin-left:auto}
   .ds-filepanel-head .ds-modetoggle button{padding-left:8px;padding-right:8px}
 }
+@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}}
 @media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-row.is-voice-focus,.ds-urow.is-voice-focus,.ds-row.is-change-jump,.ds-urow.is-change-jump{animation:none!important;filter:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
 `;
 

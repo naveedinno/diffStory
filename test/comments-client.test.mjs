@@ -32,6 +32,12 @@ test('comment conversations open in a floating sidecar instead of splitting the 
   assert.match(PAGE_JS, /setSidebarCollapsed\(false,false\)/);
 });
 
+test('show in diff waits for a lazily mounted conversation before opening it', () => {
+  assert.match(PAGE_JS, /function openWhenMounted\(\)/);
+  assert.match(PAGE_JS, /if\(\+\+attempt<50\)setTimeout\(openWhenMounted,80\)/);
+  assert.match(PAGE_JS, /setTimeout\(openWhenMounted,80\)/);
+});
+
 test('new review comments compose in the same floating surface', () => {
   assert.match(PAGE_CSS, /\.ds-composer\{position:fixed/);
   assert.match(PAGE_JS, /box\.setAttribute\('role','dialog'\)/);
@@ -294,6 +300,7 @@ test('the compact Review menu runs the batch and tracks the open count', () => {
 test('agent target labels update every sending surface and mark the current task', () => {
   assert.match(PAGE_JS, /function applyAgentTargetTo\(scope,target\)/);
   assert.match(PAGE_JS, /\$all\('\[data-agent-target-name\]',scope\)\.forEach/);
+  assert.match(PAGE_JS, /mountThreads\(scope\)[\s\S]*?applyAgentTargetTo\(scope,readAgentTarget\(\)\)/);
   assert.match(PAGE_JS, /button\.textContent=has\?'Ask agent':'Choose task & ask'/);
   assert.match(PAGE_JS, /selected\?'Current':target\.meta/);
   assert.match(PAGE_JS, /target\.agent==='codex'&&target\.mode==='new'/);

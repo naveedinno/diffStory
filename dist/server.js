@@ -36,7 +36,7 @@ import { tmpdir } from 'node:os';
 import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
 import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
 import { codexTaskBinary, listCodexStoryModels, listCodexTasks, nameCodexTask, validCodexThreadId, } from './codex-tasks.js';
-import { sendCodexDesktopTurn } from './codex-desktop.js';
+import { codexDesktopAvailable, sendCodexDesktopTurn } from './codex-desktop.js';
 import { LiveEventHub, storyFileFingerprint } from './live.js';
 import { reviewStateSummary } from './review-state.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
@@ -1220,11 +1220,7 @@ function runWorkflow(res, repo, spec) {
         agentBusy = false;
     });
 }
-/**
- * Hand an existing task to its live Desktop owner. This deliberately has no
- * `codex exec resume` fallback: that creates a parallel stored turn which the
- * selected ChatGPT task does not render as its normal conversation.
- */
+/** Hand an existing task to its live Desktop owner when that transport exists. */
 function sendAddressToCodexDesktop(res, context, title, threadId, prompt) {
     agentBusy = true;
     res.statusCode = 200;
@@ -1340,7 +1336,9 @@ function runAddress(res, session, body) {
     const useNewCodexTask = agent === 'codex' && input.newCodexTask === true;
     const agentOptions = useNewCodexTask
         ? { codex: { binary: codexTaskBinary(), json: true } }
-        : undefined;
+        : codexThreadId
+            ? { codex: { binary: codexTaskBinary(), threadId: codexThreadId, json: true } }
+            : undefined;
     const repo = session.repo;
     const feedback = loadCommentsWithHealth(repo);
     if (feedback.health.status === 'invalid') {
@@ -1407,7 +1405,7 @@ function runAddress(res, session, body) {
         ...(codexThreadId ? { taskMode: 'resume', taskLabel: codexTaskLabel || 'Selected Codex task', taskId: codexThreadId } : {}),
         ...(agent === 'codex' && input.newCodexTask === true ? { taskMode: 'new' } : {}),
     };
-    if (agent === 'codex' && codexThreadId) {
+    if (agent === 'codex' && codexThreadId && codexDesktopAvailable()) {
         sendAddressToCodexDesktop(res, runContext, title, codexThreadId, prompt);
         return;
     }

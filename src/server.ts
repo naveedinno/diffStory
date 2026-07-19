@@ -106,7 +106,7 @@ import {
   nameCodexTask,
   validCodexThreadId,
 } from './codex-tasks.js';
-import { sendCodexDesktopTurn } from './codex-desktop.js';
+import { codexDesktopAvailable, sendCodexDesktopTurn } from './codex-desktop.js';
 import { LiveEventHub, storyFileFingerprint } from './live.js';
 import { reviewStateSummary } from './review-state.js';
 
@@ -1404,11 +1404,7 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     });
 }
 
-/**
- * Hand an existing task to its live Desktop owner. This deliberately has no
- * `codex exec resume` fallback: that creates a parallel stored turn which the
- * selected ChatGPT task does not render as its normal conversation.
- */
+/** Hand an existing task to its live Desktop owner when that transport exists. */
 function sendAddressToCodexDesktop(
   res: ServerResponse,
   context: RunContext,
@@ -1548,7 +1544,9 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
   const useNewCodexTask = agent === 'codex' && input.newCodexTask === true;
   const agentOptions: AgentRunOptions | undefined = useNewCodexTask
     ? { codex: { binary: codexTaskBinary(), json: true } }
-    : undefined;
+    : codexThreadId
+      ? { codex: { binary: codexTaskBinary(), threadId: codexThreadId, json: true } }
+      : undefined;
   const repo = session.repo as string;
 
   const feedback = loadCommentsWithHealth(repo);
@@ -1620,7 +1618,7 @@ function runAddress(res: ServerResponse, session: Session, body: string): void {
     ...(codexThreadId ? { taskMode: 'resume', taskLabel: codexTaskLabel || 'Selected Codex task', taskId: codexThreadId } : {}),
     ...(agent === 'codex' && input.newCodexTask === true ? { taskMode: 'new' } : {}),
   };
-  if (agent === 'codex' && codexThreadId) {
+  if (agent === 'codex' && codexThreadId && codexDesktopAvailable()) {
     sendAddressToCodexDesktop(res, runContext, title, codexThreadId, prompt);
     return;
   }

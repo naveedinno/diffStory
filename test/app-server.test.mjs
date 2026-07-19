@@ -729,6 +729,64 @@ test('POST /api/address sends a visible turn through the selected task live Desk
   }
 });
 
+test('POST /api/address resumes the exact selected Codex task when Desktop handoff is unavailable', async () => {
+  const realHome = process.env.HOME;
+  const realPath = process.env.PATH;
+  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
+  const realCodexSocket = process.env.DIFFSTORY_CODEX_IPC_SOCKET;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
+  const threadId = '019f5079-f420-7423-8aa8-cf9f6a079e03';
+  process.env.HOME = tmpHome;
+  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
+  installFakeResumingCodex(fakeBin, threadId);
+  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
+  process.env.DIFFSTORY_CODEX_IPC_SOCKET = join(tmpdir(), `missing-diffstory-codex-${process.pid}-${Date.now()}.sock`);
+
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    await fetch(`${base}/api/comments`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: 'README.md', line: 2, type: 'question', body: 'What is happening?' }),
+    });
+
+    const addr = await fetch(`${base}/api/address`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        all: true, agent: 'codex', codexThreadId: threadId,
+        codexTaskLabel: 'Clarify restated quote handling',
+      }),
+    });
+    assert.equal(addr.status, 200);
+    const events = ndjsonEvents(await addr.text());
+    const context = events.find((event) => event.type === 'context');
+    assert.equal(context?.taskMode, 'resume');
+    assert.equal(context?.taskId, threadId);
+    assert.ok(events.some((event) => event.type === 'activity' && /Message added to selected Codex task/.test(event.label)));
+    const done = events.find((event) => event.type === 'run_done');
+    assert.equal(done?.status, 'complete');
+    assert.equal(done?.result?.codexThreadId, threadId);
+    assert.match(readFileSync(join(repo, 'codex-args.txt'), 'utf8'), new RegExp(`^exec\\nresume\\n--json\\n${threadId}\\n`));
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    process.env.PATH = realPath;
+    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
+    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
+    if (realCodexSocket === undefined) delete process.env.DIFFSTORY_CODEX_IPC_SOCKET;
+    else process.env.DIFFSTORY_CODEX_IPC_SOCKET = realCodexSocket;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
+
 test('POST /api/address rejects a selected agent that is not available', async () => {
   const realHome = process.env.HOME;
   const realPath = process.env.PATH;

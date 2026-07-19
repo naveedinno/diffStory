@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,15 @@ export function codexDesktopSocketPath() {
     }
     const uid = process.getuid?.();
     return join(tmpdir(), 'codex-ipc', uid ? `ipc-${uid}.sock` : 'ipc.sock');
+}
+/** Whether the current Desktop build exposes the live task handoff socket. */
+export function codexDesktopAvailable() {
+    try {
+        return existsSync(codexDesktopSocketPath());
+    }
+    catch {
+        return false;
+    }
 }
 function frame(message) {
     const json = JSON.stringify(message);
