@@ -20,7 +20,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-difftoolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
 .ds-modetoggle{display:flex;gap:0;padding:2px;border-radius:7px;background:var(--fill-2);border:none}
-.ds-modetoggle button{font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
+.ds-modetoggle button{min-width:44px;min-height:44px;font-size:11px;font-weight:600;padding:4px 11px;border-radius:5px;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
 .ds-modetoggle button.is-active{background:var(--panel4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.28)}
 .ds-diffhead{display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
@@ -92,11 +92,11 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-urow .ds-no,.ds-urow .ds-sign{padding-top:2px;padding-bottom:2px}
 .ds-changejump{flex:none;display:flex;align-items:center;gap:4px;padding:2px;border:1px solid var(--diff-rule);border-radius:7px;background:var(--gutter-hi)}
 .ds-changejump[hidden]{display:none}
-.ds-changebtn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+.ds-changebtn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:none;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
 .ds-changebtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-changebtn:disabled{opacity:.35;cursor:default}
 .ds-changecount{min-width:40px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
-.ds-viewed-toggle{height:30px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--diff-rule);border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
+.ds-viewed-toggle{height:44px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--diff-rule);border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
 .ds-viewed-toggle:hover{background:var(--fill-2);color:var(--text)}
 .ds-viewed-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-viewed-toggle-icon{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dim2);border-radius:50%;color:transparent;font-size:10px;line-height:1;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
@@ -149,7 +149,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
    are owned by the interruptible workspace transition in page-assets. */
 html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),html:not([data-ds-motion]) .ds-filepanel-body>[data-split-inner]:not([hidden]),html:not([data-ds-motion]) .ds-filepanel-body>[data-full-inner]:not([hidden]){animation:ds-body-in var(--motion-duration-fast) var(--motion-ease-out)}
 @keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
-@media (max-width:1050px){.ds-viewed-toggle{width:30px;padding:0;justify-content:center}.ds-viewed-toggle-label{display:none}}
+@media (max-width:1050px){.ds-viewed-toggle{width:44px;padding:0;justify-content:center}.ds-viewed-toggle-label{display:none}}
 @media (max-width:720px){
   .ds-filepanel-head{flex-wrap:wrap;gap:7px;padding:10px 12px}
   .ds-filepanel-head>.ds-cardpath{order:1;flex:1 1 110px}

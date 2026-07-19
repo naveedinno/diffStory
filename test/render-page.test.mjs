@@ -391,13 +391,35 @@ test('review page renders notes, filters, resume, and story repair affordances',
   assert.doesNotMatch(html, /data-selection-quick/);
 });
 
+test('review interaction regressions keep hidden states, note actions, and resume semantics intact', () => {
+  const comments = [{
+    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'resolved',
+    createdAt: new Date().toISOString(), selectedText: 'const orders = [];',
+  }];
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
+
+  assert.match(html, /\.ds-feedback-drawer \[hidden\]\{display:none!important\}/);
+  assert.match(html, /class="ds-ghost ds-step-ghost ds-ghost-prev"/);
+  assert.match(html, /\.ds-step-ghost\{position:absolute/);
+  assert.doesNotMatch(html, /\.ds-ghost\{position:absolute/);
+  assert.match(html, /gp\.removeAttribute\('aria-hidden'\);gp\.tabIndex=0;/);
+  assert.match(html, /gn\.removeAttribute\('aria-hidden'\);gn\.tabIndex=0;/);
+  assert.match(html, /gp\.setAttribute\('aria-label','Previous step: '/);
+  assert.match(html, /gn\.setAttribute\('aria-label','Next step: '/);
+  assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
+  assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
+});
+
 test('submitting a comment sends it to the agent immediately', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-selection-menu/);
   assert.match(html, />Ask<\/button>/);
   assert.match(html, />Ask for change<\/button>/);
   assert.match(html, />Nit<\/button>/);
-  assert.match(html, /ta\.placeholder='Comment on the selected text…'/);
+  assert.match(html, /setAttribute\('aria-label','What should change\?'\)/);
+  assert.match(html, /chatHead\('What should change\?','Anchored to your selection'\)/);
+  assert.match(html, /ta\.placeholder='What should change\?…'/);
+  assert.doesNotMatch(html, /New review comment|Comment on the selected text/);
   assert.match(html, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
   assert.doesNotMatch(html, /Leave a comment on this line/);
   assert.doesNotMatch(html, /ds-addcomment/);
@@ -449,6 +471,15 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
   assert.match(html, /\.ds-fileitem\{padding-right:5px;padding-left:calc\(5px \+ var\(--tree-indent,0px\)\)\}/);
   assert.match(html, /\.ds-filetree-count\{display:none\}/);
+  assert.match(html, /\.ds-sidebar-toggle\{width:44px;height:44px/);
+  assert.match(html, /\.ds-back\{min-height:44px/);
+  assert.match(html, /\.ds-feedback-filters button\{[^}]*height:44px/);
+  assert.match(html, /\.ds-feedback-filters button\{[^}]*min-width:44px/);
+  assert.match(html, /\.ds-comment-pin\{[^}]*height:44px;min-width:44px/);
+  assert.match(html, /\.ds-changebtn\{width:44px;height:44px/);
+  assert.match(html, /\.ds-viewed-toggle\{height:44px/);
+  assert.match(html, /\.ds-modetoggle button\{[^}]*min-height:44px/);
+  assert.match(html, /\.ds-modetoggle button\{[^}]*min-width:44px/);
 });
 
 test('review view switcher exposes complete keyboard tab semantics', () => {

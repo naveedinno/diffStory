@@ -279,7 +279,7 @@ ${BRAND_HEAD_LINKS}
     <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
       ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour, storyFreshness, routeBase)}
       ${storyless ? '' : stepPanels}
-      ${storyless ? '' : `<button type="button" class="ds-ghost ds-ghost-prev" data-ghost-prev hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button><button type="button" class="ds-ghost ds-ghost-next" data-ghost-next hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button>`}
+      ${storyless ? '' : `<button type="button" class="ds-ghost ds-step-ghost ds-ghost-prev" data-ghost-prev hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button><button type="button" class="ds-ghost ds-step-ghost ds-ghost-next" data-ghost-next hidden tabindex="-1" aria-hidden="true"><span class="ds-ghost-num"></span><span class="ds-ghost-label"></span></button>`}
       ${storyless ? storylessThread() : filmstripThread(model.steps)}
     </div>
     <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
@@ -1278,9 +1278,9 @@ function feedbackCard(repo, headRef, raw) {
     <div class="ds-feedback-message ds-md">${renderMarkdown(c.body)}</div>
     ${latestAgent ? `<div class="ds-feedback-reply ds-md"><span>${esc(APP_BRAND)}</span>${renderMarkdown(latestAgent.text)}</div>` : ''}
     <div class="ds-feedback-actions">
-      <button type="button" class="ds-ghost" data-goto-comment="${esc(c.id)}">Show in diff</button>
-      ${verify ? `<button type="button" class="ds-ghost" data-reopen-comment="${esc(c.id)}">Reopen</button><button type="button" class="ds-btn ds-btn-solid" data-accept-fix="${esc(c.id)}">Accept fix</button>` : ''}
-      ${c.status === 'resolved' ? `<button type="button" class="ds-ghost" data-reopen-comment="${esc(c.id)}">Reopen</button>` : ''}
+      <button type="button" class="ds-feedback-action" data-goto-comment="${esc(c.id)}">Show in diff</button>
+      ${verify ? `<button type="button" class="ds-feedback-action" data-reopen-comment="${esc(c.id)}">Reopen</button><button type="button" class="ds-btn ds-btn-solid" data-accept-fix="${esc(c.id)}">Accept fix</button>` : ''}
+      ${c.status === 'resolved' ? `<button type="button" class="ds-feedback-action" data-reopen-comment="${esc(c.id)}">Reopen</button>` : ''}
     </div>
   </article>`;
 }
