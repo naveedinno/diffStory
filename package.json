@@ -1,7 +1,7 @@
 {
   "name": "@naveedinno/diffstory",
   "version": "0.1.0",
-  "description": "diffStory — the agent tells the story of its change: a guided, in-order diff review with a comment loop back to the agent.",
+  "description": "diffStory \u2014 the agent tells the story of its change: a guided, in-order diff review with a comment loop back to the agent.",
   "type": "module",
   "author": "naveedinno <naveedinno@proton.me>",
   "repository": {
@@ -13,9 +13,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "bin": {
-    "diffstory": "dist/cli.js"
-  },
   "files": [
     "dist",
     "assets/brand",
@@ -25,17 +22,18 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && npm run build:browser-assets && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
+    "build": "tsc && npm run build:browser-assets",
     "build:browser-assets": "node scripts/build-browser-assets.mjs",
     "check": "npm run build && node --test test/*.test.mjs",
-    "dev": "npm run build && node dist/cli.js",
+    "dev": "npm run build && node dist/app-server.js",
     "setup:kokoro": "sh scripts/setup-kokoro.sh",
-    "start": "node dist/cli.js",
+    "start": "node dist/app-server.js",
     "demo": "npm run build && node examples/demo.mjs",
     "ui:atlas": "npm run build && node scripts/capture-ui-atlas.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
     "release:check": "npm run check && npm pack --dry-run --json",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "eval:stories": "npm run build && node scripts/eval-stories.mjs"
   },
   "engines": {
     "node": ">=20"

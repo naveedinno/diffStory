@@ -19,7 +19,7 @@ import { basename, dirname, join } from 'node:path';
 import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
 import { buildReviewModel } from './view-model.js';
 import { loadComments, loadCommentsWithHealth, addComment, deleteComment, setCommentStatus, appendUserMessage, InvalidCommentStoreError, } from './comments.js';
-import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
+import { commentsPath, resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
 import { isCodeStep } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, resumedCodexTaskMatches, storyRepairPrompt, } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, noteEventsFromText, createFileEnricher, } from './progress.js';
@@ -65,7 +65,7 @@ export function serve(opts) {
     server.on('close', () => liveHub.dispose());
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.error(`Port ${opts.port} is in use. Try: ${APP_NAME} --port ${opts.port + 1}`);
+            console.error(`Port ${opts.port} is already in use.`);
         }
         else {
             console.error(`Server error: ${err.message}`);
@@ -631,11 +631,11 @@ function changeScreen(session, params, notice) {
     const scope = resolveScope(session.repo, params);
     session.base = scope.base;
     session.head = scope.head;
-    return renderChange(session, scope, params, notice);
+    return renderChange(session, scope, notice);
 }
 /** The "Your change" scope picker: choose what to diff, then open it in the
  *  review viewer (the "Open diff viewer" CTA). */
-function renderChange(session, scope, params, notice) {
+function renderChange(session, scope, notice) {
     const repo = session.repo;
     return renderChangePage(summarizeChange(repo, session.base, session.head), {
         repoName: basename(repo),
@@ -645,10 +645,6 @@ function renderChange(session, scope, params, notice) {
         scopeLabel: scope.label,
         active: scope.active,
         notice,
-        compareBaseRef: params.get('baseRef') || undefined,
-        compareBaseCommit: params.get('baseCommit') || undefined,
-        compareHeadRef: params.get('headRef') || undefined,
-        compareHeadCommit: params.get('headCommit') || undefined,
     });
 }
 /** Resolve scope, then render the story-less *review viewer* for it: the real

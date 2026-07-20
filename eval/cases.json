@@ -1,0 +1,37 @@
+{
+  "comment": "Frozen story-eval cases. Each is an immutable base..head range from this repo's own history, so every eval run generates stories for exactly the same diffs. Keep excludePaths aligned with what the app would exclude (generated dist/, lockfiles, screenshots).",
+  "cases": [
+    {
+      "id": "bugfix-review-ui",
+      "note": "Bugfix flavor: review UI reliability and accessibility fixes across 4 files.",
+      "base": "4d6f30c^",
+      "head": "4d6f30c",
+      "mode": "guided",
+      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+    },
+    {
+      "id": "small-feature-walkthrough-stage",
+      "note": "Small feature: walkthrough stage as bounded island + Check kicker (3 files, ~15 lines).",
+      "base": "abf82f4^",
+      "head": "abf82f4",
+      "mode": "brief",
+      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+    },
+    {
+      "id": "refactor-one-shot-notes",
+      "note": "Deletion-heavy refactor: one-shot Notes model removes rounds, verdicts, and timelines (15 files, -2272 lines). Exercises deletion anchors and coverage of removed behavior.",
+      "base": "45d4f55^",
+      "head": "45d4f55",
+      "mode": "guided",
+      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+    },
+    {
+      "id": "medium-feature-rail-numerals",
+      "note": "Medium feature: rail numerals + storyless All-files escape (3 files, balanced add/remove).",
+      "base": "d7c3deb^",
+      "head": "d7c3deb",
+      "mode": "detailed",
+      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+    }
+  ]
+}

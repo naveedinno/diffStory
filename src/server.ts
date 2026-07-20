@@ -54,7 +54,7 @@ import {
   type CommentStoreHealth,
   type NewComment,
 } from './comments.js';
-import { commentsPath, resolveStoryPath, APP_NAME, APP_BRAND, DATA_DIR } from './config.js';
+import { commentsPath, resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
 import { isCodeStep, type DiffFile, type StoryScope, type Tour } from './types.js';
 import {
   availableAgents,
@@ -146,7 +146,7 @@ export function serve(opts: ServeOptions): Server {
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${opts.port} is in use. Try: ${APP_NAME} --port ${opts.port + 1}`);
+      console.error(`Port ${opts.port} is already in use.`);
     } else {
       console.error(`Server error: ${err.message}`);
     }
@@ -699,12 +699,12 @@ function changeScreen(session: Session, params: URLSearchParams, notice?: string
   const scope = resolveScope(session.repo as string, params);
   session.base = scope.base;
   session.head = scope.head;
-  return renderChange(session, scope, params, notice);
+  return renderChange(session, scope, notice);
 }
 
 /** The "Your change" scope picker: choose what to diff, then open it in the
  *  review viewer (the "Open diff viewer" CTA). */
-function renderChange(session: Session, scope: Scope, params: URLSearchParams, notice?: string): string {
+function renderChange(session: Session, scope: Scope, notice?: string): string {
   const repo = session.repo as string;
   return renderChangePage(summarizeChange(repo, session.base, session.head), {
     repoName: basename(repo),
@@ -714,10 +714,6 @@ function renderChange(session: Session, scope: Scope, params: URLSearchParams, n
     scopeLabel: scope.label,
     active: scope.active,
     notice,
-    compareBaseRef: params.get('baseRef') || undefined,
-    compareBaseCommit: params.get('baseCommit') || undefined,
-    compareHeadRef: params.get('headRef') || undefined,
-    compareHeadCommit: params.get('headCommit') || undefined,
   });
 }
 

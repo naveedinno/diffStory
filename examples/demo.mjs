@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CLI = join(ROOT, 'dist', 'cli.js');
+const SERVER_ENTRY = join(ROOT, 'dist', 'app-server.js');
 const DEMO = process.env.DIFFSTORY_DEMO_DIR || join(tmpdir(), 'diffstory-demo');
 
 // ---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ if (process.env.DIFFSTORY_DEMO_NO_SERVE) {
 
 console.log('\nOpening the app — pick the saved story or view the diff. Ctrl-C to stop.\n');
 try {
-  execFileSync('node', [CLI, '--dir', DEMO], { stdio: 'inherit' });
+  execFileSync('node', [SERVER_ENTRY, '--dir', DEMO], { stdio: 'inherit' });
 } catch {
   /* Ctrl-C */
 }

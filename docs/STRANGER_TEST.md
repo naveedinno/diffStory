@@ -19,6 +19,9 @@ Expected:
 - opening the URL shows the workspace picker
 - no Python, Kokoro, Claude, Codex, Homebrew, or API key is required
 
+This is an internal development server check. End users install and open the
+macOS app; there is no DiffStory CLI.
+
 ## Demo Review
 
 ```sh

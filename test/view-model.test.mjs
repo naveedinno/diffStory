@@ -142,3 +142,33 @@ test('code steps derive focus groups, a review question, and broad-step health',
   assert.equal(step.health.broad, true);
   assert.ok(step.health.reasons.includes('45 lines in one step'));
 });
+
+test('hotspots resolve to ordered panels and flag their step views', () => {
+  const tour = {
+    version: 2,
+    title: 'Distrust map',
+    summary: '',
+    hotspots: [
+      { step: 's2', reason: 'I never exercised the retry path.' },
+      { step: 'ghost', reason: 'dropped: unknown step' },
+    ],
+    steps: [
+      { id: 's1', order: 1, title: 'Entry', file: 'a.ts', range: [20, 20], kind: 'changed', why: 'w' },
+      { id: 's2', order: 2, title: 'Retry boundary', file: 'a.ts', range: [21, 22], kind: 'changed', why: 'w' },
+    ],
+  };
+  const files = [{
+    oldPath: 'a.ts', newPath: 'a.ts', status: 'modified',
+    hunks: [{ oldStart: 20, oldLines: 0, newStart: 20, newLines: 3, lines: [
+      { type: 'add', content: 'call();', newNo: 20 },
+      { type: 'add', content: 'retry();', newNo: 21 },
+      { type: 'add', content: 'verify();', newNo: 22 },
+    ] }],
+  }];
+  const model = buildReviewModel(process.cwd(), tour, files);
+  assert.deepEqual(model.hotspots, [
+    { stepId: 's2', panelIndex: 2, order: 2, title: 'Retry boundary', reason: 'I never exercised the retry path.' },
+  ]);
+  assert.equal(model.steps[0].hotspot, undefined);
+  assert.equal(model.steps[1].hotspot, 'I never exercised the retry path.');
+});

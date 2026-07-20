@@ -1,7 +1,7 @@
 // Names and paths in one place — renaming the tool is a single-file change.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-/** Lowercase identifier: the CLI command, package name, log prefix. */
+/** Lowercase identifier used for package metadata and log prefixes. */
 export const APP_NAME = 'diffstory';
 /** Display brand used in the UI wordmark and page title. */
 export const APP_BRAND = 'diffStory';

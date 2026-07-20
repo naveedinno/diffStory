@@ -1,49 +1,46 @@
 # diffStory
 
 [![CI](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml/badge.svg)](https://github.com/naveedinno/diffStory/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@naveedinno/diffstory.svg)](https://www.npmjs.com/package/@naveedinno/diffstory)
 [![license: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 Read a code change in the order it actually makes sense.
 
 ![diffStory guided review screen](assets/demo/diffstory-review.png)
 
-diffStory is a local browser app for reviewing git diffs. You run one command,
+diffStory is a local desktop app for reviewing git diffs. Open the app,
 pick a repo, choose what changed, and review the real diff with an optional
 AI-written walkthrough. When something needs work, select the exact text, add a
 comment, and send it back to your agent.
 
 - Runs locally on your machine.
-- Opens as a browser app, not a terminal review flow.
+- Uses a proper desktop UI, not a terminal review flow.
 - Works with plain git diffs, even without generating a story.
 - Can use Claude or Codex to generate walkthroughs and address comments.
 - Works without AI. Agent features are optional.
 
 ## Quickstart
 
-Requirements:
+Build requirements:
 
+- macOS
 - Node.js 20 or newer
+- Rust and Cargo
 - git
 - a local git repository you want to review
 
 No Python is required for the core app.
 
-Install diffStory once from npm:
+Install the macOS app from a source checkout:
 
 ```sh
-npm i -g @naveedinno/diffstory
-diffstory
+git clone https://github.com/naveedinno/diffStory.git
+cd diffStory
+npm install
+./scripts/install-macos-app.sh
 ```
 
-That opens the local browser app.
-
-If you prefer the no-global-npm installer:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/naveedinno/diffStory/main/scripts/install.sh | sh
-diffstory
-```
+Then open **diffStory** from Spotlight, Finder, or Launchpad. There is no
+diffStory CLI and no terminal review workflow.
 
 Optional: install Claude or Codex on your PATH if you want generated stories or
 agent-handled review comments.
@@ -67,8 +64,8 @@ couple of comments so you can see the full review loop.
 ## First Review
 
 1. Make changes in any local git repo.
-2. Run `diffstory`.
-3. In the browser, pick a repo from **Choose your workspace**.
+2. Open the **diffStory** app.
+3. Pick a repo from **Choose your workspace**.
 4. Choose what you want to review: uncommitted changes, the current branch, one
    commit, or any two refs.
 5. Read the diff in **All files**, or open **Story** and generate a guided
@@ -179,25 +176,16 @@ normally local reviewer state.
 ## Team Use
 
 If diffStory is in a private repository, each teammate needs normal GitHub access
-first, the same as cloning the repo. For the public package, install with:
-
-```sh
-npm i -g @naveedinno/diffstory
-```
+first, the same as cloning the repo. Each teammate installs and opens the macOS
+app; there is no CLI installation path.
 
 A teammate can replay a walkthrough when they have:
 
 1. the same branch or commit range checked out
 2. access to the story file your team chose to share
-3. diffStory installed locally
+3. the diffStory app installed locally
 
-Then they run:
-
-```sh
-diffstory
-```
-
-They pick the repo in the browser and open the saved story. No agent is needed
+They open the app, pick the repo, and open the saved story. No agent is needed
 just to read an existing walkthrough.
 
 ## From Source
@@ -221,9 +209,9 @@ Useful development commands:
 
 | Command | Use |
 | --- | --- |
-| `npm run dev` | Build the current TypeScript source and run the app. |
+| `npm run dev` | Build and run the internal web server for development. |
 | `npm run build` | Compile `src/` into `dist/`. |
-| `npm run start` | Run the built app. |
+| `npm run start` | Run the built internal development server. |
 | `npm run demo` | Build and open a sample review. |
 | `npm test` | Build and run the test suite. |
 | `npm run setup:kokoro` | Install optional local Kokoro speech support. |
@@ -245,14 +233,10 @@ settings.
 
 ## Troubleshooting
 
-**`diffstory` is not found**
+**The app does not open**
 
-Open a new terminal, or make sure `~/.local/bin` is on your PATH. The installer
-prints the launcher path it created.
-
-**The browser did not open**
-
-Use the printed local URL, usually `http://localhost:7777/`.
+Re-run `./scripts/install-macos-app.sh` from the source checkout, then open
+**diffStory** from Spotlight, Finder, or Launchpad.
 
 **A repo is not accepted**
 
@@ -283,7 +267,7 @@ cannot continue.
 
 ## How It Works
 
-diffStory starts a small local Node server and opens a browser page. The server
+The diffStory desktop app starts its private local Node server and renders the UI. The server
 reads your local git repository, renders the diff, stores review state in
 `.diffstory/`, and can ask Claude or Codex to generate or address review work.
 

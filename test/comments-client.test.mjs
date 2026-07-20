@@ -370,6 +370,8 @@ test('targeted story repair uses the shared progress panel', () => {
   assert.match(PAGE_JS, /function repairStory\(/);
   assert.match(PAGE_JS, /runProgress\(panel,'\/api\/story\/repair'/);
   assert.match(PAGE_JS, /data-story-repair/);
+  assert.match(PAGE_JS, /closest\(t,'input\[data-story-file\]'\)/);
+  assert.doesNotMatch(PAGE_JS, /closest\(t,'\[data-story-file\]'\)/);
   assert.match(PAGE_JS, /function closeStoryTuneMenus\(/);
   assert.match(PAGE_JS, /if\(!closest\(t,'\.ds-story-tune'\)\)closeStoryTuneMenus\(\)/);
   assert.match(PAGE_JS, /var openTune=\$\('\.ds-story-tune\[open\]'\)/);
@@ -394,7 +396,11 @@ test('live review reconnects through the page lease and recovers durable state',
   assert.match(PAGE_JS, /function aiTurnKeys\(/);
   assert.match(PAGE_JS, /Agent replied to /);
   assert.match(PAGE_CSS, /\.ds-live-banner\{position:fixed/);
-  assert.match(PAGE_CSS, /\.ds-live-banner button\{[^}]*min-width:44px[^}]*min-height:44px/);
+  assert.match(PAGE_CSS, /\.ds-live-banner\{[^}]*right:16px[^}]*width:min\(420px,calc\(100vw - 32px\)\)[^}]*grid-template-columns:28px minmax\(0,1fr\) auto 36px/);
+  assert.match(PAGE_CSS, /\.ds-live-banner button\{[^}]*height:36px/);
+  assert.match(PAGE_CSS, /\.ds-live-banner button:focus-visible\{[^}]*box-shadow:0 0 0 3px var\(--accent-soft\)/);
+  assert.match(PAGE_CSS, /\.ds-live-banner\[data-live-kind="disconnected"\]/);
+  assert.doesNotMatch(PAGE_CSS, /\.ds-live-banner\{[^}]*left:calc\(/);
 });
 
 test('live events survive bfcache restores and outlast the reconnect interval', () => {

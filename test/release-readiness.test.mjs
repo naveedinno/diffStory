@@ -11,13 +11,13 @@ function exists(rel) {
   return existsSync(new URL(`../${rel}`, import.meta.url));
 }
 
-test('README leads with a visual demo, npm quickstart, and local-first positioning', () => {
+test('README leads with a visual demo, desktop quickstart, and local-first positioning', () => {
   const readme = read('README.md');
   assert.match(readme, /!\[diffStory saved stories screen\]\(assets\/demo\/diffstory-story-picker\.png\)/);
   assert.match(readme, /!\[diffStory guided review screen\]\(assets\/demo\/diffstory-review\.png\)/);
   assert.doesNotMatch(readme, /assets\/demo\/diffstory-demo\.svg/);
-  assert.match(readme, /npm i -g @naveedinno\/diffstory/);
-  assert.match(readme, /diffstory/);
+  assert.match(readme, /scripts\/install-macos-app\.sh/);
+  assert.match(readme, /There is no\s+diffStory CLI/);
   assert.match(readme, /Works without AI/);
   assert.match(readme, /No Python is required for the core app\./);
 });
@@ -26,13 +26,30 @@ test('package exposes release checks and ships demo and browser assets with npm 
   const pkg = JSON.parse(read('package.json'));
   assert.match(pkg.scripts.build, /npm run build:browser-assets/);
   assert.equal(pkg.scripts['build:browser-assets'], 'node scripts/build-browser-assets.mjs');
-  assert.equal(pkg.scripts.dev, 'npm run build && node dist/cli.js');
+  assert.equal(pkg.scripts.dev, 'npm run build && node dist/app-server.js');
+  assert.equal(pkg.bin, undefined);
   assert.equal(pkg.scripts.check, 'npm run build && node --test test/*.test.mjs');
   assert.equal(pkg.scripts['release:check'], 'npm run check && npm pack --dry-run --json');
   assert.equal(pkg.scripts.prepublishOnly, 'npm run check');
   assert.equal(pkg.license, 'SEE LICENSE IN LICENSE');
   assert.ok(pkg.files.includes('dist'));
   assert.ok(pkg.files.includes('assets/demo'));
+});
+
+test('DiffStory is UI-only and distributed skills never direct users to a CLI', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const readme = read('README.md');
+  const storyteller = read('skills/diffstory-storyteller/SKILL.md');
+  const addressReview = read('skills/address-review/SKILL.md');
+
+  assert.equal(pkg.bin, undefined);
+  assert.equal(exists('src/cli.ts'), false);
+  assert.equal(exists('dist/cli.js'), false);
+  assert.equal(exists('scripts/install.sh'), false);
+  assert.doesNotMatch(readme, /npm i -g @naveedinno\/diffstory/);
+  assert.match(storyteller, /diffStory is UI-only/);
+  assert.match(addressReview, /diffStory is UI-only/);
+  assert.doesNotMatch(`${storyteller}\n${addressReview}`, /diffstory check|diffstory --/);
 });
 
 test('release build contains a self-contained Mermaid ESM browser bundle', () => {

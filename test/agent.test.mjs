@@ -26,164 +26,31 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('set its "version" field to 2'));
   assert.ok(p.includes('Use the diffstory-storyteller skill'));
   assert.ok(!p.includes('diffStory review-tour skill'));
-  assert.ok(p.includes('do not emit one step per file'));
-  assert.ok(p.includes('synchronized story note'));
-  assert.ok(p.includes('I added this parameter to method X'));
-  assert.ok(p.includes('Voice contract'));
-  assert.ok(p.includes('lively, specific, and a little fun'));
-  assert.ok(p.includes('top-level "summary" is the reading map'));
-  assert.ok(p.includes('1-3 short informal sentences'));
-  assert.ok(p.includes('first person'));
-  assert.ok(p.includes('No long paragraphs'));
-  assert.ok(p.includes('No corporate changelog voice'));
-  assert.ok(p.includes('the coverage gate is clean'));
-});
-
-test('storyPrompt recovers the why before reading the diff', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Phase 1 — Recover the why'));
-  assert.ok(p.includes('gh pr view --json title,body'));
-  assert.ok(p.includes('git log'));
-  assert.ok(p.includes('Not evidence: branch names, filenames, vibes'));
-  assert.ok(p.includes('We wanted to enable'));
-  assert.ok(p.includes('the existing app path reaches'));
-  assert.ok(p.includes('"intent"'));
-  assert.ok(p.includes('"sources"'));
-  assert.ok(p.includes('code-derived'));
-  assert.ok(p.includes('Never invent product intent'));
-});
-
-test('storyPrompt designs the reading path as a narrative, not a file list', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Phase 3 — Storyboard the camera'));
-  assert.ok(p.includes('intent -> flow -> implementation'));
-  assert.ok(p.includes('not a list of touched files'));
-  assert.ok(p.includes('To implement that flow, I first'));
-  assert.ok(p.includes('never by filename'));
-  assert.ok(p.includes('Order test:'));
-  assert.ok(p.includes('Thread rule:'));
-  assert.ok(p.includes('one continuous story'));
-});
-
-test('storyPrompt detects concept gaps and places primers just in time', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Concept-gap test:'));
-  assert.ok(p.includes('terminology, roles, relationships, or state model'));
-  assert.ok(p.includes('immediately before the first code step that depends on it'));
-  assert.ok(p.includes('must include that immediately following code step'));
-  assert.ok(p.includes('Never place concept primers next to each other or at the end'));
-  assert.ok(p.includes('Overview is the whole-change reading map'));
-  assert.ok(p.includes('primer is a just-in-time mental model'));
-});
-
-test('storyPrompt pins the concept primer schema and safety contract', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Concept primer contract'));
-  assert.ok(p.includes('"kind":"concept"'));
-  assert.ok(p.includes('"body"'));
-  assert.ok(p.includes('"preparesFor"'));
-  assert.ok(p.includes('must not contain "file", "range", "viewport", "highlights", "beats", "why", "question", "calls", or "returnsTo"'));
-  assert.ok(p.includes('60-180 words'));
-  assert.ok(p.includes('hard maximum is 220 words'));
-  assert.ok(p.includes('Concept primers never claim diff coverage'));
-  assert.ok(p.includes('three or more actors/components'));
-  assert.ok(p.includes('flowchart, sequenceDiagram, or stateDiagram-v2'));
-  assert.ok(p.includes('caption is required'));
-  assert.ok(p.includes('no links, URLs, click/href directives, init/config directives, HTML, images, or custom styling directives'));
-});
-
-test('storyPrompt ends with a falsifiable self-review', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Falsifiable self-review'));
-  assert.ok(p.includes('Why test:'));
-  assert.ok(p.includes('Thread test:'));
-  assert.ok(p.includes('read concept bodies and code beats'));
+  assert.ok(p.includes('reviewer, not a changelog'));
   assert.ok(p.includes('Do not ask questions. Generate it directly.'));
 });
 
-test('storyPrompt asks for a context map and hard quality gates', () => {
+test('storyPrompt pins run facts and delegates every craft rule to the skill', () => {
   const p = storyPrompt('main');
-  assert.ok(p.includes('private context map'));
-  assert.ok(p.includes('entry -> existing owner -> changed decision -> downstream effect -> proof or risk'));
-  assert.ok(p.includes('Each code step must include a short "question"'));
-  assert.ok(p.includes('more than 10 steps'));
-  assert.ok(p.includes('3-7 consecutive steps'));
-  assert.ok(p.includes('coverage ledger'));
-  assert.ok(p.includes('"range" is only the changed-line coverage anchor'));
-  assert.ok(p.includes('Truth contract'));
-  assert.ok(p.includes('Do not claim tests pass unless you ran them'));
-});
-
-test('storyPrompt rebuilds the app context a forgetful reviewer needs', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('reviewer remembers the requested outcome but not the app internals'));
-  assert.ok(p.includes('Phase 2 — Reconstruct the app path'));
-  assert.ok(p.includes('inbound trigger'));
-  assert.ok(p.includes('outbound consumer'));
-  assert.ok(p.includes('existing app path, the attachment point for this diff, and the new outcome'));
-  assert.ok(p.includes('app orientation -> behavioral entry -> changed decision -> downstream consequence -> proof'));
-  assert.ok(p.includes('The first code stop is the behavioral entry point'));
-  assert.ok(p.includes('Do not start with imports, icons, styling, generated output, or tests'));
-});
-
-test('storyPrompt choreographs viewport and highlights as a guided camera', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('viewport and highlights as a guided camera'));
-  assert.ok(p.includes('orientation beat'));
-  assert.ok(p.includes('Context beats may and should highlight unchanged lines'));
-  assert.ok(p.includes('Target 20-30 visible lines'));
-  assert.ok(p.includes('40 lines'));
-  assert.ok(p.includes('60 lines is an exceptional hard maximum'));
-  assert.ok(p.includes('never more than 12'));
-  assert.ok(p.includes('top-level "highlights" must match the union of the beat highlights'));
-  assert.ok(p.includes('Memory test:'));
-  assert.ok(p.includes('Camera test:'));
-});
-
-test('storyPrompt makes deleted-file steps use the changed kind', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Never use "deleted" as a step kind'));
-  assert.ok(p.includes('For deleted files, use kind "changed"'));
-  assert.ok(p.includes('anchor the range at the post-change deletion location'));
-});
-
-test('storyPrompt teaches the pure deleted-file sentinel anchor', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('For a whole deleted file, use range, viewport, and highlights of [0, 0]'));
-  assert.ok(p.includes('Do not invent line 1 for a file that no longer exists'));
-});
-
-test('storyPrompt teaches explicit read-aloud focus targets', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Focus pointer contract'));
-  assert.ok(p.includes('Prefer "highlights" for new stories'));
-  assert.ok(p.includes('"focus"'));
-  assert.ok(p.includes('"ranges"'));
-  assert.ok(p.includes('inside that step\'s "viewport"'));
-  assert.ok(p.includes('post-change line numbers'));
-  assert.ok(p.includes('exact line or tiny block'));
-  assert.ok(p.includes('line-by-line correctness pivots'));
-});
-
-test('storyPrompt teaches viewport and highlighted line selection', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Viewport contract'));
-  assert.ok(p.includes('"viewport"'));
-  assert.ok(p.includes('"highlights"'));
-  assert.ok(p.includes('what the reviewer sees'));
-  assert.ok(p.includes('lines the story is currently talking about'));
-  assert.ok(p.includes('from the requirement'));
-  assert.ok(p.includes('far-apart highlight islands'));
-  assert.ok(p.includes('scroll-stable'));
-});
-
-test('storyPrompt requires beat-by-beat narration for read-aloud sync', () => {
-  const p = storyPrompt('main');
-  assert.ok(p.includes('Beat contract'));
-  assert.ok(p.includes('"beats"'));
-  assert.ok(p.includes('separate speech'));
-  assert.ok(p.includes('one beat per highlighted code part'));
-  assert.ok(p.includes('Do not put one big speech over several highlight groups'));
+  // Run-specific facts stay in the prompt…
+  assert.ok(p.includes('git diff main --'));
+  assert.ok(p.includes('set its "mode" field to "guided"'));
+  assert.ok(p.includes('The skill owns the craft'));
+  assert.ok(p.includes('recover the why, reconstruct the app path, storyboard the camera, then write the steps'));
+  assert.ok(p.includes('hotspots'));
+  assert.ok(p.includes('non-goals'));
+  assert.ok(p.includes('The app validates the finished story'));
+  // …while the craft contracts live only in SKILL.md, so the two cannot drift.
+  for (const duplicated of [
+    'Detail level contract', 'Viewport contract', 'Beat contract', 'Context contract',
+    'Writing contract', 'Voice contract', 'Coverage contract', 'Range contract',
+    'Focus pointer contract', 'Truth contract', 'Concept primer contract',
+    'Falsifiable self-review', 'Phase 1 — Recover the why', 'Concept-gap test',
+  ]) {
+    assert.ok(!p.includes(duplicated), `craft rule duplicated in prompt: ${duplicated}`);
+  }
+  // Drift guard: a slim prompt stays an instruction, not a second copy of the skill.
+  assert.ok(p.length < 3000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -192,31 +59,11 @@ test('storyPrompt supports story detail levels', () => {
   assert.equal(normalizeStoryMode('guided'), 'guided');
   assert.equal(normalizeStoryMode('anything else'), 'guided');
 
-  const guided = storyPrompt('main');
-  assert.ok(guided.includes('set its "mode" field to "guided"'));
-  assert.ok(guided.includes('Balanced mode'));
-  assert.ok(guided.includes('guided 2'));
-  assert.ok(guided.includes('use at most 2 concept primers'));
-  assert.ok(!guided.includes('Line-by-line mode'));
-
-  const brief = storyPrompt('main', undefined, 'brief');
-  assert.ok(brief.includes('set its "mode" field to "brief"'));
-  assert.ok(brief.includes('Brief mode'));
-  assert.ok(brief.includes('brief 1'));
-  assert.ok(brief.includes('use at most 1 concept primer'));
-  assert.ok(brief.includes('one short sentence'));
-  assert.ok(brief.includes('one compact stop per meaningful change cluster'));
-
+  assert.ok(storyPrompt('main').includes('set its "mode" field to "guided"'));
+  assert.ok(storyPrompt('main', undefined, 'brief').includes('set its "mode" field to "brief"'));
   const detailed = storyPrompt('main', undefined, 'detailed');
   assert.ok(detailed.includes('git diff main --'));
   assert.ok(detailed.includes('set its "mode" field to "detailed"'));
-  assert.ok(detailed.includes('Line-by-line mode'));
-  assert.ok(detailed.includes('detailed 3'));
-  assert.ok(detailed.includes('use at most 3 concept primers'));
-  assert.ok(detailed.includes('line-by-line'));
-  assert.ok(detailed.includes('all meaningful code paths'));
-  assert.ok(detailed.includes('3-7 short sentences'));
-  assert.ok(detailed.includes('split separate branches, guards, state writes, external calls, and error paths'));
 });
 
 test('bundled diffstory-storyteller skill teaches reviewer-first story generation', () => {
@@ -771,4 +618,33 @@ test('storyPrompt requires live >> phase markers and notes', () => {
   assert.match(p, /">> Storyboarding the camera"/);
   assert.match(p, /">> Writing the steps"/);
   assert.match(p, /starting with ">> "/);
+});
+
+test('bundled diffstory-storyteller skill demands honest hotspots and non-goals', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Declare your doubts (hotspots)'));
+  assert.ok(skill.includes('where should I distrust this?'));
+  assert.ok(skill.includes('"hotspots"'));
+  assert.ok(skill.includes('Honest reasons only'));
+  assert.ok(skill.includes('the id of a `changed` or `new-file` step'));
+  assert.ok(skill.includes('nonGoals'));
+  assert.ok(skill.includes('Deliberately does not'));
+  assert.ok(skill.includes('Hotspot test'));
+  assert.ok(skill.includes('an accidental gap'));
+});
+
+test('bundled diffstory-storyteller skill bans rhetorical review questions', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Answer your own `question` before keeping it'));
+  assert.ok(skill.includes('rhetorical'));
+  assert.ok(skill.includes('Question test'));
+  assert.ok(skill.includes('could get wrong'));
+});
+
+test('bundled diffstory-storyteller skill shows the same diff as changelog vs story', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('the same diff, told twice'));
+  assert.ok(skill.includes('The changelog (do not write this)'));
+  assert.ok(skill.includes('The story (write this)'));
+  assert.ok(skill.includes('each question names a failure the evidence must rule out'));
 });

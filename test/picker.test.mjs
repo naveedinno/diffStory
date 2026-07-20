@@ -37,6 +37,29 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.doesNotMatch(html, /Your repositories|<p class="section">/, 'uses one concise repositories heading');
 });
 
+test('picker keeps repository bookkeeping in the repository row, not the masthead', () => {
+  const now = 10_000_000;
+  const html = renderPicker(
+    [{
+      path: '/Users/test/workspace',
+      name: 'workspace',
+      isGit: true,
+      hasTour: false,
+      currentBranch: 'main',
+      changedFiles: 3,
+      lastOpened: now - 7 * 60 * 1000,
+    }],
+    '/Users/test',
+    now,
+  );
+
+  assert.doesNotMatch(html, /herostats/, 'does not render the redundant masthead ledger');
+  assert.match(html, /class="hero-thread ds-atmosphere-thread"/, 'keeps the animated masthead thread when removing the ledger copy');
+  assert.match(html, /animation:ds-thread-pulse 11s linear 2s infinite backwards/, 'keeps the travelling pulse timing intact');
+  assert.equal((html.match(/3 changed files/g) ?? []).length, 1, 'shows the change count only on the repository row');
+  assert.equal((html.match(/7 min ago/g) ?? []).length, 1, 'shows the last-opened time only on the repository row');
+});
+
 test('folder browser enforces its aria-modal contract and restores focus', () => {
   const html = renderPicker([], '/Users/test', Date.now());
 

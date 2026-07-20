@@ -23,7 +23,7 @@ assignees: ""
 - OS:
 - Node version:
 - diffStory version or commit:
-- Install method: npm / curl installer / source clone
+- Install method: macOS app installer / source development
 
 ## Optional tools involved
 
@@ -31,4 +31,3 @@ assignees: ""
 - Kokoro voice: yes/no
 
 ## Notes, logs, or screenshots
-

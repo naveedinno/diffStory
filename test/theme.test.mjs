@@ -4,7 +4,7 @@ import { navBar, navStyles } from '../dist/nav.js';
 import { renderChangePage } from '../dist/change-page.js';
 import { renderPicker } from '../dist/picker.js';
 import { renderStoryPicker } from '../dist/story-picker.js';
-import { sharedTokens, themeBootstrapScript, themeControl } from '../dist/theme.js';
+import { sharedTokens, themeBootstrapScript, themeControl, threadAtmosphereStyles } from '../dist/theme.js';
 
 test('theme control offers persistent System, Light, and Dark choices', () => {
   const control = themeControl();
@@ -38,6 +38,14 @@ test('theme palettes use a resolved data attribute instead of an OS-only media q
   assert.doesNotMatch(navCss, /prefers-color-scheme/);
 });
 
+test('page atmosphere shares one map, thread pulse, compact, and reduced-motion contract', () => {
+  const css = threadAtmosphereStyles();
+  assert.match(css, /body\.ds-map-bg::before/);
+  assert.match(css, /animation:ds-thread-pulse 11s linear 2s infinite backwards/);
+  assert.match(css, /prefers-reduced-motion:reduce\)\{\.ds-atmosphere-thread \.thread-pulse\{display:none\}/);
+  assert.match(css, /max-width:480px\)\{\.ds-thread-layer\[data-thread-compact="hide"\]\{display:none\}/);
+});
+
 test('front-door pages apply the saved theme before CSS and expose one selector', () => {
   const change = renderChangePage(
     { base: 'abc', baseLabel: 'main', files: [], totalChanged: 0, hasChanges: false },
@@ -53,6 +61,8 @@ test('front-door pages apply the saved theme before CSS and expose one selector'
     assert.ok(html.indexOf("var key='ds-theme'") < html.indexOf('<style>'), 'resolves the theme before the page stylesheet');
     assert.equal((html.match(/class="ds-theme-toggle"/g) || []).length, 1);
     assert.match(html, /meta name="theme-color"[^>]+data-ds-theme-color/);
+    assert.match(html, /<body class="ds-map-bg"/);
+    assert.match(html, /class="(?:ds-thread-layer|hero-thread ds-atmosphere-thread)"/, 'renders the shared Thread Path atmosphere');
   }
   assert.equal((navBar().match(/class="ds-theme-toggle"/g) || []).length, 1);
 });

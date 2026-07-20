@@ -204,6 +204,33 @@ function validateIntent(t: Record<string, unknown>, errors: string[]): void {
       });
     }
   }
+  if (intent.nonGoals !== undefined) {
+    if (!Array.isArray(intent.nonGoals) || intent.nonGoals.length === 0) {
+      errors.push('intent.nonGoals must be a non-empty array');
+    } else {
+      intent.nonGoals.forEach((s, i) => {
+        if (typeof s !== 'string' || !s.trim()) errors.push(`intent.nonGoals[${i}] must be a non-empty string`);
+      });
+    }
+  }
+}
+
+/** Shape-only hotspot validation; step-id resolution happens once all ids are known. */
+function validateHotspots(t: Record<string, unknown>, errors: string[]): void {
+  if (t.hotspots === undefined) return;
+  if (!Array.isArray(t.hotspots) || t.hotspots.length === 0) {
+    errors.push('hotspots must be a non-empty array');
+    return;
+  }
+  t.hotspots.forEach((raw, i) => {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      errors.push(`hotspots[${i}] must be an object`);
+      return;
+    }
+    const spot = raw as Record<string, unknown>;
+    if (typeof spot.step !== 'string' || !spot.step.trim()) errors.push(`hotspots[${i}].step is required`);
+    if (typeof spot.reason !== 'string' || !spot.reason.trim()) errors.push(`hotspots[${i}].reason is required`);
+  });
 }
 
 function validateStringArray(
@@ -388,6 +415,7 @@ export function validateTour(obj: unknown): string[] {
   if (typeof t.title !== 'string' || !t.title.trim()) errors.push('title is required');
   if (typeof t.summary !== 'string') errors.push('summary is required (use "" if none)');
   validateIntent(t, errors);
+  validateHotspots(t, errors);
   validateStoryScope(t, errors);
   if (!Array.isArray(t.steps) || t.steps.length === 0) {
     errors.push('steps must be a non-empty array');
@@ -509,6 +537,20 @@ export function validateTour(obj: unknown): string[] {
     }
   });
 
+  // Hotspots anchor distrust to real evidence, so each must resolve to a code step.
+  if (Array.isArray(t.hotspots)) {
+    t.hotspots.forEach((raw, i) => {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return;
+      const ref = (raw as Record<string, unknown>).step;
+      if (typeof ref !== 'string' || !ref.trim()) return;
+      if (!ids.has(ref)) {
+        errors.push(`hotspots[${i}].step references unknown step id "${ref}"`);
+      } else if (stepsById.get(ref)?.kind === 'concept') {
+        errors.push(`hotspots[${i}].step must reference a code step, not concept "${ref}"`);
+      }
+    });
+  }
+
   return errors;
 }
 
@@ -566,6 +608,9 @@ export function validateGeneratedTour(tour: Tour): string[] {
     if (!tour.intent.sources?.length) {
       errors.push('intent.sources must name the evidence used to recover the task');
     }
+  }
+  if ((tour.hotspots?.length ?? 0) > 3) {
+    errors.push('hotspots must name at most 3 distrust spots; keep only the places you are least sure about');
   }
 
   tour.steps.forEach((step, i) => {

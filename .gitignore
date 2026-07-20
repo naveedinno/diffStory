@@ -2,9 +2,8 @@ node_modules/
 *.log
 .DS_Store
 
-# dist/ is committed so `npm i -g github:naveedinno/diffStory` works without a
-# build step (a global git-install does not install devDeps, so tsc is absent).
-# Rebuild before committing source changes: npm run build
+# dist/ is committed so the macOS app and source checkout have a ready local
+# server build. Rebuild before committing source changes: npm run build
 
 # diffStory working files live alongside the repo being reviewed.
 # Keep them local by default — they describe a single review session.
@@ -14,3 +13,4 @@ node_modules/
 macos/DiffStoryApp/target/
 macos/DiffStoryApp/gen/
 macos/DiffStoryApp/icons/icon.png
+eval/results/

@@ -46,8 +46,8 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
 .ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
 .ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
-.ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-diffbody>.ds-urow:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-diffbody>.ds-urow:not(.is-story-focus){opacity:.46}
-.ds-step[data-story-lens="focus"].is-story-active [data-diff-inner] .ds-hunkgap,.ds-step[data-story-lens="focus"].is-story-active [data-split-inner] .ds-hunkgap{opacity:.5}
+.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-diffbody>.ds-urow:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-split-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-split-inner] .ds-diffbody>.ds-urow:not(.is-story-focus){opacity:.46}
+.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-hunkgap,.ds-step.is-code-step.is-story-active [data-split-inner] .ds-hunkgap{opacity:.5}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-cell:not(.ds-cell-empty){background-image:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
@@ -162,7 +162,8 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head>.ds-flex{display:none}
   .ds-filepanel-head::after{content:'';order:6;flex-basis:100%;height:0}
   .ds-filepanel-head>.ds-changejump{order:7}
-  .ds-filepanel-head>.ds-viewed-toggle{order:8}
+  .ds-filepanel-head>.ds-viewed-toggle{order:8;width:auto;padding:0 10px}
+  .ds-filepanel-head>.ds-viewed-toggle .ds-viewed-toggle-label{display:inline}
   .ds-filepanel-head>.ds-modetoggle{order:9;margin-left:auto}
   .ds-filepanel-head .ds-modetoggle button{padding-left:8px;padding-right:8px}
 }

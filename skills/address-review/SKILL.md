@@ -9,6 +9,10 @@ The reviewer left comments on your change in diffStory. They live in `.diffstory
 each anchored to selected text in a file/range, with a line number kept for lookup. Close the loop: act on every open comment, write
 back what you did, and leave the file in a state the reviewer can re-review.
 
+diffStory is UI-only. Never install, invoke, validate with, or recommend a
+`diffstory` CLI command. Work with the review artifacts directly and tell the
+user to refresh the installed diffStory app when the review is ready.
+
 ## Steps
 
 1. **Read** `.diffstory/comments.json`. Each comment has `id`, optional `step`, optional

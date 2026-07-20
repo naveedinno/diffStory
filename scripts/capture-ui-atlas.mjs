@@ -62,6 +62,33 @@ function setStory(visible){if(visible){if(existsSync(STORY_HOLD))copyFileSync(ST
 function themeInit(theme){return `(function(){try{localStorage.clear();localStorage.setItem('ds-theme','${theme}');localStorage.setItem('ds-sidebar-collapsed','0')}catch(e){}})()`;}
 async function settled(page){await page.waitForLoadState('domcontentloaded');await page.waitForFunction(()=>document.fonts?document.fonts.status==='loaded':true);await page.waitForTimeout(280);}
 async function click(page,selector){const target=page.locator(selector).first();await target.waitFor({state:'attached'});await target.evaluate((element)=>element.click());await page.waitForTimeout(240);}
+async function assertReviewMenuVisible(page){
+  const result=await page.evaluate(()=>{
+    const pop=document.querySelector('[data-review-menu-pop]');
+    if(!pop||pop.hidden)return {visible:false,reason:'popover is missing or hidden'};
+    const rect=pop.getBoundingClientRect(),wrap=pop.parentElement?.getBoundingClientRect(),button=document.querySelector('[data-review-menu]')?.getBoundingClientRect(),x=rect.left+rect.width/2,y=rect.top+Math.min(96,rect.height/2);
+    const hit=document.elementFromPoint(x,y);
+    return {visible:!!hit&&(hit===pop||pop.contains(hit)),reason:`popover ${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.left)},${Math.round(rect.top)}; wrap ${Math.round(wrap?.width||0)}x${Math.round(wrap?.height||0)} at ${Math.round(wrap?.left||0)},${Math.round(wrap?.top||0)}; button at ${Math.round(button?.left||0)},${Math.round(button?.top||0)}; computed top ${getComputedStyle(pop).top}; offset parent ${pop.offsetParent?.className||'none'}; hit ${hit?.className||hit?.tagName||'nothing'} at ${Math.round(x)},${Math.round(y)}`};
+  });
+  if(!result.visible)throw new Error(`Review menu is clipped or covered: ${result.reason}`);
+}
+async function assertReviewStageGeometry(page,expectSideControls=false){
+  const result=await page.evaluate((checkControls)=>{
+    const chrome=document.querySelector('[data-review-chrome]'),stage=document.querySelector('#ds-view-tour>:not(.ds-filmthread):not(.ds-step-ghost):not([hidden])'),thread=document.querySelector('.ds-filmthread');
+    if(!chrome||!stage||!thread)return {valid:false,reason:'review chrome, active stage, or filmstrip is missing'};
+    const chromeRect=chrome.getBoundingClientRect(),stageRect=stage.getBoundingClientRect(),threadRect=thread.getBoundingClientRect();
+    const topGap=stageRect.top-chromeRect.bottom,bottomGap=threadRect.top-stageRect.bottom,widthShare=stageRect.width/innerWidth;
+    let controlsValid=true,controlReason='';
+    if(checkControls&&innerWidth>900){
+      const prev=document.querySelector('[data-ghost-prev]'),next=document.querySelector('[data-ghost-next]'),prevRect=prev?.getBoundingClientRect(),nextRect=next?.getBoundingClientRect();
+      controlsValid=!!prevRect&&!!nextRect&&!prev.hidden&&!next.hidden&&prevRect.right<=stageRect.left&&nextRect.left>=stageRect.right;
+      controlReason=`; prev ${Math.round(prevRect?.left||0)}-${Math.round(prevRect?.right||0)}, stage ${Math.round(stageRect.left)}-${Math.round(stageRect.right)}, next ${Math.round(nextRect?.left||0)}-${Math.round(nextRect?.right||0)}`;
+    }
+    const valid=Math.abs(topGap-bottomGap)<=2&&widthShare>=.7&&controlsValid;
+    return {valid,reason:`top gap ${Math.round(topGap)}px, bottom gap ${Math.round(bottomGap)}px, stage ${Math.round(widthShare*100)}% of viewport${controlReason}`};
+  },expectSideControls);
+  if(!result.valid)throw new Error(`Review stage geometry is unbalanced: ${result.reason}`);
+}
 async function progressState(page,status){
   await page.evaluate((terminal)=>{const root=document.querySelector('#ds-agentpanel .ds-pp');root.hidden=false;const panel=new ProgressPanel(root,{});panel.start();panel.handle({type:'run_started',workflow:'address',label:'Addressing comments'});panel.handle({type:'context',agent:'codex',repoName:'diffstory-atlas-fixture',targetCount:2,taskMode:'resume',taskLabel:'Polish diffStory review flow',taskId:'${TASK_ID}'});panel.handle({type:'phase',phase:'reading_changes'});panel.handle({type:'plan',items:[{text:'Trace both review comments to their source',status:'done'},{text:'Fix the exact-cap boundary and response contract',status:'active'},{text:'Run focused tests and report back',status:'pending'}]});panel.handle({type:'activity',kind:'search',label:'Reading src/limits.ts and src/api.ts'});if(terminal==='complete'){panel.handle({type:'phase',phase:'validating_output'});panel.handle({type:'run_done',status:'complete',result:{codeChanged:true}})}else if(terminal==='stopped'){panel.handle({type:'run_done',status:'stopped',result:{}})}else if(terminal==='failed'){panel.handle({type:'error',label:'The agent stopped before finishing',detail:'The selected Codex task could not be resumed. Re-select the task and try again.',technicalDetail:'Expected task ${TASK_ID}; received no task id.'});panel.handle({type:'run_done',status:'failed',result:{}})}},status);
   await page.waitForTimeout(180);
@@ -72,7 +99,7 @@ async function main(){
   mkdirSync(SHOTS,{recursive:true});for(const old of definitions)rmSync(join(SHOTS,`${old.category}-${old.state}.png`),{force:true});
   execFileSync(process.execPath,[join(ROOT,'examples','demo.mjs')],{cwd:ROOT,env:{...process.env,DIFFSTORY_DEMO_DIR:FIXTURE,DIFFSTORY_DEMO_NO_SERVE:'1'},stdio:'pipe'});copyFileSync(STORY,STORY_HOLD);
   const fake=join(HOME,'codex-atlas');fakeCodex(fake);const port=await freePort();const origin=`http://127.0.0.1:${port}`;
-  const server=spawn(process.execPath,[join(ROOT,'dist','cli.js'),'--dir',FIXTURE,'--port',String(port),'--no-open'],{cwd:ROOT,env:{...process.env,HOME,DIFFSTORY_CODEX_BINARY:fake},stdio:['ignore','pipe','pipe']});
+  const server=spawn(process.execPath,[join(ROOT,'dist','app-server.js'),'--dir',FIXTURE,'--port',String(port),'--no-open'],{cwd:ROOT,env:{...process.env,HOME,DIFFSTORY_CODEX_BINARY:fake},stdio:['ignore','pipe','pipe']});
   let serverLog='';server.stdout.on('data',c=>serverLog+=c);server.stderr.on('data',c=>serverLog+=c);
   let browser;
   try{
@@ -95,7 +122,7 @@ async function main(){
       }else if(def.state==='files-unified'||def.state==='files-split'){
         await click(page,'#ds-tab-files');if(def.state==='files-split'){await click(page,'.ds-filepanel:not([hidden]) [data-mode="split"]');await page.waitForFunction(()=>document.querySelector('.ds-filepanel:not([hidden]) [data-split-inner]')?.getAttribute('aria-busy')==='false');}
       }else if(def.state==='review-menu'){
-        await click(page,'[data-review-menu]');
+        await click(page,'[data-review-menu]');await assertReviewMenuVisible(page);
       }else if(def.state==='notes-drawer'||def.state==='mobile-notes'){
         await click(page,'[data-review-menu]');await click(page,'[data-feedback-open="feedback"]');
       }else if(def.state==='conversation'){
@@ -106,6 +133,7 @@ async function main(){
         await progressState(page,def.state.slice('agent-'.length));
       }
       if(!def.state.startsWith('agent-'))await page.waitForFunction(()=>!/Loading (?:the split view|this review step|available tasks)/i.test(document.body.innerText));
+      if(def.state==='overview'||def.state==='code-step')await assertReviewStageGeometry(page,def.state==='code-step');
       const file=`screenshots/${def.category}-${def.state}.png`,target=join(OUT,file);await page.screenshot({path:target,fullPage:false});const size=await page.evaluate(()=>({width:innerWidth,height:innerHeight}));const route=def.route.endsWith('/review')?`${def.route}?story=story.json`:def.route;shots.push({...def,route,file,width:size.width,height:size.height});console.log(`captured ${file}`);
     }
     const source=execFileSync('git',['rev-parse','--short','HEAD'],{cwd:ROOT,encoding:'utf8'}).trim();const dirty=execFileSync('git',['status','--porcelain'],{cwd:ROOT,encoding:'utf8'}).trim();const manifest={version:1,generatedAt:new Date().toISOString(),source:`commit ${source}${dirty?' + working tree':''} · deterministic demo`,shots};const json=JSON.stringify(manifest,null,2)+'\n';writeFileSync(join(OUT,'manifest.json'),json);writeFileSync(join(OUT,'manifest.js'),`window.DIFFSTORY_UI_ATLAS=${JSON.stringify(manifest)};\n`);console.log(`\nUI atlas: ${relative(ROOT,OUT)}/index.html (${shots.length} frames)`);

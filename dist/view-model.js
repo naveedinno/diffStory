@@ -42,14 +42,28 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
     for (const s of codeSteps)
         if (!stepByFile.has(s.file))
             stepByFile.set(s.file, s);
+    // First declared reason wins if a step is (incorrectly) flagged twice.
+    const hotspotByStep = new Map();
+    for (const spot of tour.hotspots ?? []) {
+        const reason = spot.reason?.trim();
+        if (reason && !hotspotByStep.has(spot.step))
+            hotspotByStep.set(spot.step, reason);
+    }
     const stepViews = steps.map((step) => isCodeStep(step)
-        ? buildCodeStep(repo, step, files, byId, steps.length, headRef)
+        ? buildCodeStep(repo, step, files, byId, steps.length, headRef, hotspotByStep.get(step.id))
         : buildConceptStep(step, byId));
+    const hotspots = steps.flatMap((step, index) => {
+        const reason = hotspotByStep.get(step.id);
+        return reason && isCodeStep(step)
+            ? [{ stepId: step.id, panelIndex: index + 1, order: step.order, title: step.title, reason }]
+            : [];
+    });
     const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef);
     const trust = buildTrust(coverageFiles, uncovered, stepByFile);
     return {
         steps: stepViews,
         files: fileViews,
+        hotspots,
         trust,
         totalSteps: steps.length,
         codeSteps: codeSteps.length,
@@ -67,7 +81,7 @@ function filesForStoryCoverage(tour, files) {
     const selected = new Set(included);
     return files.filter((f) => selected.has(f.newPath));
 }
-function buildCodeStep(repo, step, files, byId, total, headRef) {
+function buildCodeStep(repo, step, files, byId, total, headRef, hotspot) {
     const { blocks, note } = stepBlocks(repo, step, files, headRef);
     const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
@@ -94,6 +108,7 @@ function buildCodeStep(repo, step, files, byId, total, headRef) {
         context: step.kind === 'context',
         why: step.why,
         question: step.question?.trim() || fallbackReviewQuestion(step.title),
+        hotspot,
         health: stepHealth(step, viewport, focusGroups),
         beats,
         flow: flowLabel(step, byId, total),

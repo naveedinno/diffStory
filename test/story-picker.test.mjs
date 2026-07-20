@@ -36,6 +36,8 @@ test('compact session cards preserve trust and review facts on mobile', () => {
   assert.equal((html.match(/>Start review</g) || []).length, 1, 'offers one clear new-review action');
   assert.match(html, /Review history/);
   assert.match(html, /<b>1<\/b> review has open notes/, 'makes clear this is a review count, not a note count');
+  assert.match(html, /class="row-num" aria-hidden="true">01<\/span>/, 'uses the shared ledger numbering on saved reviews');
+  assert.match(html, /class="ds-thread-layer" data-thread-compact="hide"/, 'uses the shared page thread without turning it into content');
   assert.doesNotMatch(html, /class="review-path"|Every session keeps the scope/, 'does not repeat the review tutorial');
 });
 

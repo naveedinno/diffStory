@@ -8,6 +8,12 @@
       "port": 7777
     },
     {
+      "name": "diffstory-alt",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dist/cli.js", "--no-open", "--port", "7779"],
+      "port": 7779
+    },
+    {
       "name": "diffstory-demo",
       "runtimeExecutable": "node",
       "runtimeArgs": ["dist/cli.js", "--dir", "/var/folders/43/vsh61wg57wx_r406wmy_5qt80000gn/T/diffstory-demo", "--no-open", "--port", "7788"],

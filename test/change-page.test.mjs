@@ -53,19 +53,18 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
     'drops the redundant current-branch, branch-commits, and cross-branch cards',
   );
   assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
-  assert.ok(html.includes('id="cmpBaseRef"') && html.includes('id="cmpHeadRef"'), 'has left/right branch selectors');
-  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has left/right commit selectors');
-  assert.ok(html.includes('class="refside-title">Left</span>'), 'labels the base side Left');
-  assert.ok(html.includes('class="refside-title">Right</span>'), 'labels the head side Right');
+  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has one rev selector per compare side');
+  assert.ok(!html.includes('id="cmpBaseRef"') && !html.includes('id="cmpHeadRef"'), 'drops the separate branch-vs-commit inputs');
+  assert.ok(html.includes('<span>Base <i>older</i></span>') && html.includes('<span>Compare <i>newer</i></span>'), 'labels the sides by meaning, not position');
   assert.ok(!html.includes('<span>From</span>') && !html.includes('<span>To</span>'), 'does not use from/to labels');
   assert.ok(!html.includes('id="commitGo"') && !html.includes('Review commit'), 'single-commit scope auto-applies without a button');
   assert.ok(!html.includes('id="cmpGo"') && !html.includes('Compare refs'), 'compare scope auto-applies without a button');
   assert.ok(html.includes('data-picker="commit"'), 'uses the custom commit picker');
-  assert.ok(html.includes('data-picker="ref"'), 'uses the custom ref picker');
-  assert.ok(html.includes('data-picker="side-commit"'), 'uses branch-scoped commit pickers for compare sides');
-  assert.equal((html.match(/role="combobox"/g) || []).length, 5, 'exposes every ref field as a combobox');
-  assert.equal((html.match(/aria-controls="refPicker"/g) || []).length, 5, 'binds every combobox to the shared listbox');
-  assert.equal((html.match(/aria-expanded="false"/g) || []).length >= 7, true, 'starts disclosure and combobox state collapsed');
+  assert.ok(html.includes('data-picker="base"') && html.includes('data-picker="head"'), 'uses one rev picker per compare side');
+  assert.ok(!html.includes('data-picker="side-commit"'), 'no branch-scoped commit-pin pickers');
+  assert.equal((html.match(/role="combobox"/g) || []).length, 3, 'exposes every ref field as a combobox');
+  assert.equal((html.match(/aria-controls="refPicker"/g) || []).length, 3, 'binds every combobox to the shared listbox');
+  assert.equal((html.match(/aria-expanded="false"/g) || []).length >= 5, true, 'starts disclosure and combobox state collapsed');
   assert.match(html, /id="refPicker" role="listbox" aria-label="Available git references"/);
   assert.ok(!html.includes('<datalist'), 'does not rely on the native datalist menu');
   assert.match(html, />History<\/a>/, 'keeps saved review history as a secondary action');
@@ -230,32 +229,26 @@ test('renderChangePage shows the human scope label and highlights the active seg
   );
 });
 
-test('compare panel does not mirror refs into commit fields', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'HEAD' });
-  assert.match(html, /id="cmpBaseRef"[^>]+value="HEAD"/, 'left ref starts at HEAD');
-  assert.match(html, /id="cmpBase"[^>]+value=""/, 'left commit starts unpinned instead of duplicating HEAD');
-  assert.match(html, /id="cmpHeadRef"[^>]+value="HEAD"/, 'right ref starts at HEAD');
-  assert.match(html, /id="cmpHead"[^>]+value="HEAD \+ working tree"[^>]+data-worktree="1"/, 'right commit shows the working-tree pseudo option');
-  assert.match(html, /placeholder="Use selected ref head, or pick a commit"/, 'commit selector explains the default');
+test('compare panel prefills from the active scope and defaults the right side to the working tree', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main' });
+  assert.match(html, /id="cmpBase"[^>]+value="main"/, 'base side shows the resolved base rev');
+  assert.match(html, /id="cmpHead"[^>]+value="Working tree"[^>]+data-worktree="1"/, 'compare side defaults to the working tree');
+
+  const other = renderChangePage(withChanges, { repoName: 'demo', active: 'uncommitted', base: 'HEAD' });
+  assert.match(other, /id="cmpBase"[^>]+value=""/, 'non-compare scopes do not leak bookkeeping revs into the base input');
 });
 
-test('compare panel preserves pinned commit selections after navigation', () => {
+test('compare panel repopulates both sides straight from base/head after navigation', () => {
   const html = renderChangePage(withChanges, {
     repoName: 'demo',
     active: 'compare',
     base: '42dbc69',
     head: 'c4d0151',
-    compareBaseRef: 'main',
-    compareBaseCommit: '42dbc69',
-    compareHeadRef: 'origin/main',
-    compareHeadCommit: 'c4d0151',
   });
 
-  assert.match(html, /id="cmpBaseRef"[^>]+value="main"/, 'left branch/ref keeps the source ref');
-  assert.match(html, /id="cmpBase"[^>]+value="42dbc69"/, 'left commit keeps the pinned commit');
-  assert.match(html, /id="cmpHeadRef"[^>]+value="origin\/main"/, 'right branch/ref keeps the source ref');
-  assert.match(html, /id="cmpHead"[^>]+value="c4d0151"/, 'right commit keeps the pinned commit');
-  assert.doesNotMatch(html, /id="cmpHead"[^>]+data-worktree="1"/, 'pinned right commits do not render as worktree');
+  assert.match(html, /id="cmpBase"[^>]+value="42dbc69"/, 'base side keeps the chosen rev');
+  assert.match(html, /id="cmpHead"[^>]+value="c4d0151"/, 'compare side keeps the chosen rev');
+  assert.doesNotMatch(html, /id="cmpHead"[^>]+data-worktree="1"/, 'an explicit head does not render as worktree');
 });
 
 test('commit picker shows commits when the current value is HEAD', async () => {
@@ -456,7 +449,7 @@ assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=def56
 }
 );
 
-test('branch ref picker only offers branch rows', async () => {
+test('base rev picker offers branches then commits, without worktree pseudo-rows', async () => {
   class FakeEl {
     constructor(attrs = {}) {
       this.attrs = { ...attrs };
@@ -503,9 +496,9 @@ test('branch ref picker only offers branch rows', async () => {
   assert.ok(pickerScript, 'has the embedded ref picker script');
 
   const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
+  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: '' });
   const comparePanel = new FakeEl({ 'data-panel': 'compare' });
-  const elements = { refPicker: picker, cmpBaseRef };
+  const elements = { refPicker: picker, cmpBase };
   const context = {
     console,
     Event: class Event {
@@ -534,7 +527,7 @@ test('branch ref picker only offers branch rows', async () => {
       querySelector: () => null,
       querySelectorAll: (selector) => {
         if (selector === '[data-panel]') return [comparePanel];
-        if (selector === '[data-picker]') return [cmpBaseRef];
+        if (selector === '[data-picker]') return [cmpBase];
         return [];
       },
       createElement: () => new FakeEl(),
@@ -543,17 +536,16 @@ test('branch ref picker only offers branch rows', async () => {
   };
 
   vm.runInNewContext(pickerScript, context);
-  cmpBaseRef.listeners.focus[0]();
+  cmpBase.listeners.focus[0]();
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.ok(cmpBaseRef.listeners.click?.length, 'branch/ref inputs reopen the picker on click');
+  assert.ok(cmpBase.listeners.click?.length, 'rev inputs reopen the picker on click');
   const values = picker.children.map((row) => row.attrs['data-value']);
-  assert.deepEqual(values, ['main', 'origin/main', 'origin/feat/scope-selector']);
-  assert.ok(!values.includes('HEAD'), 'does not offer HEAD in the branch selector');
-  assert.ok(!values.includes('1ce5906') && !values.includes('42dbc69'), 'does not offer commits in the branch selector');
+  assert.deepEqual(values, ['main', 'origin/main', 'origin/feat/scope-selector', '1ce5906', '42dbc69'], 'branches first, then recent commits');
+  assert.ok(!values.includes('__WORKTREE__'), 'the base side cannot be the working tree');
 });
 
-test('compare commit picker scopes commits to the selected side ref and exposes working-tree HEAD', async () => {
+test('compare head picker leads with the working tree, then branches and commits', async () => {
   class FakeEl {
     constructor(attrs = {}) {
       this.attrs = { ...attrs };
@@ -577,6 +569,9 @@ test('compare commit picker scopes commits to the selected side ref and exposes 
     }
     addEventListener(name, fn) {
       (this.listeners[name] ||= []).push(fn);
+    }
+    dispatchEvent(ev) {
+      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
     }
     appendChild(child) {
       this.children.push(child);
@@ -603,12 +598,10 @@ test('compare commit picker scopes commits to the selected side ref and exposes 
   assert.ok(pickerScript, 'has the embedded ref picker script');
 
   const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
-  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'side-commit', 'data-ref-input': 'cmpBaseRef', value: 'main' });
-  const cmpHeadRef = new FakeEl({ id: 'cmpHeadRef', 'data-picker': 'ref', value: 'feature/demo' });
-  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'side-commit', 'data-ref-input': 'cmpHeadRef', value: 'feature/demo' });
+  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: 'main' });
+  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'head', value: '' });
   const comparePanel = new FakeEl({ 'data-panel': 'compare' });
-  const elements = { refPicker: picker, cmpBaseRef, cmpBase, cmpHeadRef, cmpHead };
+  const elements = { refPicker: picker, cmpBase, cmpHead };
   const fetched = [];
   const context = {
     console,
@@ -619,24 +612,6 @@ test('compare commit picker scopes commits to the selected side ref and exposes 
     },
     fetch: async (url) => {
       fetched.push(String(url));
-      if (String(url).includes('ref=main')) {
-        return {
-          json: async () => ({
-            current: 'main',
-            branches: [],
-            commits: [{ sha: 'aaa1111', subject: 'Main commit', committedAtLabel: '2026-06-30 14:34' }],
-          }),
-        };
-      }
-      if (String(url).includes('ref=feature%2Fdemo')) {
-        return {
-          json: async () => ({
-            current: 'main',
-            branches: [],
-            commits: [{ sha: 'bbb2222', subject: 'Feature commit', committedAtLabel: '2026-06-30 15:10' }],
-          }),
-        };
-      }
       return {
         json: async () => ({
           current: 'main',
@@ -652,7 +627,7 @@ test('compare commit picker scopes commits to the selected side ref and exposes 
       querySelector: () => null,
       querySelectorAll: (selector) => {
         if (selector === '[data-panel]') return [comparePanel];
-        if (selector === '[data-picker]') return [cmpBaseRef, cmpBase, cmpHeadRef, cmpHead];
+        if (selector === '[data-picker]') return [cmpBase, cmpHead];
         return [];
       },
       createElement: () => new FakeEl(),
@@ -661,26 +636,20 @@ test('compare commit picker scopes commits to the selected side ref and exposes 
   };
 
   vm.runInNewContext(pickerScript, context);
-  cmpBase.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  let values = picker.children.map((row) => row.attrs['data-value']);
-  assert.ok(fetched.includes('/api/refs?ref=main'), 'fetches commits for the left branch/ref');
-  assert.deepEqual(values.slice(0, 2), ['__REF_HEAD__', 'aaa1111']);
-  assert.equal(picker.children[0].children[0].textContent, 'main head');
-  assert.ok(!values.includes('all9999'), 'does not reuse the unscoped all-refs commit list');
-
   cmpHead.listeners.focus[0]();
   await new Promise((resolve) => setImmediate(resolve));
 
-  values = picker.children.map((row) => row.attrs['data-value']);
+  const values = picker.children.map((row) => row.attrs['data-value']);
   const labels = picker.children.map((row) => row.children[0].textContent);
-  assert.ok(fetched.includes('/api/refs?ref=feature%2Fdemo'), 'fetches commits for the right branch/ref');
+  assert.deepEqual(fetched, ['/api/refs'], 'a single unscoped fetch feeds both sides');
   assert.equal(values[0], '__WORKTREE__');
-  assert.equal(labels[0], 'HEAD + working tree');
-  assert.equal(values[1], '__REF_HEAD__');
-  assert.equal(labels[1], 'feature/demo head');
-  assert.ok(values.includes('bbb2222'), 'shows commits from the selected right branch/ref');
+  assert.equal(labels[0], 'Working tree');
+  assert.deepEqual(values.slice(1), ['main', 'feature/demo', 'all9999'], 'branches then recent commits follow the worktree row');
+
+  const worktreeRow = picker.children[0];
+  worktreeRow.listeners.click[0]({ preventDefault() {} });
+  assert.equal(cmpHead.value, 'Working tree');
+  assert.equal(cmpHead.attrs['data-worktree'], '1');
 });
 
 test('scope inputs automatically navigate so the summary refreshes', () => {
@@ -736,22 +705,12 @@ test('scope inputs automatically navigate so the summary refreshes', () => {
   assert.ok(script, 'has the embedded auto-refresh script');
 
   const commitRef = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'old' });
-  const cmpBaseRef = new FakeEl({ id: 'cmpBaseRef', 'data-picker': 'ref', value: 'main' });
-  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'side-commit', 'data-ref-input': 'cmpBaseRef', value: 'main' });
-  const cmpHeadRef = new FakeEl({ id: 'cmpHeadRef', 'data-picker': 'ref', value: 'HEAD' });
-  const cmpHead = new FakeEl({
-    id: 'cmpHead',
-    'data-picker': 'side-commit',
-    'data-ref-input': 'cmpHeadRef',
-    value: 'HEAD + working tree',
-    'data-worktree': '1',
-  });
+  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: 'main' });
+  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'head', value: 'Working tree', 'data-worktree': '1' });
   const elements = {
     refPicker: new FakeEl({ id: 'refPicker', hidden: true }),
     commitRef,
-    cmpBaseRef,
     cmpBase,
-    cmpHeadRef,
     cmpHead,
   };
   const context = {
@@ -774,7 +733,7 @@ test('scope inputs automatically navigate so the summary refreshes', () => {
       querySelector: () => null,
       querySelectorAll: (selector) => {
         if (selector === '[data-panel]') return [new FakeEl({ 'data-panel': 'commit' })];
-        if (selector === '[data-picker]') return [commitRef, cmpBaseRef, cmpBase, cmpHeadRef, cmpHead];
+        if (selector === '[data-picker]') return [commitRef, cmpBase, cmpHead];
         return [];
       },
       createElement: () => new FakeEl(),
@@ -790,49 +749,24 @@ test('scope inputs automatically navigate so the summary refreshes', () => {
 
   context.location.href = '';
   context.location.search = '?base=main';
-  cmpBaseRef.value = 'main';
   cmpBase.value = '42dbc69';
   cmpBase.dispatchEvent(new context.Event('change'));
-  assert.equal(
-    context.location.href,
-    '/repo/demo/change?base=42dbc69&baseRef=main&baseCommit=42dbc69',
-    'left commit pins preserve both the diff ref and displayed source ref',
-  );
+  assert.equal(context.location.href, '/repo/demo/change?base=42dbc69', 'base rev goes straight into the base param');
 
   context.location.href = '';
   context.location.search = '?base=main';
-  cmpBaseRef.value = 'main';
-  cmpBase.value = '';
+  cmpBase.value = 'main';
   cmpHead.value = 'feature/demo';
   cmpHead.removeAttribute('data-worktree');
   cmpHead.dispatchEvent(new context.Event('change'));
-  assert.equal(context.location.href, '/repo/demo/change?base=main&head=feature%2Fdemo&headRef=HEAD&headCommit=feature%2Fdemo');
-
-  context.location.href = '';
-  context.location.search = '?base=main&head=feature%2Fdemo';
-  cmpHeadRef.value = 'HEAD';
-  cmpHeadRef.dispatchEvent(new context.Event('change'));
-  assert.equal(cmpHead.value, 'HEAD + working tree');
-  assert.equal(context.location.href, '/repo/demo/change?base=main');
-
-  context.location.href = '';
-  context.location.search = '?base=main';
-  cmpHeadRef.value = 'feature/demo';
-  cmpHeadRef.dispatchEvent(new context.Event('change'));
-  assert.equal(cmpHead.value, '');
   assert.equal(context.location.href, '/repo/demo/change?base=main&head=feature%2Fdemo');
 
   context.location.href = '';
   context.location.search = '?base=main&head=feature%2Fdemo';
-  cmpHeadRef.value = 'feature/demo';
-  cmpHead.value = 'c4d0151';
-  cmpHead.removeAttribute('data-worktree');
+  cmpHead.value = 'Working tree';
+  cmpHead.setAttribute('data-worktree', '1');
   cmpHead.dispatchEvent(new context.Event('change'));
-  assert.equal(
-    context.location.href,
-    '/repo/demo/change?base=main&head=c4d0151&headRef=feature%2Fdemo&headCommit=c4d0151',
-    'right commit pins preserve both the diff ref and displayed source ref',
-  );
+  assert.equal(context.location.href, '/repo/demo/change?base=main', 'working tree means no head param');
 });
 
 test('renderChangePage shows a notice banner and the agent + model picker', () => {
@@ -857,6 +791,14 @@ test('change page draws from the shared --app-* tokens', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
   assert.match(html, /--app-bg:/);
   assert.match(html, /--elev:var\(--app-elev\)/);
+});
+
+test('change page routes its Thread Path through content-free bands', () => {
+  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
+  assert.match(html, /class="ds-atmosphere-thread ds-scope-thread" viewBox="0 0 900 240"/);
+  assert.match(html, /d="M-30 38H870c26 0 26 62 0 62H10c-26 0-26 126 0 126H930"/);
+  assert.match(html, /\.wrap>\.ds-thread-layer\{top:-34px;bottom:auto;height:240px;opacity:\.78\}/);
+  assert.match(html, /max-width:600px\)\{\.wrap\{[^}]+\}\.wrap>\.ds-thread-layer\{top:-51px\}/);
 });
 
 test('change page unfolds scope controls from their source and supports reduced motion', () => {

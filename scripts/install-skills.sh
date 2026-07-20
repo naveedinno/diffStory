@@ -56,4 +56,4 @@ echo "Done. Skills are live for agents that read those directories:"
 echo "  ~/.agents/skills  ->  Codex (\$diffstory-storyteller / \$address-review), Cursor, etc."
 echo "  ~/.claude/skills  ->  Claude Code (or just use the plugin)"
 echo
-echo "Open the app with:  diffstory"
+echo "Open the installed diffStory app to review changes."

@@ -38,6 +38,22 @@ export function themeControlStyles() {
 @media (prefers-reduced-motion:reduce){.ds-theme-toggle,.ds-theme-menu button{transition:none}.ds-theme-toggle:active{transform:none}}
 `;
 }
+/** Shared Thread Path atmosphere for page shells; page-local CSS only positions the layer. */
+export function threadAtmosphereStyles() {
+    return `
+body.ds-map-bg::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(var(--map-dot) 1px,transparent 1.6px);background-size:26px 26px;-webkit-mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.38) 58%,transparent 94%);mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.38) 58%,transparent 94%)}
+.ds-thread-host{position:relative;isolation:isolate}
+.ds-thread-layer{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.ds-atmosphere-thread{display:block;width:100%;height:100%}
+.ds-atmosphere-thread .thread-base{fill:none;stroke:var(--thread-dim);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ds-atmosphere-thread .thread-pulse{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.ds-atmosphere-thread .thread-nodes circle{fill:var(--text-3)}
+.ds-atmosphere-thread .thread-nodes .node-mid{fill:var(--accent-hi)}
+@media (prefers-reduced-motion:no-preference){.ds-atmosphere-thread .thread-base{stroke-dasharray:100;stroke-dashoffset:100;animation:ds-thread-draw 1.4s var(--motion-ease-out) .15s forwards}.ds-atmosphere-thread .thread-nodes{opacity:0;animation:ds-thread-nodes-in .5s var(--motion-ease-out) 1.2s forwards}.ds-atmosphere-thread .thread-pulse{stroke-dasharray:7 93;animation:ds-thread-pulse 11s linear 2s infinite backwards}@keyframes ds-thread-draw{to{stroke-dashoffset:0}}@keyframes ds-thread-nodes-in{to{opacity:1}}@keyframes ds-thread-pulse{0%{stroke-dashoffset:0;opacity:0}6%{opacity:.85}88%{opacity:.85}100%{stroke-dashoffset:-100;opacity:0}}}
+@media (prefers-reduced-motion:reduce){.ds-atmosphere-thread .thread-pulse{display:none}.ds-atmosphere-thread .thread-nodes{opacity:.62}}
+@media (max-width:480px){.ds-thread-layer[data-thread-compact="hide"]{display:none}}
+`;
+}
 /**
  * Inline this in <head> before page CSS. It applies the saved preference before
  * first paint, then wires any theme controls after the document is ready.

@@ -45,6 +45,16 @@ export interface StoryIntent {
   design?: string;
   /** Evidence the goal rests on: "commit 41af8b7", "PR #12 body", "conversation", "docs/plan.md", or "code-derived". */
   sources?: string[];
+  /** Deliberate omissions the reviewer should not flag: "does not touch settlement ordering". */
+  nonGoals?: string[];
+}
+
+/** An author-declared low-confidence spot: where the reviewer should distrust the change hardest. */
+export interface StoryHotspot {
+  /** Id of the code step whose evidence carries the doubt. */
+  step: string;
+  /** Why the author is least sure here: a guessed boundary, unexercised path, or unverified invariant. */
+  reason: string;
 }
 
 /** The changed files the reviewer intentionally asked the generated story to cover. */
@@ -134,6 +144,8 @@ export interface Tour {
   summary: string;
   /** Optional recovered intent: the goal, designed flow, and evidence sources. */
   intent?: StoryIntent;
+  /** Author-declared distrust spots (at most 3), each anchored to a code step. */
+  hotspots?: StoryHotspot[];
   /** Optional file-level generation scope for focused stories. */
   storyScope?: StoryScope;
   /** Optional git ref to diff against; overrides auto-detection. */

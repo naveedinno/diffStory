@@ -5,13 +5,14 @@ import { createHash } from 'node:crypto';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
-import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
+import { BRAND_HEAD_LINKS, brandStoryMarkSvg, brandThreadBackdropSvg } from './brand.js';
 import { themeBootstrapScript, themeControl } from './theme.js';
 import { buildReviewModel } from './view-model.js';
 import { intraLineMap } from './intra-line.js';
 import { renderSplitRow, renderUnifiedRow, renderHunkGap } from './diff-render.js';
 import { normalizeComment } from './comments.js';
 import { readWholeFile } from './git.js';
+const REVIEW_THREAD = brandThreadBackdropSvg();
 const FLAVOR_LABEL = {
     change: 'Change request',
     question: 'Question',
@@ -121,8 +122,9 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
+<body class="ds-map-bg"${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
 <header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>
+  <div class="ds-thread-layer" data-thread-compact="hide">${REVIEW_THREAD}</div>
   <div class="ds-reviewchrome-rail">
     <div class="ds-reviewchrome-nav">
       <button class="ds-sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
@@ -216,9 +218,14 @@ ${BRAND_HEAD_LINKS}
 </header>
 
 <div class="ds-live-banner" data-live-banner role="status" aria-live="polite" aria-atomic="true" aria-label="Live review status" hidden>
-  <span data-live-message>Live review updated.</span>
-  <button type="button" data-live-reload>Reload</button>
-  <button type="button" data-live-dismiss aria-label="Dismiss live review status">×</button>
+  <span class="ds-live-banner-icon" aria-hidden="true">
+    <svg viewBox="0 0 16 16" focusable="false"><path d="M12.7 5.3A5.25 5.25 0 1 0 13 9"/><path d="M12.7 2.7v2.6h-2.6"/></svg>
+  </span>
+  <span data-live-message>Diff changed.</span>
+  <button class="ds-live-banner-reload" type="button" data-live-reload>Reload</button>
+  <button class="ds-live-banner-dismiss" type="button" data-live-dismiss aria-label="Dismiss live review status">
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+  </button>
 </div>
 
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
@@ -315,6 +322,12 @@ function reviewChromeIcon(name) {
         chevron: '<path d="m8 10 4 4 4-4"/>',
     };
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">${paths[name]}</svg>`;
+}
+function playStepIcon() {
+    return '<span class="ds-playstep-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M5 3.6v8.8L12 8 5 3.6Z"/></svg></span>';
+}
+function repairStepIcon() {
+    return '<span class="ds-story-tune-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"/></svg></span>';
 }
 // The Overview sits above the numbered steps as navigation index 0 — the calm
 // entry point that answers "what is this change?" before the walkthrough begins.
@@ -424,9 +437,12 @@ function storyRail(steps) {
 // Story-view navigation. Node 0 is the Overview; nodes 1..N are the steps. Wired to
 // setActive via data-goto-step; activateStep syncs active/read/unread + the line fill.
 function filmNodeLabel(s) {
-    if (s.kind === 'concept')
-        return 'Concept';
-    return splitPath(s.file)[1];
+    const clean = s.title.replace(/\s+/g, ' ').trim();
+    if (clean.length <= 36)
+        return clean;
+    const clipped = clean.slice(0, 37);
+    const boundary = clipped.lastIndexOf(' ');
+    return `${clipped.slice(0, boundary > 22 ? boundary : 36).replace(/[,:;\s]+$/, '')}…`;
 }
 function filmstripThread(steps) {
     const nodes = [
@@ -472,6 +488,25 @@ function introPanel(model, tour, freshness, routeBase) {
         ? `<p class="ds-intro-design" data-speech-overview>${nl(esc(intent.design.trim()))}</p>`
         : '';
     const map = goalText && summaryText ? `<p class="ds-intro-design" data-speech-overview>${summaryText}</p>` : '';
+    const nonGoalItems = (intent?.nonGoals ?? []).map((g) => g.trim()).filter(Boolean);
+    // Deliberate omissions save the reviewer from flagging what the author skipped on purpose.
+    const nonGoals = nonGoalItems.length
+        ? `<div class="ds-intro-nongoals"><span class="ds-intro-block-kicker">Deliberately not touched</span><ul>${nonGoalItems
+            .map((g) => `<li>${esc(g)}</li>`)
+            .join('')}</ul></div>`
+        : '';
+    // Author-declared distrust spots: the "review this hardest" shortcut list.
+    const hotspots = model.hotspots.length
+        ? `<div class="ds-intro-hotspots" role="note" aria-label="Author-flagged review hotspots">
+        <span class="ds-intro-block-kicker">Where I'd distrust this first</span>
+        <ul>${model.hotspots
+            .map((spot) => `<li><button type="button" data-goto-step="${spot.panelIndex}">
+              <span class="ds-hotspot-step">Step ${spot.order} · ${esc(spot.title)}</span>
+              <span class="ds-hotspot-reason">${esc(spot.reason)}</span>
+            </button></li>`)
+            .join('')}</ul>
+      </div>`
+        : '';
     const filesLabel = `${plural(model.filesChanged, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
     const trustFact = freshness !== 'current'
         ? `<div class="ds-fact ds-fact-warn"><span class="ds-fact-n">▲</span><span class="ds-fact-l">${freshness === 'stale' ? 'story is out of date' : 'story freshness unverified'}</span></div>`
@@ -494,7 +529,8 @@ function introPanel(model, tour, freshness, routeBase) {
       <p class="ds-intro-lede" data-speech-overview>${lede}</p>
       ${freshnessNote}
       ${start}
-      ${design || map ? `<div class="ds-intro-context">${design}${map}</div>` : ''}
+      ${hotspots}
+      ${design || map || nonGoals ? `<div class="ds-intro-context">${design}${map}${nonGoals}</div>` : ''}
       <div class="ds-intro-facts">
         <div class="ds-fact"><span class="ds-fact-n">${model.codeSteps}</span><span class="ds-fact-l">${plural(model.codeSteps, 'code step')}${model.conceptSteps ? ` · ${model.conceptSteps} ${plural(model.conceptSteps, 'primer')}` : ''}</span></div>
         <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
@@ -818,7 +854,7 @@ function codeStepPanel(s, i, total, comments) {
     const flow = /^(Calls|Returns)/.test(s.flow)
         ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
         : '';
-    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-story-lens="focus"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
+    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
     <div class="ds-step-top">
       <div class="ds-stage-num" aria-hidden="true">${String(s.order).padStart(2, '0')}</div>
       <div class="ds-step-meta">
@@ -843,15 +879,13 @@ function codeStepPanel(s, i, total, comments) {
       <span class="ds-reviewfocus">${esc(reviewFocus(s))}</span>
       ${storyRepairMenu(s, true)}
     </div>
+    ${s.hotspot
+        ? `<div class="ds-hotspot-flag" role="note"><span class="ds-hotspot-flag-kicker" aria-hidden="true">▲ Distrust</span><span class="ds-sr-only">Author-flagged hotspot: </span><span class="ds-hotspot-flag-reason">${esc(s.hotspot)}</span></div>`
+        : ''}
     <div class="ds-diffscroll">
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
         <div class="ds-difftoolbar">
-          <span class="ds-difthint" data-difthint>Active beat at full strength</span>
           <span class="ds-flex"></span>
-          <div class="ds-storylens" role="group" aria-label="Story attention level">
-            <button class="is-active" data-story-lens="focus" aria-pressed="true">Focus</button>
-            <button data-story-lens="full" aria-pressed="false">Full</button>
-          </div>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           ${changeJumpControls()}
           <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
@@ -871,7 +905,7 @@ function codeStepPanel(s, i, total, comments) {
 function storyRepairMenu(step, iconOnly = false) {
     const healthTitle = step.health.broad ? ` Broad step: ${step.health.reasons.join(' · ')}.` : '';
     return `<details class="ds-story-tune${iconOnly ? ' is-icon' : ''}${step.health.broad ? ' has-health' : ''}">
-    <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}"><span aria-hidden="true">${iconOnly ? '•••' : 'Repair step'}</span></summary>
+    <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}">${iconOnly ? repairStepIcon() : '<span>Repair step</span>'}</summary>
     <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the question and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each review question its own local camera.</small></button></div>
   </details>`;
 }
@@ -917,7 +951,7 @@ function conceptStepPanel(s, i, total, stepIndexById) {
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
         <div class="ds-concept-heading">
           <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
-          <button class="ds-playstep" data-playstep title="Read this primer aloud" aria-label="Read this primer aloud">▸</button>
+          <button class="ds-playstep" data-playstep title="Read this primer aloud" aria-label="Read this primer aloud">${playStepIcon()}</button>
         </div>
         <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${esc(s.title)}</h1>
         <div class="ds-concept-body ds-md">${renderMarkdown(s.body)}</div>
@@ -945,16 +979,15 @@ function stepStoryHtml(s, diffRegionId) {
         return `<div class="ds-beatdock is-single">
     <span class="ds-beatdock-count">Review note</span>
     <p class="ds-why-text">${nl(esc(s.why))}</p>
-    <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button>
+    <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">${playStepIcon()}</button>
   </div>`;
     return `<div class="ds-beatdock" data-beat-dock>
     <span class="ds-beatdock-count"><b data-beat-current>01</b><span>/ ${String(s.beats.length).padStart(2, '0')}</span></span>
     <div class="ds-beatdock-copy">
       <div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div>
-      <span class="ds-beatdock-hint">← → move beats</span>
     </div>
     <span class="ds-beatdock-actions">
-      <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">▸</button>
+      <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">${playStepIcon()}</button>
       <button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button>
       <button type="button" data-beat-move="1" aria-label="Next review beat">→</button>
     </span>

@@ -4,8 +4,8 @@
 // file dialog, so the "Choose a folder" control drives a server-backed directory
 // browser (GET /api/fs) instead. Self-contained; every server value is escaped.
 import { APP_BRAND } from './config.js';
-import { BRAND_HEAD_LINKS, brandMarkSvg } from './brand.js';
-import { sharedTokens, themeBootstrapScript, themeControl, themeControlStyles } from './theme.js';
+import { BRAND_HEAD_LINKS, brandMarkSvg, brandThreadBackdropSvg } from './brand.js';
+import { sharedTokens, themeBootstrapScript, themeControl, themeControlStyles, threadAtmosphereStyles } from './theme.js';
 function esc(s) {
     return s
         .replace(/&/g, '&amp;')
@@ -40,6 +40,8 @@ const ICON_PLUS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" s
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>';
 const ICON_SEARCH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>';
 const ICON_MARK = brandMarkSvg('appmark', 34, 34);
+const COLO_MARK = brandMarkSvg('colomark', 15, 15, 'mono');
+const HERO_THREAD = brandThreadBackdropSvg('hero-thread ds-atmosphere-thread');
 function statusPill(r) {
     // Tour status is an internal concept and confused users — don't surface it here.
     // Only flag a recent whose folder is gone / no longer a git repo.
@@ -47,7 +49,7 @@ function statusPill(r) {
         return `<span class="pill pill-missing">Missing</span>`;
     return '';
 }
-function recentCard(r, home, now) {
+function recentCard(r, home, now, index) {
     const meta = [];
     if (r.isGit && r.currentBranch)
         meta.push(`<span class="meta">${ICON_BRANCH}${esc(r.currentBranch)}</span>`);
@@ -56,6 +58,7 @@ function recentCard(r, home, now) {
     meta.push(`<span class="meta">${esc(relativeTime(r.lastOpened, now))}</span>`);
     return (`<div class="repo-row${r.isGit ? '' : ' repo-row-missing'}">` +
         `<button class="repo-card" data-open="${esc(r.path)}" type="button">` +
+        `<span class="lg-num" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>` +
         `<span class="tile">${ICON_FOLDER}</span>` +
         `<span class="card-body">` +
         `<span class="card-top"><span class="name">${esc(r.name)}</span>${statusPill(r)}</span>` +
@@ -71,9 +74,9 @@ export function renderPicker(recents, home, now) {
     const available = recents.filter((r) => r.isGit);
     const missing = recents.filter((r) => !r.isGit);
     const list = recents.length
-        ? available.map((r) => recentCard(r, home, now)).join('') +
+        ? available.map((r, i) => recentCard(r, home, now, i)).join('') +
             (missing.length
-                ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r) => recentCard(r, home, now)).join('')}</div></details>`
+                ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r, i) => recentCard(r, home, now, available.length + i)).join('')}</div></details>`
                 : '')
         : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Point diffStory at any local Git repository — it reads the working tree directly, nothing is uploaded.</p></div>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -85,6 +88,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — pick a repo</title>
 <style>
 ${sharedTokens()}
+${threadAtmosphereStyles()}
 /* Signal 3b: alias picker names onto the canonical tokens (theme.ts); --bg and --scrim are canonical (inherited). Aliases flip via the canonical light block. */
 :root{
   --bg-rail:var(--surface-2); --bg-elev:var(--surface); --label:var(--text); --label2:var(--text-2); --label3:var(--text-3);
@@ -101,8 +105,14 @@ body{
   font-family:var(--font-sans);
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; letter-spacing:0;
 }
-.wrap{width:min(820px,100%); margin:0 auto; padding:36px 24px 64px}
-.hero{display:flex;align-items:center;padding-bottom:20px;margin-bottom:24px;border-bottom:1px solid var(--sep)}
+.wrap{width:min(820px,100%); margin:0 auto; padding:36px 24px 28px; min-height:100vh; display:flex; flex-direction:column}
+.hero{position:relative;display:flex;align-items:center;min-height:168px;padding:24px 0 26px;margin-bottom:24px;border-bottom:1px solid var(--sep);overflow:hidden}
+.hero>*{position:relative;z-index:1}
+/* Solid plates under the hero text so the thread reads as passing behind the
+   labels instead of striking through them. */
+.hero .head{background:var(--bg);border-radius:var(--radius-lg);padding:10px 16px 10px 14px;margin-left:-14px}
+.hero>.ds-theme-wrap{background:var(--bg);border-radius:var(--radius);box-shadow:0 0 0 6px var(--bg)}
+.hero-thread{position:absolute;inset:0;z-index:0;width:100%;height:100%;pointer-events:none}
 .hero>.ds-theme-wrap{margin-left:auto}
 .head{display:flex; align-items:center; gap:14px; flex:none}
 /* Signal 3b: the old blue rounded-square app icon is retired — show the Thread-Path mark directly. */
@@ -127,6 +137,8 @@ h2{font-family:var(--font-display);font-size:26px;line-height:1.1;font-weight:70
 .missing-group{margin-top:12px;border-top:1px solid var(--sep);padding-top:8px}.missing-group>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:8px 3px;color:var(--label3);font-size:12px;font-weight:600;cursor:pointer}.missing-group>summary::-webkit-details-marker{display:none}.missing-group[open]>summary span{transform:rotate(180deg)}.missing-list{display:grid;gap:8px;padding-top:2px}
 .repo-card,.fsrow{font:inherit; color:inherit; cursor:pointer}
 .repo-row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;align-items:stretch}
+.lg-num{flex:none;width:20px;font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:-.01em;color:var(--numeral);text-align:right}
+.repo-row-missing .lg-num{color:var(--numeral-dim)}
 .repo-card{width:100%; display:flex; align-items:center; gap:13px; text-align:left;
   background:var(--surface-2); border:1px solid var(--line-soft); border-radius:var(--radius-island); padding:14px 16px;
   transition:transform var(--motion-duration-fast) ease, background var(--motion-duration-fast) ease, border-color var(--motion-duration-fast) ease;}
@@ -213,6 +225,12 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
 .fsrow .repo{font-size:11px; font-weight:600; padding:1px 7px; border-radius:var(--radius-sm); background:var(--green-bg); color:var(--green-fg)}
 .fsrow .go{color:var(--label3); opacity:.5; display:flex; flex:none}
 .fsempty{padding:26px; text-align:center; color:var(--label3); font-size:13px}
+.colophon{margin-top:auto;padding-top:16px;border-top:1px solid var(--sep);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--label3)}
+.manager{margin-bottom:56px}
+.colo-brand{display:inline-flex;align-items:center;gap:7px;color:var(--label2);flex:none}
+.colo-brand .colomark{display:block;opacity:.7}
+.colo-note{text-align:right;min-width:0}
 .sheet-foot{display:flex; align-items:center; gap:10px; padding:13px 16px; border-top:1px solid var(--sep)}
 .foot-path{flex:1; min-width:0; font-family:var(--font-mono); font-size:11.5px; color:var(--label3);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -224,22 +242,27 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
 @media (prefers-reduced-motion:reduce){.scrim,.sheet{transition:none}.scrim.show .sheet{transform:none;opacity:1}.btn:active{transform:none}}
 @media (prefers-contrast:more){.repo-card,.remove-btn,.ghost,input[type=search],.sheet,.launchwarn{border-color:var(--label)}}
 @media (max-width:760px){
-  .wrap{padding:24px 16px 54px}
-  .hero{padding-bottom:18px;margin-bottom:20px}
+  .wrap{padding:24px 16px 24px}
+  .hero{min-height:128px;padding:14px 0 18px;margin-bottom:20px}
+  .manager{margin-bottom:40px}
   .add-btn span{display:none}
 }
 @media (max-width:480px){
-  .hero{align-items:center}.hero>.ds-theme-wrap{margin-left:auto}
+  .hero{align-items:center;min-height:0;padding:6px 0 16px}.hero>.ds-theme-wrap{margin-left:auto}
+  .hero-thread{display:none}
   .appmark{width:28px;height:28px}
   .section-head{align-items:center}h2{font-size:21px}
+  .colophon{justify-content:center;text-align:center}.colo-note{text-align:center}
   .repo-row{position:relative;display:block}.repo-card{padding-right:54px}
+  .lg-num{display:none}
   .remove-btn{position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:2}
   .remove-btn::after{content:"";position:absolute;inset:-5px}
 }
 </style></head>
-<body>
+<body class="ds-map-bg">
 <main class="wrap" id="pickerMain">
   <section class="hero reveal d1">
+    ${HERO_THREAD}
     <div class="head">
       <span class="appicon" aria-hidden="true">${ICON_MARK}</span>
       <span class="brandlock">
@@ -259,6 +282,11 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
     <div class="stack" id="recent">${list}</div>
     <p class="sr-only" id="msg" role="status"></p>
   </section>
+
+  <footer class="colophon reveal d3">
+    <span class="colo-brand">${COLO_MARK}<span>diffStory</span></span>
+    <span class="colo-note">Reads your working tree locally — nothing leaves this machine</span>
+  </footer>
 </main>
 
 <div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Choose a repository folder" tabindex="-1" hidden>

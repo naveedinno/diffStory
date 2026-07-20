@@ -170,8 +170,8 @@ fn spawn_server() -> std::io::Result<Child> {
     let node = node_path().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "Node.js is not installed")
     })?;
-    let cli = PathBuf::from(PROJECT_PATH).join("dist/cli.js");
-    if !cli.is_file() {
+    let server_entry = PathBuf::from(PROJECT_PATH).join("dist/app-server.js");
+    if !server_entry.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "diffStory has not been built",
@@ -191,7 +191,7 @@ fn spawn_server() -> std::io::Result<Child> {
     );
 
     Command::new(node)
-        .arg(cli)
+        .arg(server_entry)
         .args(["--no-open", "--port", "7787"])
         .current_dir(PROJECT_PATH)
         .env("PATH", path)

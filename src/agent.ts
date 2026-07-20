@@ -100,163 +100,19 @@ export function storyPrompt(
       `- These files are generated or oversized artifacts (regenerated ABIs, lockfiles, built bundles) and are intentionally excluded from this review: ${excludePaths.join(', ')}.\n` +
       `- Do not read, narrate, or write steps for them. The coverage gate already excludes them, so it will not ask you to cover them — adding them back only bloats the story.\n\n`
     : '';
-  const whyLength =
-    storyMode === 'brief'
-      ? 'one short sentence'
-      : storyMode === 'detailed'
-        ? '3-7 short sentences'
-        : '1-3 short sentences';
-  const conceptLimit = storyMode === 'brief' ? 1 : storyMode === 'detailed' ? 3 : 2;
-  const modeContract =
-    storyMode === 'brief'
-      ? `Detail level contract:\n` +
-        `- Brief mode: write the shortest useful story for a reviewer who wants the quick shape before reading the diff directly.\n` +
-        `- Use one compact stop per meaningful change cluster. Do not create line-by-line stops unless a single line is the whole risk.\n` +
-        `- Each code-step "why" should be exactly one short sentence in first person: what changed, why it matters, and where to glance.\n` +
-        `- Rebuild context inside the changed step's viewport when possible; spend a separate context step only when the entry point or contract lives elsewhere.\n` +
-        `- Keep titles concrete and skim-friendly. Skip low-risk mechanical explanation while still covering every changed hunk.\n\n`
-      : storyMode === 'detailed'
-      ? `Detail level contract:\n` +
-        `- Line-by-line mode: write a longer correctness story for a reviewer who wants to verify the code is exactly right.\n` +
-        `- Prefer more, smaller stops when a function contains separate decisions; split separate branches, guards, state writes, external calls, and error paths instead of hiding them in one broad paragraph.\n` +
-        `- Explain important ranges almost line-by-line: name the method, then describe what the first guard checks, what the next assignment or call prepares, what each branch accepts or rejects, and what state, return value, event, render, or side effect follows.\n` +
-        `- Cover all meaningful code paths: happy path, validation guards, failure cases, fallback behavior, persistence, cleanup, tests, and generated artifacts when they matter.\n` +
-        `- Trace the relevant inbound trigger and outbound consumer or side effect, including unchanged boundary code when it controls correctness.\n` +
-        `- Use exact function, variable, parameter, event, and field names, but do not paste code blocks or duplicate the diff.\n` +
-        `- Line-by-line does not mean noisy: skip trivial syntax, imports, and mechanical plumbing unless they change correctness.\n\n`
-      : `Detail level contract:\n` +
-        `- Balanced mode: write the current concise review story, optimized for a human who will read the code after you orient them.\n` +
-        `- Use only the few context bridges needed to restore the task-local app flow; do not tour unrelated architecture.\n` +
-        `- Keep steps grouped by review question and code flow; avoid line-by-line narration unless the line is a correctness hinge.\n\n`;
   return (
     `Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
     `Write ${DATA_DIR}/story.json, set its "version" field to 2, set its "base" field to "${baseRef}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
-    modeContract +
-    `- Concept-primer budgets are hard maxima: brief 1, guided 2, detailed 3. For this ${storyMode} story, use at most ${conceptLimit} concept ${conceptLimit === 1 ? 'primer' : 'primers'}; use zero when there is no real concept gap.\n\n` +
     storyScopeContract +
     scopeContract +
-    `Assume the reviewer remembers the requested outcome but not the app internals: module ownership, the existing call path, state flow, or why nearby unchanged code matters. Rebuild the smallest useful mental model before asking them to judge the changed lines.\n\n` +
-    `Work in four phases, in order. Phases 1 through 3 produce short visible notes in your output before any JSON; only phase 4 writes the file.\n\n` +
+    `The skill owns the craft. Follow its workflow in order — recover the why, reconstruct the app path, storyboard the camera, then write the steps — and honor every contract it defines: ` +
+    `coverage, ranges, viewport/highlight camera limits, beats, concept-primer budgets, questions, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
+    `The app validates the finished story against those contracts and flags violations, so do not improvise a different format or looser limits.\n\n` +
     `Live progress notes (streamed to the reviewer while you work):\n` +
     `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Reconstructing the app path", then ">> Storyboarding the camera", then ">> Writing the steps".\n` +
     `- Print every phase note as its own line starting with ">> " — for example ">> Goal: enable keepers to cap the fee" or ">> Arc: the cap is stored, then enforced, then tested".\n` +
     `- Keep each note to one short, concrete sentence. These lines are shown live in the review UI, so no filler and no markdown.\n\n` +
-    `Phase 1 — Recover the why (do this before reading the diff):\n` +
-    `- Gather intent evidence: read the commit messages behind this diff (for example git log --oneline -15 over the diffed range or ref), the PR title and body when one exists (gh pr view --json title,body — skip quietly if there is no PR or no gh), and any plan, design, or changelog notes the change touches or references.\n` +
-    `- Legitimate intent evidence: commit messages, PR bodies, docs, code comments, tests. Not evidence: branch names, filenames, vibes.\n` +
-    `- State the goal as actor + capability: "We wanted to enable <actor> to <capability>". If the change is not user-facing, name the real actor from the code, like reviewer, operator, keeper, service, or system. Then state the designed flow that achieves it: "To make that work, the existing app path reaches X, this change attaches at Y, and Z now returns/stores/renders P".\n` +
-    `- Write both into the story as "intent": {"goal": "...", "design": "...", "sources": ["commit abc1234", "PR #12 body", "docs/plan.md"]}. Every entry in "sources" names evidence you actually read.\n` +
-    `- If no evidence exists, set "goal" to what the code demonstrably enables, use "sources": ["code-derived"], and keep the wording narrow. Never invent product intent.\n` +
-    `- If the evidence contradicts what the code does, say so in the summary instead of silently picking one.\n\n` +
-    `Phase 2 — Reconstruct the app path (do this before storyboarding):\n` +
-    `- Read the exact diff, then read the complete post-change function, component, contract, schema, or test around every hunk. The diff says what moved; the surrounding source says where it lives.\n` +
-    `- Trace the smallest useful path one hop in both directions: find the inbound trigger, caller, route, event, or UI action; then find the outbound consumer, state write, render, return, external boundary, or assertion. Use symbol search and actual call sites, not filenames or guesses.\n` +
-    `- Inspect the base-side code when the reviewer needs to understand the previous behavior or a deletion. Read only relevant module docs, types, config, and tests; do not turn this into a repo tour.\n` +
-    `- Build a private context map: entry -> existing owner -> changed decision -> downstream effect -> proof or risk. For each link, record the exact source span and whether it belongs in the same viewport or needs a dedicated "context" step.\n` +
-    `- Make "intent.design" name the existing app path, the attachment point for this diff, and the new outcome. If reviewer guidance contains the original task, treat it as intent evidence, cite "reviewer guidance", and call out any mismatch with the code.\n\n` +
-    `Phase 3 — Storyboard the camera (do this before writing any JSON):\n` +
-    `- Write the narrative arc as a visible note: intent -> flow -> implementation, not a list of touched files. Shape: "To enable <goal> we designed <flow>. To implement that flow, I first changed Y in Z, then wired U into P, then pinned it with tests/docs".\n` +
-    `- Turn the context map into a reviewer-visible path: app orientation -> behavioral entry -> changed decision -> downstream consequence -> proof. The first code stop is the behavioral entry point, even when that requires a context step; a just-in-time concept primer may precede it only when the entry code already depends on that model. Do not start with imports, icons, styling, generated output, or tests unless one of those is itself the feature.\n` +
-    `- Concept-gap test: before each planned code stop, ask whether a reviewer can explain the terminology, roles, relationships, or state model needed to understand the next lines. If not, and no single code viewport teaches it cleanly, add one concept primer; otherwise use the code step or a context step and do not force a primer.\n` +
-    `- Overview is the whole-change reading map: goal, designed flow, and where the review goes. A primer is a just-in-time mental model for unfamiliar concepts needed at one specific point; it must not repeat the Overview or summarize the diff.\n` +
-    `- Place each concept primer immediately before the first code step that depends on it. Its "preparesFor" must include that immediately following code step and may include other later dependent code-step ids. Never place concept primers next to each other or at the end of the story.\n` +
-    `- Use viewport and highlights as a guided camera for code steps. One code step is one local shot that fits without manual scrolling. One beat is one exact pointing gesture whose highlighted lines visibly prove its sentence.\n` +
-    `- For a changed step, prefer three quick camera beats when the code supports them: an orientation beat on the existing signature/caller/route/contract, a change beat on the exact new decision, and a consequence beat on the return/state write/call/assertion affected next. Context beats may and should highlight unchanged lines.\n` +
-    `- Add a dedicated context step when the caller, owner contract, stored field, feature flag, or downstream consumer is outside the changed hunk and the reviewer cannot judge the change without it. Say explicitly that it is unchanged; never add context as scenery.\n` +
-    `- Order the stops by runtime, control, and data flow — never by filename. Small changes may need one context-rich changed step; do not force a fixed number of stops.\n` +
-    `- Order test: if sorting your planned steps by filename would not change how the story reads, it is not a story yet — reorder, or state in one line why file order genuinely is the clearest path.\n` +
-    `- Thread rule: each code step's first beat must pick up what the previous stop established ("Now that the cap is stored, here is who reads it"); after a primer, apply its mental model directly to the code. The steps must read as one continuous story.\n` +
-    `- Group related edits into one stop; do not emit one step per file or one step per hunk. Put tests, snapshots, and docs after the behavior they verify or explain. Only narrate generated files when they are not excluded and the behavior depends on reviewing them.\n` +
-    `- Each code step must include a short "question" the reviewer can actually answer from its highlighted evidence: where does the behavior start; what invariant changed; what is passed, rejected, stored, or rendered; what risk should the reviewer inspect; what proves this path works. Code-step titles should read like falsifiable review claims or risks, not file captions.\n` +
-    `- When the story has more than 10 steps, add a concise "chapter" label to every step. Reuse the same label across 3-7 consecutive steps so the rail becomes a handful of meaningful sections, not one flat list.\n\n` +
-    `Phase 4 — Write the steps. Mechanics checklist:\n\n` +
-    `Concept primer contract:\n` +
-    `- Exact shape: {"id":"concept-cap-model","order":2,"title":"How the cap travels","kind":"concept","body":"...","preparesFor":["code-step-id"],"diagram":{"type":"mermaid","source":"flowchart LR\\n...","caption":"..."},"tags":["mental-model"]}. "diagram" and "tags" are optional; every other shown field is required.\n` +
-    `- A concept step must not contain "file", "range", "viewport", "highlights", "beats", "why", "question", "calls", or "returnsTo". It also must not contain the legacy "focus" field. Use "preparesFor" for its one-way link to later code steps.\n` +
-    `- Write "body" as a compact 60-180 words of restricted Markdown: short paragraphs, small lists, emphasis, and inline code. The hard maximum is 220 words. Do not paste implementation code, add Markdown links/images, or turn it into a mini design doc.\n` +
-    `- Concept primers never claim diff coverage. They have no file or line location and do not replace changed/new-file coverage steps.\n` +
-    `- Add the optional Mermaid diagram only when it materially clarifies three or more actors/components, a real branch, or a state transition. Skip it for a simple chain the body already explains.\n` +
-    `- Mermaid source must start with flowchart, sequenceDiagram, or stateDiagram-v2, and its caption is required. Keep it local and declarative: no links, URLs, click/href directives, init/config directives, HTML, images, or custom styling directives.\n\n` +
-    `Viewport contract:\n` +
-    `- Every code step must include "viewport": [startLine, endLine]. This is what the reviewer sees, chosen from the requirement and the code shape, not from the tiny diff hunk.\n` +
-    `- Every code step must include "highlights": [[startLine, endLine], ...]. These are the lines the story is currently talking about and the rows diffStory should glow while reading.\n` +
-    `- Pick the viewport first: usually the whole local method, storage struct, schema block, config stanza, test case, or small file section someone needs after reading the requirement. It must answer "where am I?" before the glow asks for judgment.\n` +
-    `- Target 20-30 visible lines for a normal viewport. Guided and brief steps should stay within 40 lines; 60 lines is an exceptional hard maximum reserved for detailed review. Split a larger function into overlapping local shots instead of asking the reviewer to hunt inside it. The [0, 0] deletion sentinel is the exception.\n` +
-    `- Pick highlights second: the existing signature/caller/route that orients the reviewer, the exact changed decision, and the nearby call/state write/assertion/return that shows its consequence. Unchanged lines are valid highlights when they restore context.\n` +
-    `- Each beat highlight should point at one fact, normally 1-8 lines and never more than 12. A broad glowing region is not a pointer; split it.\n` +
-    `- Keep "highlights" inside "viewport". It is fine for the viewport to be much wider than the changed lines when that helps the reviewer understand the flow.\n` +
-    `- Keep "range" and every beat highlight inside "viewport". For new stories, top-level "highlights" must match the union of the beat highlights so there is one camera plan, not two conflicting ones.\n` +
-    `- Do not make one step jump between far-apart highlight islands. If the story needs distant lines, split it into separate steps so each viewport/highlights pair stays local and scroll-stable.\n` +
-    `- Keep "range" as the changed-line coverage anchor the coverage gate checks. "range" proves the changed hunk is covered; "viewport" controls what the diff viewer shows.\n\n` +
-    `Beat contract:\n` +
-    `- Every new code step must include "beats": [{"text": "short narration", "highlights": [[startLine, endLine]]}, ...]. Concept primers use "body" instead.\n` +
-    `- Each beat is a separate speech unit for read-aloud, so the code highlight can move exactly when the voice moves.\n` +
-    `- Use one beat per highlighted code part. Guided and brief steps should have at most three beats; detailed steps may have up to five. If there are more review points, split the step instead of hiding them in one long "why".\n` +
-    `- The first beat must locate the reviewer in the existing flow unless the preceding context step already did; then point at the changed decision and its consequence in later beats.\n` +
-    `- A beat may point at one small range or a few nearby related ranges, but it must stay inside the step "viewport".\n` +
-    `- Do not put one big speech over several highlight groups; split it into beat-by-beat narration.\n` +
-    `- Keep "why" as a compact fallback recap for older readers, but put the read-aloud story in "beats".\n\n` +
-    `Context contract:\n` +
-    `- Context belongs in the visible story, not only in your private notes. First try to frame the existing boundary and changed code together in one viewport.\n` +
-    `- Use kind "context" for important unchanged code in another file or distant section: a caller, public route, component owner, schema/storage contract, feature flag, or downstream consumer. Context steps do not claim diff coverage.\n` +
-    `- Brief mode normally avoids dedicated context steps; balanced mode uses only the few bridges needed to restore the flow; detailed mode may follow additional correctness boundaries.\n` +
-    `- Never use context for imports, nearby trivia, or architecture that does not change how the reviewer evaluates this task.\n\n` +
-    `Writing contract:\n` +
-    `- The top-level "summary" is the reading map: 1-3 short informal sentences on how the steps walk the implementation and where the reviewer should slow down. The goal and designed flow live in "intent"; do not repeat them in the summary.\n` +
-    `- Code-step titles should name the exact behavior or risk being reviewed; primer titles should name the mental model they teach.\n` +
-    `- Each code-step "why" is the compact fallback recap for that stop; keep it to ${whyLength} in first person.\n` +
-    `- Each beat is the synchronized story note: explain the local code part, why it matters, and what the next caller/helper/path can now do while its highlights glow.\n` +
-    `- Prefer causal chains like "I added this parameter to method X so method Y can pass Z, which lets H handle...".\n` +
-    `- Include what to verify only inside that story, not as a detached checklist.\n` +
-    `- Avoid filler like "adds", "updates", "this file", or restating the diff.\n` +
-    `- Prefer specific protocol/product language from the code over generic narrative.\n\n` +
-    `Voice contract:\n` +
-    `- Make the story lively, specific, and a little fun, like a sharp teammate guiding review.\n` +
-    `- Keep it informal and to the point. No long paragraphs, no essay mode, no drama.\n` +
-    `- Use active verbs, concrete nouns, and quick stakes: what could break, what now holds, what got simpler.\n` +
-    `- No corporate changelog voice, no sleepy "This updates..." phrasing, and no bland summary captions.\n` +
-    `- Keep the fun in the wording, not in fake confidence: correctness beats jokes every time.\n\n` +
-    `Coverage contract:\n` +
-    `- Coverage is necessary, but not sufficient.\n` +
-    `- Before writing ${DATA_DIR}/story.json, build a private coverage ledger: file, changed hunk range, semantic ` +
-    `purpose, and planned step id.\n` +
-    `- Cover every changed hunk with a changed/new-file step.\n` +
-    `- Never use "deleted" as a step kind. For deleted files, use kind "changed" and anchor the range at the post-change deletion location the coverage gate reports.\n` +
-    `- For a whole deleted file, use range, viewport, and highlights of [0, 0]. Do not invent line 1 for a file that no longer exists.\n` +
-    `- Use context steps only for unchanged code that makes the review easier.\n` +
-    `- Concept primers never count toward coverage and never carry a file, range, viewport, or highlights.\n` +
-    `- Cover every changed hunk so the coverage gate is clean — the review flags any change no step explains.\n\n` +
-    `Range contract:\n` +
-    `- Read the post-change file with line numbers before choosing ranges.\n` +
-    `- "range" is only the changed-line coverage anchor; "viewport" is the review window. Keep the range inside its viewport and split distant hunks into separate steps.\n` +
-    `- Do not use whole-file or giant ranges unless the whole file is new and small, or the entire file is truly ` +
-    `the review unit.\n` +
-    `- For pure deletions with surviving surrounding code, anchor the step at the post-change location where the deletion happened and include the ` +
-    `smallest surrounding code that explains the removed behavior.\n` +
-    `- For whole-file deletions with no post-change lines, use the [0, 0] deletion sentinel for "range", "viewport", and "highlights".\n\n` +
-    `Focus pointer contract:\n` +
-    `- Prefer "highlights" for new stories. "focus": {"ranges": [[startLine, endLine]], "label": "short cue"} is the legacy spelling and should only be used for compatibility.\n` +
-    `- Highlight ranges must use post-change line numbers and stay inside that step's "viewport".\n` +
-    `- In brief mode, highlight only the one exact line or tiny block the reviewer should glance at.\n` +
-    `- In balanced mode, highlight only the exact line or tiny block the reviewer should look at while listening.\n` +
-    `- In line-by-line mode, use multiple highlight ranges for guards, branches, state writes, external calls, assertions, and other line-by-line correctness pivots.\n\n` +
-    `Truth contract:\n` +
-    `- Only describe behavior you verified in the diff or current source lines you read.\n` +
-    `- The "intent" block must only claim a why its "sources" actually support.\n` +
-    `- Do not infer intent from branch names, filenames, or vibes.\n` +
-    `- Do not claim tests pass unless you ran them.\n` +
-    `- Do not claim a test covers behavior unless the assertion is visible in the story range or in code you read.\n` +
-    `- If you are uncertain, narrow the claim to what the code shows.\n\n` +
-    `Falsifiable self-review before finishing:\n` +
-    `- Memory test: read only intent, summary, concept bodies, titles, and beats. A reviewer who remembers the request but not the app must be able to explain unfamiliar terms before they reach dependent code, then answer where the behavior enters, who owns it, what changed, where the result goes, and what proves or threatens it.\n` +
-    `- Camera test: follow only the files, viewports, and highlighted groups. Every beat's glow must visibly prove that sentence without scrolling or guessing; no viewport may exceed 60 lines and no beat highlight may exceed 12.\n` +
-    `- Re-run the order test on the final steps: if filename order reads the same, reorder.\n` +
-    `- Why test: strike any code beat that only restates what the code does; every code step must say why it exists in the designed flow and what it unlocks next. Strike any primer that repeats Overview or could be replaced by one orienting code beat.\n` +
-    `- Thread test: read concept bodies and code beats in order with no code — they must form one continuous story with no unexplained term or jump.\n` +
-    `- Primer placement test: every primer sits immediately before its first dependent code step, preparesFor includes that next step, no two primers are adjacent, no primer is final, and the active mode's primer budget is respected.\n` +
-    `- Check every code title names behavior/risk, every primer title names a mental model, every code "why" stays compact, and calls/returnsTo reflect real code control/data flow. Remove vague filler and unsupported safety claims.\n` +
-    `- Coverage: every changed hunk is claimed by a changed/new-file step; every changed/new-file step has a beat overlapping its range; range and highlights stay inside viewport; context steps alone point at wholly unchanged code; concept steps claim no coverage; ids, order, calls, returnsTo, and preparesFor resolve.\n\n` +
     `Do not ask questions. Generate it directly.`
   );
 }

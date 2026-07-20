@@ -84,6 +84,8 @@ test('concept steps render as safe document primers linked to the next code step
 
   assert.ok(html.indexOf("var key='ds-theme'") < html.indexOf('<style>'), 'resolves the color theme before review CSS');
   assert.equal((html.match(/class="ds-theme-toggle"/g) || []).length, 1, 'renders one shared color-theme selector');
+  assert.match(html, /<body class="ds-map-bg"/, 'uses the shared map atmosphere');
+  assert.match(html, /class="ds-thread-layer" data-thread-compact="hide"/, 'keeps the ambient thread inside review chrome');
   assert.match(html, /data-theme-choice="light"/);
   assert.match(html, /document\.documentElement\.getAttribute\('data-theme'\)==='dark'/, 'uses the resolved theme for diagrams');
   assert.match(html, /document\.addEventListener\('ds-theme-change'/, 're-renders diagrams after a theme change');
@@ -220,6 +222,9 @@ test('story narrative lives in a nested rail tree and a compact bottom dock', ()
   assert.match(html, /\.ds-railbeats-head \.ds-story-tune\.is-icon\.has-health>summary::before\{display:none\}/);
   assert.match(html, /class="ds-beatdock"/);
   assert.match(html, /\.ds-beatdock\{[^}]*grid-template-columns:auto minmax\(0,1fr\) auto/);
+  assert.match(html, /\.ds-beatdock-note\.is-selected\{display:block;background:transparent\}/);
+  assert.match(html, /\.ds-beatdock-note:hover\{background:transparent\}/);
+  assert.doesNotMatch(html, /move beats|ds-beatdock-hint/);
   assert.match(html, /class="ds-review-question"/);
   assert.doesNotMatch(html, /<div class="ds-why">/);
   assert.doesNotMatch(html, /<div class="ds-step-health/);
@@ -255,6 +260,7 @@ test('narrated stories use one quiet review row and keep secondary controls out 
 
 test('toolbar keeps the decision signal primary and demotes agent routing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(html, /\.ds-reviewchrome\{height:56px[^}]*overflow:visible/, 'header overlays must not be clipped or focus-scroll the chrome');
   assert.match(html, /data-review-menu/);
   assert.match(html, /data-review-menu-pop/);
   assert.match(html, />Review</);
@@ -403,6 +409,12 @@ test('review interaction regressions keep hidden states, note actions, and resum
   assert.match(html, /\.ds-feedback-drawer \[hidden\]\{display:none!important\}/);
   assert.match(html, /class="ds-ghost ds-step-ghost ds-ghost-prev"/);
   assert.match(html, /\.ds-step-ghost\{position:absolute/);
+  assert.match(html, /\.ds-step-ghost\{[^}]*width:44px;height:44px/);
+  assert.match(html, /\.ds-ghost-prev::before\{content:'←'\}\.ds-ghost-next::before\{content:'→'\}/);
+  assert.match(html, /max-width:1120px/);
+  assert.match(html, /width:calc\(100% - 152px\)/);
+  assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
+  assert.match(html, /\.ds-filmthread\{[^}]*margin:0 12px 12px[^}]*padding:13px 16px 15px/);
   assert.doesNotMatch(html, /\.ds-ghost\{position:absolute/);
   assert.match(html, /gp\.removeAttribute\('aria-hidden'\);gp\.tabIndex=0;/);
   assert.match(html, /gn\.removeAttribute\('aria-hidden'\);gn\.tabIndex=0;/);
@@ -410,6 +422,20 @@ test('review interaction regressions keep hidden states, note actions, and resum
   assert.match(html, /gn\.setAttribute\('aria-label','Next step: '/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
   assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
+});
+
+test('filmstrip navigation names review steps by purpose instead of implementation file', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  const thread = html.match(/<nav class="ds-filmthread"[\s\S]*?<\/nav>/)?.[0] ?? '';
+
+  assert.match(thread, /class="ds-filmnode-label">Changed line<\/span>/);
+  assert.doesNotMatch(thread, />a\.ts<\/span>/);
+  assert.match(html, /\.ds-filmnode\{[^}]*width:112px;min-width:112px/);
+  assert.match(html, /\.ds-filmthread-line\{[^}]*top:30px/);
+  assert.match(html, /\.ds-filmnode\{[^}]*gap:12px/);
+  assert.match(html, /\.ds-filmnode-num\{[^}]*min-height:24px/);
+  assert.match(html, /\.ds-filmnode-label\{[^}]*-webkit-line-clamp:2[^}]*font-family:var\(--sans\)[^}]*font-size:10\.5px[^}]*color:var\(--text-2\)/);
+  assert.match(html, /if\(i<=1\)scroll\.scrollLeft=0/);
 });
 
 test('submitting a comment sends it to the agent immediately', () => {
@@ -858,7 +884,8 @@ test('story viewport controls visible code while highlights control narration fo
   assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
   assert.doesNotMatch(html, /data-step-camera=/);
-  assert.match(html, /Active beat at full strength/i);
+  assert.match(html, /\.ds-step\.is-code-step\.is-story-active[^}]*opacity:\.46/);
+  assert.doesNotMatch(html, /<span class="ds-difthint"[^>]*>Active beat at full strength<\/span>/i);
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -1003,6 +1030,8 @@ test('story steps default to split while compact review keeps code readable in u
   assert.match(html, /data-mode="diff" aria-pressed="false">Unified<\/button>/);
   assert.match(html, /class="is-active" data-mode="split" aria-pressed="true">Split<\/button>/);
   assert.match(html, /data-playstep title="Read this step aloud" aria-label="Read this step aloud"/);
+  assert.match(html, /class="ds-playstep-icon" aria-hidden="true"><svg viewBox="0 0 16 16"/);
+  assert.doesNotMatch(html, /data-playstep[^>]*>▸<\/button>/);
   assert.match(html, /<div data-diff-inner hidden>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
   assert.match(html, /<div data-split-inner data-loaded="1">[\s\S]*class="ds-diffbody"/);
   assert.match(html, /function applyResponsiveStoryMode\(panel\)/);
@@ -1530,6 +1559,8 @@ test('all-files view exposes reviewed and unreviewed controls bound to file hash
   assert.match(html, /data-viewed-progress/);
   assert.match(html, /data-viewed-toggle aria-pressed="false"/);
   assert.match(html, /data-viewed-label>Mark reviewed</);
+  assert.match(html, /\.ds-filepanel-head>\.ds-viewed-toggle\{order:8;width:auto;padding:0 10px\}/);
+  assert.match(html, /\.ds-filepanel-head>\.ds-viewed-toggle \.ds-viewed-toggle-label\{display:inline\}/);
   assert.match(html, /data-review-hash="[a-f0-9]{64}"/);
   assert.match(html, /class="ds-fileitem-viewed" aria-hidden="true">✓</);
   assert.match(html, /data-file-filter="all" aria-pressed="true">All<\/button>/);
@@ -1637,13 +1668,14 @@ test('story repair is a named control with rewrite shorten and split outcomes', 
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /<summary aria-label="Repair this story step"/);
   assert.match(html, /class="ds-story-tune is-icon/);
-  assert.match(html, /<span aria-hidden="true">•••<\/span>/);
+  assert.match(html, /class="ds-story-tune-icon" aria-hidden="true"><svg[^>]*viewBox="0 0 24 24"/);
+  assert.doesNotMatch(html, /<span aria-hidden="true">•••<\/span>/);
   assert.match(html, /data-story-repair="rewrite"/);
   assert.match(html, /<strong>Make shorter<\/strong><small>Condense this explanation without dropping its risk\.<\/small>/);
   assert.match(html, /<strong>Split into smaller stops<\/strong><small>Give each review question its own local camera\.<\/small>/);
 });
 
-test('story steps expose defensive attention levels and explicit beat navigation', () => {
+test('story steps stay in focus mode and expose explicit beat navigation', () => {
   const beatTour = {
     ...tour,
     steps: [{
@@ -1657,22 +1689,17 @@ test('story steps expose defensive attention levels and explicit beat navigation
     }],
   };
   const html = renderPage({ repo: process.cwd(), tour: beatTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-story-lens="focus"/);
-  assert.match(html, /aria-label="Story attention level"/);
-  assert.doesNotMatch(html, /data-story-lens="context"/);
-  assert.match(html, /data-story-lens="full"/);
+  assert.doesNotMatch(html, /data-story-lens|ds-storylens|Story attention level/);
+  assert.doesNotMatch(html, />Focus<\/button>|>Full<\/button>/);
   assert.doesNotMatch(html, /nearby context/i);
   assert.match(html, /data-beat-current>01/);
   assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
-  assert.match(html, /Active beat at full strength/);
-  assert.match(html, /if\(lens!==\'focus\'&&lens!==\'full\'\)lens=\'focus\'/);
-  assert.match(html, /data-story-lens="focus"[^}]*\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
+  assert.doesNotMatch(html, /Active beat at full strength|<span class="ds-difthint"/);
+  assert.match(html, /\.ds-step\.is-code-step\.is-story-active[^}]*\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /outside this beat/);
   assert.doesNotMatch(html, /data-step-camera|is-story-camera|cameraGroups/);
-  assert.match(html, /function setStoryLens\(panel,lens,persist\)/);
-  assert.match(html, /closest\(t,'button\[data-story-lens\]'\)/);
-  assert.doesNotMatch(html, /closest\(t,'\[data-story-lens\]'\)/);
+  assert.doesNotMatch(html, /setStoryLens|restoreStoryLens|ds-story-lens/);
 });
 
 test('broad steps surface concrete health reasons and direct repairs', () => {
@@ -1806,7 +1833,39 @@ test('live review banner is stable, polite, dismissible, and does not move docum
     repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], reviewPageToken: 'lease-token',
   });
   assert.match(html, /class="ds-live-banner" data-live-banner role="status" aria-live="polite" aria-atomic="true" aria-label="Live review status" hidden/);
-  assert.match(html, /data-live-reload>Reload</);
-  assert.match(html, /data-live-dismiss aria-label="Dismiss live review status"/);
+  assert.match(html, /class="ds-live-banner-icon" aria-hidden="true"/);
+  assert.match(html, /class="ds-live-banner-reload" type="button" data-live-reload>Reload</);
+  assert.match(html, /class="ds-live-banner-dismiss" type="button" data-live-dismiss aria-label="Dismiss live review status"/);
+  assert.match(html, /\{kind:'diff',message:'Diff changed\.'\}/);
   assert.ok(html.indexOf('data-live-banner') < html.indexOf('class="ds-layout"'));
+});
+
+test('overview surfaces author distrust hotspots and deliberate non-goals', () => {
+  const hotspotTour = {
+    ...tour,
+    version: 2,
+    intent: {
+      goal: 'We wanted the helper to receive the right value.',
+      nonGoals: ['Deliberately does not touch settlement ordering.'],
+    },
+    hotspots: [{ step: 's1', reason: 'I reasoned about the boundary but never exercised it.' }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: hotspotTour, files, baseLabel: 'main', comments: [] });
+  // Overview: a jump list of distrust spots ahead of the reading context.
+  assert.match(html, /Where I'd distrust this first/);
+  assert.match(html, /data-goto-step="1">\s*<span class="ds-hotspot-step">Step 1 · Changed line<\/span>/);
+  assert.match(html, /class="ds-hotspot-reason">I reasoned about the boundary but never exercised it\./);
+  // Overview: deliberate omissions listed under the intent context.
+  assert.match(html, /Deliberately not touched/);
+  assert.match(html, /<li>Deliberately does not touch settlement ordering\.<\/li>/);
+  // The flagged step itself carries the distrust strip.
+  assert.match(html, /class="ds-hotspot-flag" role="note"/);
+  assert.match(html, /▲ Distrust/);
+});
+
+test('stories without hotspots or non-goals render no empty distrust chrome', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /<div class="ds-intro-hotspots"/);
+  assert.doesNotMatch(html, /<div class="ds-intro-nongoals"/);
+  assert.doesNotMatch(html, /class="ds-hotspot-flag"/);
 });

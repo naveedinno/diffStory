@@ -1,4 +1,6 @@
 const THREAD_PATH_D = 'M6.6 5.4h8.7c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6H8.8c-2.1 0-3.8 1.7-3.8 3.8s1.7 3.8 3.8 3.8h8.6';
+const THREAD_BACKDROP_D = 'M-30 38H560c46 0 46 62 0 62H210c-46 0-46 62 0 62H930';
+const CHANGE_SCOPE_THREAD_D = 'M-30 38H870c26 0 26 62 0 62H10c-26 0-26 126 0 126H930';
 const THREAD_PATH_MONO_BODY = `<path d="${THREAD_PATH_D}" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>` +
     `<circle cx="6.6" cy="5.4" r="2.35" fill="currentColor"/>` +
     `<circle cx="15.3" cy="12.6" r="2.35" fill="currentColor"/>` +
@@ -13,6 +15,24 @@ export function brandMarkSvg(className, width, height, tone = 'color') {
 }
 export function brandStoryMarkSvg(className, width, height) {
     return brandMarkSvg(className, width, height, 'mono');
+}
+function threadBackdropSvg(path, height, nodes, className) {
+    return (`<svg class="${className}" viewBox="0 0 900 ${height}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">` +
+        `<path class="thread-base" d="${path}" pathLength="100"/>` +
+        `<path class="thread-pulse" d="${path}" pathLength="100"/>` +
+        `<g class="thread-nodes">${nodes}</g></svg>`);
+}
+/** The masthead-scale Thread Path used as the shared page atmosphere. */
+export function brandThreadBackdropSvg(className = 'ds-atmosphere-thread') {
+    return threadBackdropSvg(THREAD_BACKDROP_D, 190, `<circle cx="60" cy="38" r="3.2" opacity=".45"/>` +
+        `<circle class="node-mid" cx="385" cy="100" r="3.2" opacity=".85"/>` +
+        `<circle cx="760" cy="162" r="3.2" opacity=".45"/>`, className);
+}
+/** A collision-safe Thread Path that uses the scope page's three empty horizontal bands. */
+export function brandChangeScopeThreadSvg(className = 'ds-atmosphere-thread ds-scope-thread') {
+    return threadBackdropSvg(CHANGE_SCOPE_THREAD_D, 240, `<circle cx="72" cy="38" r="3.2" opacity=".45"/>` +
+        `<circle class="node-mid" cx="650" cy="100" r="3.2" opacity=".85"/>` +
+        `<circle cx="760" cy="226" r="3.2" opacity=".45"/>`, className);
 }
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
     `<style>:root{--path:#0072d6;--node:#14171c;--mid:#7adfff}@media (prefers-color-scheme:dark){:root{--path:#3fb2ff;--node:#eef1f5;--mid:#7adfff}}</style>` +

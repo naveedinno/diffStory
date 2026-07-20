@@ -16,21 +16,24 @@ Confirm:
 - npm pack dry-run includes the expected files
 - `CHANGELOG.md` mentions the version being released
 
-## Publish
+## Package
 
 ```sh
 npm login
 npm publish --access public
 ```
 
-If npm requires 2FA, complete the prompt in your terminal. After publishing,
-verify:
+If npm requires 2FA, complete the prompt in your terminal. The package is build
+material for the desktop app and must not expose a command-line executable.
+After publishing, verify:
 
 ```sh
 npm view @naveedinno/diffstory version
-npm i -g @naveedinno/diffstory
-diffstory --version
+npm pack --dry-run
+./scripts/install-macos-app.sh
 ```
+
+Open the installed diffStory app and confirm the workspace picker loads.
 
 ## Tag
 

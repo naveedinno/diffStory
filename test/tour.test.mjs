@@ -768,3 +768,36 @@ test('generated and repaired concept profiles enforce mode budgets and useful bo
   ], { mode: 'brief' });
   assert.ok(validateGeneratedConceptSteps(tooMany).includes('brief stories can include at most one concept step'));
 });
+
+test('intent.nonGoals must be non-empty strings when present', () => {
+  const tour = (nonGoals) => ({
+    version: 2,
+    title: 'T',
+    summary: '',
+    intent: { goal: 'We wanted the boundary clamped.', nonGoals },
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  });
+  assert.deepEqual(validateTour(tour(['does not touch settlement ordering'])), []);
+  assert.ok(validateTour(tour([])).includes('intent.nonGoals must be a non-empty array'));
+  assert.ok(validateTour(tour([' '])).includes('intent.nonGoals[0] must be a non-empty string'));
+  assert.ok(validateTour(tour('nope')).includes('intent.nonGoals must be a non-empty array'));
+});
+
+test('hotspots must be well-shaped and resolve to code steps', () => {
+  const tour = (hotspots) => v2Tour([v2ConceptStep(), v2CodeStep()], { hotspots });
+  assert.deepEqual(validateTour(tour([{ step: 'code', reason: 'I never exercised the deletion path.' }])), []);
+  assert.ok(validateTour(tour([])).includes('hotspots must be a non-empty array'));
+  assert.ok(validateTour(tour([{ reason: 'no anchor' }])).includes('hotspots[0].step is required'));
+  assert.ok(validateTour(tour([{ step: 'code', reason: ' ' }])).includes('hotspots[0].reason is required'));
+  assert.ok(validateTour(tour([{ step: 'ghost', reason: 'r' }])).includes('hotspots[0].step references unknown step id "ghost"'));
+  assert.ok(validateTour(tour([{ step: 'concept', reason: 'r' }])).includes('hotspots[0].step must reference a code step, not concept "concept"'));
+});
+
+test('generated stories keep hotspots down to the three most honest doubts', () => {
+  const steps = [1, 2, 3, 4].map((n) => v2CodeStep(`s${n}`, n));
+  const spots = (n) => steps.slice(0, n).map((s) => ({ step: s.id, reason: `unsure about ${s.id}` }));
+  assert.ok(!validateGeneratedTour(v2Tour(steps, { hotspots: spots(3) }))
+    .some((e) => e.includes('hotspots')));
+  assert.ok(validateGeneratedTour(v2Tour(steps, { hotspots: spots(4) }))
+    .includes('hotspots must name at most 3 distrust spots; keep only the places you are least sure about'));
+});

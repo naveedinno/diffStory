@@ -9,7 +9,7 @@
     {
       "name": "diffstory",
       "source": "./",
-      "description": "The diffstory-storyteller + address-review skills that drive diffStory's review loop. Pair with the `diffstory` CLI (see the repo README).",
+      "description": "The diffstory-storyteller + address-review skills that drive the diffStory UI review loop.",
       "version": "0.1.0",
       "homepage": "https://github.com/naveedinno/diffstory"
     }

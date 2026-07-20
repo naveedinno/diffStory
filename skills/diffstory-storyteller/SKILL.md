@@ -20,6 +20,10 @@ code matters. The job is to rebuild the smallest useful mental model, then move
 their eyes through the evidence with `viewport`, `highlights`, and `beats`.
 Coverage is the trust floor; restored context is the product.
 
+diffStory is UI-only. Never install, invoke, validate with, or recommend a
+`diffstory` CLI command. Write and validate the story artifact directly, then
+tell the user to open or refresh the installed diffStory app.
+
 ## Non-Negotiable Contract
 
 - Newly generated stories use `"version": 2`. Version 1 stories remain readable;
@@ -52,6 +56,10 @@ Coverage is the trust floor; restored context is the product.
   highlighted evidence. Concept primers do not use `question`.
 - Stories longer than 10 steps give every step a concise `chapter`; reuse each
   chapter across 3-7 consecutive steps so the rail stays scannable.
+- Top-level `hotspots` (at most 3) anchor your honest doubt to code steps: each
+  is `{"step": "<code-step-id>", "reason": "<why you are least sure here>"}`.
+- `intent.nonGoals` lists deliberate omissions the reviewer should not flag.
+  Only claim non-goals your intent evidence supports; never invent them.
 
 ## Detail levels
 
@@ -134,13 +142,23 @@ reading the diff.
 - If the evidence contradicts what the code does, say so in the summary instead
   of silently picking one.
 
+Also recover the deliberate omissions. Reviewers burn time flagging what the
+author skipped on purpose, so when the task evidence shows something was
+intentionally left alone — an adjacent path not migrated, an ordering not
+changed, a cleanup deferred — record it in `intent.nonGoals` as short
+"deliberately does not …" entries. Non-goals need the same evidence standard as
+the goal: only claim an omission was deliberate when the conversation, commits,
+or docs say so. If you merely did not get to something, that is a hotspot or an
+honest gap, not a non-goal.
+
 Write the result into the story:
 
 ```jsonc
 "intent": {
   "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
   "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
-  "sources": ["conversation"]
+  "sources": ["conversation"],
+  "nonGoals": ["Deliberately does not change settlement ordering; only the rate input is clamped."]
 }
 ```
 
@@ -232,6 +250,54 @@ goal -> design decisions -> implementation chain.
   file order genuinely is the clearest path.
 - Do not invent user intent. If the diff only proves a technical refactor, make
   the goal technical and keep it grounded.
+
+### 3.6. What good looks like: the same diff, told twice
+
+One small diff — `settleFunding()` in `Funding.sol` gains a clamp, a new
+`_capRate()` helper lands in `RateMath.sol`, and `RateMath.t.sol` gets a test.
+Two stories.
+
+**The changelog (do not write this).** File order, diff-restating beats,
+rhetorical questions:
+
+```text
+1. "Update Funding.sol"       — why: "Adds a cap check to settleFunding()."
+                                 question: "Is the cap checked?"
+2. "Add RateMath.sol helper"  — why: "Adds a _capRate() helper for clamping."
+                                 question: "Does the helper clamp?"
+3. "Add tests"                — why: "Adds tests for the new helper."
+                                 question: "Do the tests cover the helper?"
+```
+
+Every hunk is covered, every gate passes — and the reviewer learned nothing the
+diff didn't already say. Each `why` restates its own hunk, no step hands off to
+the next, and every question answers itself with "yes" while the real question
+(can an unclamped rate still reach balances?) is never asked.
+
+**The story (write this).** Same three stops, ordered by the runtime path,
+each beat picking up what the previous stop established:
+
+```text
+1. "Entry: settleFunding() clamps before balances move"
+   beat: "Start here: the keeper hits this path each epoch, and the old code
+          handed the raw rate straight to settlement."
+   beat: "Now the rate passes through _capRate() first — the review hinge is
+          that this happens before any balance mutation."
+   question: "Can any path still reach the balance write with an unclamped rate?"
+2. "Helper: _capRate() owns the inclusive boundary"
+   beat: "This is where the entry point just sent us; the cap is inclusive, so
+          rate == cap must pass."
+   question: "Does the <= match the doc'd inclusive cap, or did an off-by-one slip in?"
+3. "Proof: the boundary test pins rate == cap"
+   beat: "Final proof: this test fails if the boundary flips to exclusive —
+          it guards exactly the hinge from step 2."
+   question: "Would this test actually fail if <= became < ?"
+```
+
+The difference is not length or polish — it is that each stop exists because of
+the previous one, and each question names a failure the evidence must rule out.
+If your draft reads like the first version, reorder around the runtime path and
+rewrite each beat to say what it unlocks, not what it edits.
 
 ### 3.75. Test for concept gaps
 
@@ -445,6 +511,16 @@ Tests
 Changes in api.ts
 ```
 
+Answer your own `question` before keeping it. Privately answer each question
+from that step's highlighted evidence. If your honest answer is a trivial "yes"
+that no plausible mistake would flip — "Is the cap checked?" when the highlight
+IS the cap check — the question is rhetorical noise; replace it with one a
+careful reviewer could actually get wrong. Good questions name the failure the
+evidence must rule out: "Can an over-cap rate reach balance mutation before the
+clamp?", "Does any caller still pass the pre-normalization value?". If a step
+supports only rhetorical questions, the step is probably restating the diff —
+sharpen the step, not just the question.
+
 Each code-step `why` should be a compact fallback recap for the whole stop. The
 read-aloud explanation belongs in `beats`, and each beat should answer one
 local reviewer question. In brief mode, use exactly one short first-person
@@ -529,6 +605,35 @@ conceptually jump. Concept primers use `preparesFor` instead.
 - Do not link every adjacent step.
 - If you set a link, name the actual handoff in `why`: what is passed, called, returned, read, written, or validated.
 
+### 8. Declare your doubts (hotspots)
+
+The story answers "where do I read?"; `hotspots` answer the reviewer's real
+question: "where should I distrust this?". You just wrote the change — you know
+exactly where you were least sure. Say so.
+
+After the steps are written, add top-level `hotspots`: 1-3 entries, each
+anchoring a doubt to the code step that shows its evidence:
+
+```jsonc
+"hotspots": [
+  { "step": "s2", "reason": "I matched the inclusive boundary to the docs but never exercised the exact-cap case." }
+]
+```
+
+- Honest reasons only: a boundary you guessed at, a path you never ran, an
+  invariant you reasoned about but did not test, an unfamiliar API you followed
+  by example, math you derived but did not execute.
+- Rank by real doubt, not by importance. The entry point is not automatically a
+  hotspot; the line you'd re-read at 2am is.
+- Use zero hotspots only when you would genuinely stake the review on every
+  step — and expect that to be rare.
+- Never use hotspots as a summary, a severity label, or decoration. A hotspot
+  whose reason could be said about any change ("this is complex") is noise;
+  name the specific thing you did not verify.
+- Each `step` must be the id of a `changed` or `new-file` step. diffStory shows
+  hotspots on the overview as a jump list and flags the step itself, so the
+  reason must make sense right next to the highlighted code.
+
 ## Hard quality gates
 
 Coverage is necessary, but not sufficient.
@@ -592,6 +697,13 @@ Falsifiable checks — run each one, do not skim:
 - Why test: strike any code beat that only restates what the code does. Strike
   any primer that repeats the Overview or could be replaced by one orienting
   code beat.
+- Question test: privately answer every code-step `question` from its
+  highlighted evidence. Strike any whose honest answer is a trivial "yes" no
+  plausible mistake would flip, and replace it with one a careful reviewer
+  could get wrong.
+- Hotspot test: for each hotspot, check the reason names something you
+  specifically did not verify, not generic complexity. For each non-goal,
+  check the intent evidence shows the omission was deliberate.
 - Thread test: read concept bodies and code beats in order with no code. They
   must form one continuous story with no unexplained term or jump.
 - Concept-gap test: before each code stop, verify the reviewer already has the
@@ -642,8 +754,12 @@ Falsifiable checks — run each one, do not skim:
   "intent": {
     "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
     "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
-    "sources": ["commit 41af8b7", "PR #12 body"]
+    "sources": ["commit 41af8b7", "PR #12 body"],
+    "nonGoals": ["Deliberately does not change settlement ordering; only the rate input is clamped."]
   },
+  "hotspots": [
+    { "step": "s2", "reason": "I matched the inclusive boundary to the docs but never exercised the exact-cap case." }
+  ],
   "storyScope": {
     "includedFiles": ["contracts/Funding.sol", "contracts/lib/RateMath.sol"],
     "excludedFiles": ["test/Funding.t.sol"],
@@ -757,8 +873,11 @@ Write `.diffstory/story.json`, then verify it against the diff yourself:
   deliberately points at unchanged code that changes how the diff is judged.
 - Every concept primer is just in time, stays within its mode budget, has a
   60-180 word body (never over 220), and claims no coverage.
-- The JSON is valid: ids, `order`, `calls`, `returnsTo`, and `preparesFor` all
-  resolve; no primer is adjacent to another primer or final.
+- `hotspots` (at most 3) reference real code-step ids and name specific
+  unverified doubts; `intent.nonGoals` entries are evidence-backed deliberate
+  omissions, not gaps you ran out of time for.
+- The JSON is valid: ids, `order`, `calls`, `returnsTo`, `preparesFor`, and
+  `hotspots[].step` all resolve; no primer is adjacent to another primer or final.
 
 Fix every issue before handing back. If a clean story is impossible, report the
 blocker instead of pretending it is ready.
@@ -785,3 +904,9 @@ Tell the user: "Story ready — open the diff in the diffStory app to review."
   them toward coverage.
 - Don't invent intent. Every `goal` claim needs a source; `["code-derived"]` is the honest fallback.
 - Don't ship steps in file order without stating why that order genuinely reads best.
+- Don't keep a rhetorical question whose answer is a trivial "yes"; a question
+  that cannot be answered wrong is not review guidance.
+- Don't pick decorative hotspots ("this is complex") or skip hotspots out of
+  false confidence — name the specific thing you did not verify.
+- Don't list a non-goal you cannot back with intent evidence; an accidental gap
+  belongs in a hotspot reason, not in `nonGoals`.
