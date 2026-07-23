@@ -55,6 +55,12 @@ enum PortState {
     Occupied,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StartupProbeAction {
+    Ready,
+    Wait,
+}
+
 fn home_directory() -> PathBuf {
     dirs::home_dir().unwrap_or_else(std::env::temp_dir)
 }
@@ -140,22 +146,51 @@ fn probe_port() -> PortState {
         Ok(address) => address,
         Err(_) => return PortState::Available,
     };
+    probe_address(address)
+}
+
+fn probe_address(address: SocketAddr) -> PortState {
     let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(250)) {
         Ok(stream) => stream,
         Err(_) => return PortState::Available,
     };
     let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
     if stream
-        .write_all(b"GET / HTTP/1.0\r\nHost: 127.0.0.1:7787\r\n\r\n")
+        .write_all(b"GET /api/health HTTP/1.0\r\nHost: 127.0.0.1:7787\r\nConnection: close\r\n\r\n")
         .is_err()
     {
         return PortState::Occupied;
     }
     let mut response = String::new();
-    if stream.read_to_string(&mut response).is_ok() && response.contains("<title>diffStory") {
+    let _ = stream.read_to_string(&mut response);
+    if response.contains("\"app\":\"diffStory\"") && response.contains("\"ready\":true") {
         PortState::DiffStory
     } else {
         PortState::Occupied
+    }
+}
+
+fn confirmed_port_state_with<F, P>(mut probe: F, mut pause: P) -> PortState
+where
+    F: FnMut() -> PortState,
+    P: FnMut(),
+{
+    let first = probe();
+    if first != PortState::DiffStory {
+        return first;
+    }
+    pause();
+    probe()
+}
+
+fn confirmed_port_state() -> PortState {
+    confirmed_port_state_with(probe_port, || thread::sleep(Duration::from_millis(250)))
+}
+
+fn startup_probe_action(state: PortState) -> StartupProbeAction {
+    match state {
+        PortState::DiffStory => StartupProbeAction::Ready,
+        PortState::Available | PortState::Occupied => StartupProbeAction::Wait,
     }
 }
 
@@ -254,7 +289,7 @@ fn server_exited(app: &AppHandle) -> bool {
 fn start_or_connect(app: AppHandle) {
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(80));
-        match probe_port() {
+        match confirmed_port_state() {
             PortState::DiffStory => {
                 diagnostic_log("connected to an existing diffStory server");
                 navigate_to_workspace(&app);
@@ -307,21 +342,13 @@ fn start_or_connect(app: AppHandle) {
         }
 
         for attempt in 0..100 {
-            match probe_port() {
-                PortState::DiffStory => {
+            match startup_probe_action(probe_port()) {
+                StartupProbeAction::Ready => {
                     diagnostic_log("diffStory server is ready");
                     navigate_to_workspace(&app);
                     return;
                 }
-                PortState::Occupied => {
-                    show_startup_error(
-                        &app,
-                        "Port 7787 was claimed",
-                        "Another local process took diffStory’s port during startup. Close it, then try again.",
-                    );
-                    return;
-                }
-                PortState::Available => {}
+                StartupProbeAction::Wait => {}
             }
             if server_exited(&app) {
                 show_startup_error(
@@ -569,4 +596,63 @@ fn main() {
             stop_server(app);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+    use std::net::TcpListener;
+
+    #[test]
+    fn a_server_that_disappears_during_confirmation_is_not_reused() {
+        let mut states = VecDeque::from([PortState::DiffStory, PortState::Available]);
+        let state =
+            confirmed_port_state_with(|| states.pop_front().expect("probe called twice"), || {});
+        assert_eq!(state, PortState::Available);
+    }
+
+    #[test]
+    fn a_stable_diffstory_server_is_reused() {
+        let mut states = VecDeque::from([PortState::DiffStory, PortState::DiffStory]);
+        let state =
+            confirmed_port_state_with(|| states.pop_front().expect("probe called twice"), || {});
+        assert_eq!(state, PortState::DiffStory);
+    }
+
+    #[test]
+    fn an_available_port_does_not_wait_for_confirmation() {
+        let mut paused = false;
+        let state = confirmed_port_state_with(|| PortState::Available, || paused = true);
+        assert_eq!(state, PortState::Available);
+        assert!(!paused);
+    }
+
+    #[test]
+    fn a_half_started_owned_server_keeps_the_readiness_loop_waiting() {
+        assert_eq!(
+            startup_probe_action(PortState::Occupied),
+            StartupProbeAction::Wait
+        );
+    }
+
+    #[test]
+    fn a_valid_keep_alive_response_is_recognized_without_waiting_for_eof() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("test server address");
+        let responder = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().expect("accept probe");
+            let mut request = [0_u8; 512];
+            let _ = socket.read(&mut request);
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 32\r\nConnection: keep-alive\r\n\r\n{\"app\":\"diffStory\",\"ready\":true}",
+                )
+                .expect("write probe response");
+            thread::sleep(Duration::from_millis(900));
+        });
+
+        assert_eq!(probe_address(address), PortState::DiffStory);
+        responder.join().expect("join test server");
+    }
 }

@@ -1,7 +1,15 @@
 // Unit tests for the shared diff-row renderer. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DIFF_CSS } from '../dist/diff-assets.js';
 import { renderUnifiedRow, renderSplitRow, renderHunkGap, rowAttrs, targetAttrs } from '../dist/diff-render.js';
+
+function cssRuleBody(css, selector) {
+  const start = css.indexOf(`${selector}{`);
+  assert.notEqual(start, -1, `missing ${selector} rule`);
+  const bodyStart = start + selector.length + 1;
+  return css.slice(bodyStart, css.indexOf('}', bodyStart));
+}
 
 test('unified add row carries anchors, sign, and tint class', () => {
   const html = renderUnifiedRow(
@@ -14,6 +22,7 @@ test('unified add row carries anchors, sign, and tint class', () => {
   assert.match(html, /<span class="ds-no">3<\/span>/);
   assert.match(html, /<span class="ds-sign ds-sign-add">\+<\/span>/);
   assert.match(html, /data-comment-file="a\.ts" data-comment-line="3"/);
+  assert.match(html, /data-vscode-symbol data-vscode-column="7"[^>]*>x<\/span>/);
 });
 
 test('unified untoured row is flagged UNEXPLAINED', () => {
@@ -31,6 +40,7 @@ test('unified del row carries the minus sign and an old-side anchor', () => {
   assert.match(html, /aria-label="Deleted before line 7 in a\.ts: gone\(\);"/);
   assert.match(html, /<span class="ds-sign ds-sign-del">−<\/span>/);
   assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="7"/);
+  assert.doesNotMatch(html, /data-vscode-symbol/);
 });
 
 test('split ctx row renders both cells with line numbers', () => {
@@ -71,6 +81,28 @@ test('focus index is emitted only when set', () => {
   const without = renderSplitRow({ type: 'ctx', oldNo: 1, newNo: 1, content: 'x' }, { focusIndex: null });
   assert.match(withFocus, /data-step-focus="2"/);
   assert.doesNotMatch(without, /data-step-focus/);
+});
+
+test('semantic diff text uses dedicated accessible ink tokens in every diff mode', () => {
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-diffhead-label.ds-green'), /color:var\(--diff-add-text\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-sign-add'), /color:var\(--diff-add-text\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-sign-del'), /color:var\(--diff-del-text\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-code-add'), /color:var\(--diff-add-text\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-code-del'), /color:var\(--diff-del-text\)/);
+});
+
+test('story focus keeps every code row readable without boxing each focused row', () => {
+  assert.doesNotMatch(DIFF_CSS, /\.ds-step\.is-code-step\.is-story-active[^{]*\{[^}]*opacity:/);
+
+  const splitFocus = cssRuleBody(DIFF_CSS, '.ds-row.is-story-focus');
+  assert.match(splitFocus, /inset 3px 0 0 var\(--accent-blue\)/);
+  assert.doesNotMatch(splitFocus, /inset 0 -?1px 0 var\(--accent-line\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-story-focus .ds-cell:not(.ds-cell-empty)'), /background-image:linear-gradient/);
+
+  const unifiedFocus = cssRuleBody(DIFF_CSS, '.ds-urow.is-story-focus');
+  assert.match(unifiedFocus, /inset 3px 0 0 var\(--accent-blue\)/);
+  assert.doesNotMatch(unifiedFocus, /inset 0 -?1px 0 var\(--accent-line\)/);
+  assert.match(unifiedFocus, /background-image:linear-gradient/);
 });
 
 test('bare hunk gap matches the legacy markup exactly', () => {

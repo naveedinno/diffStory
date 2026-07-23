@@ -17,6 +17,8 @@ comment, and send it back to your agent.
 - Works with plain git diffs, even without generating a story.
 - Can use Claude or Codex to generate walkthroughs and address comments.
 - Works without AI. Agent features are optional.
+- Command-click or Ctrl-click a current-code identifier to open its implementation
+  through the small VS Code navigation bridge.
 
 ## Quickstart
 
@@ -156,6 +158,30 @@ If no agent is installed, diffStory still opens and still works as a local diff
 viewer. Story generation and comment handoff will be unavailable until Claude or
 Codex is on your PATH.
 
+## VS Code Navigation Bridge
+
+The optional VS Code companion is deliberately tiny. It has no review sidebar,
+Git model, comments, stories, commands, or webview. It only lets the diffStory
+app reuse VS Code's language intelligence.
+
+Install it from this checkout:
+
+```sh
+cd vscode-extension
+npm install
+npm run package
+code --install-extension diffstory-vscode-0.9.0.vsix
+```
+
+Keep the reviewed repository open in VS Code. In diffStory, Command-click on
+macOS or Ctrl-click elsewhere on an identifier in the current-code side of a
+diff. The bridge asks VS Code for an implementation first, falls back to a
+definition, and finally opens the clicked source position if the language
+extension reports neither.
+
+The bridge keeps the previous extension identifier, so installing it upgrades
+and replaces the retired full DiffStory review extension.
+
 ## Review Files
 
 diffStory stores review state inside the repo you open:
@@ -202,8 +228,8 @@ npm run dev
 The app opens at `http://localhost:7777/`. If the browser does not open
 automatically, open the printed URL yourself.
 
-That is the whole core setup. You do not need Python, Homebrew, Kokoro, Claude,
-or Codex just to open the app and review diffs.
+That is the whole core setup. You do not need Python, Homebrew, Claude, or Codex
+just to open the app and review diffs. Narration uses the separate Aloud app.
 
 Useful development commands:
 
@@ -214,22 +240,18 @@ Useful development commands:
 | `npm run start` | Run the built internal development server. |
 | `npm run demo` | Build and open a sample review. |
 | `npm test` | Build and run the test suite. |
-| `npm run setup:kokoro` | Install optional local Kokoro speech support. |
 
-## Optional Local Voice
+## Narration With Aloud
 
-Kokoro AI voice is optional. The read-aloud popup works with browser voices by
-default, and you only need this setup if you want local generated speech:
+diffStory delegates narration to Aloud instead of loading voice models or
+managing audio itself. Install Aloud's Services, choose your voice, model,
+speed, and playback mode in Aloud, then use **Play story** or a step's play
+button in diffStory. Playback stays in Aloud's shared reader and menu-bar
+session.
 
-```sh
-npm run setup:kokoro
-```
-
-The setup script reuses a compatible Python if you already have one, creates
-`~/.diffstory/kokoro-venv`, installs `kokoro` and `soundfile`, and installs
-`espeak-ng` through Homebrew on macOS when needed. Kokoro currently supports
-Python 3.10, 3.11, or 3.12. After setup, choose **Kokoro AI** in the voice
-settings.
+When Aloud is unavailable, diffStory leaves the review usable and shows how to
+enable narration. No Aloud model, cache, or voice preference is stored by
+diffStory.
 
 ## Troubleshooting
 

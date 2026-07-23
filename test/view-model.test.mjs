@@ -172,3 +172,40 @@ test('hotspots resolve to ordered panels and flag their step views', () => {
   assert.equal(model.steps[0].hotspot, undefined);
   assert.equal(model.steps[1].hotspot, 'I never exercised the retry path.');
 });
+
+test('story overview file scope stays focused while All Files keeps complete diff totals', () => {
+  const scopedTour = {
+    version: 1,
+    title: 'Focused story',
+    summary: 'Review only the selected production path.',
+    storyScope: { includedFiles: ['a.ts'], excludedFiles: ['b.test.ts'] },
+    steps: [{ id: 's1', order: 1, title: 'Production path', file: 'a.ts', range: [2, 2], kind: 'changed', why: 'w' }],
+  };
+  const scopedFiles = [
+    {
+      oldPath: 'a.ts', newPath: 'a.ts', status: 'modified',
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: [
+        { type: 'ctx', content: 'keep', oldNo: 1, newNo: 1 },
+        { type: 'add', content: 'production();', newNo: 2 },
+      ] }],
+    },
+    {
+      oldPath: 'b.test.ts', newPath: 'b.test.ts', status: 'modified',
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: [
+        { type: 'del', content: 'old test', oldNo: 1 },
+        { type: 'add', content: 'new test', newNo: 1 },
+        { type: 'add', content: 'another test', newNo: 2 },
+      ] }],
+    },
+  ];
+
+  const model = buildReviewModel(process.cwd(), scopedTour, scopedFiles);
+
+  assert.equal(model.files.length, 2, 'All Files keeps the complete diff');
+  assert.equal(model.filesChanged, 2);
+  assert.equal(model.totalAdd, 3);
+  assert.equal(model.totalDel, 1);
+  assert.equal(model.storyFilesChanged, 1);
+  assert.equal('storyTotalAdd' in model, false);
+  assert.equal('storyTotalDel' in model, false);
+});

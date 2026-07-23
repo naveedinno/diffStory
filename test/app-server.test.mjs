@@ -2,7 +2,7 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -13,6 +13,7 @@ import { serve } from '../dist/server.js';
 import { getDiff } from '../dist/git.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
 import { diffFingerprint } from '../dist/stories.js';
+import { captureStorySnapshot } from '../dist/story-drift.js';
 
 function gitRepo() {
   const d = mkdtempSync(join(tmpdir(), 'ds-app-'));
@@ -33,13 +34,107 @@ function addCommits(repo, count) {
   }
 }
 
-async function boot(repo = null) {
-  const server = serve({ repo, port: 0, open: false });
+async function boot(repo = null, homeOverride = null, aloud) {
+  const home = homeOverride ?? mkdtempSync(join(tmpdir(), 'ds-server-home-'));
+  const server = serve({ repo, port: 0, open: false, homeOverride: home, aloud });
+  if (homeOverride == null) {
+    server.once('close', () => rmSync(home, { recursive: true, force: true }));
+  }
   await once(server, 'listening');
   const { address, port } = server.address();
   assert.equal(address, '127.0.0.1', 'local app server only listens on loopback');
   return { server, base: `http://localhost:${port}` };
 }
+
+test('server exposes a narrow same-origin bridge to the Aloud reader', async () => {
+  const calls = [];
+  const status = { jobId: 'story-1', ok: true, paused: false, protocolVersion: 2, running: true, service: 'aloud-speech-daemon', state: { status: 'reading' } };
+  const aloud = {
+    async status() { calls.push(['status']); return status; },
+    async speak(input) { calls.push(['speak', input]); return status; },
+    async control(action) { calls.push(['control', action]); return { ...status, paused: action === 'pause' }; },
+  };
+  const app = await boot(null, null, aloud);
+  try {
+    assert.equal((await fetch(`${app.base}/api/aloud/status`)).status, 200);
+    const spoken = await fetch(`${app.base}/api/aloud/speak`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        batches: ['  Review this beat. ', ' Then this one.  '],
+        prefetch: 3,
+        text: '  Review this beat. Then this one.  ',
+      }),
+    });
+    assert.equal(spoken.status, 200);
+    const paused = await fetch(`${app.base}/api/aloud/control`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'pause' }),
+    });
+    assert.equal(paused.status, 200);
+    assert.deepEqual(calls, [
+      ['status'],
+      ['speak', {
+        batches: ['Review this beat.', 'Then this one.'],
+        prefetch: 3,
+        text: 'Review this beat. Then this one.',
+      }],
+      ['control', 'pause'],
+    ]);
+
+    const invalid = await fetch(`${app.base}/api/aloud/control`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'skip' }),
+    });
+    assert.equal(invalid.status, 400);
+  } finally {
+    app.server.close();
+    await once(app.server, 'close');
+  }
+});
+
+test('fresh desktop server restores a recent repository route and falls back when it is stale', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = gitRepo();
+  let first;
+  let restarted;
+  let staleRestart;
+  try {
+    first = await boot(null, tmpHome);
+    const opened = await fetch(`${first.base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    assert.equal(opened.status, 200);
+    first.server.close();
+    await once(first.server, 'close');
+    first = null;
+
+    restarted = await boot(null, tmpHome);
+    const savedRoute = `/repo/${encodeURIComponent(basename(repo))}/stories`;
+    const restored = await fetch(`${restarted.base}${savedRoute}`);
+    assert.equal(restored.status, 200);
+    assert.equal(restored.url, `${restarted.base}${savedRoute}`);
+    assert.match(await restored.text(), /Review history/);
+
+    restarted.server.close();
+    await once(restarted.server, 'close');
+    restarted = null;
+    staleRestart = await boot(null, tmpHome);
+    const stale = await fetch(`${staleRestart.base}/repo/no-longer-present/review?story=story.json`);
+    assert.equal(stale.status, 200);
+    assert.equal(stale.url, `${staleRestart.base}/`);
+    assert.match(await stale.text(), /pick a repo/i);
+  } finally {
+    first?.server.close();
+    restarted?.server.close();
+    staleRestart?.server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
 
 function reviewPageToken(html) {
   const match = html.match(/data-review-page-token="([^"]+)"/);
@@ -145,6 +240,196 @@ test('lazy file evidence remains available when only another file changes', asyn
   }
 });
 
+test('story drift routes keep side-file changes current and lazily render only the requested since-story patch', async () => {
+  const repo = gitRepo();
+  mkdirSync(join(repo, 'contracts'));
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 1; }\n');
+  writeFileSync(join(repo, 'side.txt'), 'side one\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add drift fixtures'], { cwd: repo });
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 2; }\n');
+  const snapshot = captureStorySnapshot({
+    repo,
+    base: 'HEAD',
+    storyScope: { includedFiles: ['contracts/A.sol'] },
+  });
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 1,
+    title: 'Scoped Solidity story',
+    summary: 'Only the production contract belongs to this story.',
+    base: 'HEAD',
+    storySnapshot: snapshot,
+    storyScope: { includedFiles: ['contracts/A.sol'] },
+    steps: [{
+      id: 'contract', order: 1, title: 'Contract update', file: 'contracts/A.sol',
+      range: [1, 1], kind: 'changed', why: 'The production contract changed.',
+    }],
+  }, null, 2)}\n`);
+  writeFileSync(join(repo, 'side.txt'), 'side two\n');
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
+    let html = await (await fetch(`${base}${route}`)).text();
+    assert.match(html, /Story current · 1 side file changed/);
+    assert.doesNotMatch(html, /Story needs refresh/);
+    const token = reviewPageToken(html);
+    const observation = html.match(/data-drift-observation="([a-f0-9]{64})"/)?.[1];
+    assert.ok(observation);
+
+    const summary = await (await fetch(leased(`${base}/api/story-drift`, token))).json();
+    assert.equal(summary.state, 'outside-only');
+    assert.equal(summary.inScopeFiles, 0);
+    assert.equal(summary.outsideScopeFiles, 1);
+    assert.deepEqual(summary.files.map((file) => file.path), ['side.txt']);
+
+    const patch = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=side.txt`, token));
+    assert.equal(patch.status, 200);
+    const patchHtml = await patch.text();
+    assert.match(patchHtml, />Before</);
+    assert.match(patchHtml, />After</);
+    assert.match(patchHtml, /side/);
+    assert.match(patchHtml, /one/);
+    assert.match(patchHtml, /two/);
+
+    const compactPatch = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=side.txt&layout=unified`, token));
+    assert.equal(compactPatch.status, 200);
+    const compactHtml = await compactPatch.text();
+    assert.match(compactHtml, /ds-diffbody-unified ds-drift-unified/);
+    assert.match(compactHtml, /ds-urow/);
+    assert.doesNotMatch(compactHtml, /ds-diffhead-side/);
+
+    writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 3; }\n');
+    const moved = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=side.txt`, token));
+    assert.equal(moved.status, 409);
+    assert.equal((await moved.json()).reloadRequired, true);
+
+    html = await (await fetch(`${base}${route}`)).text();
+    assert.match(html, /Story needs refresh · 1 story file \+ 1 side file changed/);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('story drift preserves metadata-only rename and mode evidence in lazy details', async () => {
+  const repo = gitRepo();
+  mkdirSync(join(repo, 'contracts'));
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 1; }\n');
+  writeFileSync(join(repo, 'old-name.txt'), 'same bytes\n');
+  writeFileSync(join(repo, 'mode.txt'), 'same mode bytes\n');
+  writeFileSync(join(repo, 'combo-old.txt'), 'same rename and mode bytes\n');
+  writeFileSync(join(repo, 'binary.bin'), Buffer.from([0, 1, 2, 3]));
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add metadata fixtures'], { cwd: repo });
+  execFileSync('git', ['config', 'core.filemode', 'true'], { cwd: repo });
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 2; }\n');
+  const snapshot = captureStorySnapshot({
+    repo,
+    base: 'HEAD',
+    storyScope: { includedFiles: ['contracts/A.sol'] },
+  });
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 1,
+    title: 'Metadata drift story',
+    summary: 'The contract is selected while metadata-only side changes stay inspectable.',
+    base: 'HEAD',
+    storySnapshot: snapshot,
+    storyScope: { includedFiles: ['contracts/A.sol'] },
+    steps: [{
+      id: 'contract', order: 1, title: 'Contract update', file: 'contracts/A.sol',
+      range: [1, 1], kind: 'changed', why: 'The production contract changed.',
+    }],
+  }, null, 2)}\n`);
+  renameSync(join(repo, 'old-name.txt'), join(repo, 'new-name.txt'));
+  chmodSync(join(repo, 'mode.txt'), 0o755);
+  renameSync(join(repo, 'combo-old.txt'), join(repo, 'combo-new.txt'));
+  chmodSync(join(repo, 'combo-new.txt'), 0o755);
+  writeFileSync(join(repo, 'binary.bin'), Buffer.from([0, 1, 2, 4]));
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
+    const html = await (await fetch(`${base}${route}`)).text();
+    assert.match(html, /Story current · 4 side files changed/);
+    assert.match(html, /data-drift-label="old-name\.txt → new-name\.txt"/);
+    assert.match(html, /data-drift-label="combo-old\.txt → combo-new\.txt"/);
+    const token = reviewPageToken(html);
+    const observation = html.match(/data-drift-observation="([a-f0-9]{64})"/)?.[1];
+    assert.ok(observation);
+
+    const renamed = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=new-name.txt&layout=unified`, token));
+    assert.equal(renamed.status, 200);
+    assert.match(await renamed.text(), /Renamed old-name\.txt to new-name\.txt; file contents did not change\./);
+
+    const mode = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=mode.txt&layout=unified`, token));
+    assert.equal(mode.status, 200);
+    assert.match(await mode.text(), /File mode changed from 100644 to 100755; file contents did not change\./);
+
+    const combined = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=combo-new.txt&layout=unified`, token));
+    assert.equal(combined.status, 200);
+    assert.match(
+      await combined.text(),
+      /Renamed combo-old\.txt to combo-new\.txt and changed file mode from 100644 to 100755; file contents did not change\./,
+    );
+
+    const binary = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=binary.bin&layout=unified`, token));
+    assert.equal(binary.status, 200);
+    const binaryHtml = await binary.text();
+    assert.match(binaryHtml, /Binary contents changed; only their identities are available\./);
+    assert.doesNotMatch(binaryHtml, /metadata changed|without textual content changes/i);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('story drift refuses a snapshot copied into a different story scope', async () => {
+  const repo = gitRepo();
+  mkdirSync(join(repo, 'contracts'));
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 1; }\n');
+  writeFileSync(join(repo, 'side.txt'), 'side one\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add binding fixtures'], { cwd: repo });
+  writeFileSync(join(repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 2; }\n');
+  const snapshot = captureStorySnapshot({
+    repo,
+    base: 'HEAD',
+    storyScope: { includedFiles: ['contracts/A.sol'] },
+  });
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 1,
+    title: 'Mismatched snapshot story',
+    summary: 'The copied snapshot must not define this story scope.',
+    base: 'HEAD',
+    storySnapshot: snapshot,
+    storyScope: { includedFiles: ['contracts/A.sol', 'side.txt'] },
+    steps: [{
+      id: 'contract', order: 1, title: 'Contract update', file: 'contracts/A.sol',
+      range: [1, 1], kind: 'changed', why: 'The production contract changed.',
+    }],
+  }, null, 2)}\n`);
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
+    const html = await (await fetch(`${base}${route}`)).text();
+    assert.match(html, /Freshness unverified/);
+    assert.doesNotMatch(html, /Story current/);
+    const token = reviewPageToken(html);
+    const summary = await (await fetch(leased(`${base}/api/story-drift`, token))).json();
+    assert.equal(summary.state, 'unverified');
+    assert.equal(summary.inScopeFiles, 0);
+    assert.equal(summary.outsideScopeFiles, 0);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test('app server serves the bundled Mermaid ESM from the same origin', async () => {
   const { server, base } = await boot();
   try {
@@ -161,6 +446,24 @@ test('app server serves the bundled Mermaid ESM from the same origin', async () 
     assert.match(source, /export\{/);
   } finally {
     server.close();
+  }
+});
+
+test('desktop health probe stays stable while a repository session is open', async () => {
+  const realHome = process.env.HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
+  process.env.HOME = tmpHome;
+  const repo = gitRepo();
+  const { server, base } = await boot(repo, tmpHome);
+  try {
+    const response = await fetch(`${base}/api/health`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { app: 'diffStory', ready: true });
+  } finally {
+    server.close();
+    process.env.HOME = realHome;
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
@@ -243,6 +546,12 @@ test('POST /api/story/repair runs the selected agent and validates the rewritten
     const repaired = JSON.parse(readFileSync(join(repo, '.diffstory', 'story.json'), 'utf8'));
     assert.equal(repaired.steps[0].why, 'Shortened explanation.');
     assert.match(repaired.diffFingerprint, /^[a-f0-9]{64}$/);
+    assert.match(repaired.storySnapshot?.id ?? '', /^[a-f0-9]{64}$/);
+    const snapshot = JSON.parse(readFileSync(
+      join(repo, '.diffstory', 'snapshots', `${repaired.storySnapshot.id}.json`),
+      'utf8',
+    ));
+    assert.deepEqual(snapshot.storyFiles, ['README.md'], 'a story without storyScope is bounded to its actual code-step files');
     assert.equal(readFileSync(join(repo, 'README.md'), 'utf8'), '# hi\nchanged\n');
   } finally {
     server.close();
@@ -326,7 +635,7 @@ test('app server drives picker → open → refs → recent → close', async ()
   process.env.HOME = tmpHome;
   const repo = gitRepo();
   addCommits(repo, 82);
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     const root = await fetch(`${base}/`);
     assert.equal(root.status, 200);
@@ -380,31 +689,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     const agentsAfter = await (await fetch(`${base}/api/agents`)).json();
     assert.equal(agentsAfter.skills.current, true);
 
-    if (process.platform === 'darwin' && existsSync('/usr/bin/say')) {
-      const tts = await fetch(`${base}/api/tts/say`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: 'diffStory local voice check', voice: 'daniel', rate: 1 }),
-      });
-      assert.equal(tts.status, 200);
-      const ttsBody = await tts.json();
-      assert.equal(ttsBody.voice, 'Daniel');
-      assert.match(ttsBody.url, /^\/api\/tts\/say\/[a-f0-9]{64}\.m4a$/);
-
-      const audio = await fetch(`${base}${ttsBody.url}`);
-      assert.equal(audio.status, 200);
-      assert.match(audio.headers.get('content-type') ?? '', /audio\/mp4/);
-      assert.ok((await audio.arrayBuffer()).byteLength > 0);
-    }
-
-    const badKokoro = await fetch(`${base}/api/tts/kokoro`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{',
-    });
-    assert.equal(badKokoro.status, 400);
-    assert.equal((await badKokoro.json()).error, 'invalid JSON');
-
+    assert.equal((await fetch(`${base}/api/tts/say`)).status, 404);
     assert.equal((await fetch(`${base}/api/tts/kokoro/not-a-real.wav`)).status, 404);
 
     // server-backed folder browser lists dirs and flags the repo itself
@@ -515,7 +800,7 @@ test('POST /api/comments/:id/message appends a user turn and reopens the thread'
   process.env.HOME = tmpHome;
   const repo = gitRepo();
   addCommits(repo, 1);
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -564,7 +849,7 @@ test('addressing comments from the raw diff viewer reports code edits so the UI 
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     const opened = await fetch(`${base}/api/repo/open`, {
       method: 'POST',
@@ -618,7 +903,7 @@ test('POST /api/address honors the selected agent instead of first PATH match', 
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST',
@@ -671,7 +956,7 @@ test('POST /api/address sends a visible turn through the selected task live Desk
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -745,7 +1030,7 @@ test('POST /api/address resumes the exact selected Codex task when Desktop hando
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -801,7 +1086,7 @@ test('POST /api/address rejects a selected agent that is not available', async (
 
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot();
+  const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
       method: 'POST',
@@ -914,7 +1199,7 @@ test('/api/diff/context serves clamped context rows', async () => {
     assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);
     // The syntax highlighter tokenizes the trailing digit, so "line 3" is served
     // as 'line <span class="tk-n">3</span>' rather than a literal substring.
-    assert.match(html, /line <span class="tk-n">3<\/span>/);
+    assert.match(html, />line<\/span> <span class="tk-n">3<\/span>/);
     const split = await fetch(context('file=notes.txt&from=2&to=3&layout=split'));
     assert.match(await split.text(), /ds-celldiv/);
     const empty = await fetch(context('file=notes.txt&from=9999&to=eof&layout=unified'));
@@ -986,7 +1271,7 @@ test('/api/diff/context serves the story head, not the drifted working tree', as
     assert.match(html, /^<div data-ctx-rows data-from="2" data-to="4">/);
     // Story-head content at line 3 is "line 3" (digit tokenized by the highlighter) —
     // the drifted working-tree content must NOT leak in.
-    assert.match(html, /line <span class="tk-n">3<\/span>/);
+    assert.match(html, />line<\/span> <span class="tk-n">3<\/span>/);
     assert.doesNotMatch(html, /drifted/);
   } finally {
     server.close();

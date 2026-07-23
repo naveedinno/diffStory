@@ -67,7 +67,12 @@ export function diffLineTokens(oldLine, newLine) {
     // A whitespace-only token is never marked changed on its own — highlighting a
     // lone space reads as noise. Real tokens off the common subsequence are marked.
     const left = a.map((t, k) => renderToken(t, !aCommon[k] && !isWs(t.text))).join('');
-    const right = b.map((t, k) => renderToken(t, !bCommon[k] && !isWs(t.text))).join('');
+    let rightColumn = 1;
+    const right = b.map((t, k) => {
+        const html = renderToken(t, !bCommon[k] && !isWs(t.text), rightColumn);
+        rightColumn += t.text.length;
+        return html;
+    }).join('');
     return { left, right };
 }
 /**

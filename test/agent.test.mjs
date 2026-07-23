@@ -49,8 +49,12 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   ]) {
     assert.ok(!p.includes(duplicated), `craft rule duplicated in prompt: ${duplicated}`);
   }
-  // Drift guard: a slim prompt stays an instruction, not a second copy of the skill.
-  assert.ok(p.length < 3000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  // Drift guard. The boundary the eval loop settled on: the prompt owns what the
+  // VALIDATOR enforces (field names, numeric caps) because machine-checked
+  // contracts do not survive being read as prose inside an 8k-word skill; the
+  // skill owns judgment. So size alone is not the test — the craft-section
+  // assertions above are. This cap just stops the skill leaking back in wholesale.
+  assert.ok(p.length < 4000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -64,16 +68,21 @@ test('storyPrompt supports story detail levels', () => {
   const detailed = storyPrompt('main', undefined, 'detailed');
   assert.ok(detailed.includes('git diff main --'));
   assert.ok(detailed.includes('set its "mode" field to "detailed"'));
+  for (const mode of ['brief', 'guided', 'detailed']) {
+    const prompt = storyPrompt('main', undefined, mode);
+    assert.ok(prompt.length < 4000, `${mode} prompt grew to ${prompt.length} chars`);
+  }
 });
 
 test('bundled diffstory-storyteller skill teaches reviewer-first story generation', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
   assert.ok(skill.includes('Make a reviewer map before JSON'));
   assert.ok(skill.includes('falsifiable mental model'));
   assert.ok(skill.includes('Hard quality gates'));
   assert.ok(skill.includes('coverage ledger'));
   assert.ok(skill.includes('`viewport` is the review window'));
-  assert.ok(skill.includes('`range` is the coverage hook'));
+  assert.ok(flat.includes('`range` anchors; optional top-level `ranges` claim; `highlights` point'));
   assert.ok(skill.includes('Truth audit'));
   assert.ok(skill.includes('Do not claim tests pass unless you ran them'));
 });
@@ -94,7 +103,9 @@ test('bundled diffstory-storyteller skill makes the camera contract falsifiable'
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   assert.ok(skill.includes('guided camera'));
   assert.ok(skill.includes('orientation -> change ->'));
-  assert.ok(skill.includes('at most 60 lines'));
+  assert.ok(skill.includes('detailed steps stay within 60'));
+  assert.ok(skill.includes('range` itself'));
+  assert.ok(skill.includes('at most 12 context'));
   assert.ok(skill.includes('at most 12 lines'));
   assert.ok(skill.includes('Memory test'));
   assert.ok(skill.includes('Camera test'));
@@ -124,6 +135,7 @@ test('bundled diffstory-storyteller skill teaches just-in-time concept primers',
 
 test('bundled diffstory-storyteller skill pins concept schema, limits, and diagram safety', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
   assert.ok(skill.includes('Newly generated stories use `"version": 2`'));
   assert.ok(skill.includes('60-180 words'));
   assert.match(skill, /hard maximum\s+of 220 words/);
@@ -135,8 +147,9 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
   assert.ok(skill.includes('flowchart`, `sequenceDiagram`, or `stateDiagram-v2'));
   assert.ok(skill.includes('caption is required'));
   assert.ok(skill.includes('No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives'));
-  assert.ok(skill.includes('must not contain `file`, `range`, `viewport`, `highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`'));
-  assert.ok(skill.includes('Every code step includes a short `question`'));
+  assert.ok(flat.includes('must not contain `file`, `range`, `ranges`, `viewport`, `highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`'));
+  assert.match(flat, /`question`[^.]{0,400}(?:optional|except)/i);
+  for (const tag of ['`skim`', '`sweep`', '`mechanical`']) assert.ok(flat.includes(tag));
   assert.ok(skill.includes('Stories longer than 10 steps'));
 });
 
@@ -635,10 +648,12 @@ test('bundled diffstory-storyteller skill demands honest hotspots and non-goals'
 
 test('bundled diffstory-storyteller skill bans rhetorical review questions', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
-  assert.ok(skill.includes('Answer your own `question` before keeping it'));
+  assert.ok(skill.includes('Run the flip test on every `question`'));
+  assert.ok(skill.includes('name the specific bug'));
   assert.ok(skill.includes('rhetorical'));
-  assert.ok(skill.includes('Question test'));
-  assert.ok(skill.includes('could get wrong'));
+  assert.ok(skill.includes('REJECT, rhetorical'));
+  assert.ok(skill.includes('KEEP, names a real bug'));
+  assert.ok(skill.includes('Question flip test'));
 });
 
 test('bundled diffstory-storyteller skill shows the same diff as changelog vs story', () => {
@@ -647,4 +662,197 @@ test('bundled diffstory-storyteller skill shows the same diff as changelog vs st
   assert.ok(skill.includes('The changelog (do not write this)'));
   assert.ok(skill.includes('The story (write this)'));
   assert.ok(skill.includes('each question names a failure the evidence must rule out'));
+});
+
+test('bundled diffstory-storyteller skill teaches beat prose that unlocks, not inventories', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('the layer that most often goes flat'));
+  assert.ok(skill.includes('No line-number narration'));
+  assert.ok(skill.includes('One beat, one decision'));
+  assert.ok(skill.includes('End on the consequence'));
+  assert.ok(skill.includes('BAD  (one beat, three decisions, pure inventory)'));
+  assert.ok(skill.includes('GOOD  (three beats, each one decision ending in its consequence)'));
+  assert.ok(skill.includes('Beat prose test'));
+});
+
+test('bundled diffstory-storyteller skill rejects circular intent sources', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Prefer evidence that *motivated* the change'));
+  assert.ok(skill.includes('circular'));
+  assert.ok(skill.includes('keep the\n  goal narrow and factual'));
+});
+
+test('bundled diffstory-storyteller skill signals independent concerns instead of faking a thread', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Branch rule'));
+  assert.ok(skill.includes('Do not fake a thread between them'));
+  assert.ok(skill.includes('announcing the switch'));
+  assert.ok(skill.includes('An unsignalled jump between concerns'));
+  assert.ok(skill.includes('an unannounced jump fails this test'));
+});
+
+test('bundled diffstory-storyteller skill permits only narrow mechanical sweep consolidation', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  assert.ok(flat.includes('Count the hunks before you plan the steps'));
+  assert.ok(flat.includes('Mechanical sweeps'));
+  assert.ok(flat.includes('one repeated mechanical pattern in one file'));
+  assert.ok(flat.includes('top-level `ranges`'));
+  assert.ok(flat.includes('Keep `range` tight around one representative instance'));
+  assert.ok(flat.includes('Scattered substantive decisions need separate steps'));
+  assert.ok(flat.includes('coverage wins'));
+  assert.ok(!flat.includes('One step claims exactly one `range`'));
+});
+
+test('bundled diffstory-storyteller skill keeps detailed mode from narrating line numbers', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('describes *granularity*, never *phrasing*'));
+  assert.ok(skill.includes('does not license narrating line numbers'));
+  assert.ok(skill.includes('let the highlight supply the address'));
+});
+
+test('bundled diffstory-storyteller skill forbids abbreviating sweep-step schema', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  assert.ok(flat.includes('shorter, never structurally lighter'));
+  assert.ok(flat.includes('beats use `text`, never `body`'));
+  assert.ok(flat.includes('drift into an abbreviated shape, and the app rejects the whole story over it'));
+  assert.ok(flat.includes('Schema spot-check'));
+  assert.ok(flat.includes('are the ones real stories lose first'));
+  assert.ok(flat.includes('`order` (a number — never omit it)'));
+});
+
+test('storyPrompt pins machine-checked field names the skill prose cannot convey', () => {
+  // Real eval runs paraphrased the beat field as "body" and "prose" and dropped
+  // "order" from every step. Field names are the output contract, not craft, so
+  // they live in the prompt where they cannot be reworded.
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Exact field names (never paraphrase)'));
+  assert.ok(p.includes('"order" (number 1..N)'));
+  assert.ok(p.includes('optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical"'));
+  assert.ok(p.includes('"question" is required unless tagged that way'));
+  assert.ok(p.includes('"text" (not "body" or "prose")'));
+  assert.ok(p.includes('"body" is concept-only'));
+  assert.ok(p.includes('One omission invalidates the story'));
+});
+
+test('bundled diffstory-storyteller skill keeps sweep steps from becoming diff narration', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  assert.ok(flat.includes('Sweep steps must not become diff narration'));
+  assert.ok(flat.includes('Keep `range` tight around one representative instance'));
+  assert.match(flat, /same (?:repeated )?(?:edit|change|pattern)/i);
+  assert.ok(flat.includes('never a restatement of the changed lines'));
+  assert.ok(flat.includes('same `chapter` so the rail shows one skimmable'));
+});
+
+test('bundled diffstory-storyteller skill separates range (claims) from highlights (points)', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  // Markdown rewraps as the prose is edited, so match against whitespace-normalized
+  // text instead of guessing where a line happens to break.
+  const flat = skill.replace(/\s+/g, ' ');
+  for (const phrase of [
+    '`range` anchors; optional top-level `ranges` claim; `highlights` point',
+    'top-level `ranges`',
+    'legacy `focus.ranges`',
+    'complete coverage claim',
+    '`range` must be contained in one entry',
+    'not the bounding box',
+    'Other top-level `ranges` entries may sit outside `viewport`',
+    'Point the single beat at ONE local instance',
+  ]) {
+    assert.ok(flat.includes(phrase), `SKILL.md is missing: ${phrase}`);
+  }
+});
+
+test('bundled diffstory-storyteller skill bans value-transition narration in beats', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  for (const phrase of [
+    'Never narrate a value transition',
+    'The diff already renders both sides in colour',
+    'say what depended on it',
+    'A sweep beat is allowed to be short; it is not allowed to be empty',
+  ]) {
+    assert.ok(flat.includes(phrase), `SKILL.md is missing: ${phrase}`);
+  }
+});
+
+test('storyPrompt pins the numeric limits the validator enforces, per mode', () => {
+  // Camera caps drifted the same way field names did: stated in the skill, ignored
+  // in practice. They are machine-checked, so they belong next to the field names.
+  const guided = storyPrompt('main');
+  assert.ok(guided.includes('Hard limits the app enforces'));
+  assert.ok(guided.includes('at most 12 lines'));
+  assert.ok(guided.includes('A wide "range" does NOT permit a wide highlight'));
+  assert.ok(guided.includes('Each claimed span covers its FULL changed cluster'));
+  assert.ok(guided.includes('"range" is framed and inside "viewport"'));
+  assert.ok(guided.includes('other "ranges" entries need not be'));
+  assert.ok(guided.includes('"viewport": at most 40 lines in guided mode'));
+  assert.ok(guided.includes('only a changed/new-file step with a larger "range" may use its length plus at most 12 context lines'));
+  assert.ok(guided.includes('At most 3 beats per step in guided mode'));
+  assert.ok(guided.includes('must not narrate a value transition'));
+
+  const detailed = storyPrompt('main', undefined, 'detailed');
+  assert.ok(detailed.includes('"viewport": at most 60 lines in detailed mode'));
+  assert.ok(detailed.includes('At most 5 beats per step in detailed mode'));
+});
+
+test('storyPrompt self-check names every required field, not a sample', () => {
+  // A run that was told to check only order/text/highlights shipped 55 code
+  // steps with no "why" at all — the self-check list is what gets verified.
+  const p = storyPrompt('main');
+  assert.ok(p.includes('check EVERY step'));
+  assert.ok(p.includes('all ten always-required fields'));
+  assert.ok(!p.includes('all eleven of'));
+  for (const f of ['id', 'order', 'title', 'kind', 'file', 'range', 'viewport', 'highlights', 'why', 'beats']) {
+    assert.ok(p.includes(`"${f}"`), `self-check omits ${f}`);
+  }
+  assert.ok(p.includes('has "question" unless tagged "skim", "sweep", or "mechanical"'));
+  assert.ok(p.includes('every beat has "text" and "highlights"'));
+  assert.ok(p.includes('One omission invalidates the story'));
+});
+
+test('storyPrompt makes coverage a verification pass, not just a generation goal', () => {
+  // Scattered mechanical edits may share one narrative only through explicit
+  // top-level claims; ordinary behavior still keeps one framed local range.
+  const p = storyPrompt('main');
+  assert.ok(p.includes('Coverage pass'));
+  assert.ok(p.includes('including separate clusters inside one hunk'));
+  assert.ok(p.includes('changed/new-file step claims TOP-LEVEL "ranges" when present, otherwise "range"'));
+  assert.ok(p.includes('Legacy "focus.ranges" only points at code; it never claims coverage'));
+  assert.ok(p.includes('Only on a "skim"/"sweep"/"mechanical" step for one repeated sweep in one file'));
+  assert.ok(p.includes('one representative "range"'));
+  assert.ok(p.includes('every other full changed span in "ranges"'));
+  assert.ok(p.includes('Other entries may be outside "viewport"'));
+  assert.ok(p.includes('"range" must be contained in one entry, never a bounding box'));
+  assert.ok(p.includes('Anything outside all claims is unexplained'));
+});
+
+test('storyPrompt requires every named source to be cited in intent.sources', () => {
+  // A run named "DESIGN_MEMORY" in its goal while sources listed only the commit,
+  // making the reviewer's one verifiable claim unverifiable.
+  const p = storyPrompt('main');
+  assert.ok(p.includes('must also appear in "sources"'));
+  assert.ok(p.includes('if you cannot cite it, do not name it'));
+});
+
+test('bundled diffstory-storyteller skill bridges chapter seams without blanket long-tail merging', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  for (const phrase of [
+    'Chapter-seam rule',
+    'must open by naming the seam',
+    'the single most common place a story loses its thread',
+    'Long-tail caution',
+    'top-level `ranges`',
+    'show a representative instance',
+    'coverage-preserving tool for the repetitive tail',
+    'not a general instruction to make stories shorter',
+  ]) {
+    assert.ok(flat.includes(phrase), `SKILL.md is missing: ${phrase}`);
+  }
+  assert.ok(flat.includes('one repeated mechanical pattern in one file'));
+  assert.ok(flat.includes('Substantive changes still need enough local steps to explain every decision'));
+  assert.ok(!flat.includes('Prose is the only lever here; step count is not.'));
 });

@@ -56,7 +56,6 @@ const ICON_TRASH =
 const ICON_SEARCH =
   '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>';
 const ICON_MARK = brandMarkSvg('appmark', 34, 34);
-const COLO_MARK = brandMarkSvg('colomark', 15, 15, 'mono');
 
 const HERO_THREAD = brandThreadBackdropSvg('hero-thread ds-atmosphere-thread');
 
@@ -97,7 +96,7 @@ export function renderPicker(recents: RecentRow[], home: string, now: number): s
   const list = recents.length
     ? available.map((r, i) => recentCard(r, home, now, i)).join('') +
       (missing.length
-        ? `<details class="missing-group"><summary>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'} <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r, i) => recentCard(r, home, now, available.length + i)).join('')}</div></details>`
+        ? `<details class="missing-group"><summary><span data-missing-count>${missing.length} unavailable ${missing.length === 1 ? 'workspace' : 'workspaces'}</span> <span aria-hidden="true">⌄</span></summary><div class="missing-list">${missing.map((r, i) => recentCard(r, home, now, available.length + i)).join('')}</div></details>`
         : '')
     : `<div class="empty"><span class="empty-mark">${ICON_FOLDER}</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Point diffStory at any local Git repository — it reads the working tree directly, nothing is uploaded.</p></div>`;
 
@@ -146,17 +145,17 @@ h1.wordmark{font-family:var(--font-display);font-size:24px;font-weight:400;line-
 .wm-diff{color:var(--label2);font-weight:400}.wm-story{color:var(--label);font-weight:700}
 .brandkicker{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
 .manager{min-width:0}
-.launchwarn{margin:0 0 18px;padding:10px 12px;border:1px solid var(--amber);border-radius:var(--radius);background:var(--amber-soft);color:var(--label);font-size:12.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
+.launchwarn{margin:14px 0 0;padding:10px 2px 0;border:0;border-top:1px solid var(--sep);background:transparent;color:var(--label2);font-size:11.5px;line-height:1.45;display:flex;align-items:center;gap:10px}
 .launchwarn[hidden]{display:none}
 .launchwarn span{flex:1;min-width:0}
-.skillfix{flex:none;font:inherit;font-size:12px;font-weight:600;color:var(--on-accent);background:var(--blue);border:none;border-radius:var(--radius);padding:6px 10px;cursor:pointer}
-.skillfix:hover{background:var(--blue-press)}.skillfix:disabled{opacity:.55;cursor:default}
+.skillfix{flex:none;font:inherit;font-size:11.5px;font-weight:600;color:var(--label2);background:transparent;border:1px solid var(--hairline);border-radius:var(--radius);padding:5px 9px;cursor:pointer}
+.skillfix:hover{background:var(--hover);color:var(--label)}.skillfix:disabled{opacity:.55;cursor:default}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:2px 0 14px}
 h2{font-family:var(--font-display);font-size:26px;line-height:1.1;font-weight:700;margin:0;letter-spacing:-.02em}
 .add-btn{height:var(--control-h);padding:0 13px;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:var(--radius);background:var(--blue);color:var(--on-accent);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
 .add-btn:hover{background:var(--blue-press)}
 .stack>*+*{margin-top:8px}
-.missing-group{margin-top:12px;border-top:1px solid var(--sep);padding-top:8px}.missing-group>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:8px 3px;color:var(--label3);font-size:12px;font-weight:600;cursor:pointer}.missing-group>summary::-webkit-details-marker{display:none}.missing-group[open]>summary span{transform:rotate(180deg)}.missing-list{display:grid;gap:8px;padding-top:2px}
+.missing-group{margin-top:12px;border-top:1px solid var(--sep);padding-top:8px}.missing-group>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:8px 3px;color:var(--label3);font-size:12px;font-weight:600;cursor:pointer}.missing-group>summary::-webkit-details-marker{display:none}.missing-group[open]>summary>[aria-hidden="true"]{transform:rotate(180deg)}.missing-list{display:grid;gap:8px;padding-top:2px}
 .repo-card,.fsrow{font:inherit; color:inherit; cursor:pointer}
 .repo-row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;align-items:stretch}
 .lg-num{flex:none;width:20px;font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:-.01em;color:var(--numeral);text-align:right}
@@ -247,12 +246,7 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
 .fsrow .repo{font-size:11px; font-weight:600; padding:1px 7px; border-radius:var(--radius-sm); background:var(--green-bg); color:var(--green-fg)}
 .fsrow .go{color:var(--label3); opacity:.5; display:flex; flex:none}
 .fsempty{padding:26px; text-align:center; color:var(--label3); font-size:13px}
-.colophon{margin-top:auto;padding-top:16px;border-top:1px solid var(--sep);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;
-  font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--label3)}
 .manager{margin-bottom:56px}
-.colo-brand{display:inline-flex;align-items:center;gap:7px;color:var(--label2);flex:none}
-.colo-brand .colomark{display:block;opacity:.7}
-.colo-note{text-align:right;min-width:0}
 .sheet-foot{display:flex; align-items:center; gap:10px; padding:13px 16px; border-top:1px solid var(--sep)}
 .foot-path{flex:1; min-width:0; font-family:var(--font-mono); font-size:11.5px; color:var(--label3);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -274,7 +268,6 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
   .hero-thread{display:none}
   .appmark{width:28px;height:28px}
   .section-head{align-items:center}h2{font-size:21px}
-  .colophon{justify-content:center;text-align:center}.colo-note{text-align:center}
   .repo-row{position:relative;display:block}.repo-card{padding-right:54px}
   .lg-num{display:none}
   .remove-btn{position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:2}
@@ -296,19 +289,15 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
   </section>
 
   <section class="manager reveal d2">
-    <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
     <div class="section-head">
       <div><h2>Repositories</h2></div>
       <button class="add-btn" id="quickAddBtn" type="button" aria-label="Add repository" title="Add repository">${ICON_PLUS}<span>Add repository</span></button>
     </div>
     <div class="stack" id="recent">${list}</div>
+    <p class="launchwarn" id="skillWarn" hidden><span id="skillWarnText" role="status" aria-live="polite" aria-atomic="true"></span><button class="skillfix" id="skillUpdateBtn" type="button">Update skills</button></p>
     <p class="sr-only" id="msg" role="status"></p>
   </section>
 
-  <footer class="colophon reveal d3">
-    <span class="colo-brand">${COLO_MARK}<span>diffStory</span></span>
-    <span class="colo-note">Reads your working tree locally — nothing leaves this machine</span>
-  </footer>
 </main>
 
 <div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Choose a repository folder" tabindex="-1" hidden>
@@ -379,20 +368,40 @@ input[type=search]:focus{border-color:var(--accent-line); box-shadow:0 0 0 3px v
   function emptyRecent(){
     return '<div class="empty"><span class="empty-mark">'+document.getElementById('ico-folder').innerHTML+'</span><p class="empty-title">No repositories yet</p><p class="empty-sub">Point diffStory at any local Git repository — it reads the working tree directly, nothing is uploaded.</p></div>';
   }
-  function removeRecent(path,row){
+  function syncRecentUi(){
+    var group=document.querySelector('#recent .missing-group');
+    if(group){
+      var count=group.querySelectorAll('.repo-row').length;
+      if(!count){group.parentNode.removeChild(group);}
+      else{
+        var label=group.querySelector('[data-missing-count]');
+        if(label)label.textContent=count+' unavailable '+(count===1?'workspace':'workspaces');
+      }
+    }
+    if(!document.querySelector('#recent .repo-row'))document.getElementById('recent').innerHTML=emptyRecent();
+  }
+  function removeRecent(path,row,button){
+    if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
     fetch('/api/repos/recent',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({path:path})})
       .then(function(r){return r.json().catch(function(){return {};}).then(function(d){if(!r.ok)throw new Error(d.error||'Could not remove repository.');return d;});})
       .then(function(){
         if(row&&row.parentNode)row.parentNode.removeChild(row);
-        if(!document.querySelector('#recent .repo-row'))document.getElementById('recent').innerHTML=emptyRecent();
+        syncRecentUi();
         msg.style.color='var(--label2)'; msg.textContent='Removed from recent repositories.';
       })
-      .catch(function(e){ msg.style.color='var(--red-fg)'; msg.textContent=e.message||'Could not remove repository.'; });
+      .catch(function(e){
+        if(button){button.disabled=false;button.removeAttribute('aria-busy');}
+        msg.style.color='var(--red-fg)'; msg.textContent=e.message||'Could not remove repository.';
+      });
   }
-  document.getElementById('recent').addEventListener('click',function(e){
-    var rb=e.target.closest('button[data-remove-repo]');
-    if(rb){ e.preventDefault(); e.stopPropagation(); removeRecent(rb.getAttribute('data-remove-repo'),rb.closest('.repo-row')); return; }
-    var b=e.target.closest('button[data-open]'); if(b) open(b.getAttribute('data-open'));
+  Array.prototype.forEach.call(document.querySelectorAll('#recent button[data-remove-repo]'),function(rb){
+    rb.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      removeRecent(rb.getAttribute('data-remove-repo'),rb.closest('.repo-row'),rb);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#recent button[data-open]'),function(b){
+    b.addEventListener('click',function(){open(b.getAttribute('data-open'));});
   });
   var scrim=document.getElementById('scrim'), fslist=document.getElementById('fslist'),
       crumbs=document.getElementById('crumbs'), footPath=document.getElementById('footPath'),

@@ -10,7 +10,7 @@ const rows = [
 
 test('side-by-side (render.ts cell) marks only the changed token', () => {
   const html = renderFullFile(rows, { file: 'a.ts', newFile: false });
-  assert.match(html, /changed">computeCost/); // added side
+  assert.match(html, /changed"[^>]*>computeCost/); // added side
   assert.match(html, /changed">computeFee/); // removed side
   assert.doesNotMatch(html, /changed">total/); // shared prefix untouched
   assert.doesNotMatch(html, /changed">x/); // shared arg untouched

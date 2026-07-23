@@ -31,6 +31,7 @@ test('workspace handoffs are interruptible and scoped to the changing surface', 
   assert.match(PAGE_JS, /if\(typeof document\.startViewTransition!=='function'\)return runWorkspaceFallback/);
   assert.match(PAGE_JS, /workspaceTransition\.skipTransition\(\)/);
   assert.match(PAGE_JS, /document\.startViewTransition\(update\)/);
+  assert.match(PAGE_JS, /Promise\.resolve\(workspaceTransition\.ready\)\.catch\(function\(\)\{\}\)/);
   assert.match(PAGE_JS, /function runWorkspaceFallback\(kind,direction,update\)/);
   assert.match(PAGE_JS, /workspaceFallbackTimer\)clearTimeout\(workspaceFallbackTimer\)/);
   assert.match(PAGE_JS, /surface\.classList\.add\('is-workspace-entering'\)/);
@@ -57,6 +58,8 @@ test('focus scrolling cancels stale work and honors reduced motion', () => {
   assert.match(PAGE_JS, /function cancelFocusScroll\(\)/);
   assert.match(PAGE_JS, /cancelAnimationFrame\(focusScrollFrame\)/);
   assert.match(PAGE_JS, /document\.documentElement\.contains\(target\)/);
+  assert.match(PAGE_JS, /var rendered=rows\.filter\(function\(row\)\{return !closest\(row,'\[hidden\]'\)&&row\.getClientRects\(\)\.length>0;\}\)/, 'beat centering excludes the hidden unified or split copy');
+  assert.match(PAGE_JS, /var candidates=rendered\.length\?rendered:rows,target=candidates\[Math\.floor\(\(candidates\.length-1\)\/2\)\]/, 'beat centering chooses its midpoint from rendered rows');
   assert.match(PAGE_JS, /behavior:instant\|\|prefersReducedMotion\(\)\?'auto':'smooth'/);
   assert.match(DIFF_JS, /behavior:\(opts&&opts\.instant\)\|\|prefersReducedMotion\(\)\?'auto':'smooth'/);
 });
@@ -74,12 +77,21 @@ test('resize gestures batch frame writes and scope layout variables', () => {
   assert.doesNotMatch(PAGE_CSS, /\.ds-rail\{[^}]*transition:[^}]*width/);
 });
 
-test('read aloud focus is static while loading state remains explicit', () => {
+test('read aloud focus is static and routine playback state stays in the controls', () => {
   assert.doesNotMatch(DIFF_CSS, /dsVoiceFocus/);
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /animation|filter/);
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /animation|filter/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-speaking \.ds-readaloud-ico\{animation:none;box-shadow:0 0 0 3px var\(--accent-soft\)\}/);
-  assert.match(PAGE_CSS, /\.ds-readaloud-primary\.is-active \.ds-readaloud-ico\.is-stop::before\{content:"";width:14px;height:14px;border-radius:3px;background:currentColor/);
+  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-play::before\{content:"";width:0;height:0/);
+  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-pause::before\{content:"";width:8px;height:9px;border-left:3px solid currentColor;border-right:3px solid currentColor/);
+  assert.match(PAGE_CSS, /\.ds-narration-stop span\{width:9px;height:9px;border-radius:2px;background:currentColor/);
+  assert.doesNotMatch(PAGE_CSS, /ds-narration-status|ds-narration-track|ds-narration-dot/);
+  assert.doesNotMatch(PAGE_CSS, /ds-aloud-active \.ds-live-banner/);
+  assert.match(PAGE_CSS, /\.ds-narration-stop::after\{content:"Stop"\}/);
+  assert.match(PAGE_CSS, /\.ds-narration-stop\{position:absolute;z-index:13;top:calc\(100% \+ 16px\);right:-40px;width:62px;height:32px/);
+  assert.match(PAGE_CSS, /\.ds-aloud-active \.ds-playstep\{opacity:\.48\}/);
+  assert.match(PAGE_JS, /document\.body\.classList\.toggle\('ds-aloud-active',playing\)/);
+  assert.doesNotMatch(PAGE_JS, /Voice paused|Voice resumed/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading/);
 });
 
@@ -88,7 +100,7 @@ test('reduced motion keeps status feedback but removes movement and pulses', () 
   assert.match(PAGE_CSS, /\.ds-toast\{animation:none!important;transform:translateX\(-50%\);transition:opacity 200ms ease\}/);
   assert.match(PAGE_CSS, /\.ds-readhead-fill\{transition:none!important\}/);
   assert.match(PAGE_CSS, /\.ds-agent-target\.is-busy \.ds-agent-target-icon[^}]*animation:none!important/);
-  assert.match(PAGE_CSS, /prefers-reduced-motion:no-preference\)\{\.ds-voice-card:hover\{transform:translateY\(-1px\)\}/);
+  assert.doesNotMatch(PAGE_CSS, /ds-voice-card/);
   assert.match(PAGE_CSS, /\.ds-live-banner\{transition:none!important\}/);
   assert.match(DIFF_CSS, /\.ds-row\.is-voice-focus[^}]*animation:none!important;filter:none!important/);
   const progress = progressPanelStyles();

@@ -180,6 +180,8 @@ export interface ReviewModel {
   contextFiles: number;
   totalAdd: number;
   totalDel: number;
+  /** Hunk-bearing changed files inside the story's selected scope. */
+  storyFilesChanged: number;
 }
 
 export function buildReviewModel(
@@ -229,6 +231,9 @@ export function buildReviewModel(
   });
   const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef);
   const trust = buildTrust(coverageFiles, uncovered, stepByFile);
+  const changedFileViews = fileViews.filter((file) => file.kind !== 'context');
+  const storyPaths = new Set(coverageFiles.map((file) => file.newPath));
+  const storyFileViews = changedFileViews.filter((file) => storyPaths.has(file.file));
 
   return {
     steps: stepViews,
@@ -238,10 +243,11 @@ export function buildReviewModel(
     totalSteps: steps.length,
     codeSteps: codeSteps.length,
     conceptSteps: steps.length - codeSteps.length,
-    filesChanged: fileViews.filter((f) => f.kind !== 'context').length,
+    filesChanged: changedFileViews.length,
     contextFiles: fileViews.filter((f) => f.kind === 'context').length,
-    totalAdd: fileViews.reduce((a, f) => a + f.add, 0),
-    totalDel: fileViews.reduce((a, f) => a + f.del, 0),
+    totalAdd: changedFileViews.reduce((a, f) => a + f.add, 0),
+    totalDel: changedFileViews.reduce((a, f) => a + f.del, 0),
+    storyFilesChanged: storyFileViews.length,
   };
 }
 

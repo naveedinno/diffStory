@@ -2,7 +2,7 @@
 // for every changed line. It does not prove that the story is correct or that a
 // human reviewed the change.
 import { changedRanges, rangesOverlap } from './diff.js';
-import { isCodeStep } from './types.js';
+import { claimedRanges, isCodeStep } from './types.js';
 /** Inclusive portions of target that are not accounted for by any claim. */
 function unclaimedSegments(target, claims) {
     const relevant = claims
@@ -24,14 +24,39 @@ function unclaimedSegments(target, claims) {
         missing.push([cursor, target[1]]);
     return missing;
 }
+/** Maximum local review window for the authored story depth. */
+function rangeCap(tour) {
+    return tour.mode === 'detailed' ? 60 : 40;
+}
+function rangeLength([start, end]) {
+    return end - start + 1;
+}
+/**
+ * Short legacy claims may include ordinary context around a change. A claim
+ * larger than the camera budget is only credible when the diff proves that
+ * the whole span is one contiguous change; otherwise a bounding box around
+ * distant hunks could manufacture both coverage and a giant viewport.
+ */
+function isCredibleClaim(claim, changed, cap) {
+    if (rangeLength(claim) <= cap)
+        return true;
+    return changed.some(([start, end]) => start <= claim[0] && claim[1] <= end);
+}
 export function computeStoryClaimCoverage(tour, files) {
     // Index the ranges each step claims, by file.
     const claimsByFile = new Map();
+    const filesByPath = new Map(files.map((file) => [file.newPath, file]));
+    const cap = rangeCap(tour);
     for (const step of tour.steps) {
         if (!isCodeStep(step) || step.kind === 'context')
             continue; // concepts/context never claim changes
+        const file = filesByPath.get(step.file);
+        if (!file)
+            continue;
+        const changed = changedRanges(file);
         const list = claimsByFile.get(step.file) ?? [];
-        list.push(step.range);
+        // A step may claim several scattered spans via `ranges`; each one counts.
+        list.push(...claimedRanges(step).filter((claim) => isCredibleClaim(claim, changed, cap)));
         claimsByFile.set(step.file, list);
     }
     const unclaimed = [];
@@ -74,12 +99,18 @@ export function computeCoverage(tour, files) {
 /** Tour steps that point at a file/range with no corresponding change in the diff. */
 export function stalePointers(tour, files) {
     const byPath = new Map(files.map((f) => [f.newPath, f]));
+    const cap = rangeCap(tour);
     return tour.steps.filter((step) => {
         if (!isCodeStep(step) || step.kind === 'context')
             return false; // context/concepts are not diff pointers
         const file = byPath.get(step.file);
         if (!file)
             return true;
-        return !changedRanges(file).some((r) => rangesOverlap(r, step.range));
+        // Check the local camera separately even when `ranges` replaces it as the
+        // coverage claim list. A valid remote sweep must not hide a stale anchor.
+        const pointers = step.ranges?.length ? [step.range, ...step.ranges] : [step.range];
+        const changed = changedRanges(file);
+        return pointers.some((claim) => (!isCredibleClaim(claim, changed, cap)
+            || !changed.some((range) => rangesOverlap(range, claim))));
     });
 }

@@ -81,12 +81,11 @@ export interface TourStepBase {
   chapter?: string;
 }
 
-/** One code-backed stop whose ranges drive the diff camera and coverage gate. */
-export interface CodeTourStep extends TourStepBase {
-  kind: CodeStepKind;
+/** Fields shared by every code-backed stop. */
+export interface CodeTourStepBase extends TourStepBase {
   /** Repo-relative path of the file this step shows. */
   file: string;
-  /** Inclusive changed-line coverage anchor in the post-change file; [0, 0] means a whole-file deletion. */
+  /** Inclusive local camera anchor and legacy coverage claim; [0, 0] means a whole-file deletion. */
   range: [number, number];
   /** Inclusive visible review window the storyteller wants the diff viewer to show. */
   viewport?: [number, number];
@@ -98,13 +97,34 @@ export interface CodeTourStep extends TourStepBase {
   focus?: StepFocusTarget;
   /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */
   why: string;
-  /** A short falsifiable question the reviewer should answer at this stop. */
+  /** A short falsifiable question; optional only for skim/sweep/mechanical stops. */
   question?: string;
   /** Step ids this one leads into (renders the A -> B jump links). */
   calls?: string[];
   /** Step id to return to afterwards (the B -> A jump back). */
   returnsTo?: string;
 }
+
+/** A changed/new-file stop that may explicitly claim scattered changed spans. */
+export interface ChangedCodeTourStep extends CodeTourStepBase {
+  kind: 'changed' | 'new-file';
+  /**
+   * Optional complete coverage-claim list for scattered changed/new-file spans in one file.
+   * `range` remains the tight camera anchor contained by one entry; other entries
+   * may sit outside `viewport` and must not be collapsed into a bounding box.
+   * Absent means the step claims exactly `range`, preserving legacy behaviour.
+   */
+  ranges?: Array<[number, number]>;
+}
+
+/** An unchanged-code stop; context can frame evidence but never claim diff coverage. */
+export interface ContextCodeTourStep extends CodeTourStepBase {
+  kind: 'context';
+  ranges?: never;
+}
+
+/** One code-backed stop with a local camera anchor. */
+export type CodeTourStep = ChangedCodeTourStep | ContextCodeTourStep;
 
 /** Optional diagram inside a concept primer. Source is rendered locally by Mermaid. */
 export interface ConceptDiagram {
@@ -132,12 +152,23 @@ export function isCodeStep(step: TourStep): step is CodeTourStep {
   return step.kind !== 'concept';
 }
 
+/**
+ * Every changed span a code step claims for the coverage gate. `ranges` exists so
+ * one step can honestly claim scattered edits (a rename across twenty call sites)
+ * instead of forcing one step per hunk; without it, `range` alone is the claim.
+ */
+export function claimedRanges(step: CodeTourStep): Array<[number, number]> {
+  return step.ranges?.length ? step.ranges : [step.range];
+}
+
 /** The whole reading plan the AI emits. */
 export interface Tour {
   /** v1 contains code-only steps; v2 also permits concept primers. */
   version: 1 | 2;
   /** SHA-256 of the exact rendered git diff when the story was last generated or repaired. */
   diffFingerprint?: string;
+  /** Immutable post-story repository evidence used for scope-aware freshness and since-story diffs. */
+  storySnapshot?: { version: 1; id: string };
   /** Story depth requested at generation time; old stories default to guided. */
   mode?: StoryMode;
   title: string;

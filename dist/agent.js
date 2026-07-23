@@ -72,6 +72,45 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `The skill owns the craft. Follow its workflow in order — recover the why, reconstruct the app path, storyboard the camera, then write the steps — and honor every contract it defines: ` +
         `coverage, ranges, viewport/highlight camera limits, beats, concept-primer budgets, questions, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
         `The app validates the finished story against those contracts and flags violations, so do not improvise a different format or looser limits.\n\n` +
+        // The craft lives in the skill, but these exact field names do not survive
+        // being read as prose: real runs paraphrased "text" into "body" and "prose",
+        // and dropped "order" from every step. Machine-checked names get pinned here,
+        // closest to the moment of writing, where they cannot be reworded.
+        `Exact field names (never paraphrase):\n` +
+        `- Top level: "version", "title", "summary", "base", "mode", "intent", "steps"; "title" and "summary" are required.\n` +
+        `- Every step: "id", "order" (number 1..N), "title", "kind".\n` +
+        `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical". "question" is required unless tagged that way.\n` +
+        `- Every beat: "text" (not "body" or "prose") and non-empty "highlights". "body" is concept-only.\n` +
+        // The self-check list is what actually gets verified, so it names every
+        // required field rather than a sample: a run that checked only order/text/
+        // highlights shipped 55 code steps with no "why" at all.
+        `Before writing, check EVERY step: every code step has all ten always-required fields ` +
+        `"id", "order", "title", "kind", "file", "range", "viewport", "highlights", "why", "beats"; has "question" unless tagged "skim", "sweep", or "mechanical"; and every beat has "text" and "highlights". ` +
+        `One omission invalidates the story.\n\n` +
+        // Coverage fails the same way fields did — silently, and only a pass over the
+        // finished JSON catches it. One diff hunk often holds several separate
+        // clusters of changed lines; runs reliably claimed the cluster they narrated
+        // and left the rest of the same hunk uncovered.
+        `Coverage pass:\n` +
+        `- Re-read every changed (+/-) line, including separate clusters inside one hunk.\n` +
+        `- A changed/new-file step claims TOP-LEVEL "ranges" when present, otherwise "range". Legacy "focus.ranges" only points at code; it never claims coverage.\n` +
+        `- Only on a "skim"/"sweep"/"mechanical" step for one repeated sweep in one file: narrate one representative "range"; put it and every other full changed span in "ranges". Other entries may be outside "viewport". "range" must be contained in one entry, never a bounding box across gaps.\n` +
+        `- Anything outside all claims is unexplained.\n\n` +
+        // A run named "DESIGN_MEMORY" in its goal while sources listed only the
+        // commit, leaving the reviewer's one verifiable claim unverifiable.
+        `Finally, check "intent": every document, ticket, or discussion you name in "goal" or "design" must also appear in "sources". ` +
+        `An uncited claim reads as invented; if you cannot cite it, do not name it.\n\n` +
+        // Same lesson as the field names: numeric limits the validator enforces do
+        // not survive being read as prose deep inside the skill. The app rejects the
+        // story on any of these, so they are pinned here rather than described there.
+        `Hard limits the app enforces — a story violating any of these is rejected:\n` +
+        `- Each claimed span covers its FULL changed cluster. "range" is framed and inside "viewport"; other "ranges" entries need not be.\n` +
+        `- Each beat highlight: at most 12 lines, ideally 1-8. A wide "range" does NOT permit a wide highlight.\n` +
+        `- One beat's highlights must stay local — never more than 10 lines apart, or it reads as jumping across the file.\n` +
+        `- "viewport": at most ${storyMode === 'detailed' ? '60' : '40'} lines in ${storyMode} mode; only a changed/new-file step with a larger "range" may use its length plus at most 12 context lines.\n` +
+        `- At most ${storyMode === 'detailed' ? '5' : '3'} beats per step in ${storyMode} mode; split the step instead of adding more.\n` +
+        `- Top-level "highlights" must equal the union of that step's beat highlights.\n` +
+        `- Beat text must not open by naming line numbers ("Line 742 ...") and must not narrate a value transition ("650 -> 600"). The diff already shows both; say why they matter instead.\n\n` +
         `Live progress notes (streamed to the reviewer while you work):\n` +
         `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Reconstructing the app path", then ">> Storyboarding the camera", then ">> Writing the steps".\n` +
         `- Print every phase note as its own line starting with ">> " — for example ">> Goal: enable keepers to cap the fee" or ">> Arc: the cap is stored, then enforced, then tested".\n` +

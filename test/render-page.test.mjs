@@ -84,8 +84,8 @@ test('concept steps render as safe document primers linked to the next code step
 
   assert.ok(html.indexOf("var key='ds-theme'") < html.indexOf('<style>'), 'resolves the color theme before review CSS');
   assert.equal((html.match(/class="ds-theme-toggle"/g) || []).length, 1, 'renders one shared color-theme selector');
-  assert.match(html, /<body class="ds-map-bg"/, 'uses the shared map atmosphere');
-  assert.match(html, /class="ds-thread-layer" data-thread-compact="hide"/, 'keeps the ambient thread inside review chrome');
+  assert.match(html, /<body class="ds-map-bg ds-overview-active"/, 'uses the shared map atmosphere and starts in the calm cover state');
+  assert.doesNotMatch(html, /<div class="ds-thread-layer"|<svg class="ds-atmosphere-thread"/, 'keeps decorative page atmosphere out of the review workspace');
   assert.match(html, /data-theme-choice="light"/);
   assert.match(html, /document\.documentElement\.getAttribute\('data-theme'\)==='dark'/, 'uses the resolved theme for diagrams');
   assert.match(html, /document\.addEventListener\('ds-theme-change'/, 're-renders diagrams after a theme change');
@@ -110,9 +110,14 @@ test('concept steps render as safe document primers linked to the next code step
   assert.match(html, /class="ds-concept-next"[^>]*data-goto-step="2"/);
   assert.match(html, /Next in code · Step 2/);
   assert.match(html, />Apply the request policy<\/span>/);
+  const lazyCodeStep = html.match(/<section class="ds-step ds-step-lazy is-code-step"[^>]*data-step-id="implementation"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(lazyCodeStep, /data-step-speech-cache/);
+  assert.match(lazyCodeStep, /I changed this line so the next helper receives the value it needs\./);
 
   assert.match(html, /1 code step \+ 1 primer/);
-  assert.match(html, />1<\/span><span class="ds-fact-l">code step · 1 primer<\/span>/);
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.doesNotMatch(intro, /ds-intro-meta|code step|primer/, 'the cover should not repeat walkthrough bookkeeping');
+  assert.doesNotMatch(intro, /ds-intro-start-sub|Step 1 ·/, 'the cover action should stay to one compact line');
   const speech = html.match(/<span class="ds-sr-only" data-speech-concept>(.*?)<\/span>/s)?.[1] ?? '';
   assert.match(speech, /The request envelope/);
   assert.match(speech, /Parse &lt;then&gt; apply\./);
@@ -122,7 +127,8 @@ test('concept steps render as safe document primers linked to the next code step
 test('agent activity console starts hidden and idle', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /<div id="ds-agentpanel">/);
-  assert.match(html, /class="ds-pp" data-variant="floating" hidden aria-live="polite"/);
+  assert.match(html, /class="ds-pp" data-variant="floating" hidden>/);
+  assert.match(html, /class="ds-pp-announcer" role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(html, /class="ds-pp-spin" aria-hidden="true" hidden/);
   assert.match(html, /class="ds-pp-title"/);
 });
@@ -152,18 +158,23 @@ test('overview keeps the primary walkthrough action ahead of supporting detail',
     },
   };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
   const ledeAt = html.indexOf('class="ds-intro-lede"');
   const startAt = html.indexOf('class="ds-intro-start"');
-  const contextAt = html.indexOf('class="ds-intro-context"');
-  const factsAt = html.indexOf('class="ds-intro-facts"');
+  const utilityAt = html.indexOf('class="ds-intro-utility"');
+  const notesAt = html.indexOf('class="ds-intro-notes"');
 
   assert.ok(ledeAt < startAt, 'the overview should establish intent before the action');
-  assert.ok(startAt < contextAt, 'the action should be reachable before supporting prose');
-  assert.ok(contextAt < factsAt, 'supporting prose should remain available before the review facts');
+  assert.ok(startAt < utilityAt, 'quiet scope support should follow the primary action');
+  assert.ok(utilityAt < notesAt, 'supporting prose should stay behind one progressive disclosure');
+  assert.equal((intro.match(/class="ds-intro-start"/g) ?? []).length, 1, 'the cover should have one primary action');
+  assert.doesNotMatch(html.match(/<details class="ds-intro-notes"[^>]*>/)?.[0] ?? '', /\sopen/);
+  assert.doesNotMatch(intro, /ds-intro-start-sub|Step 1 ·|ds-intro-meta|ds-intro-disclosure|ds-freshness-callout/);
+  assert.doesNotMatch(html, /<div class="ds-intro-facts">/);
   assert.match(html, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(html, /@media \(prefers-reduced-transparency:reduce\)/);
   assert.match(html, /@media \(prefers-contrast:more\)/);
-  assert.match(html, /\.ds-intro-context \.ds-intro-design\{[^}]*color:color-mix\(in srgb,var\(--text\) 70%,transparent\)/);
+  assert.match(html, /\.ds-intro-notes>summary\{[^}]*display:inline-flex/);
 });
 
 test('step narrative tells the reviewer what to verify', () => {
@@ -174,6 +185,15 @@ test('step narrative tells the reviewer what to verify', () => {
   assert.doesNotMatch(html, /class="ds-step-file"/);
   assert.match(html, /class="ds-diffhead-path">a\.ts<\/span>/);
   assert.doesNotMatch(html, /Why this step/);
+});
+
+test('step header states progress once and leaves position navigation to the filmstrip', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  const panel = html.match(/<section class="ds-step is-code-step"[\s\S]*?<div class="ds-review-question">/)?.[0] ?? '';
+
+  assert.equal((panel.match(/class="ds-step-count"/g) ?? []).length, 1);
+  assert.match(panel, />Step 1 of 1<\/span>/);
+  assert.doesNotMatch(panel, /ds-stage-num|ds-step-pos|ds-iconbtn|data-prev|data-next|Previous story step|Next story step/);
 });
 
 test('story text cannot take over the diff viewport when read aloud is off', () => {
@@ -219,7 +239,7 @@ test('story narrative lives in a nested rail tree and a compact bottom dock', ()
   assert.match(html, /class="ds-railbeats" aria-label="Review beats for/);
   assert.match(html, /\.ds-railstory-node\.is-active>\.ds-railbeats\{display:block\}/);
   assert.match(html, /\.ds-railbeats\{[^}]*border-left:1px solid/);
-  assert.match(html, /\.ds-railbeats-head \.ds-story-tune\.is-icon\.has-health>summary::before\{display:none\}/);
+  assert.doesNotMatch(html, /ds-story-tune\.is-icon\.has-health|story-tune\.is-icon\.has-health/);
   assert.match(html, /class="ds-beatdock"/);
   assert.match(html, /\.ds-beatdock\{[^}]*grid-template-columns:auto minmax\(0,1fr\) auto/);
   assert.match(html, /\.ds-beatdock-note\.is-selected\{display:block;background:transparent\}/);
@@ -228,19 +248,21 @@ test('story narrative lives in a nested rail tree and a compact bottom dock', ()
   assert.match(html, /class="ds-review-question"/);
   assert.doesNotMatch(html, /<div class="ds-why">/);
   assert.doesNotMatch(html, /<div class="ds-step-health/);
-  assert.match(html, /@media \(max-width:470px\)\{\.ds-step-meta\{gap:6px\}\.ds-step-count\{white-space:nowrap\}\.ds-step-meta>\.ds-dot,\.ds-step-meta>\.ds-flowchip,\.ds-step-meta>\.ds-step-pos\{display:none\}\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
+  assert.match(html, /@media \(max-width:470px\)\{\.ds-step-meta\{gap:6px\}\.ds-step-count\{white-space:nowrap\}\.ds-step-meta>\.ds-dot,\.ds-step-meta>\.ds-flowchip\{display:none\}\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
 });
 
-test('review page returns to change scope and keeps saved reviews secondary', () => {
+test('review page closes the story to review history with an explicit action', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [], routeBase: '/repo/demo' });
-  assert.match(html, /class="ds-back" data-close-story href="\/repo\/demo\/change"/);
+  assert.match(html, /class="ds-back" data-close-story href="\/repo\/demo\/stories"/);
   assert.match(html, /<header class="ds-reviewchrome is-storyful" data-review-chrome data-story-chrome>/);
-  assert.match(html, /class="ds-ui-icon" aria-hidden="true"><svg[^>]*>[\s\S]*?m15 18-6-6 6-6[\s\S]*?<\/svg><\/span><span>Change<\/span>/);
+  assert.match(html, /title="Close story and return to review history" aria-label="Close story and return to review history"/);
+  assert.match(html, /class="ds-ui-icon" aria-hidden="true"><svg[^>]*>[\s\S]*?M6 6l12 12M18 6 6 18[\s\S]*?<\/svg><\/span><span>Close story<\/span>/);
+  assert.doesNotMatch(html, /Back to change scope|<span>Change<\/span>/);
   assert.match(html, /href="\/repo\/demo\/stories"[\s\S]*Saved reviews/);
   assert.match(html, /\.ds-back\{/);
   assert.doesNotMatch(html, /\.ds-close-story\{/);
   assert.match(html, /@media \(max-width:720px\)[\s\S]*:root\{--ds-rail-width:240px\}/);
-  assert.match(html, /\.ds-settings-wrap\{display:none\}/);
+  assert.doesNotMatch(html, /ds-settings-wrap/);
   assert.match(html, /getComputedStyle\(layout\)\.getPropertyValue\('--ds-rail-width'\)/);
 });
 
@@ -407,34 +429,47 @@ test('review interaction regressions keep hidden states, note actions, and resum
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
 
   assert.match(html, /\.ds-feedback-drawer \[hidden\]\{display:none!important\}/);
-  assert.match(html, /class="ds-ghost ds-step-ghost ds-ghost-prev"/);
-  assert.match(html, /\.ds-step-ghost\{position:absolute/);
-  assert.match(html, /\.ds-step-ghost\{[^}]*width:44px;height:44px/);
-  assert.match(html, /\.ds-ghost-prev::before\{content:'←'\}\.ds-ghost-next::before\{content:'→'\}/);
-  assert.match(html, /max-width:1120px/);
-  assert.match(html, /width:calc\(100% - 152px\)/);
+  assert.doesNotMatch(html, /data-ghost-prev|data-ghost-next|ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
+  assert.match(html, /width:calc\(100% - 24px\);max-width:none/);
   assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
-  assert.match(html, /\.ds-filmthread\{[^}]*margin:0 12px 12px[^}]*padding:13px 16px 15px/);
-  assert.doesNotMatch(html, /\.ds-ghost\{position:absolute/);
-  assert.match(html, /gp\.removeAttribute\('aria-hidden'\);gp\.tabIndex=0;/);
-  assert.match(html, /gn\.removeAttribute\('aria-hidden'\);gn\.tabIndex=0;/);
-  assert.match(html, /gp\.setAttribute\('aria-label','Previous step: '/);
-  assert.match(html, /gn\.setAttribute\('aria-label','Next step: '/);
+  assert.match(html, /\.ds-filmthread\{[^}]*margin:0 12px 12px[^}]*padding:7px 12px 8px/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
   assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
 });
 
 test('filmstrip navigation names review steps by purpose instead of implementation file', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  const thread = html.match(/<nav class="ds-filmthread"[\s\S]*?<\/nav>/)?.[0] ?? '';
+  const thread = html.match(/<nav class="ds-filmthread[^"]*"[\s\S]*?<\/nav>/)?.[0] ?? '';
+  const longTitle = 'The arbitrary three-line algorithm is deleted';
+  const longTitleHtml = renderPage({
+    repo: process.cwd(),
+    tour: { ...tour, steps: [{ ...tour.steps[0], title: longTitle }] },
+    files,
+    baseLabel: 'main',
+    comments: [],
+  });
+  const longTitleThread = longTitleHtml.match(/<nav class="ds-filmthread[^"]*"[\s\S]*?<\/nav>/)?.[0] ?? '';
 
+  assert.match(thread, /^<nav class="ds-filmthread is-overview"/, 'the numbered navigator starts collapsed on the cover');
   assert.match(thread, /class="ds-filmnode-label">Changed line<\/span>/);
+  assert.match(thread, /data-filmthread-tooltip aria-hidden="true"/);
+  assert.doesNotMatch(thread, / title="/);
+  assert.ok(longTitleThread.includes(`<span class="ds-filmnode-label">${longTitle}</span>`));
   assert.doesNotMatch(thread, />a\.ts<\/span>/);
-  assert.match(html, /\.ds-filmnode\{[^}]*width:112px;min-width:112px/);
-  assert.match(html, /\.ds-filmthread-line\{[^}]*top:30px/);
-  assert.match(html, /\.ds-filmnode\{[^}]*gap:12px/);
-  assert.match(html, /\.ds-filmnode-num\{[^}]*min-height:24px/);
-  assert.match(html, /\.ds-filmnode-label\{[^}]*-webkit-line-clamp:2[^}]*font-family:var\(--sans\)[^}]*font-size:10\.5px[^}]*color:var\(--text-2\)/);
+  assert.match(html, /\.ds-filmnode\{[^}]*width:42px;min-width:42px[^}]*min-height:42px;padding:3px 0 0/);
+  assert.match(html, /\.ds-filmthread-line\{[^}]*top:40px;height:1px;opacity:\.82/);
+  assert.match(html, /\.ds-filmthread-scroll\{[^}]*scrollbar-width:none\}\.ds-filmthread-scroll::-webkit-scrollbar\{display:none\}/);
+  assert.match(html, /\.ds-filmthread-nodes\{[^}]*justify-content:space-between[^}]*gap:4px[^}]*min-width:100%/);
+  assert.match(html, /\.ds-filmnode-num\{[^}]*width:28px;min-width:28px;height:28px;min-height:28px[^}]*color:color-mix\(in srgb,var\(--text-2\) 72%,var\(--numeral-dim\)\)[^}]*transform:translateY\(var\(--ds-dock-lift\)\) scale\(var\(--ds-dock-scale\)\)/);
+  assert.match(html, /\.ds-filmnode:is\(:hover,:focus-visible\)\{--ds-dock-scale:1\.24;--ds-dock-lift:-5px\}/);
+  assert.match(html, /\.ds-filmnode:has\(\+\.ds-filmnode:is\(:hover,:focus-visible\)\)[^}]*--ds-dock-scale:1\.09/);
+  assert.match(html, /\.ds-filmthread-tooltip\{[^}]*bottom:calc\(100% \+ 5px\)[^}]*width:max-content[^}]*max-width:min\(520px[^}]*max-height:none;overflow:visible[^}]*text-wrap:pretty;white-space:normal;overflow-wrap:anywhere[\s\S]*?\.ds-filmthread-tooltip\.is-visible\{opacity:1/);
+  assert.match(html, /function showFilmTooltip\(node\)[\s\S]*filmTooltip\.style\.setProperty\('--ds-film-tooltip-x',x\+'px'\)/);
+  assert.match(html, /function renderFilmMagnification\(\)[\s\S]*distance\/96[\s\S]*1\+\.24\*influence/);
+  assert.match(html, /function onFilmFocusIn\(e\)\{[^}]*clearFilmMagnification\(\);showFilmTooltip\(node\)/);
+  assert.match(html, /@media \(prefers-reduced-motion:reduce\)\{[^}]*\.ds-filmnode,\.ds-filmnode-num,\.ds-filmnode-label,\.ds-filmthread-tooltip\{transition:none!important\}/);
+  assert.match(html, /thread\.classList\.toggle\('is-overview',i===0\)/, 'starting a step should reveal the numbered navigator');
+  assert.match(html, /\.ds-filmthread\.is-overview\{display:none\}/);
   assert.match(html, /if\(i<=1\)scroll\.scrollLeft=0/);
 });
 
@@ -627,135 +662,52 @@ test('diff panels expose automatic first-change navigation controls', () => {
   assert.match(html, /mountThreads\(fullInner\);updateChangeNav\(closest\(fullInner,'.ds-filepanel'\)\|\|closest\(fullInner,'.ds-diff'\)\);jumpToFirstChange\(closest\(fullInner,'.ds-filepanel'\)\|\|closest\(fullInner,'.ds-diff'\)\);/);
 });
 
-test('the review chrome keeps one focused play control without voice-settings clutter', () => {
+test('the review chrome delegates its one narration control to Aloud', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.doesNotMatch(html, /data-voice-engine=/);
   assert.match(html, /class="ds-readaloud ds-readaloud-primary" data-readaloud[^>]*aria-label="Play story"/);
-  assert.match(html, /data-readaloud-label>Play<\/span>/);
-  assert.doesNotMatch(html, /id="ds-settings"/);
-  assert.match(html, /class="ds-playstep" data-playstep/, 'step-level narration remains available in context');
-  assert.match(html, /\.ds-voice-card\[data-voice-preset="flirty"\]/);
-  assert.match(html, /\.ds-voice-card\[data-voice-preset="bass"\]/);
-  assert.match(html, /\.ds-voice-card\[data-say-voice="samantha"\]/);
-  assert.match(html, /\.ds-voice-card\[data-say-voice="daniel"\]/);
-  assert.match(html, /\.ds-voice-card\[data-kokoro-voice="af_heart"\]/);
+  assert.match(html, /class="ds-playstep" data-playstep/, 'step narration remains available in context');
+  assert.match(html, /function aloudFetch\(path,body,signal\)/);
+  assert.match(html, /fetch\('\/api\/aloud\/'\+path,init\)/);
+  assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
+  assert.match(html, /aloudFetch\('status'\)/);
+  assert.match(html, /aloudFetch\('control',\{action:action\}\)/);
+  assert.match(html, /status\.service!=='aloud-speech-daemon'\|\|status\.protocolVersion!==2/);
 });
 
-test('read aloud presets have explicit voice preferences and samples', () => {
+test('diffStory no longer owns voice engines, generated audio, or voice preferences', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /flirty:\{[^}]*rate:0\.98,pitch:1\.04,volume:1/s);
-  assert.match(html, /bass:\{[^}]*rate:0\.95,pitch:0\.92,volume:1/s);
-  assert.match(html, /prefer:\[\/ava\/,\/samantha\/,\/allison\/,\/susan\/,\/serena\/,\/karen\/,\/moira\/,\/tessa\/,\/zira\/,\/jenny\/,\/aria\/\]/);
-  assert.match(html, /prefer:\[\/alex\/,\/daniel\/,\/tom\/,\/david\/,\/mark\/,\/guy\/,\/brian\/\]/);
-  assert.match(html, /sample:'Warm mode\./);
-  assert.match(html, /sample:'Deep mode\./);
-  assert.match(html, /function pickVoice\(presetName\)/);
-  assert.match(html, /voiceScore\(b,presetName\)-voiceScore\(a,presetName\)/);
+  assert.doesNotMatch(html, /SpeechSynthesis|speechSynthesis|new Audio\(/);
+  assert.doesNotMatch(html, /\/api\/tts\/(?:say|kokoro)/);
+  assert.doesNotMatch(html, /ds-voice-engine|ds-say-voice|ds-kokoro-voice|ds-voice-preset/);
+  assert.doesNotMatch(html, /SAY_VOICES|KOKORO_VOICES|VOICE_PRESETS/);
+  assert.doesNotMatch(html, /id="ds-settings"|data-settings/);
 });
 
-test('mac local voice selection is direct and persisted separately', () => {
+test('Aloud keeps routine playback state inside its controls', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /var SAY_VOICES=\{/);
-  assert.match(html, /function setSayVoice\(v,preview\)/);
-  assert.match(html, /localStorage\.setItem\('ds-say-voice',sayVoice\)/);
-  assert.match(html, /b=closest\(t,'\[data-say-voice\]'\);if\(b\)\{setSayVoice\(b\.getAttribute\('data-say-voice'\),true\);return;\}/);
-  assert.match(html, /function fetchGeneratedSpeech\(engine,text,voice,speechRate,signal\)/);
-  assert.match(html, /return speakGeneratedAudio\('say',text,opts\)/);
-  assert.match(html, /Mac local · '\+\(SAY_VOICES\[sayVoice\]\|\|SAY_VOICES\.samantha\)\.label/);
+  assert.match(html, /speechLoadingLabel='Starting Aloud'/);
+  assert.match(html, /data-aloud-stop[^>]*aria-label="Stop narration"/);
+  assert.match(html, /function applyAloudStatus\(status\)/);
+  assert.match(html, /aloudPhase==='starting'\|\|aloudPhase==='generating'/);
+  assert.match(html, /function pollAloudSpeech\(token,opts\)/);
+  assert.match(html, /if\(status\.running\)\{pollAloudSpeech\(token,opts\);return;\}/);
+  assert.match(html, /finishAloudSpeech\(token,opts,state==='done'/);
+  assert.match(html, /Open Aloud and install its Services to enable narration/);
+  assert.match(html, /btn\.classList\.toggle\('is-loading',loading\)/);
+  assert.match(html, /action=speechLoadingLabel\?'Starting':\(aloudPaused\?'Resume':\(aloudActive\?'Pause':'Play'\)\)/);
+  assert.doesNotMatch(html, /data-aloud-status|ds-narration-status|data-aloud-phase|data-aloud-message/);
+  assert.doesNotMatch(html, /Playback is paused|Reading selected text|ds-narration-track|ds-narration-dot/);
 });
 
-test('kokoro voice selection is a separate neural engine', () => {
+test('read aloud submits future narration beats together so Aloud can prefetch them', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /var KOKORO_VOICES=\{/);
-  assert.match(html, /af_heart:\{label:'Heart'/);
-  assert.match(html, /af_bella:\{label:'Bella'/);
-  assert.match(html, /am_onyx:\{label:'Onyx'/);
-  assert.match(html, /bm_daniel:\{label:'Daniel'/);
-  assert.match(html, /function normalizeKokoroVoice\(v\)/);
-  assert.match(html, /return KOKORO_VOICES\[name\]\?name:\(aliases\[name\]\|\|'af_heart'\)/);
-  assert.match(html, /function setKokoroVoice\(v,preview\)/);
-  assert.match(html, /localStorage\.setItem\('ds-kokoro-voice',kokoroVoice\)/);
-  assert.match(html, /b=closest\(t,'\[data-kokoro-voice\]'\);if\(b\)\{setKokoroVoice\(b\.getAttribute\('data-kokoro-voice'\),true\);return;\}/);
-  assert.match(html, /function speakKokoroAudio\(text,opts\)/);
-  assert.match(html, /api=engine==='kokoro'\?'\/api\/tts\/kokoro':'\/api\/tts\/say'/);
-  assert.match(html, /return speakGeneratedAudio\('kokoro',text,opts\)/);
-  assert.match(html, /Kokoro AI · '\+\(KOKORO_VOICES\[kokoroVoice\]\|\|KOKORO_VOICES\.af_heart\)\.label/);
-});
-
-test('kokoro generated speech separates server failure from playback blocking', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function readJsonOrError\(r,msg\)/);
-  assert.match(html, /throw new Error\(\(j&&j\.error\)\|\|msg\)/);
-  assert.match(html, /function handleLocalPlaybackBlocked\(a,btn,msg\)/);
-  assert.match(html, /Kokoro audio is ready\. Press Space to play it\./);
-  assert.match(html, /Kokoro failed: '\+err\.message/);
-  assert.doesNotMatch(html, /function handleLocalPlaybackBlocked\(a,btn,msg\)[\s\S]*voiceEngine='browser'[\s\S]*function playGeneratedAudio/);
-});
-
-test('read aloud avoids warped persona voices and falls back to natural voices', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.doesNotMatch(html, /pitch:1\.4/);
-  assert.doesNotMatch(html, /pitch:0\.4/);
-  assert.doesNotMatch(html, /rate:0\.6/);
-  assert.match(html, /function bestNaturalVoice\(\)/);
-  assert.match(html, /return bestNaturalVoice\(\)/);
-});
-
-test('read aloud start stop and preview are controlled by one speech state', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function speakLocalAudio\(text,opts\)/);
-  assert.match(html, /fetch\(api,\{method:'POST'/);
-  assert.match(html, /function setGeneratedSpeechLoading\(token,label,engine,voice,mode\)/);
-  assert.match(html, /function clearGeneratedSpeechLoading\(token\)/);
-  assert.match(html, /function abortGeneratedSpeech\(\)/);
-  assert.match(html, /speechAbort=ctrl/);
-  assert.match(html, /signal:ctrl\?ctrl\.signal:undefined/);
-  assert.match(html, /if\(isAbortError\(err\)\)return;/);
-  assert.match(html, /setGeneratedSpeechLoading\(token,opts\.preview\?'Generating preview':'Generating speech',engine,voice,opts\.preview\?'preview':'speech'\)/);
-  assert.match(html, /function setVoiceEngine\(engine\)/);
-  assert.match(html, /localStorage\.setItem\('ds-voice-engine',voiceEngine\)/);
-  assert.match(html, /browserGrid\.hidden=voiceEngine!=='browser'/);
-  assert.match(html, /sayGrid\.hidden=voiceEngine!=='say'/);
-  assert.match(html, /kokoroGrid\.hidden=voiceEngine!=='kokoro'/);
-  assert.match(html, /function firstSpeakableStep\(\)/);
-  assert.match(html, /function cancelSpeech\(\)/);
-  assert.match(html, /activeUtterance=null/);
-  assert.match(html, /function updateReadAloudButton\(\)/);
-  assert.match(html, /label\.textContent=speechLoadingLabel\|\|\(readAloud\?'Stop':'Play'\)/);
-  assert.match(html, /ico\.classList\.toggle\('is-stop',readAloud&&!loading\)/);
-  assert.match(html, /btn\.setAttribute\('aria-label',buttonLabel\)/);
-  assert.match(html, /function restartReadAloud\(\)/);
-  assert.match(html, /function speakVoicePreview\(\)/);
-  assert.match(html, /readAloud=false;\n    try\{localStorage\.setItem\('ds-readaloud',''\);\}catch\(e\)\{\}/);
-  assert.match(html, /speak\(kokoroLocal\.sample,\{voice:kokoroVoice,rate:1,preview:true\}\)/);
-  assert.match(html, /b=closest\(t,'\[data-preview-voice\]'\);if\(b\)\{speakVoicePreview\(\);return;\}/);
-});
-
-test('generated voice loading is visible in the controls while previews or steps render', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-readaloud\.is-loading/);
-  assert.match(html, /\.ds-preview\.is-loading/);
-  assert.match(html, /\.ds-voice-card\.is-loading/);
-  assert.match(html, /preview\.classList\.toggle\('is-loading',loading&&speechLoadingMode==='preview'\)/);
-  assert.match(html, /previewLabel\.textContent=loading&&speechLoadingMode==='preview'\?'Generating':'Preview'/);
-  assert.match(html, /b\.classList\.toggle\('is-loading',speechLoadingEngine==='kokoro'&&b\.getAttribute\('data-kokoro-voice'\)===speechLoadingVoice\)/);
-  assert.match(html, /b\.classList\.toggle\('is-loading',speechLoadingEngine==='say'&&b\.getAttribute\('data-say-voice'\)===speechLoadingVoice\)/);
-  assert.match(html, /if\(s\)s\.textContent=speechLoadingLabel\?speechLoadingLabel\+'…':describeVoice\(\)/);
-});
-
-test('generated voice prefetches the next speech unit while the current unit is active', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /prefetchedSpeech=\{\}/);
-  assert.match(html, /speechPrefetchAbort=null/);
-  assert.match(html, /function prefetchNextSpeech\(i\)/);
-  assert.match(html, /function prefetchGeneratedSpeechText\(text\)/);
-  assert.match(html, /function prefetchUpcomingSpeech\(stepIndex,units,index,manual\)/);
-  assert.match(html, /function prefetchGeneratedSpeech\(engine,text,voice,speechRate\)/);
-  assert.match(html, /function cachedGeneratedSpeech\(engine,text,voice,speechRate\)/);
-  assert.match(html, /var spoke=speakStep\(i\);if\(!spoke\)prefetchNextSpeech\(i\);/);
-  assert.match(html, /if\(index\+1<units\.length\)\{prefetchGeneratedSpeechText\(units\[index\+1\]\.text\);return;\}/);
-  assert.match(html, /if\(spoken\)prefetchUpcomingSpeech\(stepIndex,units,index,manual\);return spoken;/);
-  assert.doesNotMatch(html, /prefetchNextSpeech\(active\)/);
+  assert.match(html, /function speechSequenceFrom\(stepIndex,unitIndex,manual\)/);
+  assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
+  assert.match(html, /function applyAloudSequenceProgress\(status\)/);
+  assert.doesNotMatch(
+    html,
+    /onDone:function\(\)\{[^}]*if\(token!==voiceSequenceToken\)return;[^}]*speakStepUnit\(stepIndex,units,index\+1,manual\)/,
+  );
 });
 
 test('read aloud visually focuses the code rows for the step being spoken', () => {
@@ -766,7 +718,6 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function clearVoiceFocus\(\)/);
   assert.match(html, /function setVoiceFocus\(stepIndex,focusGroup\)/);
   assert.match(html, /function startVoiceFocusSequence\(stepIndex,text\)/);
-  assert.match(html, /function updateVoiceFocusForChar\(stepIndex,charIndex,text\)/);
   assert.match(html, /function activeVoiceFocusRows\(panel,group\)/);
   assert.match(html, /function centerFocusRows\(rows,instant\)/);
   assert.match(html, /var scroller=closest\(target,'\.ds-diffscroll'\)/);
@@ -777,8 +728,8 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /function speakStepIndex\(i,manual\)/);
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
   assert.match(html, /if\(opts\.stepIndex!=null\)\{if\(opts\.focusGroup!=null\)setActiveBeat\(opts\.stepIndex,opts\.focusGroup\);else startVoiceFocusSequence\(opts\.stepIndex,text\);\}/);
-  assert.match(html, /u\.onboundary=function\(e\)/);
   assert.match(html, /if\(opts\.stepIndex!=null\)clearVoiceFocus\(\)/);
+  assert.match(html, /finishAloudSpeech\(token,opts,state==='done'/);
   assert.match(html, /speakStepIndex\(sp,true\)/);
 });
 
@@ -884,7 +835,8 @@ test('story viewport controls visible code while highlights control narration fo
   assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
   assert.doesNotMatch(html, /data-step-camera=/);
-  assert.match(html, /\.ds-step\.is-code-step\.is-story-active[^}]*opacity:\.46/);
+  assert.match(html, /\.ds-row\.is-story-focus\{[^}]*inset 3px 0 0 var\(--accent-blue\)/);
+  assert.doesNotMatch(html, /\.ds-step\.is-code-step\.is-story-active[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /<span class="ds-difthint"[^>]*>Active beat at full strength<\/span>/i);
 
   rmSync(repo, { recursive: true, force: true });
@@ -986,7 +938,8 @@ test('silent story navigation persistently centers the first authored focus', ()
   assert.match(html, /function selectStoryFocus\(stepIndex,group,shouldScroll\)/);
   assert.match(html, /var storyFocused=ap&&i>0\?selectStoryFocus\(i,0,true\):false;/);
   assert.match(html, /if\(ap&&!storyFocused\)jumpToFirstChange/);
-  assert.match(html, /rows\[Math\.floor\(\(rows\.length-1\)\/2\)\]/);
+  assert.match(html, /var rendered=rows\.filter\(function\(row\)\{return !closest\(row,'\[hidden\]'\)&&row\.getClientRects\(\)\.length>0;\}\)/);
+  assert.match(html, /target=candidates\[Math\.floor\(\(candidates\.length-1\)\/2\)\]/);
   assert.match(html, /\.ds-row\.is-story-focus/);
   assert.match(html, /content:'Story focus'/);
   assert.match(html, /\.ds-step\.is-voice-active \.ds-row\.is-story-focus:not\(\.is-voice-focus\)/);
@@ -1196,10 +1149,10 @@ test('space pauses and resumes voice without stealing focused controls', () => {
   assert.match(html, /function isReadAloudShortcutTarget\(t\)/);
   assert.match(html, /\^\(BUTTON\|A\)\$/);
   assert.match(html, /function toggleVoicePause\(\)/);
-  assert.match(html, /localAudio\.paused/);
-  assert.match(html, /localAudio\.pause\(\)/);
-  assert.match(html, /if\(synth\.paused\)\{synth\.resume\(\);toast\('Voice resumed'\);/);
-  assert.match(html, /if\(synth\.speaking\|\|activeUtterance\)\{synth\.pause\(\);toast\('Voice paused'\);/);
+  assert.match(html, /if\(!aloudActive\)return false;/);
+  assert.match(html, /var wasPaused=aloudPaused,action=wasPaused\?'resume':'pause'/);
+  assert.match(html, /if\(aloudControlPending\)return true;/);
+  assert.match(html, /aloudControl\(action,false\)/);
   assert.match(html, /var wantsSpacePause=e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar';/);
   assert.match(html, /if\(wantsSpacePause&&!isTextEntryTarget\(e\.target\)&&\(isReadAloudShortcutTarget\(e\.target\)\|\|!isKeyboardControlTarget\(e\.target\)\)\)\{if\(toggleVoicePause\(\)\)\{e\.preventDefault\(\);return;\}\}/);
   assert.match(html, /if\(isTextEntryTarget\(e\.target\)\|\|isKeyboardControlTarget\(e\.target\)\)return;/);
@@ -1216,7 +1169,7 @@ test('arrow keys move through read-aloud beats and auto-advance steps', () => {
   assert.match(html, /function speechBeatTarget\(stepIndex,unitIndex,delta\)/);
   assert.match(html, /function moveSpeechBeat\(delta\)/);
   assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
-  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)\{setActive\(n\);return;\}/);
+  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)setActive\(n\);/);
   assert.match(html, /if\(delta<0\)\{var p=previousSpeakableStep\(stepIndex\);if\(p>=0\)\{var prevUnits=stepSpeechUnits\(stepPanels\[p\]\);return \{step:p,unit:prevUnits\.length-1\};\}\}/);
   assert.match(html, /var target=speechBeatTarget\(baseStep,baseUnit,delta\);if\(!target\)return true;/);
   assert.match(html, /activateStep\(target\.step,false\);/);
@@ -1228,22 +1181,12 @@ test('arrow keys move through read-aloud beats and auto-advance steps', () => {
 
 test('arrow keys navigate changes while j/k still navigate the story or file list', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function activateStep\(i,autoSpeak\)[\s\S]*var spoke=speakStep\(i\);/);
+  assert.match(html, /function activateStep\(i,autoSpeak\)[\s\S]*if\(autoSpeak!==false\)speakStep\(i\);/);
   assert.match(html, /if\(handleChangeShortcut\(e\)\)return;/);
   assert.match(html, /var next=e\.key==='j',prev=e\.key==='k';/);
   assert.match(html, /if\(next\|\|prev\)\{[\s\S]*if\(isTextEntryTarget\(e\.target\)\)return;/);
   assert.match(html, /if\(filesView&&!filesView\.hidden\)selectFile\(selectedFile\+\(next\?1:-1\)\);/);
   assert.match(html, /else if\(tourView&&!tourView\.hidden\)setActive\(active\+\(next\?1:-1\)\);/);
-});
-
-test('read aloud preset switch migrates old modes and restarts active reading', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function normalizePreset\(p\)/);
-  assert.match(html, /if\(p==='warm'\|\|p==='flirty'\)return 'flirty'/);
-  assert.match(html, /if\(p==='precise'\|\|p==='reviewer'\|\|p==='bass'\)return 'bass'/);
-  assert.match(html, /localStorage\.getItem\('ds-voice-preset'\)\|\|localStorage\.getItem\('ds-operator'\)/);
-  assert.match(html, /if\(readAloud\)restartReadAloud\(\)/);
-  assert.match(html, /else if\(preview\)speakVoicePreview\(\)/);
 });
 
 test('review page embeds the shared progress panel and ProgressPanel script', () => {
@@ -1458,7 +1401,7 @@ test('large story scopes stay collapsed until the reviewer chooses to edit them'
 
 test('story scope keeps excluded files visible without flagging them as unexplained', () => {
   const scopedFiles = [
-    files[0],
+    { ...files[0], oldPath: 'contracts/A.sol', newPath: 'contracts/A.sol' },
     {
       oldPath: 'b.test.ts',
       newPath: 'b.test.ts',
@@ -1476,18 +1419,22 @@ test('story scope keeps excluded files visible without flagging them as unexplai
   ];
   const scopedTour = {
     ...tour,
+    steps: [{ ...tour.steps[0], file: 'contracts/A.sol' }],
     storyScope: {
-      includedFiles: ['a.ts'],
+      includedFiles: ['contracts/A.sol'],
       excludedFiles: ['b.test.ts'],
     },
   };
   const html = renderPage({ repo: process.cwd(), tour: scopedTour, files: scopedFiles, baseLabel: 'main', comments: [] });
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
   assert.match(html, /b\.test\.ts/);
   assert.doesNotMatch(html, /<b>1<\/b> unexplained/);
   assert.doesNotMatch(html, /title="1 unexplained change"/);
   assert.match(html, /data-story-scope="focused"/);
   assert.match(html, /Story covers its selected scope/);
-  assert.match(html, /selected story scope explained/);
+  assert.match(intro, /class="ds-intro-scope">Solidity only · 1 file<\/span>/);
+  assert.match(intro, /class="ds-intro-allfiles"[^>]*>All files/);
+  assert.doesNotMatch(intro, /of 2 changed files|story lines|changed lines|ds-intro-meta/);
   assert.doesNotMatch(html, /every change explained/);
 });
 
@@ -1534,7 +1481,7 @@ test('read aloud starts with overview context before advancing to step one', () 
   assert.match(html, /var overview=\$all\('\[data-speech-overview\],\[data-speech-concept\]',panel\)/);
   assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechClean\(node\.textContent\|\|''\),group:null\};\}\)/);
   assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
-  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)\{setActive\(n\);return;\}/);
+  assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)setActive\(n\);/);
 });
 
 test('intent text is HTML-escaped in the intro panel', () => {
@@ -1668,6 +1615,7 @@ test('story repair is a named control with rewrite shorten and split outcomes', 
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /<summary aria-label="Repair this story step"/);
   assert.match(html, /class="ds-story-tune is-icon/);
+  assert.doesNotMatch(html, /class="ds-story-tune is-icon has-health"/);
   assert.match(html, /class="ds-story-tune-icon" aria-hidden="true"><svg[^>]*viewBox="0 0 24 24"/);
   assert.doesNotMatch(html, /<span aria-hidden="true">•••<\/span>/);
   assert.match(html, /data-story-repair="rewrite"/);
@@ -1696,7 +1644,8 @@ test('story steps stay in focus mode and expose explicit beat navigation', () =>
   assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
   assert.doesNotMatch(html, /Active beat at full strength|<span class="ds-difthint"/);
-  assert.match(html, /\.ds-step\.is-code-step\.is-story-active[^}]*\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
+  assert.match(html, /\.ds-row\.is-story-focus\{[^}]*inset 3px 0 0 var\(--accent-blue\)/);
+  assert.doesNotMatch(html, /\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /outside this beat/);
   assert.doesNotMatch(html, /data-step-camera|is-story-camera|cameraGroups/);
   assert.doesNotMatch(html, /setStoryLens|restoreStoryLens|ds-story-lens/);
@@ -1823,9 +1772,81 @@ test('unverified stories stay visible and explain how to recover trust', () => {
     routeBase: '/repo/demo',
     storyFreshness: 'unverified',
   });
-  assert.match(html, /Unverified<\/b> story · regenerate it/);
-  assert.match(html, /This older story has no exact diff fingerprint/);
-  assert.match(html, /Regenerate story/);
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(intro, /class="ds-intro-freshness" role="status"/);
+  assert.match(intro, /<span>Freshness unverified<\/span>/);
+  assert.match(intro, /href="\/repo\/demo\/change">Regenerate<\/a>/);
+  assert.doesNotMatch(intro, /ds-freshness-callout|Regenerate story/);
+});
+
+test('scope-aware side drift keeps the story current and stays behind one quiet drawer trigger', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files,
+    baseLabel: 'main',
+    comments: [],
+    storyDrift: {
+      state: 'outside-only',
+      observationId: 'observation-1',
+      inScopeFiles: 0,
+      outsideScopeFiles: 1,
+      files: [{
+        path: 'test/<side>.ts',
+        oldPath: 'test/<old-side>.ts',
+        status: 'renamed',
+        scope: 'outside',
+        additions: 2,
+        deletions: 1,
+        detail: 'exact',
+      }],
+    },
+  });
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(intro, /Story current · 1 side file changed/);
+  assert.match(intro, /data-drift-open aria-haspopup="dialog" aria-controls="ds-drift-drawer" aria-expanded="false"/);
+  assert.doesNotMatch(intro, /Story needs refresh|Regenerate/);
+  assert.equal((html.match(/id="ds-drift-drawer"/g) ?? []).length, 1);
+  assert.match(html, /data-drift-observation="observation-1"/);
+  assert.match(html, /data-drift-file="test\/&lt;side&gt;\.ts"/);
+  assert.match(html, /data-drift-label="test\/&lt;old-side&gt;\.ts → test\/&lt;side&gt;\.ts"/);
+  assert.match(html, /class="ds-drift-file"[^>]*aria-pressed="false"/);
+  assert.doesNotMatch(html, /class="ds-drift-file is-active"/);
+  assert.match(html, /<code data-drift-selected-path aria-live="polite"><\/code>/);
+  assert.match(html, /<em class="is-outside">Side<\/em>/);
+  assert.match(html, /\/api\/story-drift\/file\?observation=/);
+});
+
+test('mixed drift reports exact story and side counts without rendering file patches up front', () => {
+  const filesSinceStory = Array.from({ length: 100 }, (_, index) => ({
+    path: `side/file-${index}.txt`,
+    status: 'modified',
+    scope: 'outside',
+    detail: 'exact',
+  }));
+  filesSinceStory.unshift({ path: 'src/story.sol', status: 'modified', scope: 'story', detail: 'exact' });
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
+    storyDrift: {
+      state: 'mixed', observationId: 'observation-101', inScopeFiles: 1, outsideScopeFiles: 100,
+      files: filesSinceStory,
+    },
+  });
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(intro, /Story needs refresh · 1 story file \+ 100 side files changed/);
+  assert.equal((html.match(/data-drift-file=/g) ?? []).length, 101);
+  assert.match(html, /Choose a file to load its exact change since the story/);
+});
+
+test('a captured story with no drift renders one faint current status and no empty drawer', () => {
+  const html = renderPage({
+    repo: process.cwd(), tour, files, baseLabel: 'main', comments: [],
+    storyDrift: { state: 'current', observationId: 'steady', inScopeFiles: 0, outsideScopeFiles: 0, files: [] },
+  });
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(intro, /class="ds-intro-freshness is-current" role="status"/);
+  assert.match(intro, /Story current/);
+  assert.doesNotMatch(html, /id="ds-drift-drawer"/);
 });
 
 test('live review banner is stable, polite, dismissible, and does not move document flow', () => {
@@ -1851,13 +1872,21 @@ test('overview surfaces author distrust hotspots and deliberate non-goals', () =
     hotspots: [{ step: 's1', reason: 'I reasoned about the boundary but never exercised it.' }],
   };
   const html = renderPage({ repo: process.cwd(), tour: hotspotTour, files, baseLabel: 'main', comments: [] });
-  // Overview: a jump list of distrust spots ahead of the reading context.
-  assert.match(html, /Where I'd distrust this first/);
-  assert.match(html, /data-goto-step="1">\s*<span class="ds-hotspot-step">Step 1 · Changed line<\/span>/);
-  assert.match(html, /class="ds-hotspot-reason">I reasoned about the boundary but never exercised it\./);
-  // Overview: deliberate omissions listed under the intent context.
-  assert.match(html, /Deliberately not touched/);
-  assert.match(html, /<li>Deliberately does not touch settlement ordering\.<\/li>/);
+  const intro = html.match(/<section class="ds-step is-intro"[\s\S]*?<\/section>/)?.[0] ?? '';
+  const notes = intro.match(/<details class="ds-intro-notes"[\s\S]*?<\/details>/)?.[0] ?? '';
+  // Overview: all optional review material stays behind one closed, quiet disclosure.
+  assert.equal((intro.match(/<details class="ds-intro-notes"/g) ?? []).length, 1);
+  assert.doesNotMatch(notes.match(/^<details[^>]*>/)?.[0] ?? '', /\sopen/);
+  assert.match(notes, /Review notes/);
+  assert.match(notes, /class="ds-intro-hotspots"/);
+  assert.match(notes, /class="ds-intro-context"/);
+  assert.match(notes, /class="ds-intro-nongoals"/);
+  assert.doesNotMatch(intro, /ds-intro-disclosure/);
+  assert.match(notes, /Where I'd distrust this first/);
+  assert.match(notes, /data-goto-step="1">\s*<span class="ds-hotspot-step">Step 1 · Changed line<\/span>/);
+  assert.match(notes, /class="ds-hotspot-reason">I reasoned about the boundary but never exercised it\./);
+  assert.match(notes, /Deliberately not touched/);
+  assert.match(notes, /<li>Deliberately does not touch settlement ordering\.<\/li>/);
   // The flagged step itself carries the distrust strip.
   assert.match(html, /class="ds-hotspot-flag" role="note"/);
   assert.match(html, /▲ Distrust/);
@@ -1865,6 +1894,7 @@ test('overview surfaces author distrust hotspots and deliberate non-goals', () =
 
 test('stories without hotspots or non-goals render no empty distrust chrome', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.doesNotMatch(html, /<details class="ds-intro-notes"/);
   assert.doesNotMatch(html, /<div class="ds-intro-hotspots"/);
   assert.doesNotMatch(html, /<div class="ds-intro-nongoals"/);
   assert.doesNotMatch(html, /class="ds-hotspot-flag"/);

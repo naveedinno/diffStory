@@ -2,7 +2,7 @@
 // HTML. Consumed by the story-step renderer, the All-files panels, the
 // full-file endpoint, and the expand-context endpoint, so every surface
 // draws rows identically. Pure functions; all content is escaped here.
-import { highlight } from './highlight.js';
+import { highlight, highlightNavigable } from './highlight.js';
 import type { IntraSides } from './intra-line.js';
 import type { SbsRow, UnifiedRow } from './view-model.js';
 
@@ -46,6 +46,10 @@ function reviewRowAttrs(
   )}"`;
 }
 
+function highlightedCode(code: string, target?: RowTarget): string {
+  return target?.side === 'right' ? highlightNavigable(code) : highlight(code);
+}
+
 /** One side of a split row. Copied verbatim from render.ts cell(). */
 function cell(side: RowSide, row: SbsRow, target?: RowTarget, intra?: string): string {
   const add = row.type === 'add';
@@ -76,7 +80,7 @@ function cell(side: RowSide, row: SbsRow, target?: RowTarget, intra?: string): s
   else if (side === 'left' && del) tint = ' ds-cell-del';
   const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
   return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
-    (intra ?? highlight(row.content)) || ' '
+    (intra ?? highlightedCode(row.content, target)) || ' '
   }</span>${flag}</span>`;
 }
 
@@ -90,7 +94,7 @@ function singleCell(row: SbsRow, target?: RowTarget): string {
   const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
   const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
   return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
-    highlight(row.content) || ' '
+    highlightedCode(row.content, target) || ' '
   }</span>${flag}</span>`;
 }
 
@@ -125,7 +129,7 @@ export function renderUnifiedRow(row: UnifiedRow, target?: RowTarget, intra?: st
   return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${
     row.no ?? ''
   }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
-    (intra ?? highlight(row.content)) || ' '
+    (intra ?? highlightedCode(row.content, target)) || ' '
   }</span>${flag}</div>`;
 }
 

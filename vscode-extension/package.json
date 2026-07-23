@@ -1,8 +1,8 @@
 {
   "name": "diffstory-vscode",
-  "displayName": "DiffStory",
-  "description": "Review changed files, comment on exact code, and verify agent fixes without leaving VS Code.",
-  "version": "0.8.0",
+  "displayName": "DiffStory Navigation Bridge",
+  "description": "Opens implementations and definitions from the DiffStory desktop and web review surface.",
+  "version": "0.9.0",
   "publisher": "naveedinno",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
@@ -13,218 +13,23 @@
     "vscode": "^1.98.0"
   },
   "categories": [
-    "Other",
-    "SCM Providers"
+    "Other"
   ],
   "keywords": [
-    "diff",
-    "review",
-    "git",
-    "code review",
-    "agent"
+    "diffstory",
+    "navigation",
+    "implementation",
+    "definition"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [],
-  "contributes": {
-    "commands": [
-      {
-        "command": "diffstory.openReview",
-        "title": "DiffStory: Open review"
-      },
-      {
-        "command": "diffstory.refresh",
-        "title": "DiffStory: Refresh review",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "diffstory.openStep",
-        "title": "DiffStory: Open story step"
-      },
-      {
-        "command": "diffstory.openChangedFile",
-        "title": "DiffStory: Open changed file"
-      },
-      {
-        "command": "diffstory.addComment",
-        "title": "DiffStory: Add comment to selected code"
-      },
-      {
-        "command": "diffstory.resolveComment",
-        "title": "DiffStory: Resolve review comment"
-      },
-      {
-        "command": "diffstory.reopenComment",
-        "title": "DiffStory: Reopen review comment"
-      },
-      {
-        "command": "diffstory.deleteComment",
-        "title": "DiffStory: Delete review comment"
-      },
-      {
-        "command": "diffstory.approveReview",
-        "title": "DiffStory: Approve exact change"
-      },
-      {
-        "command": "diffstory.requestChanges",
-        "title": "DiffStory: Request changes"
-      },
-      {
-        "command": "diffstory.openRepositories",
-        "title": "DiffStory: Choose repository"
-      },
-      {
-        "command": "diffstory.openHistory",
-        "title": "DiffStory: Open review history"
-      },
-      {
-        "command": "diffstory.changeScope",
-        "title": "DiffStory: Set up comparison",
-        "icon": "$(git-compare)"
-      },
-      {
-        "command": "diffstory.resumeReview",
-        "title": "DiffStory: Resume guided review"
-      },
-      {
-        "command": "diffstory.openSinceFeedback",
-        "title": "DiffStory: Inspect changes since feedback"
-      },
-      {
-        "command": "diffstory.chooseStoryFiles",
-        "title": "DiffStory: Choose story files"
-      },
-      {
-        "command": "diffstory.openNextUnseenFile",
-        "title": "DiffStory: Open next unseen file"
-      },
-      {
-        "command": "diffstory.generateStory",
-        "title": "DiffStory: Generate guided story"
-      },
-      {
-        "command": "diffstory.addressFeedback",
-        "title": "DiffStory: Address open feedback"
-      },
-      {
-        "command": "diffstory.repairStoryStep",
-        "title": "DiffStory: Refine story step"
-      },
-      {
-        "command": "diffstory.storyActions",
-        "title": "DiffStory: Guide options"
-      },
-      {
-        "command": "diffstory.stopAgent",
-        "title": "DiffStory: Stop agent"
-      },
-      {
-        "command": "diffstory.openGettingStarted",
-        "title": "DiffStory: Getting started",
-        "icon": "$(question)"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "diffstory.addComment",
-          "group": "navigation@20",
-          "when": "editorHasSelection && isInDiffEditor"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "diffstory.refresh",
-          "when": "view == diffstory.review",
-          "group": "navigation@1"
-        },
-        {
-          "command": "diffstory.changeScope",
-          "when": "view == diffstory.review",
-          "group": "navigation@2"
-        },
-        {
-          "command": "diffstory.openGettingStarted",
-          "when": "view == diffstory.review",
-          "group": "navigation@3"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "diffstory",
-          "title": "DiffStory",
-          "icon": "media/diffstory.svg"
-        }
-      ]
-    },
-    "views": {
-      "diffstory": [
-        {
-          "type": "webview",
-          "id": "diffstory.review",
-          "name": "Code review"
-        }
-      ]
-    },
-    "walkthroughs": [
-      {
-        "id": "diffstory.gettingStarted",
-        "title": "Review code with DiffStory",
-        "description": "Open changed files, comment on exact code, and verify the agent's fixes.",
-        "steps": [
-          {
-            "id": "openReview",
-            "title": "Open your changed files",
-            "description": "Open a Git project, then use **DiffStory: Open review**. The **Changes** tab shows the whole review queue.",
-            "completionEvents": [
-              "onCommand:diffstory.openReview"
-            ]
-          },
-          {
-            "id": "addComment",
-            "title": "Comment on exact code",
-            "description": "Open a diff, select the relevant code, right-click, and choose **DiffStory: Add comment to selected code**.",
-            "completionEvents": [
-              "onCommand:diffstory.addComment"
-            ]
-          },
-          {
-            "id": "connectAgent",
-            "title": "Connect an agent for Guide and Feedback",
-            "description": "In VS Code's terminal, run `codex --version` or `claude --version`. If neither works, install [Codex CLI](https://developers.openai.com/codex/cli) or [Claude Code](https://code.claude.com/docs/en/getting-started), then reload VS Code. Reviewing changed files does not require an agent.",
-            "completionEvents": [
-              "onCommand:diffstory.generateStory",
-              "onCommand:diffstory.addressFeedback"
-            ]
-          },
-          {
-            "id": "addressFeedback",
-            "title": "Send and verify feedback",
-            "description": "Use **Feedback** to send open comments to an agent. Review every response before marking it resolved.",
-            "completionEvents": [
-              "onCommand:diffstory.addressFeedback"
-            ]
-          }
-        ]
-      }
-    ],
-    "configuration": {
-      "title": "DiffStory",
-      "properties": {
-        "diffstory.defaultBase": {
-          "type": "string",
-          "default": "",
-          "description": "Optional Git ref to use as the base when no saved story specifies one."
-        }
-      }
-    }
-  },
+  "activationEvents": [
+    "onUri"
+  ],
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "tsc -p .",
     "check": "npm run build && node --test test/*.test.mjs",
-    "package": "npx @vscode/vsce package"
+    "package": "npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

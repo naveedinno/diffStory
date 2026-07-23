@@ -12,6 +12,8 @@ test('markup exposes the plan-centric regions for both variants', () => {
     assert.match(m, /ds-pp-plan/);
     assert.match(m, /ds-pp-now/);
     assert.match(m, /ds-pp-live/);
+    assert.match(m, /class="ds-pp-announcer" role="status" aria-live="polite" aria-atomic="true"/);
+    assert.match(m, /class="ds-pp-live-elapsed" role="timer" aria-live="off"><span class="ds-pp-visually-hidden">Elapsed <\/span><span data-pp-elapsed>0s<\/span>/);
     assert.match(m, /ds-pp-error-title/);
     assert.match(m, /ds-pp-error-detail/);
     assert.match(m, /role="alert" aria-atomic="true"/);
@@ -23,6 +25,7 @@ test('markup exposes the plan-centric regions for both variants', () => {
     assert.match(m, /ds-pp-miles/);
     assert.match(m, /ds-pp-note/);
     assert.match(m, /data-pp-task-link/);
+    assert.doesNotMatch(m, /data-variant="(?:inline|floating)" hidden aria-live=/, 'keeps the frequently changing panel outside the live region');
     // The old noisy regions are gone.
     assert.doesNotMatch(m, /ds-pp-timeline/);
     assert.doesNotMatch(m, /ds-pp-phase-label/);
@@ -58,6 +61,20 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
   assert.match(s, /Open ['"]?\+\(ev\.taskLabel\|\|'selected Codex task'\)\+' in Codex'/);
 });
 
+test('elapsed time stays visual while only meaningful lifecycle changes announce', () => {
+  const s = progressPanelScript();
+
+  assert.match(s, /function tick\(\)\{ setElapsed\(\); \}/, 'the one-second timer only changes the non-live elapsed field');
+  assert.match(s, /function announce\(message\)/);
+  assert.match(s, /setLive\('Preparing',0\); announce\('Preparing'\)/);
+  assert.match(s, /setLive\('Working',0\); announce\(workTitle\)/);
+  assert.match(s, /renderMiles\(\);announce\(miles\[i\]\.label\)/);
+  assert.match(s, /if\(ok\|\|status==='stopped'\)announce\(finishTitle\)/);
+  assert.doesNotMatch(s, /root\.setAttribute\('aria-live'/, 'never turns the whole updating panel into a live region');
+  assert.doesNotMatch(s, /case 'heartbeat':\s*announce/, 'heartbeats remain silent to assistive technology');
+  assert.doesNotMatch(s, /case 'file':\s*announce|case 'command':\s*announce/, 'fine-grained activity remains silent');
+});
+
 test('finished runs stop the milestone pulse', () => {
   const css = progressPanelStyles();
   assert.match(css, /\.ds-pp\.is-finished \.ds-pp-mile-dot\{animation:none\}/);
@@ -75,8 +92,7 @@ test('failed runs show one human error and keep diagnostics collapsed', () => {
   assert.match(s, /els\.details\.open=false/);
   assert.match(s, /FAIL=\{guided_review:'Generation failed'/);
   assert.match(s, /mileFailed\?'is-error':'is-active'/);
-  assert.match(s, /root\.setAttribute\('aria-live','off'\)/);
-  assert.match(s, /root\.setAttribute\('aria-live','polite'\)/);
+  assert.doesNotMatch(s, /root\.setAttribute\('aria-live'/);
   assert.doesNotMatch(s, /case 'error': appendRaw/);
 
   const css = progressPanelStyles();

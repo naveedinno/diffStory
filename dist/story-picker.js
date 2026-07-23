@@ -1,7 +1,7 @@
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
-import { BRAND_HEAD_LINKS, brandStoryMarkSvg, brandThreadBackdropSvg } from './brand.js';
-import { sharedTokens, themeBootstrapScript, threadAtmosphereStyles } from './theme.js';
+import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
+import { sharedTokens, themeBootstrapScript } from './theme.js';
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -22,7 +22,6 @@ function plural(n, word) {
     return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 const MARK = brandStoryMarkSvg('empty-storymark', 30, 30);
-const PAGE_THREAD = brandThreadBackdropSvg();
 const CHEV = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
 const TRASH = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"/></svg>`;
 function storyRow(s, now, routeBase, index) {
@@ -32,10 +31,14 @@ function storyRow(s, now, routeBase, index) {
         : s.openComments
             ? { label: 'In review', cls: 'feedback', detail: `${plural(s.openComments, 'open note')} waiting` }
             : s.freshness === 'stale'
-                ? { label: 'Diff changed', cls: 'warn', detail: 'Regenerate the story for the current diff' }
+                ? { label: 'Story changed', cls: 'warn', detail: s.inStoryDrift
+                        ? `${plural(s.inStoryDrift, 'story file')} changed${s.outsideStoryDrift ? ` · ${plural(s.outsideStoryDrift, 'side file')} also changed` : ''}`
+                        : 'Regenerate the story for the current diff' }
                 : s.freshness === 'unverified'
-                    ? { label: 'Verify scope', cls: 'warn', detail: 'Story has no exact diff fingerprint' }
-                    : { label: 'Current', cls: 'ready', detail: 'Story matches the current diff' };
+                    ? { label: 'Verify scope', cls: 'warn', detail: 'Regenerate to establish a scope-aware baseline' }
+                    : { label: 'Current', cls: 'ready', detail: s.outsideStoryDrift
+                            ? `Story current · ${plural(s.outsideStoryDrift, 'side file')} changed`
+                            : 'Story matches its captured scope' };
     const activity = s.addressedComments
         ? `${plural(s.addressedComments, 'reply')} ready to verify`
         : state.detail;
@@ -73,11 +76,12 @@ export function renderStoryPicker(opts) {
         right: `<a class="nv-act" href="${esc(rb)}/stories" title="Reload after another agent saves a story">Refresh</a>`,
     });
     const body = `<header class="page-head">
-      <div class="page-copy"><p class="kicker">${esc(opts.repoName)}</p><h1>Review history</h1><p class="sub">Resume a saved review when you need its scope or its notes.</p></div>
-      <div class="page-actions">
-        ${hasStories && openFeedback ? `<span class="history-status" aria-label="Review history status"><span><b>${openFeedback}</b> ${openFeedback === 1 ? 'review has' : 'reviews have'} open notes</span></span>` : ''}
-        <a class="start-review" href="${esc(rb)}/change">Start review</a>
+      <div class="page-copy">
+        <p class="kicker">${esc(opts.repoName)}</p>
+        <div class="page-title-row"><h1>Review history</h1><a class="start-review" href="${esc(rb)}/change">Start review</a></div>
+        <p class="sub">Resume a saved review when you need its scope or its notes.</p>
       </div>
+      ${hasStories && openFeedback ? `<span class="history-status" aria-label="Review history status"><span><b>${openFeedback}</b> ${openFeedback === 1 ? 'review has' : 'reviews have'} open notes</span></span>` : ''}
     </header>` +
         (hasStories
             ? `<section class="stories-panel" aria-labelledby="saved-reviews-title">
@@ -98,17 +102,15 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(opts.repoName)} review history</title>
 <style>
 ${sharedTokens()}
-${threadAtmosphereStyles()}
 /* Signal 3b: alias story-picker names onto the canonical tokens (theme.ts); --bg and --amber are canonical (inherited). Aliases flip via the canonical light block. */
 :root{--elev:var(--surface);--label:var(--text);--l2:var(--text-2);--l3:var(--text-3);--hair:var(--line);--sep:var(--line-soft);--blue:var(--accent);--blue2:var(--accent-hi);--red-bg:var(--del-soft);--red:var(--del);--green:var(--add);--fill:var(--fill-2);--chip:var(--fill-3)}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;letter-spacing:0}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(var(--map-dot) 1px,transparent 1.6px);background-size:26px 26px;-webkit-mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.32) 58%,transparent 94%);mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.32) 58%,transparent 94%)}
 .wrap{width:min(960px,100%);margin:0 auto;padding:28px 24px 64px;position:relative;isolation:isolate}
-.wrap>.ds-thread-layer{top:-38px;bottom:auto;height:190px;opacity:.78}
-.wrap>*:not(.ds-thread-layer){position:relative;z-index:1}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:28px;padding-bottom:22px;margin-bottom:22px;border-bottom:1px solid var(--sep)}
-.page-copy{min-width:0;background:var(--bg);border-radius:var(--radius-lg);box-shadow:0 0 0 10px var(--bg)}.page-actions{display:flex;align-items:center;gap:18px;flex:none}
+.page-copy{min-width:0}.page-title-row{display:flex;align-items:center;flex-wrap:wrap;gap:14px}
 .head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 12px}
 .kicker{font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--l3);margin:0 0 6px;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
 h1{font-family:var(--font-display);font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
@@ -146,16 +148,16 @@ h2{font-family:var(--font-display);font-size:16px;line-height:1.1;font-weight:60
 .empty-title{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .empty-sub{color:var(--l2);font-size:14px;line-height:1.5;margin:8px 0 0}
 .empty-sub b{color:var(--label);font-weight:600}
-@media (max-width:760px){.wrap{padding:22px 16px 64px}.page-head{align-items:flex-start}.page-actions{flex-direction:column;align-items:flex-end;gap:10px}.row-main{grid-template-columns:24px minmax(0,1fr);padding:16px 15px 15px 19px;gap:12px}.resume{grid-column:2;justify-self:start}}
+@media (max-width:760px){.wrap{padding:22px 16px 64px}.page-head{align-items:flex-start}.row-main{grid-template-columns:24px minmax(0,1fr);padding:16px 15px 15px 19px;gap:12px}.resume{grid-column:2;justify-self:start}}
 @media (max-width:460px){.story-row{position:relative;display:block}.row-main{padding:16px 54px 15px 19px}.row-head{align-items:flex-start;flex-direction:column}.row-title{display:-webkit-box;white-space:normal;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.28}.row-del{position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:9px}.row-del::after{content:"";position:absolute;inset:-5px}.session-facts{line-height:1.65}.session-facts>span{padding:0 8px}.row-foot{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 8px;align-items:center}.row-foot>span+span:before{display:none}.row-foot>span:nth-child(2){grid-column:1 / -1;grid-row:2;line-height:1.35}.row-foot>span:nth-child(3){grid-column:2;grid-row:1}.resume{margin-top:2px}}
-@media (max-width:560px){.page-head{display:block}.page-actions{margin-top:16px;align-items:stretch}.history-status{justify-content:space-between}.start-review{justify-content:center}.empty{max-width:none}}
+@media (max-width:560px){.page-head{display:block}.history-status{margin-top:14px}.empty{max-width:none}}
 @media (prefers-reduced-motion:no-preference){.wrap{animation:history-page-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.story-row{animation:history-row-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}@keyframes history-page-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes history-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}}
 @media (prefers-reduced-motion:reduce){.row-main,.row-del,.start-review,.resume svg{transition:none}.row-main:active,.row-del:active,.row-main:hover .resume svg{transform:none}}
 @media (prefers-contrast:more){.row-main,.row-del{border-width:1px;border-color:var(--label)}}
 </style></head>
-<body class="ds-map-bg">
+<body>
 ${nav}
-<main class="wrap ds-thread-host"><div class="ds-thread-layer" data-thread-compact="hide">${PAGE_THREAD}</div>${body}</main>
+<main class="wrap">${body}</main>
 <script>
 (function(){
   var list=document.getElementById('storyList');if(!list)return;

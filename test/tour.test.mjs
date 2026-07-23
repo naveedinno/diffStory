@@ -54,6 +54,20 @@ test('a well-formed tour has no errors', () => {
   assert.deepEqual(errs, []);
 });
 
+test('story snapshot references are optional, versioned, and content addressed', () => {
+  const base = {
+    version: 1,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  };
+  assert.deepEqual(validateTour({ ...base, storySnapshot: { version: 1, id: 'a'.repeat(64) } }), []);
+  assert.ok(validateTour({ ...base, storySnapshot: { version: 2, id: 'a'.repeat(64) } })
+    .includes('storySnapshot must be a version 1 snapshot reference'));
+  assert.ok(validateTour({ ...base, storySnapshot: { version: 1, id: '../unsafe' } })
+    .includes('storySnapshot must be a version 1 snapshot reference'));
+});
+
 test('generated-story validation requires context, camera framing, and narrated highlights', () => {
   const legacyCompatible = {
     version: 1,
@@ -624,6 +638,7 @@ test('concept steps reject code anchors and code-step narration fields', () => {
   const forbidden = {
     file: 'x.ts',
     range: [1, 2],
+    ranges: [[1, 2], [40, 42]],
     viewport: [1, 2],
     highlights: [[1, 2]],
     focus: { ranges: [[1, 2]] },
@@ -778,9 +793,10 @@ test('intent.nonGoals must be non-empty strings when present', () => {
     steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
   });
   assert.deepEqual(validateTour(tour(['does not touch settlement ordering'])), []);
-  assert.ok(validateTour(tour([])).includes('intent.nonGoals must be a non-empty array'));
+  // An empty array is the honest "no deliberate omissions"; see the dedicated test below.
+  assert.deepEqual(validateTour(tour([])), []);
   assert.ok(validateTour(tour([' '])).includes('intent.nonGoals[0] must be a non-empty string'));
-  assert.ok(validateTour(tour('nope')).includes('intent.nonGoals must be a non-empty array'));
+  assert.ok(validateTour(tour('nope')).includes('intent.nonGoals must be an array'));
 });
 
 test('hotspots must be well-shaped and resolve to code steps', () => {
@@ -800,4 +816,215 @@ test('generated stories keep hotspots down to the three most honest doubts', () 
     .some((e) => e.includes('hotspots')));
   assert.ok(validateGeneratedTour(v2Tour(steps, { hotspots: spots(4) }))
     .includes('hotspots must name at most 3 distrust spots; keep only the places you are least sure about'));
+});
+
+test('generated-story validation reports malformed beats instead of throwing', () => {
+  // A real agent produced this shape under load: beats spelled `text` as `body`
+  // and omitted `highlights` entirely. Callers show these messages to the
+  // reviewer, so a TypeError here would surface as "not iterable" noise.
+  const malformed = v2Tour([
+    v2CodeStep('s1', 1, {
+      viewport: [1, 10],
+      highlights: [[1, 2]],
+      beats: [{ body: 'wrote body instead of text, and no highlights' }],
+    }),
+  ], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+
+  let errors;
+  assert.doesNotThrow(() => { errors = validateGeneratedTour(malformed); });
+  assert.ok(errors.includes('steps[0].beats[0].highlights are required for a generated story'));
+
+  // Non-pair highlight entries are reported, not thrown on, too.
+  const badPair = structuredClone(malformed);
+  badPair.steps[0].beats = [{ text: 'ok', highlights: [[1, 2], null] }];
+  let pairErrors;
+  assert.doesNotThrow(() => { pairErrors = validateGeneratedTour(badPair); });
+  assert.ok(pairErrors.includes('steps[0].beats[0].highlights[1] must be a [start, end] pair'));
+});
+
+test('generated-story validation rejects beat prose that only restates the diff', () => {
+  const story = (text) => v2Tour([
+    v2CodeStep('s1', 1, {
+      viewport: [1, 10], highlights: [[1, 2]],
+      beats: [{ text, highlights: [[1, 2]] }],
+    }),
+  ], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+
+  // Line-number openers: the highlight already points there.
+  const opener = validateGeneratedTour(story('Lines 748-750 normalize the heading weights.'));
+  assert.ok(opener.some((e) => e.includes('must not open by naming line numbers')));
+  assert.ok(validateGeneratedTour(story('Line 784 now carries font-style:normal.'))
+    .some((e) => e.includes('must not open by naming line numbers')));
+
+  // Value transitions: the diff renders both sides already.
+  assert.ok(validateGeneratedTour(story('The back button font-weight 650→600 here.'))
+    .some((e) => e.includes('must not narrate a value transition')));
+  assert.ok(validateGeneratedTour(story('concept-eyebrow 780 -> 700 for consistency.'))
+    .some((e) => e.includes('must not narrate a value transition')));
+
+  // Conceptual arrows between words are normal prose and must stay legal.
+  const conceptual = validateGeneratedTour(story('The request → handler path clamps before the write, so nothing downstream over-caps.'));
+  assert.ok(!conceptual.some((e) => e.includes('value transition')));
+  // "inline" mention of a line number mid-sentence is fine; only openers are barred.
+  const midSentence = validateGeneratedTour(story('The guard added at line 42 is what stops a stale nonce reaching the write.'));
+  assert.ok(!midSentence.some((e) => e.includes('naming line numbers')));
+});
+
+test('intent.nonGoals tolerates an empty array as "no deliberate omissions"', () => {
+  const tour = (nonGoals) => ({
+    version: 2, title: 'T', summary: '',
+    intent: { goal: 'We clamped the boundary.', nonGoals },
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  });
+  assert.deepEqual(validateTour(tour([])), []);
+  assert.deepEqual(validateTour(tour(['does not touch settlement ordering'])), []);
+  assert.ok(validateTour(tour('nope')).includes('intent.nonGoals must be an array'));
+  assert.ok(validateTour(tour([' '])).includes('intent.nonGoals[0] must be a non-empty string'));
+});
+
+test('skim steps need no review question; substantive stops still do', () => {
+  const step = (overrides) => v2CodeStep('s1', 1, {
+    viewport: [1, 10], highlights: [[1, 2]],
+    beats: [{ text: 'Same rename as above; nothing reads the old field.', highlights: [[1, 2]] }],
+    ...overrides,
+  });
+  const tour = (s) => v2Tour([s], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+
+  // A mechanical sweep stop exists for coverage, not interrogation — forcing a
+  // question there only produces rhetorical filler.
+  const skim = tour(step({ question: undefined, tags: ['skim'] }));
+  assert.ok(!validateGeneratedTour(skim).some((e) => e.includes('question is required')));
+  for (const tag of ['sweep', 'mechanical', 'SKIM']) {
+    assert.ok(!validateGeneratedTour(tour(step({ question: undefined, tags: [tag] })))
+      .some((e) => e.includes('question is required')));
+  }
+  // Anything the reviewer must actually weigh still needs one.
+  assert.ok(validateGeneratedTour(tour(step({ question: undefined })))
+    .some((e) => e.includes('question is required')));
+  assert.ok(validateGeneratedTour(tour(step({ question: undefined, tags: ['core'] })))
+    .some((e) => e.includes('question is required')));
+
+  // Agent output is untrusted JSON. A non-string tag is a useful validation
+  // error, never a `.trim is not a function` crash in the generation result.
+  const malformedTags = tour(step({ tags: [42] }));
+  let malformedErrors;
+  assert.doesNotThrow(() => { malformedErrors = validateGeneratedTour(malformedTags); });
+  assert.ok(malformedErrors.includes('steps[0].tags[0] must be a non-empty string'));
+});
+
+test('viewport caps bound framing, not the size of the change itself', () => {
+  const tour = (range, viewport, mode) => v2Tour([
+    v2CodeStep('s1', 1, {
+      range, viewport, highlights: [[range[0], range[0] + 1]],
+      beats: [{ text: 'The guard now runs before the write.', highlights: [[range[0], range[0] + 1]] }],
+    }),
+  ], { mode, intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+  const viewportErrors = (t) => validateGeneratedTour(t).filter((e) => e.includes('viewport'));
+
+  // A hunk larger than the mode cap must still be claimable whole: "range spans
+  // the full hunk" and "range sits inside viewport" would otherwise conflict.
+  assert.deepEqual(viewportErrors(tour([100, 145], [100, 145], 'guided')), []);
+  // ...with room for context around it.
+  assert.deepEqual(viewportErrors(tour([100, 145], [94, 151], 'guided')), []);
+  // But padding beyond that allowance is still a too-broad step.
+  assert.ok(viewportErrors(tour([100, 145], [70, 175], 'guided')).length);
+  // Small ranges keep the original caps: 41 lines of frame around 2 changed lines.
+  assert.ok(viewportErrors(tour([100, 101], [70, 110], 'guided')).length);
+  assert.deepEqual(viewportErrors(tour([100, 101], [80, 110], 'guided')), []);
+});
+
+test('context steps never use the large-range viewport exception', () => {
+  const context = (range, viewport, mode) => v2Tour([
+    v2CodeStep('s1', 1, {
+      kind: 'context', range, viewport, highlights: [[range[0], range[0] + 1]],
+      beats: [{ text: 'This caller explains where the changed path begins.', highlights: [[range[0], range[0] + 1]] }],
+    }),
+  ], { mode, intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+
+  assert.ok(validateGeneratedTour(context([100, 145], [100, 145], 'guided'))
+    .includes('steps[0].viewport should stay within 40 lines in guided mode; split the step'));
+  assert.ok(validateGeneratedTour(context([100, 160], [100, 160], 'detailed'))
+    .includes('steps[0].viewport must stay within one 60-line camera shot'));
+});
+
+test('optional ranges lets one step claim scattered spans without widening the camera', () => {
+  const step = (extra) => v2CodeStep('s1', 1, {
+    file: 'x.ts', range: [10, 14], viewport: [8, 30], highlights: [[10, 12]],
+    beats: [{ text: 'The rename lands here; nothing reads the old field.', highlights: [[10, 12]] }],
+    ...extra,
+  });
+  const tour = (extra) => v2Tour([step(extra)], {
+    mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] },
+  });
+
+  // Absent -> unchanged behaviour.
+  assert.deepEqual(validateTour(tour({})), []);
+
+  // Scattered spans far outside the viewport are the POINT: a sweep touches
+  // lines no single camera shot can show.
+  const scattered = tour({
+    ranges: [[10, 14], [400, 402], [900, 900]],
+    question: undefined,
+    tags: ['skim'],
+  });
+  assert.deepEqual(validateTour(scattered), []);
+  assert.deepEqual(validateGeneratedTour(scattered), []);
+
+  // Multi-range coverage is reserved for an explicitly skimmable mechanical
+  // sweep. Otherwise the agent could hide substantive review points in one step.
+  const untagged = tour({ ranges: [[10, 14], [400, 402]] });
+  assert.ok(validateGeneratedTour(untagged)
+    .includes('steps[0].ranges requires a "skim", "sweep", or "mechanical" tag for a generated story'));
+
+  // Containment, not exact equality: the anchor may be a tighter camera shot
+  // inside the changed span it represents.
+  assert.deepEqual(validateTour(tour({ ranges: [[8, 20], [400, 402]] })), []);
+
+  // The anchor must be part of what is claimed, so framing and claim can't drift.
+  assert.ok(validateTour(tour({ ranges: [[400, 402]] }))
+    .some((e) => e.includes('range must be contained in one of steps[0].ranges')));
+
+  // Shape errors are reported, not thrown.
+  assert.ok(validateTour(tour({ ranges: [] })).includes('steps[0].ranges must be a non-empty array when present'));
+  assert.ok(validateTour(tour({ ranges: [[5]] })).some((e) => e.includes('steps[0].ranges[0] must be [startLine, endLine]')));
+
+  // Context never claims coverage, so accepting ranges there would be a silent no-op.
+  assert.ok(validateTour(tour({ kind: 'context', ranges: [[10, 14], [400, 402]] }))
+    .includes('steps[0].ranges is not allowed for a context step'));
+});
+
+test('whole-file deletion ranges must contain the deletion anchor', () => {
+  const deletion = (ranges) => v2Tour([
+    v2CodeStep('s1', 1, {
+      range: [0, 0], ranges, viewport: [0, 0], highlights: [[0, 0]],
+      beats: [{ text: 'The file disappears as one deliberate removal.', highlights: [[0, 0]] }],
+      tags: ['mechanical'],
+    }),
+  ], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
+
+  assert.deepEqual(validateTour(deletion([[0, 0]])), []);
+  assert.deepEqual(validateGeneratedTour(deletion([[0, 0]])), []);
+  assert.ok(validateTour(deletion([[1, 1]]))
+    .some((e) => e.includes('range must be contained in one of steps[0].ranges')));
+});
+
+test('coverage counts every span a step claims via ranges', async () => {
+  const { computeCoverage } = await import('../dist/coverage.js');
+  const { parseUnifiedDiff } = await import('../dist/diff.js');
+  // Two separate clusters inside one file: 10-11 and 40-41.
+  const diff = [
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,2 @@', '+alpha', '+beta',
+    '@@ -40,0 +40,2 @@', '+gamma', '+delta',
+  ].join('\n');
+  const files = parseUnifiedDiff(diff);
+  const base = { id: 's1', order: 1, title: 'T', kind: 'changed', file: 'x.ts', why: 'w' };
+
+  // Anchor alone leaves the far cluster unexplained...
+  const narrow = { version: 2, title: 'T', summary: '', steps: [{ ...base, range: [10, 11] }] };
+  assert.equal(computeCoverage(narrow, files).uncovered.length, 1);
+
+  // ...and claiming both spans closes it, with no change to what is displayed.
+  const swept = { version: 2, title: 'T', summary: '', steps: [{ ...base, range: [10, 11], ranges: [[10, 11], [40, 41]] }] };
+  assert.equal(computeCoverage(swept, files).uncovered.length, 0);
 });

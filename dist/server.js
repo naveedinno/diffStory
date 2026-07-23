@@ -8,14 +8,14 @@ import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour } from '
 import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, stagedWorktreeDivergentFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile, renderSplitHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, } from './render.js';
 import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
 import { renderStoryPicker } from './story-picker.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope } from './scope.js';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
 import { buildReviewModel } from './view-model.js';
 import { loadComments, loadCommentsWithHealth, addComment, deleteComment, setCommentStatus, appendUserMessage, InvalidCommentStoreError, } from './comments.js';
@@ -33,19 +33,19 @@ import { homedir } from 'node:os';
 import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isLocalTtsId, localTtsCacheDir, synthesizeWithSay } from './local-tts.js';
-import { isKokoroTtsId, kokoroTtsCacheDir, synthesizeWithKokoro } from './kokoro-tts.js';
+import { createAloudReader } from './aloud-client.js';
 import { codexTaskBinary, listCodexStoryModels, listCodexTasks, nameCodexTask, validCodexThreadId, } from './codex-tasks.js';
 import { codexDesktopAvailable, sendCodexDesktopTurn } from './codex-desktop.js';
 import { LiveEventHub, storyFileFingerprint } from './live.js';
 import { reviewStateSummary } from './review-state.js';
+import { captureStorySnapshot, inspectStoryDrift, loadStoryDriftDiff, } from './story-drift.js';
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
     // Capture the home directory once. Besides making one server session stable,
     // this keeps parallel test servers from following later HOME mutations into
     // another test's recents, skills, or voice cache.
-    const home = homedir();
+    const home = opts.homeOverride ?? homedir();
     const session = createSession({
         repo: opts.repo,
         base: opts.baseOverride,
@@ -54,7 +54,9 @@ export function serve(opts) {
     const liveHub = new LiveEventHub({
         leaseActive: (token) => !!getReviewPageLease(session, token),
     });
-    const server = createServer((req, res) => handle(req, res, session, home, liveHub));
+    const aloud = opts.aloud ?? createAloudReader();
+    const openExternal = opts.openExternal ?? openExternalUrl;
+    const server = createServer((req, res) => handle(req, res, session, home, liveHub, aloud, openExternal));
     // Dispose the hub when close is REQUESTED, not on the 'close' event: the
     // server cannot finish closing while the hub still holds SSE responses open.
     const requestClose = server.close.bind(server);
@@ -139,6 +141,26 @@ function parseRepoRoute(pathname, repo) {
         ? screen
         : null;
 }
+/**
+ * The desktop shell remembers its last /repo/<name>/... URL, while a freshly
+ * started server has no open repository in memory. Rehydrate that session from
+ * the persisted recents list so reopening the app does not strand the webview
+ * on a 404. Recents are newest-first, which also resolves duplicate basenames
+ * the same way the picker presents the most recently opened workspace.
+ */
+function recentRepoForRoute(pathname, home) {
+    const match = pathname.match(/^\/repo\/([^/]+)(?:\/|$)/);
+    if (!match)
+        return null;
+    let name;
+    try {
+        name = decodeURIComponent(match[1]);
+    }
+    catch {
+        return null;
+    }
+    return loadRecents(home).find((entry) => basename(entry.path) === name && isGitRepo(entry.path))?.path ?? null;
+}
 function redirect(res, location) {
     res.writeHead(302, { location });
     res.end();
@@ -196,7 +218,7 @@ function setLocalResponseHeaders(res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
 }
-function handle(req, res, session, home, liveHub) {
+function handle(req, res, session, home, liveHub, aloud, openExternal) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
     setLocalResponseHeaders(res);
@@ -204,6 +226,18 @@ function handle(req, res, session, home, liveHub) {
         return sendJson(res, 403, { error: 'This local app only accepts same-origin localhost requests.' });
     }
     try {
+        if (method === 'GET' && url.pathname === '/api/health') {
+            return sendJson(res, 200, { app: 'diffStory', ready: true });
+        }
+        if (method === 'GET' && url.pathname === '/api/aloud/status') {
+            return runAloudStatus(res, aloud);
+        }
+        if (method === 'POST' && url.pathname === '/api/aloud/speak') {
+            return readBody(req, res, (body) => runAloudSpeak(res, aloud, body));
+        }
+        if (method === 'POST' && url.pathname === '/api/aloud/control') {
+            return readBody(req, res, (body) => runAloudControl(res, aloud, body));
+        }
         if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
             return sendMermaidBrowserAsset(res);
         }
@@ -234,6 +268,12 @@ function handle(req, res, session, home, liveHub) {
                 return redirect(res, repoRoute(session.repo, 'change', url.search));
             }
             return redirect(res, repoRoute(session.repo, sessionEntryScreen(session), url.search));
+        }
+        if (method === 'GET' && session.repo == null && url.pathname.startsWith('/repo/')) {
+            const restoredRepo = recentRepoForRoute(url.pathname, home);
+            if (!restoredRepo)
+                return redirect(res, '/');
+            openSession(session, restoredRepo);
         }
         const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
         if (repoScreen === 'stories') {
@@ -294,6 +334,41 @@ function handle(req, res, session, home, liveHub) {
         }
         if (method === 'GET' && url.pathname === '/api/agents') {
             return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(home) });
+        }
+        if (method === 'POST' && url.pathname === '/api/editor/open') {
+            if (!session.repo)
+                return noRepo(res);
+            return readBody(req, res, (body) => {
+                let input;
+                try {
+                    input = JSON.parse(body || '{}');
+                }
+                catch {
+                    return sendJson(res, 400, { error: 'invalid JSON' });
+                }
+                const file = typeof input.file === 'string' ? input.file : '';
+                const line = Number(input.line);
+                const column = Number(input.column);
+                if (!file || !Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
+                    return sendJson(res, 400, { error: 'A valid file, line, and column are required.' });
+                }
+                const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+                if (!page.ok)
+                    return sendReviewPageConflict(res, page.error);
+                const allowed = new Set([
+                    ...page.files.map((candidate) => candidate.newPath),
+                    ...(page.storyless ? [] : page.tour.steps.filter(isCodeStep).map((step) => step.file)),
+                ]);
+                if (!allowed.has(file))
+                    return sendJson(res, 400, { error: 'That file is not part of this review.' });
+                const editorUrl = vscodeNavigationUrl(page.repo, file, line, column);
+                if (!editorUrl)
+                    return sendJson(res, 400, { error: 'That file path cannot be opened safely.' });
+                if (!openExternal(editorUrl)) {
+                    return sendJson(res, 503, { error: 'VS Code could not be opened. Install VS Code and the DiffStory navigation bridge.' });
+                }
+                return sendJson(res, 200, { ok: true });
+            });
         }
         if (method === 'GET' && url.pathname === '/api/codex/tasks') {
             if (!session.repo)
@@ -418,6 +493,54 @@ function handle(req, res, session, home, liveHub) {
                 return sendReviewPageConflict(res, page.error);
             return sendLeasedHtml(res, session, page, renderExcludedFileResponse(page, url.searchParams.get('file') ?? ''));
         }
+        if (method === 'GET' && url.pathname === '/api/story-drift') {
+            const lease = optionalRequestLease(session, url);
+            if (lease === null)
+                return sendReviewPageConflict(res, 'This review page is no longer active.');
+            if (!lease || lease.storyIdentity === 'storyless')
+                return sendJson(res, 409, { error: 'No guided story is active.' });
+            try {
+                const tour = loadTour(lease.storyPath);
+                if (reviewStoryIdentity(lease.storyPath, tour, false) !== lease.storyIdentity) {
+                    return sendReviewPageConflict(res, 'The guided review changed after this page loaded.');
+                }
+                return sendJson(res, 200, storyDriftView(inspectStoryDrift({
+                    repo: lease.repo,
+                    snapshot: tour.storySnapshot,
+                    expected: storyDriftBinding(lease.base, lease.head, tour),
+                })));
+            }
+            catch (error) {
+                return sendJson(res, 409, { error: error.message });
+            }
+        }
+        if (method === 'GET' && url.pathname === '/api/story-drift/file') {
+            const lease = optionalRequestLease(session, url);
+            if (lease === null)
+                return sendReviewPageConflict(res, 'This review page is no longer active.');
+            if (!lease || lease.storyIdentity === 'storyless')
+                return sendJson(res, 409, { error: 'No guided story is active.' });
+            try {
+                const tour = loadTour(lease.storyPath);
+                if (reviewStoryIdentity(lease.storyPath, tour, false) !== lease.storyIdentity) {
+                    return sendReviewPageConflict(res, 'The guided review changed after this page loaded.');
+                }
+                const loaded = loadStoryDriftDiff({
+                    repo: lease.repo,
+                    snapshot: tour.storySnapshot,
+                    expected: storyDriftBinding(lease.base, lease.head, tour),
+                    observationId: url.searchParams.get('observation') ?? '',
+                    path: url.searchParams.get('file') ?? '',
+                });
+                if (loaded.status === 'unverified')
+                    return sendReviewPageConflict(res, loaded.reason ?? 'The drift evidence changed.');
+                const layout = url.searchParams.get('layout') === 'unified' ? 'unified' : 'split';
+                return sendHtml(res, renderStoryDriftFileResponse(loaded, layout));
+            }
+            catch (error) {
+                return sendReviewPageConflict(res, error.message);
+            }
+        }
         if (method === 'GET' && url.pathname === '/api/review-state') {
             const lease = optionalRequestLease(session, url);
             if (lease === null)
@@ -469,18 +592,6 @@ function handle(req, res, session, home, liveHub) {
         }
         if (method === 'POST' && url.pathname === '/api/story/repair') {
             return readBody(req, res, (body) => runStoryRepair(res, session, body));
-        }
-        if (method === 'POST' && url.pathname === '/api/tts/say') {
-            return readBody(req, res, (body) => runLocalSay(res, body, home));
-        }
-        if (method === 'GET' && url.pathname.startsWith('/api/tts/say/')) {
-            return sendLocalSayAudio(res, url.pathname.slice('/api/tts/say/'.length), home);
-        }
-        if (method === 'POST' && url.pathname === '/api/tts/kokoro') {
-            return readBody(req, res, (body) => runLocalKokoro(res, body, home));
-        }
-        if (method === 'GET' && url.pathname.startsWith('/api/tts/kokoro/')) {
-            return sendLocalKokoroAudio(res, url.pathname.slice('/api/tts/kokoro/'.length), home);
         }
         if (method === 'POST' && url.pathname.startsWith('/api/comments/') && url.pathname.endsWith('/message')) {
             const lease = optionalRequestLease(session, url);
@@ -720,11 +831,18 @@ function renderReview(session) {
     const { tour, base, head, files: fullFiles, diff } = data;
     const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles, data.changeFingerprint);
     const files = fullFiles;
+    const storyDrift = tour.storySnapshot
+        ? storyDriftView(inspectStoryDrift({
+            repo,
+            snapshot: tour.storySnapshot,
+            expected: storyDriftBinding(base, head, tour),
+        }))
+        : undefined;
     const storyFreshness = !tour.diffFingerprint
         ? 'unverified'
         : diffFingerprint(diff) === tour.diffFingerprint
             ? 'current'
-            : 'stale';
+            : 'unverified';
     const storyPath = selectedStoryPath(session);
     const pageLease = issueReviewPageLease(session, {
         repo,
@@ -750,6 +868,7 @@ function renderReview(session) {
         reviewState,
         reviewPageToken: pageLease.token,
         storyFreshness,
+        storyDrift,
         stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
         excludedFiles: excludedReviewFiles(repo, base, head),
     });
@@ -1034,6 +1153,63 @@ function renderExcludedFileResponse(page, file) {
     const shown = lines.slice(0, limit);
     const rows = shown.map((line, index) => `<span><i>${index + 1}</i><code>${esc(line) || ' '}</code></span>`).join('');
     return `<div class="ds-excluded-file-head"><strong>${side}</strong><span>This is a text preview, not story coverage or a before/after diff.</span></div><pre class="ds-excluded-code">${rows}</pre>${lines.length > limit ? `<div class="ds-diffnote">Showing the first ${limit} of ${lines.length} lines.</div>` : ''}`;
+}
+function storyDriftView(report) {
+    const state = report.storyFreshness === 'unverified'
+        ? 'unverified'
+        : report.inScopeCount && report.outsideScopeCount
+            ? 'mixed'
+            : report.inScopeCount
+                ? 'story-changed'
+                : report.outsideScopeCount
+                    ? 'outside-only'
+                    : 'current';
+    return {
+        state,
+        ...(report.observationId ? { observationId: report.observationId } : {}),
+        inScopeFiles: report.inScopeCount,
+        outsideScopeFiles: report.outsideScopeCount,
+        files: report.changes.map((change) => ({
+            path: change.path,
+            ...(change.oldPath ? { oldPath: change.oldPath } : {}),
+            status: change.kind,
+            scope: change.inStory ? 'story' : 'outside',
+            detail: change.evidence === 'exact' ? 'exact' : 'summary-only',
+            ...(change.reason ? { reason: change.reason } : {}),
+        })),
+    };
+}
+function renderStoryDriftFileResponse(result, layout = 'split') {
+    const note = result.reason
+        ? `<div class="ds-diffnote${result.status === 'partial' ? '' : ' is-warning'}">${esc(result.reason)}</div>`
+        : '';
+    if (!result.diff) {
+        return note || `<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`;
+    }
+    const file = parseUnifiedDiff(result.diff)[0];
+    if (!file || !file.hunks.length)
+        return `${note}<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`;
+    if (layout === 'unified')
+        return `${note}${renderUnifiedHunks(file)}`;
+    return `${note}${renderSplitHunks(hunksToSbsBlocks(file, []), {
+        file: file.newPath || result.path,
+        oldFile: file.oldPath || result.oldPath,
+        newFile: file.status === 'added',
+        hunkRanges: file.hunks.map(hunkNewRange),
+        canExpand: false,
+    })}`;
+}
+function metadataOnlyDriftDescription(result) {
+    const modes = result.diff?.match(/^old mode ([0-7]+)\r?\nnew mode ([0-7]+)$/m);
+    if (result.oldPath && result.oldPath !== result.path) {
+        if (modes) {
+            return `Renamed ${result.oldPath} to ${result.path} and changed file mode from ${modes[1]} to ${modes[2]}; file contents did not change.`;
+        }
+        return `Renamed ${result.oldPath} to ${result.path}; file contents did not change.`;
+    }
+    if (modes)
+        return `File mode changed from ${modes[1]} to ${modes[2]}; file contents did not change.`;
+    return 'File metadata changed without textual content changes.';
 }
 /** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
  *  file, clamped to [from, to] new-file line numbers. */
@@ -1510,7 +1686,7 @@ function storyScopeFromInput(input, changedFiles) {
         },
     };
 }
-function stampStoryMetadata(storyPath, fingerprint, scope) {
+function stampStoryMetadata(storyPath, fingerprint, scope, snapshot) {
     if (!existsSync(storyPath))
         return;
     try {
@@ -1520,10 +1696,65 @@ function stampStoryMetadata(storyPath, fingerprint, scope) {
         parsed.diffFingerprint = fingerprint;
         if (scope)
             parsed.storyScope = scope;
+        if (snapshot)
+            parsed.storySnapshot = snapshot;
         writeFileSync(storyPath, `${JSON.stringify(parsed, null, 2)}\n`);
     }
     catch {
         // Validation will report malformed or missing stories in the normal finish path.
+    }
+}
+function storySnapshotScope(tour) {
+    const includedFiles = tour.storyScope?.includedFiles
+        ?? tour.steps.filter(isCodeStep).map((step) => step.file);
+    return { includedFiles: [...new Set(includedFiles)].sort((a, b) => a.localeCompare(b)) };
+}
+function storyDriftBinding(base, head, tour) {
+    return {
+        base,
+        ...(head ? { head } : {}),
+        storyScope: storySnapshotScope(tour),
+    };
+}
+function captureAndStampStoryBaseline(repo, storyPath, base, head) {
+    const storySource = readFileSync(storyPath, 'utf8');
+    const tour = loadTour(storyPath);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const snapshot = captureStorySnapshot({
+            repo,
+            base,
+            ...(head ? { head } : {}),
+            storyScope: storySnapshotScope(tour),
+        });
+        const expected = storyDriftBinding(base, head, tour);
+        const observed = inspectStoryDrift({ repo, snapshot, expected });
+        if (observed.status !== 'current')
+            continue;
+        const diff = getDiff(repo, base, head);
+        const confirmed = inspectStoryDrift({ repo, snapshot, expected });
+        if (confirmed.status !== 'current' || confirmed.currentIdentity !== observed.currentIdentity)
+            continue;
+        if (readFileSync(storyPath, 'utf8') !== storySource) {
+            throw new Error('The story changed while DiffStory captured its baseline.');
+        }
+        stampStoryMetadata(storyPath, diffFingerprint(diff), undefined, snapshot);
+        return snapshot;
+    }
+    throw new Error('The repository kept changing while diffStory captured the story baseline.');
+}
+function finishWithStoryBaseline(finished, repo, storyPath, base, head) {
+    if (finished.status !== 'complete')
+        return finished;
+    try {
+        const snapshot = captureAndStampStoryBaseline(repo, storyPath, base, head);
+        return { ...finished, result: { ...finished.result, storySnapshot: snapshot.id } };
+    }
+    catch (error) {
+        return {
+            status: 'failed',
+            result: { ...finished.result, storySnapshot: false },
+            events: [...finished.events, errorEvent('validation', 'The story baseline could not be captured', 'The story is valid, but freshness cannot be proven yet. Retry when repository writes have finished.', error.message)],
+        };
     }
 }
 function runStoryRepair(res, session, body) {
@@ -1588,11 +1819,12 @@ function runStoryRepair(res, session, body) {
         },
         isTargetWrite: (event) => event.type === 'file' && event.action !== 'read' && event.target.endsWith('story.json'),
         finish: (result) => {
-            if (result.ok && existsSync(storyPath)) {
-                stampStoryMetadata(storyPath, diffFingerprint(data.diff));
+            const storyChanged = existsSync(storyPath) && readFileSync(storyPath, 'utf8') !== storyBefore;
+            if (result.ok && storyChanged) {
+                stampStoryMetadata(storyPath, diffFingerprint(getDiff(repo, data.base, data.head)));
             }
             const finished = finishStoryGeneration(result, storyPath, session, storyBefore, storyWasModern);
-            return finished;
+            return finishWithStoryBaseline(finished, repo, storyPath, data.base, data.head);
         },
         fileScope: { repoPath: repo, changedFiles: data.files.map((file) => file.newPath) },
     });
@@ -1662,7 +1894,8 @@ function runGenerate(res, session, body) {
             if (r.ok && storyChanged) {
                 stampStoryMetadata(storyPath, diffFingerprint(getDiff(repo, promptBase, promptHead)), storyScope.scope);
             }
-            return finishStoryGeneration(r, storyPath, session, storyBefore);
+            const finished = finishStoryGeneration(r, storyPath, session, storyBefore);
+            return finishWithStoryBaseline(finished, repo, storyPath, promptBase, promptHead);
         },
         fileScope: { repoPath: repo, changedFiles },
     });
@@ -1688,7 +1921,12 @@ function readBody(req, res, done) {
             done(data);
     });
 }
-function runLocalSay(res, body, home) {
+function runAloudStatus(res, aloud) {
+    aloud.status()
+        .then((status) => sendJson(res, 200, status))
+        .catch((error) => sendAloudError(res, error));
+}
+function runAloudSpeak(res, aloud, body) {
     let input;
     try {
         input = JSON.parse(body || '{}');
@@ -1696,99 +1934,43 @@ function runLocalSay(res, body, home) {
     catch {
         return sendJson(res, 400, { error: 'invalid JSON' });
     }
-    const abort = speechAbortForResponse(res);
-    synthesizeWithSay(home, {
-        text: input.text ?? '',
-        voice: input.voice,
-        preset: input.preset,
-        rate: input.rate,
-    }, { signal: abort.signal })
-        .then((audio) => sendJson(res, 200, {
-        cached: audio.cached,
-        rate: audio.rate,
-        url: audio.url,
-        voice: audio.voice,
-    }))
-        .catch((err) => {
-        if (abort.signal.aborted || res.destroyed)
-            return;
-        sendJson(res, 400, { error: err.message });
-    });
+    const text = typeof input.text === 'string' ? input.text.trim() : '';
+    if (!text)
+        return sendJson(res, 400, { error: 'No text to speak.' });
+    const batches = Array.isArray(input.batches)
+        ? input.batches.map((batch) => typeof batch === 'string' ? batch.trim() : '')
+        : undefined;
+    if (batches && (batches.length === 0 || batches.some((batch) => !batch))) {
+        return sendJson(res, 400, { error: 'Narration batches must be non-empty strings.' });
+    }
+    const prefetch = Number(input.prefetch);
+    aloud.speak({
+        text,
+        ...(batches ? { batches } : {}),
+        ...(Number.isFinite(prefetch) ? { prefetch } : {}),
+    })
+        .then((status) => sendJson(res, 200, status))
+        .catch((error) => sendAloudError(res, error));
 }
-function runLocalKokoro(res, body, home) {
-    let input;
+function runAloudControl(res, aloud, body) {
+    let action;
     try {
-        input = JSON.parse(body || '{}');
+        const input = JSON.parse(body || '{}');
+        if (input.action !== 'pause' && input.action !== 'resume' && input.action !== 'stop') {
+            return sendJson(res, 400, { error: 'Unknown Aloud playback action.' });
+        }
+        action = input.action;
     }
     catch {
         return sendJson(res, 400, { error: 'invalid JSON' });
     }
-    const abort = speechAbortForResponse(res);
-    synthesizeWithKokoro(home, {
-        text: input.text ?? '',
-        voice: input.voice,
-        rate: input.rate,
-    }, { signal: abort.signal })
-        .then((audio) => sendJson(res, 200, {
-        cached: audio.cached,
-        engine: 'kokoro',
-        rate: audio.rate,
-        url: audio.url,
-        voice: audio.voice,
-    }))
-        .catch((err) => {
-        if (abort.signal.aborted || res.destroyed)
-            return;
-        sendJson(res, 400, { error: err.message });
-    });
+    aloud.control(action)
+        .then((status) => sendJson(res, 200, status))
+        .catch((error) => sendAloudError(res, error));
 }
-function speechAbortForResponse(res) {
-    const ctrl = new AbortController();
-    res.on('close', () => {
-        if (!res.writableEnded)
-            ctrl.abort();
-    });
-    return ctrl;
-}
-function sendLocalSayAudio(res, file, home) {
-    const id = file.endsWith('.m4a') ? file.slice(0, -4) : file;
-    if (!isLocalTtsId(id)) {
-        res.statusCode = 404;
-        res.end('Not found');
-        return;
-    }
-    const path = join(localTtsCacheDir(home), `${id}.m4a`);
-    if (!existsSync(path)) {
-        res.statusCode = 404;
-        res.end('Not found');
-        return;
-    }
-    const stat = statSync(path);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'audio/mp4');
-    res.setHeader('Content-Length', String(stat.size));
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    createReadStream(path).pipe(res);
-}
-function sendLocalKokoroAudio(res, file, home) {
-    const id = file.endsWith('.wav') ? file.slice(0, -4) : file;
-    if (!isKokoroTtsId(id)) {
-        res.statusCode = 404;
-        res.end('Not found');
-        return;
-    }
-    const path = join(kokoroTtsCacheDir(home), `${id}.wav`);
-    if (!existsSync(path)) {
-        res.statusCode = 404;
-        res.end('Not found');
-        return;
-    }
-    const stat = statSync(path);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'audio/wav');
-    res.setHeader('Content-Length', String(stat.size));
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    createReadStream(path).pipe(res);
+function sendAloudError(res, error) {
+    const status = Number(error?.statusCode);
+    sendJson(res, Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503, { error: error instanceof Error ? error.message : 'Aloud is unavailable.' });
 }
 const MERMAID_BROWSER_ASSET = new URL('./mermaid.esm.min.mjs', import.meta.url);
 function sendMermaidBrowserAsset(res) {
@@ -1860,6 +2042,35 @@ code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</sty
 }
 function escapeText(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+const VSCODE_BRIDGE_ID = 'naveedinno.diffstory-vscode';
+/** Build the system URI consumed by the tiny VS Code navigation bridge. */
+export function vscodeNavigationUrl(repo, file, line, column) {
+    if (!file || isAbsolute(file) || !Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
+        return null;
+    }
+    const root = resolve(repo);
+    const target = resolve(root, file);
+    const fromRoot = relative(root, target);
+    if (!fromRoot || fromRoot === '..' || fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(fromRoot)) {
+        return null;
+    }
+    const url = new URL(`vscode://${VSCODE_BRIDGE_ID}/navigate`);
+    url.searchParams.set('path', target);
+    url.searchParams.set('line', String(line));
+    url.searchParams.set('column', String(column));
+    return url.toString();
+}
+function openExternalUrl(url) {
+    const cmd = process.platform === 'darwin' ? '/usr/bin/open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+    const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    try {
+        execFileSync(cmd, args, { stdio: 'ignore', timeout: 5_000 });
+        return true;
+    }
+    catch {
+        return false;
+    }
 }
 function openBrowser(url) {
     const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';

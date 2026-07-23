@@ -32,7 +32,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-diffhead-ctx .ds-diffhead-side{padding:0}
 .ds-diffhead-label{flex:none;font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
 .ds-diffhead-label.ds-dim{color:var(--dim2)}
-.ds-diffhead-label.ds-green{color:var(--add)}
+.ds-diffhead-label.ds-green{color:var(--diff-add-text)}
 .ds-diffhead-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
 .ds-diffhead-divider{width:1px;background:var(--diff-rule)}
 .ds-diffhead-note{font-size:11px;color:var(--dim2)}
@@ -46,8 +46,8 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
 .ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
 .ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
-.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-diffbody>.ds-urow:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-split-inner] .ds-diffbody>.ds-row:not(.is-story-focus),.ds-step.is-code-step.is-story-active [data-split-inner] .ds-diffbody>.ds-urow:not(.is-story-focus){opacity:.46}
-.ds-step.is-code-step.is-story-active [data-diff-inner] .ds-hunkgap,.ds-step.is-code-step.is-story-active [data-split-inner] .ds-hunkgap{opacity:.5}
+/* Keep surrounding evidence at full text opacity. Focus is marked without
+   boxing each row: one accent rail, tinted cells, and an emphasized line number. */
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-cell:not(.ds-cell-empty){background-image:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
@@ -79,11 +79,11 @@ body.ds-selecting-right .ds-code[data-comment-side="left"],
 body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:none;user-select:none}
 .ds-no{width:42px;flex:none;display:flex;align-items:flex-start;justify-content:flex-end;text-align:right;padding:3px 8px 3px 0;color:var(--dim2);background:var(--gutter);border-right:1px solid var(--diff-rule);user-select:none;font-variant-numeric:tabular-nums}
 .ds-sign{width:12px;flex:none;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
-.ds-sign-add{color:var(--add-bd)}
-.ds-sign-del{color:var(--del)}
+.ds-sign-add{color:var(--diff-add-text)}
+.ds-sign-del{color:var(--diff-del-text)}
 .ds-code{flex:1;min-width:0;padding:3px 14px 3px 7px;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
-.ds-code-add{color:var(--add-text)}
-.ds-code-del{color:var(--del-text)}
+.ds-code-add{color:var(--diff-add-text)}
+.ds-code-del{color:var(--diff-del-text)}
 .ds-untoured-tag{flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
 .ds-urow{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,0.025);min-height:23px}
 .ds-urow.ds-row-add{background:rgba(18,150,111,0.12);box-shadow:inset 3px 0 0 var(--add-rail)}
@@ -102,7 +102,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-viewed-toggle:hover{background:var(--fill-2);color:var(--text)}
 .ds-viewed-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-viewed-toggle-icon{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dim2);border-radius:50%;color:transparent;font-size:10px;line-height:1;transition:background var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
-.ds-viewed-toggle.is-active{border-color:rgba(48,209,88,.28);background:rgba(48,209,88,.08);color:var(--add-text)}
+.ds-viewed-toggle.is-active{border-color:rgba(48,209,88,.28);background:rgba(48,209,88,.08);color:var(--diff-add-text)}
 .ds-viewed-toggle,.ds-fileitem-viewed{--ds-reviewed-check-fg:var(--on-green,#00250c)}
 .ds-viewed-toggle.is-active .ds-viewed-toggle-icon{border-color:var(--add);background:var(--add);color:var(--ds-reviewed-check-fg)}
 .ds-row.is-change-jump,.ds-urow.is-change-jump{box-shadow:inset 3px 0 0 var(--accent-blue)}
@@ -113,6 +113,8 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-code .tk-s{color:var(--tk-s)}
 .ds-code .tk-n{color:var(--tk-n)}
 .ds-code .tk-c{color:var(--tk-c);font-style:italic}
+.ds-code[data-comment-side="right"] [data-vscode-symbol]{border-radius:2px;cursor:alias;text-decoration:underline;text-decoration-color:transparent;text-decoration-thickness:1px;text-underline-offset:2px;transition:text-decoration-color var(--motion-duration-fast) ease,background-color var(--motion-duration-fast) ease}
+.ds-code[data-comment-side="right"] [data-vscode-symbol]:hover{background:var(--accent-soft);text-decoration-color:currentColor}
 /* word-level diff: a stronger tint on just the tokens that changed within a line */
 .ds-code .changed{border-radius:3px}
 .ds-cell-add .changed,.ds-urow.ds-row-add .changed{background:rgba(18,150,111,0.38);box-shadow:0 0 0 1px rgba(18,150,111,0.38)}
@@ -144,7 +146,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-gapdots{color:var(--dim2)}
 .ds-hunkgap.is-error{display:flex;align-items:center;justify-content:center;min-height:34px;padding:4px 10px}
 .ds-hunkgap.is-error>.ds-gapbtn,.ds-hunkgap.is-error>.ds-gapdots,.ds-hunkgap.is-error>.ds-gap-side,.ds-hunkgap.is-error>.ds-gap-mid{display:none}
-.ds-gaperror{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--del-text);font-family:var(--sans);font-size:11px}
+.ds-gaperror{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--diff-del-text);font-family:var(--sans);font-size:11px}
 .ds-gapretry{opacity:1;min-height:26px;color:var(--text);border-color:var(--line)}
 @media (hover:none),(pointer:coarse){.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1;min-height:28px;padding-left:11px;padding-right:11px}}
 /* Lazy diff bodies get a small fallback reveal. Interactive mode/file handoffs

@@ -55,10 +55,12 @@ export function progressPanelStyles() {
 .ds-pp-now[hidden]{display:none}
 .ds-pp-live{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--pp-line);font-size:11.5px;color:var(--pp-faint);font-variant-numeric:tabular-nums}
 .ds-pp-live[hidden]{display:none}
+.ds-pp-announcer,.ds-pp-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ds-pp-live-dot{width:6px;height:6px;border-radius:50%;background:var(--pp-ok);flex:none;animation:ds-pp-pulse 1.6s ease-in-out infinite}
 .ds-pp-live.is-error .ds-pp-live-dot{background:var(--pp-err);animation:none}
 .ds-pp-live.is-error{color:var(--pp-muted)}
 .ds-pp-live.is-done .ds-pp-live-dot{animation:none}
+.ds-pp-live-elapsed::before{content:'·';margin-right:8px;color:var(--pp-faint)}
 .ds-pp-live-count{margin-left:auto}
 @keyframes ds-pp-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .ds-pp-error{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;margin:12px 14px 2px;padding:11px 12px;
@@ -121,7 +123,8 @@ export function progressPanelStyles() {
 }
 /** The panel markup fragment; \`variant\` only sets the outer positioning class. */
 export function progressPanelMarkup(variant) {
-    return `<div class="ds-pp" data-variant="${variant}" hidden aria-live="polite">
+    return `<div class="ds-pp" data-variant="${variant}" hidden>
+  <span class="ds-pp-announcer" role="status" aria-live="polite" aria-atomic="true"></span>
   <div class="ds-pp-head">
     <span class="ds-pp-spin" aria-hidden="true" hidden></span>
     <span class="ds-pp-title">Preparing…</span>
@@ -135,7 +138,7 @@ export function progressPanelMarkup(variant) {
   <div class="ds-pp-note" hidden></div>
   <ol class="ds-pp-plan"></ol>
   <div class="ds-pp-now" hidden></div>
-  <div class="ds-pp-live" hidden><span class="ds-pp-live-dot" aria-hidden="true"></span><span class="ds-pp-live-tx">Starting…</span><span class="ds-pp-live-count"></span></div>
+  <div class="ds-pp-live" hidden><span class="ds-pp-live-dot" aria-hidden="true"></span><span class="ds-pp-live-tx">Starting…</span><span class="ds-pp-live-elapsed" role="timer" aria-live="off"><span class="ds-pp-visually-hidden">Elapsed </span><span data-pp-elapsed>0s</span></span><span class="ds-pp-live-count"></span></div>
   <div class="ds-pp-error" role="alert" aria-atomic="true" hidden><span class="ds-pp-error-icon" aria-hidden="true">!</span><div><div class="ds-pp-error-title"></div><div class="ds-pp-error-detail"></div></div></div>
   <details class="ds-pp-details" hidden><summary>Technical details</summary><pre class="ds-pp-raw"></pre></details>
   <div class="ds-pp-foot" hidden></div>
@@ -151,7 +154,8 @@ function ProgressPanel(root, opts){
   var els = {
     title:q('.ds-pp-title'), agent:q('.ds-pp-agent'), repo:q('.ds-pp-repo'), spin:q('.ds-pp-spin'),
     plan:q('.ds-pp-plan'), now:q('.ds-pp-now'), live:q('.ds-pp-live'),
-    liveTx:q('.ds-pp-live-tx'), liveCount:q('.ds-pp-live-count'),
+    liveTx:q('.ds-pp-live-tx'), liveElapsed:q('[data-pp-elapsed]'), liveCount:q('.ds-pp-live-count'),
+    announcer:q('.ds-pp-announcer'),
     details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
     error:q('.ds-pp-error'), errorTitle:q('.ds-pp-error-title'), errorDetail:q('.ds-pp-error-detail'),
     stop:q('[data-pp-stop]'), close:q('[data-pp-close]'), taskLink:q('[data-pp-task-link]'),
@@ -178,15 +182,22 @@ function ProgressPanel(root, opts){
   };
   MILES.detailed_audit=MILES.guided_review;
   var miles=null, mileIdx=-1, mileFailed=false;
-  var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working', lastError=null;
+  var workflow='', hasPlan=false, planTotal=0, planDone=0, activeNow=null, curState='Working', lastError=null, lastAnnouncement='';
   var t0=0, timer=null;
   function elapsed(){ var s=Math.round((Date.now()-t0)/1000); return s<60?(s+'s'):(Math.floor(s/60)+'m '+(s%60)+'s'); }
+  function setElapsed(){ if(els.liveElapsed)els.liveElapsed.textContent=elapsed(); }
   function setLive(state, quietMs){
     if(!els.liveTx)return;
     var q2=(typeof quietMs==='number')?Math.round(quietMs/1000):0;
-    els.liveTx.textContent=(state||'Working')+' · '+elapsed()+(q2>=8?(' · quiet '+q2+'s'):'');
+    els.liveTx.textContent=(state||'Working')+(q2>=8?(' · quiet '+q2+'s'):'');
+    setElapsed();
   }
-  function tick(){ setLive(curState,0); }
+  function tick(){ setElapsed(); }
+  function announce(message){
+    var text=String(message||'').replace(/\\s+/g,' ').trim();
+    if(!text||text===lastAnnouncement||!els.announcer)return;
+    lastAnnouncement=text; els.announcer.textContent=text;
+  }
   function clip(s,n){ s=String(s||'').replace(/\\s+/g,' ').trim(); return s.length>n?s.slice(0,n)+'…':s; }
   function firstLine(s){ s=String(s||''); var i=s.indexOf(NL); return i>=0?s.slice(0,i):s; }
   var RAW_CAP=200000;
@@ -198,7 +209,6 @@ function ProgressPanel(root, opts){
   }
   function showError(err){
     lastError=err||{};
-    root.setAttribute('aria-live','off');
     if(els.error)els.error.hidden=false;
     if(els.errorTitle)els.errorTitle.textContent=lastError.label||'The run failed';
     if(els.errorDetail)els.errorDetail.textContent=lastError.detail||'';
@@ -241,7 +251,7 @@ function ProgressPanel(root, opts){
   function advanceMiles(phase){
     if(!miles)return;
     for(var i=0;i<miles.length;i++){
-      if(miles[i].phases.indexOf(phase)>=0){ if(i>mileIdx){mileIdx=i;renderMiles();} return; }
+      if(miles[i].phases.indexOf(phase)>=0){ if(i>mileIdx){mileIdx=i;renderMiles();announce(miles[i].label);} return; }
     }
   }
   function setNote(text){
@@ -263,8 +273,9 @@ function ProgressPanel(root, opts){
   }
   function start(){
     root.hidden=false; t0=Date.now(); setFinished(false);
-    workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working'; lastError=null;
-    miles=null; mileIdx=-1; mileFailed=false; root.setAttribute('aria-live','polite');
+    workflow=''; hasPlan=false; planTotal=0; planDone=0; activeNow=null; curState='Working'; lastError=null; lastAnnouncement='';
+    miles=null; mileIdx=-1; mileFailed=false;
+    if(els.announcer)els.announcer.textContent='';
     if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
     if(els.note){els.note.textContent='';els.note.hidden=true;}
     if(els.taskLink){els.taskLink.hidden=true;els.taskLink.removeAttribute('href');}
@@ -282,7 +293,7 @@ function ProgressPanel(root, opts){
     if(els.foot){els.foot.hidden=true; els.foot.textContent='';}
     if(els.live){els.live.hidden=false; els.live.className='ds-pp-live';}
     if(els.liveCount)els.liveCount.textContent='';
-    if(timer)clearInterval(timer); timer=setInterval(tick,1000); setLive('Preparing',0);
+    if(timer)clearInterval(timer); timer=setInterval(tick,1000); setLive('Preparing',0); announce('Preparing');
   }
   function stopTimer(){ if(timer){clearInterval(timer);timer=null;} }
   function handle(ev){
@@ -291,9 +302,10 @@ function ProgressPanel(root, opts){
     switch(ev.type){
       case 'run_started':
         workflow=ev.workflow||'';
-        if(els.title)els.title.textContent=WORK[workflow]||ev.label||'Working…';
+        var workTitle=WORK[workflow]||ev.label||'Working…';
+        if(els.title)els.title.textContent=workTitle;
         miles=MILES[workflow]||null; mileIdx=miles?0:-1; if(miles)renderMiles();
-        curState='Working'; setLive('Working',0); break;
+        curState='Working'; setLive('Working',0); announce(workTitle); break;
       case 'context':
         if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model,ev.taskMode);
         if(els.repo){els.repo.textContent=repoLine(ev);els.repo.title=ev.taskId?('Codex task '+ev.taskId):'';}
@@ -308,6 +320,7 @@ function ProgressPanel(root, opts){
         if(ev.phase==='validating_output'||ev.phase==='applying_results'){
           if(els.title)els.title.textContent='Checking the result…';
           curState='Checking'; setLive('Checking',0);
+          if(!miles)announce('Checking the result');
         } break;
       case 'plan': renderPlan(ev.items); break;
       case 'file': setCurrent(ev.label); break;
@@ -337,12 +350,15 @@ function ProgressPanel(root, opts){
     var handedToDesktop=ok&&result&&result.delivery==='desktop';
     if(ok&&miles){ mileIdx=miles.length; renderMiles(); }
     else if(!ok&&status!=='stopped'&&miles){mileFailed=true;renderMiles();}
-    if(els.title)els.title.textContent=handedToDesktop?'Sent to ChatGPT':ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':(FAIL[workflow]||"Couldn't finish");
+    var finishTitle=handedToDesktop?'Sent to ChatGPT':ok?(DONE[workflow]||'Done'):(status==='stopped')?'Stopped':(FAIL[workflow]||"Couldn't finish");
+    if(els.title)els.title.textContent=finishTitle;
     if(els.now)els.now.hidden=true;
     if(els.live){
       els.live.className='ds-pp-live '+(ok?'is-done':'is-error');
-      if(els.liveTx)els.liveTx.textContent=(handedToDesktop?'Message delivered':ok?'Done':(status==='stopped')?'Stopped':'Failed')+' · '+elapsed();
+      if(els.liveTx)els.liveTx.textContent=handedToDesktop?'Message delivered':ok?'Done':(status==='stopped')?'Stopped':'Failed';
+      setElapsed();
     }
+    if(ok||status==='stopped')announce(finishTitle);
     if(!ok&&status!=='stopped'&&!lastError)showError({label:'The connection to the agent ended',detail:'Try again. If it keeps failing, reopen diffStory and check the technical details.'});
     if(!ok && els.details && els.raw && els.raw.textContent.trim()){els.details.hidden=false;els.details.open=false;}
     if(opts.onDone)opts.onDone(status, result||{});

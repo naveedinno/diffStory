@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deleteStory, diffFingerprint, listStories, storyPathForId } from '../dist/stories.js';
 import { getDiff } from '../dist/git.js';
+import { captureStorySnapshot } from '../dist/story-drift.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-stories-'));
 
@@ -134,7 +135,7 @@ test('listStories counts concept primers without treating them as files', () => 
   rmSync(repo, { recursive: true, force: true });
 });
 
-test('listStories calls a story current only when its exact diff fingerprint matches', () => {
+test('listStories calls a legacy story current only on an exact fingerprint and otherwise leaves it unverified', () => {
   const repo = tmp();
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
@@ -158,8 +159,46 @@ test('listStories calls a story current only when its exact diff fingerprint mat
 
   writeFileSync(join(repo, 'a.txt'), 'three\n');
   stories = listStories(repo);
-  assert.equal(stories[0].freshness, 'stale');
+  assert.equal(stories[0].freshness, 'unverified');
   assert.equal(stories[0].current, false);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('listStories keeps a scoped story current across side drift and stales it only for included files', () => {
+  const repo = tmp();
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  writeFileSync(join(repo, 'a.txt'), 'story one\n');
+  writeFileSync(join(repo, 'side.txt'), 'side one\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'initial'], { cwd: repo });
+  writeFileSync(join(repo, 'a.txt'), 'story two\n');
+  const storySnapshot = captureStorySnapshot({
+    repo,
+    base: 'HEAD',
+    storyScope: { includedFiles: ['a.txt'] },
+  });
+  writeStory(repo, 'story.json', 'Scoped review', {
+    base: 'HEAD',
+    storyScope: { includedFiles: ['a.txt'] },
+    storySnapshot,
+  });
+
+  writeFileSync(join(repo, 'side.txt'), 'side two\n');
+  let [story] = listStories(repo);
+  assert.equal(story.freshness, 'current');
+  assert.equal(story.current, true);
+  assert.equal(story.inStoryDrift, 0);
+  assert.equal(story.outsideStoryDrift, 1);
+
+  writeFileSync(join(repo, 'a.txt'), 'story three\n');
+  [story] = listStories(repo);
+  assert.equal(story.freshness, 'stale');
+  assert.equal(story.current, false);
+  assert.equal(story.inStoryDrift, 1);
+  assert.equal(story.outsideStoryDrift, 1);
 
   rmSync(repo, { recursive: true, force: true });
 });

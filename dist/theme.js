@@ -140,7 +140,7 @@ export function sharedTokens() {
   /* signal accent */
   --accent:#3fb2ff;--accent-hi:#7adfff;--on-accent:#06121c;--accent-soft:rgba(63,178,255,.12);--accent-line:rgba(63,178,255,.3);
   /* semantic: evidence + state */
-  --add:#3ddc97;--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--del-soft:rgba(255,107,98,.12);
+  --add:#3ddc97;--diff-add-text:var(--add);--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--diff-del-text:var(--del);--del-soft:rgba(255,107,98,.12);
   --amber:#ffb224;--amber-soft:rgba(255,178,36,.14);--on-amber:#241600;
   /* thread + numerals */
   --numeral:var(--accent);--numeral-dim:#3a4250;--thread:var(--accent);--thread-dim:rgba(63,178,255,.28);
@@ -173,11 +173,13 @@ export function sharedTokens() {
   --line:rgba(20,30,45,.15);--line-soft:rgba(20,30,45,.08);
   --fill-1:rgba(20,30,45,.035);--fill-2:rgba(20,30,45,.06);--fill-3:rgba(20,30,45,.1);
   --accent:#0072d6;--accent-hi:#0086f0;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
-  --add:#178a52;--add-soft:rgba(23,138,82,.1);--del:#d2372e;--del-soft:rgba(210,55,46,.09);
+  /* Rails and fills keep the Signal semantic hues; the darker ink variants
+     give small diff text AA contrast on header, split, and unified tints. */
+  --add:#178a52;--diff-add-text:#116f43;--add-soft:rgba(23,138,82,.1);--del:#d2372e;--diff-del-text:#b52f2a;--del-soft:rgba(210,55,46,.09);
   --amber:#a96800;--amber-soft:rgba(199,124,0,.13);--on-amber:#ffffff;
   --numeral-dim:#c3ccd9;--thread-dim:rgba(0,114,214,.25);--map-dot:rgba(20,40,70,.13);--accent-glow:rgba(0,114,214,.14);
   --gutter:#edf0f5;--add-bg:rgba(23,138,82,.08);--del-bg:rgba(210,55,46,.07);
-  --tk-k:#9a2ebf;--tk-t:#0e7490;--tk-f:#2563eb;--tk-s:#297a3a;--tk-n:#b45309;--tk-c:#6b7785;
+  --tk-k:#8628a5;--tk-t:#096882;--tk-f:#1d4ed8;--tk-s:#256f35;--tk-n:#9a460c;--tk-c:#515c69;
   --scrim:rgba(15,22,32,.32);--shadow:0 1px 2px rgba(15,22,32,.12),0 8px 24px rgba(15,22,32,.1);--scroll:rgba(60,70,85,.25)}
 `;
 }

@@ -10,6 +10,7 @@ const MODES: StoryMode[] = ['brief', 'guided', 'detailed'];
 const CONCEPT_CODE_FIELDS = [
   'file',
   'range',
+  'ranges',
   'viewport',
   'highlights',
   'beats',
@@ -23,6 +24,22 @@ const CONCEPT_MIN_WORDS = 60;
 const CONCEPT_MAX_WORDS = 220;
 const MERMAID_MAX_CHARS = 8_000;
 const MERMAID_MAX_LINES = 80;
+/** Lines of framing a viewport may add around its range — about six either side. */
+const CONTEXT_ALLOWANCE = 12;
+
+/**
+ * Beat prose that says nothing the rendered diff already says. Both patterns are
+ * forbidden by the storyteller skill, but prose guidance lands unevenly, so the
+ * mechanically detectable cases are enforced at generation time.
+ *
+ * `LINE_NUMBER_OPENER` — "Line 742 makes …", "Lines 30-34 add …". The highlight
+ * already points at those lines; the words should explain, not re-address.
+ * `VALUE_TRANSITION` — "650 → 600", "650->600". Both sides are already rendered
+ * in colour, so restating them costs a line and teaches nothing. Prose arrows
+ * between words ("request → handler") stay legal: only digit-to-digit matches.
+ */
+const LINE_NUMBER_OPENER = /^lines?\s+\d/i;
+const VALUE_TRANSITION = /\d\s*(?:→|->|—>|–>)\s*\d/;
 
 export class TourError extends Error {}
 
@@ -32,6 +49,28 @@ function isLineNumber(v: unknown): v is number {
 
 function isDeletionAnchor(value: unknown): value is [0, 0] {
   return Array.isArray(value) && value.length === 2 && value[0] === 0 && value[1] === 0;
+}
+
+/**
+ * A stop the author marked as skim-worthy: mechanical sweep coverage rather than
+ * a place the reviewer must weigh a decision. Authored via `tags`, so the story
+ * declares its own low-stakes stops instead of the app guessing from prose.
+ */
+function isSkimStep(step: { tags?: unknown }): boolean {
+  return Array.isArray(step.tags) && step.tags.some((tag) =>
+    typeof tag === 'string' && /^(skim|sweep|mechanical)$/i.test(tag.trim()),
+  );
+}
+
+/** A range that strict validation can safely compare after shape validation. */
+function isComparableLineRange(value: unknown): value is [number, number] {
+  return isDeletionAnchor(value) || (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    isLineNumber(value[0]) &&
+    isLineNumber(value[1]) &&
+    value[0] <= value[1]
+  );
 }
 
 function mergedLineRanges(ranges: Array<[number, number]>): Array<[number, number]> {
@@ -205,9 +244,12 @@ function validateIntent(t: Record<string, unknown>, errors: string[]): void {
     }
   }
   if (intent.nonGoals !== undefined) {
-    if (!Array.isArray(intent.nonGoals) || intent.nonGoals.length === 0) {
-      errors.push('intent.nonGoals must be a non-empty array');
+    if (!Array.isArray(intent.nonGoals)) {
+      errors.push('intent.nonGoals must be an array');
     } else {
+      // An empty array means "this change has no deliberate omissions", which is
+      // the same honest claim as omitting the field. Rejecting it would fail a
+      // whole story over a semantically correct answer.
       intent.nonGoals.forEach((s, i) => {
         if (typeof s !== 'string' || !s.trim()) errors.push(`intent.nonGoals[${i}] must be a non-empty string`);
       });
@@ -355,9 +397,57 @@ function validateCodeStep(
     : validateLineRange(step.viewport, `${where}.viewport`, errors, { allowDeletionAnchor });
   const containerRange = viewportRange ?? stepRange;
   const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
+  if (stepKind === 'context' && step.ranges !== undefined) {
+    errors.push(`${where}.ranges is not allowed for a context step`);
+  } else {
+    validateClaimedRanges(step, stepRange, where, errors, allowDeletionAnchor);
+  }
   validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
   validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
   validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+}
+
+/**
+ * Optional `ranges`: every changed span this step claims for the coverage gate.
+ *
+ * Deliberately NOT constrained to the viewport. That is the whole point — a
+ * mechanical sweep touches lines no single 40-line camera shot can display, and
+ * before this existed the only way to claim them was one step per hunk, which
+ * produced 60-step stories that lost fields and read as disconnected captions.
+ *
+ * `range` stays the tight anchor the camera frames (and still drives the
+ * viewport caps), so it must correspond to one of the claimed spans rather than
+ * their bounding box — a bounding box over scattered spans would license an
+ * enormous viewport and defeat the camera contract.
+ */
+function validateClaimedRanges(
+  step: Record<string, unknown>,
+  stepRange: [number, number] | undefined,
+  where: string,
+  errors: string[],
+  allowDeletionAnchor: boolean,
+): void {
+  if (step.ranges === undefined) return;
+  if (!Array.isArray(step.ranges) || step.ranges.length === 0) {
+    errors.push(`${where}.ranges must be a non-empty array when present`);
+    return;
+  }
+  const parsed = step.ranges.map((value, i) =>
+    validateLineRange(value, `${where}.ranges[${i}]`, errors, { allowDeletionAnchor }),
+  );
+  const valid = parsed.filter((r): r is [number, number] => !!r);
+  if (valid.length !== parsed.length || !stepRange) return;
+
+  // The anchor must be part of what is claimed, so the framed evidence and the
+  // coverage claim can never drift apart.
+  const anchored = valid.some((span) =>
+    isDeletionAnchor(span) || isDeletionAnchor(stepRange)
+      ? isDeletionAnchor(span) && isDeletionAnchor(stepRange)
+      : span[0] <= stepRange[0] && span[1] >= stepRange[1],
+  );
+  if (!anchored) {
+    errors.push(`${where}.range must be contained in one of ${where}.ranges (the span the viewport frames)`);
+  }
 }
 
 function storyScopeIncludedFiles(t: Record<string, unknown>): Set<string> | null {
@@ -408,6 +498,18 @@ export function validateTour(obj: unknown): string[] {
   if (t.version !== 1 && t.version !== 2) errors.push('version must be 1 or 2');
   if (t.diffFingerprint !== undefined && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
     errors.push('diffFingerprint must be a SHA-256 hex digest');
+  }
+  if (t.storySnapshot !== undefined) {
+    const snapshot = t.storySnapshot;
+    if (
+      typeof snapshot !== 'object'
+      || snapshot === null
+      || Array.isArray(snapshot)
+      || (snapshot as Record<string, unknown>).version !== 1
+      || !/^[0-9a-f]{64}$/.test(String((snapshot as Record<string, unknown>).id ?? ''))
+    ) {
+      errors.push('storySnapshot must be a version 1 snapshot reference');
+    }
   }
   if (t.mode !== undefined && !MODES.includes(t.mode as StoryMode)) {
     errors.push(`mode must be one of ${MODES.join(', ')}`);
@@ -554,8 +656,10 @@ export function validateTour(obj: unknown): string[] {
   return errors;
 }
 
-function conceptWordCount(body: string): number {
-  return body.match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0;
+function conceptWordCount(body: unknown): number {
+  return typeof body === 'string'
+    ? body.match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0
+    : 0;
 }
 
 /**
@@ -594,18 +698,28 @@ export function validateGeneratedConceptSteps(tour: Tour): string[] {
  * stories still open; this stricter profile is only applied at generation time.
  */
 export function validateGeneratedTour(tour: Tour): string[] {
-  const errors: string[] = validateGeneratedConceptSteps(tour);
+  // This function is exported and is also used independently by tests and
+  // repair detection. Preserve the shape errors instead of assuming every
+  // caller already ran loadTour(); strict checks below then add the generation
+  // contract without turning malformed agent output into a TypeError.
+  const errors: string[] = validateTour(tour);
+  errors.push(...validateGeneratedConceptSteps(tour));
 
   if (tour.version !== 2) errors.push('version must be 2 for a generated story');
   if (!tour.mode) errors.push('mode is required for a generated story');
-  if (!tour.summary.trim()) errors.push('summary must explain the generated reading path');
+  // Callers normally hand this a tour that already passed validateTour(), but it
+  // is exported and agent output can be arbitrary — report a missing field
+  // rather than throwing, so the reviewer sees a fixable message.
+  if (typeof tour.summary !== 'string' || !tour.summary.trim()) {
+    errors.push('summary must explain the generated reading path');
+  }
   if (!tour.intent) {
     errors.push('intent is required for a generated story');
   } else {
-    if (!tour.intent.design?.trim()) {
+    if (typeof tour.intent.design !== 'string' || !tour.intent.design.trim()) {
       errors.push('intent.design must explain the existing app path, attachment point, and new outcome');
     }
-    if (!tour.intent.sources?.length) {
+    if (!Array.isArray(tour.intent.sources) || !tour.intent.sources.length) {
       errors.push('intent.sources must name the evidence used to recover the task');
     }
   }
@@ -618,20 +732,48 @@ export function validateGeneratedTour(tour: Tour): string[] {
     if (step.kind === 'concept') {
       return;
     }
-    if (!step.why.trim()) errors.push(`${where}.why must be a non-empty fallback recap`);
-    if (!step.question?.trim()) errors.push(`${where}.question is required for a generated story`);
+    if (typeof step.why !== 'string' || !step.why.trim()) {
+      errors.push(`${where}.why must be a non-empty fallback recap`);
+    }
+    if (step.ranges !== undefined && !isSkimStep(step)) {
+      errors.push(
+        `${where}.ranges requires a "skim", "sweep", or "mechanical" tag for a generated story`,
+      );
+    }
+    // A `skim` step exists to keep the coverage gate honest over a mechanical
+    // sweep, not to pose a review question. Demanding one there only produces
+    // rhetorical filler ("did the rename apply?"), which reviewers discount and
+    // graders penalise — so the requirement applies to substantive stops only.
+    if (!isSkimStep(step) && (typeof step.question !== 'string' || !step.question.trim())) {
+      errors.push(`${where}.question is required for a generated story`);
+    }
     if (!step.viewport) errors.push(`${where}.viewport is required for a generated story`);
     if (!step.highlights?.length) errors.push(`${where}.highlights are required for a generated story`);
     if (!step.beats?.length) errors.push(`${where}.beats are required for a generated story`);
 
-    if (step.viewport && !isDeletionAnchor(step.range) && !isDeletionAnchor(step.viewport)) {
-      if (step.range[0] < step.viewport[0] || step.range[1] > step.viewport[1]) {
+    const stepRange = isComparableLineRange(step.range) ? step.range : undefined;
+    const viewportRange = isComparableLineRange(step.viewport) ? step.viewport : undefined;
+    if (viewportRange && stepRange && !isDeletionAnchor(stepRange) && !isDeletionAnchor(viewportRange)) {
+      if (stepRange[0] < viewportRange[0] || stepRange[1] > viewportRange[1]) {
         errors.push(`${where}.range must be inside ${where}.viewport`);
       }
-      if (step.viewport[1] - step.viewport[0] + 1 > 60) {
+      // The caps bound how much *padding* a step frames around its change, not
+      // the change itself. A single hunk can exceed the cap, and `range` must
+      // span it whole, so capping the viewport below the range's own size makes
+      // those two rules unsatisfiable together. Every range therefore keeps a
+      // context allowance — roughly six lines either side — on top of its size.
+      const viewportLines = viewportRange[1] - viewportRange[0] + 1;
+      const rangeLines = stepRange[1] - stepRange[0] + 1;
+      const withContext = rangeLines + CONTEXT_ALLOWANCE;
+      // Context stops do not claim changed code, so a huge context `range`
+      // cannot justify a huge camera. Only changed/new-file steps may need the
+      // larger-range exception to frame one genuinely contiguous change.
+      const detailedCap = step.kind === 'context' ? 60 : Math.max(60, withContext);
+      const compactCap = step.kind === 'context' ? 40 : Math.max(40, withContext);
+      if (viewportLines > detailedCap) {
         errors.push(`${where}.viewport must stay within one 60-line camera shot`);
       }
-      if ((tour.mode === 'brief' || tour.mode === 'guided') && step.viewport[1] - step.viewport[0] + 1 > 40) {
+      if ((tour.mode === 'brief' || tour.mode === 'guided') && viewportLines > compactCap) {
         errors.push(`${where}.viewport should stay within 40 lines in ${tour.mode} mode; split the step`);
       }
     }
@@ -642,31 +784,68 @@ export function validateGeneratedTour(tour: Tour): string[] {
     }
 
     step.beats?.forEach((beat, beatIndex) => {
-      const sortedHighlights = [...beat.highlights].sort((a, b) => a[0] - b[0]);
+      // Two prose failures that make a beat say nothing the diff hasn't already
+      // shown. Both are asked for in the skill, but prose guidance lands
+      // inconsistently across runs, so the ones that can be checked are checked.
+      const beatText = typeof beat?.text === 'string' ? beat.text.trim() : '';
+      if (LINE_NUMBER_OPENER.test(beatText)) {
+        errors.push(
+          `${where}.beats[${beatIndex}].text must not open by naming line numbers; ` +
+          `the highlight already points there — say why those lines matter`,
+        );
+      }
+      if (VALUE_TRANSITION.test(beatText)) {
+        errors.push(
+          `${where}.beats[${beatIndex}].text must not narrate a value transition; ` +
+          `the diff already shows both sides — say what depended on the old value`,
+        );
+      }
+      // A generated story can arrive malformed (an agent omitting `highlights`,
+      // or spelling the beat's `text` as `body`). Report that as a validation
+      // error the author can act on — never throw a TypeError from here, since
+      // callers surface this message directly to the reviewer.
+      if (!Array.isArray(beat?.highlights) || beat.highlights.length === 0) {
+        errors.push(`${where}.beats[${beatIndex}].highlights are required for a generated story`);
+        return;
+      }
+      const validHighlights: Array<{ range: [number, number]; sourceIndex: number }> = [];
+      beat.highlights.forEach((highlight, highlightIndex) => {
+        if (isComparableLineRange(highlight)) {
+          validHighlights.push({ range: highlight, sourceIndex: highlightIndex });
+        } else {
+          errors.push(`${where}.beats[${beatIndex}].highlights[${highlightIndex}] must be a [start, end] pair`);
+        }
+      });
+      const sortedHighlights = validHighlights.map(({ range }) => range).sort((a, b) => a[0] - b[0]);
       if (sortedHighlights.some((range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10)) {
         errors.push(`${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`);
       }
-      beat.highlights.forEach((highlight, highlightIndex) => {
-        if (!isDeletionAnchor(highlight) && highlight[1] - highlight[0] + 1 > 12) {
-          errors.push(`${where}.beats[${beatIndex}].highlights[${highlightIndex}] must point at at most 12 lines`);
+      validHighlights.forEach(({ range, sourceIndex }) => {
+        if (!isDeletionAnchor(range) && range[1] - range[0] + 1 > 12) {
+          errors.push(`${where}.beats[${beatIndex}].highlights[${sourceIndex}] must point at at most 12 lines`);
         }
       });
     });
 
     if (step.highlights?.length && step.beats?.length) {
-      const beatHighlights = step.beats.flatMap((beat) => beat.highlights);
-      if (!sameLineCoverage(step.highlights, beatHighlights)) {
+      const stepHighlights = step.highlights.filter(isComparableLineRange);
+      const beatHighlights = step.beats
+        .flatMap((beat) => Array.isArray(beat.highlights) ? beat.highlights : [])
+        .filter(isComparableLineRange);
+      if (!sameLineCoverage(stepHighlights, beatHighlights)) {
         errors.push(`${where}.highlights must match the union of ${where}.beats highlights`);
       }
     }
 
-    if (step.kind !== 'context' && step.beats?.length) {
+    if (step.kind !== 'context' && stepRange && step.beats?.length) {
       const coversChange = step.beats.some((beat) =>
-        beat.highlights.some((highlight) =>
-          isDeletionAnchor(step.range)
-            ? isDeletionAnchor(highlight)
-            : !isDeletionAnchor(highlight) && highlight[0] <= step.range[1] && highlight[1] >= step.range[0],
-        ),
+        (Array.isArray(beat.highlights) ? beat.highlights : [])
+          .filter(isComparableLineRange)
+          .some((highlight) =>
+            isDeletionAnchor(stepRange)
+              ? isDeletionAnchor(highlight)
+              : !isDeletionAnchor(highlight) && highlight[0] <= stepRange[1] && highlight[1] >= stepRange[0],
+          ),
       );
       if (!coversChange) {
         errors.push(`${where}.beats must include a highlight that overlaps the changed range`);

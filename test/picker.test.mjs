@@ -35,6 +35,17 @@ test('folder browser exposes live filtering and keyboard navigation', () => {
   assert.match(html, /\.remove-btn::after\{content:"";position:absolute;inset:-5px\}/, 'keeps the compact mobile remove action easy to tap');
   assert.doesNotMatch(html, /hero-copy|hero-title|Recent repositories keep branch/, 'keeps the app bar free of repeated instructions');
   assert.doesNotMatch(html, /Your repositories|<p class="section">/, 'uses one concise repositories heading');
+  assert.doesNotMatch(html, /colophon|Reads your working tree locally|nothing leaves this machine/, 'does not render the redundant privacy footer');
+});
+
+test('skill recovery stays visible without outranking the repository action', () => {
+  const html = renderPicker([], '/Users/test', Date.now());
+
+  assert.ok(html.indexOf('id="quickAddBtn"') < html.indexOf('id="skillWarn"'), 'places repository selection before optional setup recovery');
+  assert.match(html, /id="skillWarnText"[^>]+role="status"[^>]+aria-live="polite"[^>]+aria-atomic="true"/, 'announces asynchronous skill recovery state without interrupting');
+  assert.match(html, /\.launchwarn\{[^}]*border-top:1px solid var\(--sep\)[^}]*background:transparent[^}]*color:var\(--label2\)/);
+  assert.match(html, /\.skillfix\{[^}]*color:var\(--label2\)[^}]*background:transparent[^}]*border:1px solid var\(--hairline\)/);
+  assert.match(html, /id="skillUpdateBtn"[^>]*>Update skills<\/button>/, 'keeps a direct recovery action available');
 });
 
 test('picker keeps repository bookkeeping in the repository row, not the masthead', () => {
@@ -58,6 +69,42 @@ test('picker keeps repository bookkeeping in the repository row, not the masthea
   assert.match(html, /animation:ds-thread-pulse 11s linear 2s infinite backwards/, 'keeps the travelling pulse timing intact');
   assert.equal((html.match(/3 changed files/g) ?? []).length, 1, 'shows the change count only on the repository row');
   assert.equal((html.match(/7 min ago/g) ?? []).length, 1, 'shows the last-opened time only on the repository row');
+});
+
+test('recent repository removal binds directly and keeps missing-workspace bookkeeping current', () => {
+  const now = 10_000_000;
+  const html = renderPicker(
+    [
+      {
+        path: '/missing/one',
+        name: 'one',
+        isGit: false,
+        hasTour: false,
+        currentBranch: null,
+        changedFiles: 0,
+        lastOpened: now,
+      },
+      {
+        path: '/missing/two',
+        name: 'two',
+        isGit: false,
+        hasTour: false,
+        currentBranch: null,
+        changedFiles: 0,
+        lastOpened: now,
+      },
+    ],
+    '/Users/test',
+    now,
+  );
+
+  assert.match(html, /<span data-missing-count>2 unavailable workspaces<\/span>/);
+  assert.match(html, /querySelectorAll\('#recent button\[data-remove-repo\]'\)/);
+  assert.match(html, /rb\.addEventListener\('click'/, 'each trash button owns its click path');
+  assert.doesNotMatch(html, /e\.target\.closest\('button\[data-remove-repo\]'\)/, 'does not depend on a nested WebKit event target');
+  assert.match(html, /button\.disabled=true;button\.setAttribute\('aria-busy','true'\)/, 'acknowledges the click while removal is pending');
+  assert.match(html, /label\.textContent=count\+' unavailable '\+\(count===1\?'workspace':'workspaces'\)/);
+  assert.match(html, /if\(!count\)\{group\.parentNode\.removeChild\(group\);\}/, 'removes the unavailable section after its last row');
 });
 
 test('folder browser enforces its aria-modal contract and restores focus', () => {

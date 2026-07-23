@@ -6,7 +6,8 @@ import { loadTour } from './tour.js';
 import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { loadComments } from './comments.js';
-import { isCodeStep, type StoryMode } from './types.js';
+import { isCodeStep, type StoryMode, type StoryScope as TourStoryScope, type Tour } from './types.js';
+import { inspectStoryDrift, type StoryDriftExpectedBinding } from './story-drift.js';
 
 export interface StorySummary {
   id: string;
@@ -26,9 +27,12 @@ export interface StorySummary {
   primers: number;
   /** Distinct files the steps touch (0 when invalid). */
   files: number;
-  /** True only when the story fingerprint exactly matches its current git diff. */
+  /** True only when the story's captured scope still matches its baseline. */
   current: boolean;
   freshness: 'current' | 'stale' | 'unverified';
+  /** Files changed after the captured story baseline, split by narrative scope. */
+  inStoryDrift: number;
+  outsideStoryDrift: number;
   /** Live review-session facts derived from the current diff and feedback state. */
   liveFiles: number;
   additions: number;
@@ -99,7 +103,14 @@ function storySummary(repo: string, id: string): StorySummary | null {
   const updatedAt = statSync(path).mtimeMs;
   try {
     const story = loadTour(path);
-    const session = storySession(repo, story.base, story.head, story.diffFingerprint);
+    const session = storySession(
+      repo,
+      story.base,
+      story.head,
+      story.diffFingerprint,
+      story.storySnapshot,
+      snapshotBindingForStory(repo, story),
+    );
     return {
       id,
       path,
@@ -137,6 +148,8 @@ function storySummary(repo: string, id: string): StorySummary | null {
       files: 0,
       current: false,
       freshness: 'unverified',
+      inStoryDrift: 0,
+      outsideStoryDrift: 0,
       liveFiles: 0,
       additions: 0,
       deletions: 0,
@@ -156,9 +169,13 @@ function storySession(
   base?: string,
   head?: string,
   expected?: string,
+  snapshot?: unknown,
+  snapshotBinding?: StoryDriftExpectedBinding,
 ): Pick<
   StorySummary,
   | 'freshness'
+  | 'inStoryDrift'
+  | 'outsideStoryDrift'
   | 'liveFiles'
   | 'additions'
   | 'deletions'
@@ -167,6 +184,8 @@ function storySession(
 > {
   const empty = {
     freshness: 'unverified' as const,
+    inStoryDrift: 0,
+    outsideStoryDrift: 0,
     liveFiles: 0,
     additions: 0,
     deletions: 0,
@@ -178,6 +197,7 @@ function storySession(
     const diff = getDiff(repo, resolvedBase, head);
     const files = parseUnifiedDiff(diff);
     const comments = loadComments(repo);
+    const drift = snapshot ? inspectStoryDrift({ repo, snapshot, expected: snapshotBinding }) : undefined;
     let additions = 0;
     let deletions = 0;
     for (const file of files) {
@@ -189,7 +209,13 @@ function storySession(
       }
     }
     return {
-      freshness: expected ? (diffFingerprint(diff) === expected ? 'current' : 'stale') : 'unverified',
+      freshness: drift
+        ? drift.storyFreshness
+        : expected
+          ? (diffFingerprint(diff) === expected ? 'current' : 'unverified')
+          : 'unverified',
+      inStoryDrift: drift?.inScopeCount ?? 0,
+      outsideStoryDrift: drift?.outsideScopeCount ?? 0,
       liveFiles: files.length,
       additions,
       deletions,
@@ -199,6 +225,21 @@ function storySession(
   } catch {
     return empty;
   }
+}
+
+function snapshotScopeForStory(story: Tour): Pick<TourStoryScope, 'includedFiles'> {
+  const includedFiles = story.storyScope?.includedFiles
+    ?? story.steps.filter(isCodeStep).map((step) => step.file);
+  return { includedFiles: [...new Set(includedFiles)].sort((a, b) => a.localeCompare(b)) };
+}
+
+function snapshotBindingForStory(repo: string, story: Tour): StoryDriftExpectedBinding {
+  const base = resolveBase(repo, story.base);
+  return {
+    base,
+    ...(story.head ? { head: story.head } : {}),
+    storyScope: snapshotScopeForStory(story),
+  };
 }
 
 function storyScope(base?: string, head?: string): StoryScope {

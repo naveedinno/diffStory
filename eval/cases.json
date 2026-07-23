@@ -3,11 +3,16 @@
   "cases": [
     {
       "id": "bugfix-review-ui",
-      "note": "Bugfix flavor: review UI reliability and accessibility fixes across 4 files.",
+      "note": "Bugfix flavor: review UI reliability and accessibility across 4 files. SLOW: subtle a11y/CSS reasoning over minified 2000-char lines in page-assets.ts makes this thinking-bound \u2014 observed >45min even though the diff is only ~100 lines. Needs a long timeout.",
       "base": "4d6f30c^",
       "head": "4d6f30c",
       "mode": "guided",
-      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+      "excludePaths": [
+        "dist/*",
+        "package-lock.json",
+        "docs/ui-atlas/*"
+      ],
+      "timeoutMinutes": 90
     },
     {
       "id": "small-feature-walkthrough-stage",
@@ -15,15 +20,24 @@
       "base": "abf82f4^",
       "head": "abf82f4",
       "mode": "brief",
-      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+      "excludePaths": [
+        "dist/*",
+        "package-lock.json",
+        "docs/ui-atlas/*"
+      ]
     },
     {
       "id": "refactor-one-shot-notes",
-      "note": "Deletion-heavy refactor: one-shot Notes model removes rounds, verdicts, and timelines (15 files, -2272 lines). Exercises deletion anchors and coverage of removed behavior.",
+      "note": "Deletion-heavy refactor: one-shot Notes model removes rounds, verdicts, and timelines (15 files, -2272 lines). Exercises deletion anchors and coverage of removed behavior. SLOW: 89 hunks means a long story; observed 35min at 2 lanes and >55min once the coverage rule lengthened stories. Give it room.",
       "base": "45d4f55^",
       "head": "45d4f55",
       "mode": "guided",
-      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+      "excludePaths": [
+        "dist/*",
+        "package-lock.json",
+        "docs/ui-atlas/*"
+      ],
+      "timeoutMinutes": 90
     },
     {
       "id": "medium-feature-rail-numerals",
@@ -31,7 +45,11 @@
       "base": "d7c3deb^",
       "head": "d7c3deb",
       "mode": "detailed",
-      "excludePaths": ["dist/*", "package-lock.json", "docs/ui-atlas/*"]
+      "excludePaths": [
+        "dist/*",
+        "package-lock.json",
+        "docs/ui-atlas/*"
+      ]
     }
   ]
 }

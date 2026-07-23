@@ -139,3 +139,124 @@ test('the whole-file deletion sentinel remains a fully claimed change', () => {
   assert.deepEqual(cov.unclaimed, []);
   assert.equal(cov.fullyClaimedChangedFiles, 1);
 });
+
+test('stale-pointer detection honours every claimed span', async () => {
+  const { stalePointers } = await import('../dist/coverage.js');
+  const { parseUnifiedDiff } = await import('../dist/diff.js');
+  const files = parseUnifiedDiff([
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -40,0 +40,2 @@', '+gamma', '+delta',
+  ].join('\n'));
+  const step = (extra) => ({
+    version: 2, title: 'T', summary: '',
+    steps: [{ id: 's1', order: 1, title: 'T', kind: 'changed', file: 'x.ts', why: 'w', ...extra }],
+  });
+  // Anchor points at unchanged code — stale on its own...
+  assert.equal(stalePointers(step({ range: [10, 11] }), files).length, 1);
+  // ...and one valid sibling must not hide it.
+  assert.equal(stalePointers(step({ range: [10, 11], ranges: [[10, 11], [40, 41]] }), files).length, 1);
+  // The inverse is stale too: a valid anchor cannot hide an obsolete remote claim.
+  assert.equal(stalePointers(step({ range: [40, 41], ranges: [[40, 41], [90, 90]] }), files).length, 1);
+  // Every effective claim touching changed code is fresh.
+  assert.equal(stalePointers(step({ range: [40, 40], ranges: [[40, 40], [41, 41]] }), files).length, 0);
+});
+
+test('a broad valid coverage claim cannot hide a stale local camera', () => {
+  const oneLineFiles = parseUnifiedDiff([
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,1 @@', '+alpha',
+  ].join('\n'));
+  const story = {
+    ...tour([{
+      id: 's1', order: 1, title: 'sweep', kind: 'changed', file: 'x.ts',
+      range: [15, 16], ranges: [[10, 20]], why: 'same repeated edit',
+    }]),
+    mode: 'guided',
+  };
+
+  assert.equal(computeStoryClaimCoverage(story, oneLineFiles).unclaimed.length, 0);
+  assert.equal(stalePointers(story, oneLineFiles).length, 1);
+});
+
+test('a giant bounding-box claim cannot cover distant changed clusters', () => {
+  const distantFiles = parseUnifiedDiff([
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,1 @@', '+alpha',
+    '@@ -400,0 +400,1 @@', '+omega',
+  ].join('\n'));
+  const story = {
+    ...tour([{
+      id: 's1', order: 1, title: 'giant sweep', kind: 'changed', file: 'x.ts',
+      range: [10, 400], why: 'same repeated edit',
+    }]),
+    mode: 'guided',
+  };
+
+  assert.deepEqual(computeStoryClaimCoverage(story, distantFiles).unclaimed, [
+    { file: 'x.ts', range: [10, 10], status: 'modified' },
+    { file: 'x.ts', range: [400, 400], status: 'modified' },
+  ]);
+  assert.equal(stalePointers(story, distantFiles).length, 1);
+
+  const remoteBoundingBox = {
+    ...story,
+    steps: [{ ...story.steps[0], range: [10, 10], ranges: [[10, 400]] }],
+  };
+  assert.equal(computeStoryClaimCoverage(remoteBoundingBox, distantFiles).unclaimed.length, 2);
+  assert.equal(stalePointers(remoteBoundingBox, distantFiles).length, 1);
+});
+
+test('an over-cap claim remains valid for one contiguous changed span', () => {
+  const contiguousFiles = parseUnifiedDiff([
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,46 @@',
+    ...Array.from({ length: 46 }, (_, index) => `+line ${index + 1}`),
+  ].join('\n'));
+  const story = {
+    ...tour([{
+      id: 's1', order: 1, title: 'large hunk', kind: 'changed', file: 'x.ts',
+      range: [10, 55], why: 'one contiguous replacement',
+    }]),
+    mode: 'guided',
+  };
+
+  assert.deepEqual(computeStoryClaimCoverage(story, contiguousFiles).unclaimed, []);
+  assert.deepEqual(stalePointers(story, contiguousFiles), []);
+});
+
+test('legacy focus.ranges points at code but never claims coverage', () => {
+  const scatteredDiff = [
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,2 @@', '+alpha', '+beta',
+    '@@ -40,0 +40,2 @@', '+gamma', '+delta',
+  ].join('\n');
+  const scatteredFiles = parseUnifiedDiff(scatteredDiff);
+  const base = {
+    id: 's1', order: 1, title: 'sweep', kind: 'changed', file: 'x.ts',
+    range: [10, 11], why: 'same repeated edit', focus: { ranges: [[40, 41]] },
+  };
+
+  assert.deepEqual(computeStoryClaimCoverage(tour([base]), scatteredFiles).unclaimed, [
+    { file: 'x.ts', range: [40, 41], status: 'modified' },
+  ]);
+  assert.deepEqual(computeStoryClaimCoverage(tour([{
+    ...base, ranges: [[10, 11], [40, 41]],
+  }]), scatteredFiles).unclaimed, []);
+});
+
+test('a partial ranges claim reports the exact missing segment', () => {
+  const scatteredDiff = [
+    'diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts',
+    '@@ -10,0 +10,2 @@', '+alpha', '+beta',
+    '@@ -40,0 +40,2 @@', '+gamma', '+delta',
+  ].join('\n');
+  const cov = computeStoryClaimCoverage(
+    tour([{
+      id: 's1', order: 1, title: 'sweep', kind: 'changed', file: 'x.ts',
+      range: [10, 11], ranges: [[10, 11], [40, 40]], why: 'same repeated edit',
+    }]),
+    parseUnifiedDiff(scatteredDiff),
+  );
+
+  assert.deepEqual(cov.unclaimed, [{ file: 'x.ts', range: [41, 41], status: 'modified' }]);
+});

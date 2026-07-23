@@ -35,6 +35,10 @@ export interface Token {
   cls: string | null;
 }
 
+function isNavigableIdentifier(token: Token): boolean {
+  return token.cls !== 'tk-k' && /^[A-Za-z_$][\w$]*$/.test(token.text);
+}
+
 /**
  * Lex one line into tokens. This is the single source of truth for how a line is
  * broken up; highlight() renders these, and intra-line.ts diffs them so word-level
@@ -69,9 +73,15 @@ export function tokenize(code: string): Token[] {
  * (identifiers, keywords, whitespace), so escaping uniformly here reproduces the
  * old highlight() output byte-for-byte while staying safe for comments/strings.
  */
-export function renderToken(t: Token, changed = false): string {
+export function renderToken(t: Token, changed = false, column?: number): string {
   const cls = changed ? (t.cls ? `${t.cls} changed` : 'changed') : t.cls;
-  return cls ? `<span class="${cls}">${esc(t.text)}</span>` : esc(t.text);
+  const navigable = column !== undefined && isNavigableIdentifier(t);
+  if (!cls && !navigable) return esc(t.text);
+  const classAttr = cls ? ` class="${cls}"` : '';
+  const navigationAttrs = navigable
+    ? ` data-vscode-symbol data-vscode-column="${column}" title="Open implementation in VS Code (Command/Ctrl-click)"`
+    : '';
+  return `<span${classAttr}${navigationAttrs}>${esc(t.text)}</span>`;
 }
 
 /** Highlight one line of code → HTML-escaped string with token spans. */
@@ -79,5 +89,17 @@ export function highlight(code: string): string {
   if (!code) return '';
   let out = '';
   for (const t of tokenize(code)) out += renderToken(t);
+  return out;
+}
+
+/** Highlight a current-file line and annotate identifiers with one-based columns. */
+export function highlightNavigable(code: string): string {
+  if (!code) return '';
+  let out = '';
+  let column = 1;
+  for (const token of tokenize(code)) {
+    out += renderToken(token, false, column);
+    column += token.text.length;
+  }
   return out;
 }

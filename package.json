@@ -17,7 +17,6 @@
     "dist",
     "assets/brand",
     "assets/demo",
-    "scripts/setup-kokoro.sh",
     "skills",
     "README.md"
   ],
@@ -26,7 +25,6 @@
     "build:browser-assets": "node scripts/build-browser-assets.mjs",
     "check": "npm run build && node --test test/*.test.mjs",
     "dev": "npm run build && node dist/app-server.js",
-    "setup:kokoro": "sh scripts/setup-kokoro.sh",
     "start": "node dist/app-server.js",
     "demo": "npm run build && node examples/demo.mjs",
     "ui:atlas": "npm run build && node scripts/capture-ui-atlas.mjs",

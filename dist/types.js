@@ -8,3 +8,11 @@
 export function isCodeStep(step) {
     return step.kind !== 'concept';
 }
+/**
+ * Every changed span a code step claims for the coverage gate. `ranges` exists so
+ * one step can honestly claim scattered edits (a rename across twenty call sites)
+ * instead of forcing one step per hunk; without it, `range` alone is the claim.
+ */
+export function claimedRanges(step) {
+    return step.ranges?.length ? step.ranges : [step.range];
+}

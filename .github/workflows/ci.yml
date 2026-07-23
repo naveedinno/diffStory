@@ -27,5 +27,13 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Install VS Code navigation bridge dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Check VS Code navigation bridge
+        working-directory: vscode-extension
+        run: npm run check
+
       - name: Pack dry-run
         run: npm pack --dry-run --json

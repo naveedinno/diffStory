@@ -1,7 +1,7 @@
 // Unit tests for the syntax tokenizer. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenize, renderToken, highlight } from '../dist/highlight.js';
+import { tokenize, renderToken, highlight, highlightNavigable } from '../dist/highlight.js';
 
 // Golden output — locks highlight() byte-for-byte through the tokenize() refactor.
 const GOLDEN = [
@@ -47,4 +47,12 @@ test('renderToken adds the changed class alongside the syntax class', () => {
   const plain = { text: 'bar', cls: null };
   assert.equal(renderToken(plain, true), '<span class="changed">bar</span>');
   assert.equal(renderToken(plain, false), 'bar');
+});
+
+test('navigable highlighting annotates identifiers with one-based UTF-16 columns', () => {
+  const html = highlightNavigable('const result = executeOrder(input);');
+  assert.doesNotMatch(html, /data-vscode-column="1"/); // keyword
+  assert.match(html, /data-vscode-symbol data-vscode-column="7"[^>]*>result<\/span>/);
+  assert.match(html, /class="tk-f" data-vscode-symbol data-vscode-column="16"[^>]*>executeOrder<\/span>/);
+  assert.match(html, /data-vscode-symbol data-vscode-column="29"[^>]*>input<\/span>/);
 });

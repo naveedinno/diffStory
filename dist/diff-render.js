@@ -2,7 +2,7 @@
 // HTML. Consumed by the story-step renderer, the All-files panels, the
 // full-file endpoint, and the expand-context endpoint, so every surface
 // draws rows identically. Pure functions; all content is escaped here.
-import { highlight } from './highlight.js';
+import { highlight, highlightNavigable } from './highlight.js';
 export function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -25,6 +25,9 @@ function reviewRowAttrs(target, type, content, step) {
     // callers while still giving modern rows a useful accessible description.
     const summary = String(content ?? '').trim().replace(/\s+/g, ' ') || 'blank line';
     return `${rowAttrs(target, step)} data-review-row role="group" tabindex="-1" aria-keyshortcuts="C" aria-label="${esc(`${action} ${version} line ${target.line} in ${target.file}: ${summary}`)}"`;
+}
+function highlightedCode(code, target) {
+    return target?.side === 'right' ? highlightNavigable(code) : highlight(code);
 }
 /** One side of a split row. Copied verbatim from render.ts cell(). */
 function cell(side, row, target, intra) {
@@ -58,7 +61,7 @@ function cell(side, row, target, intra) {
     else if (side === 'left' && del)
         tint = ' ds-cell-del';
     const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlight(row.content)) || ' '}</span>${flag}</span>`;
+    return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlightedCode(row.content, target)) || ' '}</span>${flag}</span>`;
 }
 /** Context/new-file steps render one full-width cell. Verbatim from singleCell()
  *  — note it deliberately takes no intra (single-cell rows never word-diff). */
@@ -69,7 +72,7 @@ function singleCell(row, target) {
     const signCls = add ? ' ds-sign-add' : '';
     const tint = add ? (row.untoured ? ' ds-cell-untoured' : ' ds-cell-add') : '';
     const flag = add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${highlight(row.content) || ' '}</span>${flag}</span>`;
+    return `<span class="ds-cell ds-cell-single${tint}"><span class="ds-no">${no}</span><span class="ds-sign${signCls}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${highlightedCode(row.content, target) || ' '}</span>${flag}</span>`;
 }
 export function renderSplitRow(row, opts = {}) {
     const primaryTarget = opts.rightTarget ?? opts.leftTarget;
@@ -84,7 +87,7 @@ export function renderUnifiedRow(row, target, intra) {
     const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
     const flag = row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
     const attrs = reviewRowAttrs(target, row.type, row.content);
-    return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${row.no ?? ''}</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlight(row.content)) || ' '}</span>${flag}</div>`;
+    return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${row.no ?? ''}</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlightedCode(row.content, target)) || ' '}</span>${flag}</div>`;
 }
 /** The ⋯ separator between hunks. Bare (no gap info) matches the legacy markup;
  *  Task 6 passes GapInfo to make it expandable. */

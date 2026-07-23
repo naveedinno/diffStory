@@ -10,7 +10,7 @@ test('marks only the changed span, from the reported screenshot', () => {
   assert.ok(diff, 'lines are similar enough to word-diff');
 
   // The new call name is marked on the right.
-  assert.match(diff.right, /class="tk-f changed">_executeInstantTemplate</);
+  assert.match(diff.right, /class="tk-f changed"[^>]*>_executeInstantTemplate</);
   // The old receiver + method are marked on the left.
   assert.match(diff.left, /class="changed">instantLayer</);
   assert.match(diff.left, /class="tk-f changed">executeTemplate</);
@@ -26,9 +26,18 @@ test('marks a changed token with common prefix and suffix', () => {
   const diff = diffLineTokens('a = foo(1);', 'a = bar(1);');
   assert.ok(diff);
   assert.match(diff.left, /changed">foo</);
-  assert.match(diff.right, /changed">bar</);
+  assert.match(diff.right, /changed"[^>]*>bar</);
   assert.ok(!diff.left.includes('changed">a'));
   assert.ok(!diff.right.includes('changed">1'));
+});
+
+test('annotates only the current side with semantic-navigation columns', () => {
+  const diff = diffLineTokens('a = oldCall(value);', 'a = newCall(value);');
+  assert.ok(diff);
+  assert.doesNotMatch(diff.left, /data-vscode-symbol/);
+  assert.match(diff.right, /data-vscode-symbol data-vscode-column="1"[^>]*>a<\/span>/);
+  assert.match(diff.right, /data-vscode-symbol data-vscode-column="5"[^>]*>newCall<\/span>/);
+  assert.match(diff.right, /data-vscode-symbol data-vscode-column="13"[^>]*>value<\/span>/);
 });
 
 test('identical lines produce no changed marks', () => {
@@ -70,7 +79,7 @@ test('intraLineMap keys left onto removed rows and right onto added rows', () =>
   const map = intraLineMap(rows, (r) => r.type, (r) => r.content);
   assert.ok(map.get(rows[0]).left.includes('changed">foo'));
   assert.equal(map.get(rows[0]).right, undefined);
-  assert.ok(map.get(rows[1]).right.includes('changed">bar'));
+  assert.match(map.get(rows[1]).right, /changed"[^>]*>bar/);
   assert.equal(map.get(rows[1]).left, undefined);
   assert.equal(map.get(rows[2]), undefined); // context line, no pair
 });
