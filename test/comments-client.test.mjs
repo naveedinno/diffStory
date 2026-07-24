@@ -361,7 +361,7 @@ test('file filters, resume state, and keyboard commands stay local to the review
   assert.match(PAGE_JS, /function restoreReviewPosition\(/);
   assert.match(PAGE_JS, /localStorage\.setItem\(reviewUiKey\(\)/);
   assert.match(PAGE_JS, /btn\.hidden=!text\|\|!inFiles/);
-  assert.match(PAGE_JS, /function setView\(v\)[\s\S]*?revealResumeReview\(\)/);
+  assert.match(PAGE_JS, /function setView\(v,focusAfter\)[\s\S]*?revealResumeReview\(\)/);
   assert.match(PAGE_JS, /e\.key==='\?'/);
   assert.match(PAGE_JS, /e\.key==='\/'/);
 });

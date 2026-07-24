@@ -530,6 +530,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /\.ds-reviewchrome,body\.ds-rail-collapsed \.ds-reviewchrome\{height:56px;grid-template-columns:minmax\(0,1fr\);grid-template-rows:56px\}/);
   assert.match(html, /\.ds-reload-diff,\.ds-review-menu\{min-width:44px;height:44px/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
+  assert.match(html, /if\(compactScreen\(\)&&v==='tour'\)setSidebarCollapsed\(true,false\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
   assert.match(html, /\.ds-fileitem\{padding-right:5px;padding-left:calc\(5px \+ var\(--tree-indent,0px\)\)\}/);
@@ -552,6 +553,9 @@ test('review view switcher exposes complete keyboard tab semantics', () => {
   assert.match(html, /id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0"/);
   assert.match(html, /id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0"/);
   assert.match(html, /t\.setAttribute\('aria-selected',on\?'true':'false'\);t\.tabIndex=on\?0:-1/);
+  assert.match(html, /function focusViewEntry\(v\)/);
+  assert.match(html, /if\(v==='tour'\)\{focusStoryViewEntry\(\);return;\}/);
+  assert.match(html, /setView\(nextView,true\)/);
   assert.match(html, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\)/);
 });
 
@@ -1003,6 +1007,21 @@ test('arrow keys on a focused story beat move the authored camera instead of the
   assert.match(html, /var focusedStoryBeat=closest\(e\.target,'\[data-story-beat\]'\);/);
   assert.match(html, /if\(focusedStoryBeat&&\(e\.key==='ArrowRight'\|\|e\.key==='ArrowLeft'\)\)\{[\s\S]*e\.preventDefault\(\);moveStoryBeat[\s\S]*var wantsBeatNav=/);
   assert.match(html, /\.ds-urow\.is-story-focus/);
+});
+
+test('beat controls cross step boundaries', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /if\(delta>0&&index===beats\.length-1&&stepIndex<total-1\)\{focusStoryStepBoundary\(stepIndex\+1,false\);return true;\}/);
+  assert.match(html, /if\(next\)next\.disabled=index>=beats\.length-1&&panelIndex>=total-1;/);
+  assert.match(html, /function focusStoryStepBoundary\(stepIndex,atEnd\)/);
+  assert.match(html, /var boundaryTarget=panel\?\(atEnd\?\$\('\.ds-concept-next',panel\):\$\('\[data-playstep\]',panel\)\):null;/);
+  assert.match(html, /var conceptScroll=panel&&\$\('\.ds-concept-scroll',panel\);/);
+  assert.match(html, /if\(conceptScroll\)conceptScroll\.scrollTop=atEnd\?conceptScroll\.scrollHeight:0;/);
+  assert.match(html, /if\(workspaceTransition&&workspaceTransition\.finished\)Promise\.resolve\(workspaceTransition\.finished\)\.then\(focus,focus\);else focus\(\);/);
+  assert.match(html, /var target=beats\[atEnd\?beats\.length-1:0\],group=parseInt\(target\.getAttribute\('data-focus-group'\)\|\|'0',10\);/);
+  assert.match(html, /if\(delta<0&&index===0&&stepIndex>1\)\{focusStoryStepBoundary\(stepIndex-1,true\);return true;\}/);
+  assert.match(html, /if\(prev\)prev\.disabled=index<=0&&panelIndex<=1;/);
 });
 
 test('pure deleted-file sentinel highlights deleted rows', () => {
@@ -1649,6 +1668,17 @@ test('story steps stay in focus mode and expose explicit beat navigation', () =>
   assert.doesNotMatch(html, /outside this beat/);
   assert.doesNotMatch(html, /data-step-camera|is-story-camera|cameraGroups/);
   assert.doesNotMatch(html, /setStoryLens|restoreStoryLens|ds-story-lens/);
+});
+
+test('light review navigation uses ledger tabs and a quiet continuation action', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  assert.match(html, /:root\[data-theme="light"\] \.ds-viewtoggle\{[^}]*background:transparent[^}]*box-shadow:inset 0 -1px 0 var\(--line\)/);
+  assert.match(html, /:root\[data-theme="light"\] \.ds-tab::after\{[^}]*width:32px[^}]*height:2px[^}]*background:var\(--accent\)[^}]*transform:translateX\(-50%\) scaleX\(0\)/);
+  assert.match(html, /:root\[data-theme="light"\] \.ds-tab\.is-active::after\{transform:translateX\(-50%\) scaleX\(1\)\}/);
+  assert.match(html, /:root\[data-theme="light"\] \.ds-resume-review\{[^}]*background:transparent[^}]*font-weight:600/);
+  assert.match(html, /:root\[data-theme="light"\] \.ds-readhead\[data-rail="files"\]\{[^}]*border-top:1px solid var\(--line-soft\)/);
+  assert.match(html, /if\(filesView\)filesView\.hidden=v!=='files';[\s\S]*?\$all\('\[data-rail\]'\)[\s\S]*?revealResumeReview\(\);/);
 });
 
 test('broad steps surface concrete health reasons and direct repairs', () => {
