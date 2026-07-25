@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   addComment,
   appendUserMessage,
+  commentsForStory,
   deleteComment,
   loadComments,
   loadCommentsWithHealth,
@@ -190,5 +191,82 @@ test('every comment mutation preserves a malformed comments file byte for byte',
       assert.throws(mutate, /will not overwrite the invalid file/i);
       assert.equal(readFileSync(path, 'utf8'), malformed);
     }
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('addComment stores the story it was filed against, and omits it when absent', () => {
+  const repo = tmpRepo();
+  try {
+    const scoped = addComment(repo, {
+      file: 'a.ts', line: 1, type: 'change', body: 'scoped', story: 'stories/quote-v2.json',
+    });
+    assert.equal(scoped.story, 'stories/quote-v2.json');
+
+    const bare = addComment(repo, { file: 'a.ts', line: 2, type: 'change', body: 'bare' });
+    assert.ok(!('story' in bare), 'story should be absent when not provided');
+
+    const blank = addComment(repo, { file: 'a.ts', line: 3, type: 'change', body: 'blank', story: '   ' });
+    assert.ok(!('story' in blank), 'a whitespace-only story id is not a story');
+
+    assert.deepEqual(loadComments(repo).map((c) => c.story), ['stories/quote-v2.json', undefined, undefined]);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('commentsForStory scopes feedback per story and keeps untagged comments everywhere', () => {
+  const comments = [
+    { id: 'c1', story: 'stories/a.json', file: 'a.ts', line: 1, type: 'change', body: 'a', status: 'open', createdAt: 'x' },
+    { id: 'c2', story: 'stories/b.json', file: 'b.ts', line: 1, type: 'change', body: 'b', status: 'open', createdAt: 'x' },
+    { id: 'c3', file: 'c.ts', line: 1, type: 'change', body: 'legacy', status: 'open', createdAt: 'x' },
+  ];
+
+  assert.deepEqual(
+    commentsForStory(comments, 'stories/a.json').map((c) => c.id),
+    ['c1', 'c3'],
+    'one story sees its own comments plus untagged ones',
+  );
+  assert.deepEqual(commentsForStory(comments, 'stories/b.json').map((c) => c.id), ['c2', 'c3']);
+  assert.deepEqual(
+    commentsForStory(comments, 'stories/unknown.json').map((c) => c.id),
+    ['c3'],
+    'a story with no feedback of its own still sees untagged comments',
+  );
+  assert.deepEqual(
+    commentsForStory(comments, null).map((c) => c.id),
+    ['c1', 'c2', 'c3'],
+    'a storyless surface sees the whole store',
+  );
+});
+
+test('a repo whose comments predate stories keeps every comment visible', () => {
+  const repo = tmpRepo();
+  try {
+    // Exactly the shape a pre-multi-story repo has on disk: no `story` field anywhere.
+    mkdirSync(join(repo, '.diffstory'), { recursive: true });
+    writeFileSync(
+      join(repo, '.diffstory', 'comments.json'),
+      JSON.stringify([
+        { id: 'c1', step: 's1', file: 'a.ts', line: 4, type: 'change', body: 'old one', status: 'open', createdAt: 'x' },
+        { id: 'c2', file: 'b.ts', line: 9, type: 'nit', body: 'old two', status: 'resolved', createdAt: 'x' },
+      ]),
+    );
+
+    const loaded = loadCommentsWithHealth(repo);
+    assert.equal(loaded.health.status, 'healthy', 'a story-less comment file is still valid');
+    assert.deepEqual(commentsForStory(loaded.comments, 'stories/anything.json').map((c) => c.id), ['c1', 'c2']);
+    assert.deepEqual(commentsForStory(loaded.comments, null).map((c) => c.id), ['c1', 'c2']);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('a non-string story field invalidates the store instead of being ignored', () => {
+  const repo = tmpRepo();
+  try {
+    mkdirSync(join(repo, '.diffstory'), { recursive: true });
+    writeFileSync(
+      join(repo, '.diffstory', 'comments.json'),
+      JSON.stringify([{ id: 'c1', story: 7, file: 'a.ts', line: 1, type: 'change', body: 'x', status: 'open', createdAt: 'x' }]),
+    );
+    const loaded = loadCommentsWithHealth(repo);
+    assert.equal(loaded.health.status, 'invalid');
+    assert.match(loaded.health.message, /story must be a string/);
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });

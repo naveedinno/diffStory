@@ -53,6 +53,7 @@ import { buildReviewModel } from './view-model.js';
 import {
   loadComments,
   loadCommentsWithHealth,
+  commentsForStory,
   addComment,
   deleteComment,
   setCommentStatus,
@@ -104,8 +105,9 @@ import {
 } from './session.js';
 import { inspectRepo } from './repo-state.js';
 import { forgetRecent, recordRecent, loadRecents } from './recents.js';
+import { recallStorySelection, recordStorySelection } from './story-selection.js';
 import { listDirs } from './fs-browse.js';
-import { deleteStory, diffFingerprint, listStories, storyPathForId } from './stories.js';
+import { deleteStory, diffFingerprint, listStories, storyIdForPath, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
 import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -400,6 +402,7 @@ function handle(
       const restoredRepo = recentRepoForRoute(url.pathname, home);
       if (!restoredRepo) return redirect(res, '/');
       openSession(session, restoredRepo);
+      restoreStorySelection(session, home);
     }
     const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
     if (repoScreen === 'stories') {
@@ -416,7 +419,7 @@ function handle(
       return sendHtml(res, diffScreen(session, url.searchParams));
     }
     if (repoScreen === 'review') {
-      return sendHtml(res, reviewScreen(session, url.searchParams));
+      return sendHtml(res, reviewScreen(session, url.searchParams, home));
     }
     if (method === 'GET' && url.pathname === '/stories') {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
@@ -519,6 +522,7 @@ function handle(
         }
         if (session.repo && session.repo !== path) liveHub.closeRepo(session.repo);
         openSession(session, path);
+        restoreStorySelection(session, home);
         recordRecent(home, path, nowMs());
         sendJson(res, 200, { ...inspectRepo(path), route: repoRoute(path, sessionEntryScreen(session)) });
       });
@@ -542,6 +546,7 @@ function handle(
         const path = storyPathForId(repo, id);
         if (!path) return sendJson(res, 404, { error: 'No such story.' });
         deleteStory(repo, id);
+        if (recallStorySelection(home, repo) === id) recordStorySelection(home, repo, null, nowMs());
         if (session.selectedStory === path) {
           session.selectedStory = undefined;
           session.chooseStory = true;
@@ -677,7 +682,7 @@ function handle(
       if (!repo) return noRepo(res);
       const loaded = loadCommentsWithHealth(repo);
       if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
-      return sendJson(res, 200, loaded.comments);
+      return sendJson(res, 200, commentsForStory(loaded.comments, activeStoryId(session, lease)));
     }
     if (method === 'POST' && url.pathname === '/api/comments') {
       const lease = optionalRequestLease(session, url);
@@ -689,7 +694,10 @@ function handle(
           const loaded = loadCommentsWithHealth(repo);
           if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
           const input = JSON.parse(body) as NewComment;
-          const comment = addComment(repo, input);
+          // The server owns the story tag: a client cannot file feedback against a
+          // story it is not reviewing, and an untagged page leaves it absent.
+          const story = activeStoryId(session, lease);
+          const comment = addComment(repo, story ? { ...input, story } : { ...input, story: undefined });
           sendJson(res, 201, comment);
         } catch (e) {
           sendCommentMutationError(res, e);
@@ -783,8 +791,8 @@ function hasChangeQuery(params: URLSearchParams): boolean {
   return params.has('scope') || params.has('base') || params.has('head') || params.has('commit');
 }
 
-function reviewScreen(session: Session, params: URLSearchParams): string {
-  const picked = applyStoryChoice(session, params);
+function reviewScreen(session: Session, params: URLSearchParams, home: string): string {
+  const picked = applyStoryChoice(session, params, home);
   if (session.selectedStory === null) {
     return changeScreen(session, params);
   }
@@ -808,7 +816,7 @@ function reviewScreen(session: Session, params: URLSearchParams): string {
   return changeScreen(session, params);
 }
 
-function applyStoryChoice(session: Session, params: URLSearchParams): boolean {
+function applyStoryChoice(session: Session, params: URLSearchParams, home: string): boolean {
   if (!session.repo || !params.has('story')) return false;
   const id = params.get('story') ?? '';
   session.chooseStory = false;
@@ -816,15 +824,50 @@ function applyStoryChoice(session: Session, params: URLSearchParams): boolean {
   session.head = undefined;
   if (id === 'new') {
     session.selectedStory = null;
+    // The storyless change view is not a story, so stop resuming one.
+    recordStorySelection(home, session.repo, null, nowMs());
     return true;
   }
-  session.selectedStory = storyPathForId(session.repo, id);
+  const path = storyPathForId(session.repo, id);
+  session.selectedStory = path;
+  if (path) recordStorySelection(home, session.repo, id, nowMs());
   return true;
+}
+
+/**
+ * Re-select the story this repo was last reviewing so a restart resumes it. A remembered
+ * id that no longer resolves — the story was deleted or renamed — falls through to the
+ * picker rather than guessing at a replacement.
+ */
+function restoreStorySelection(session: Session, home: string): void {
+  if (!session.repo) return;
+  const remembered = recallStorySelection(home, session.repo);
+  if (!remembered) return;
+  const path = storyPathForId(session.repo, remembered);
+  if (!path) return;
+  session.selectedStory = path;
+  session.chooseStory = false;
 }
 
 function selectedStoryPath(session: Session): string {
   if (!session.repo) throw new Error('No repo is open.');
   return session.selectedStory ?? resolveStoryPath(session.repo);
+}
+
+/**
+ * Which story owns the feedback on this surface, as a listStories() id. A rendered page
+ * answers from its own lease rather than the session, so a tab reviewing one story keeps
+ * its feedback scope even after another tab switches stories. `null` means no story is
+ * active (the all-files change view), and those surfaces see the whole store.
+ */
+function leaseStoryId(lease: ReviewPageLease): string | null {
+  return lease.storyIdentity === 'storyless' ? null : storyIdForPath(lease.repo, lease.storyPath);
+}
+
+function activeStoryId(session: Session, lease?: ReviewPageLease | null): string | null {
+  if (lease) return leaseStoryId(lease);
+  if (!session.repo || session.selectedStory === null) return null;
+  return storyIdForPath(session.repo, selectedStoryPath(session));
 }
 
 /** Apply a scope choice from the Your-change switcher (?scope=... | ?base= | ?head=). */
@@ -1111,7 +1154,7 @@ function renderReview(session: Session): string {
     fileIndex: boundedReviewIndex(fileIndex),
     baseLabel: describeBase(repo, base),
     headRef: head,
-    comments: loadComments(repo),
+    comments: commentsForStory(loadComments(repo), activeStoryId(session, pageLease)),
     reviewState,
     reviewPageToken: pageLease.token,
     storyDrift,
@@ -1521,7 +1564,12 @@ function renderStoryStepResponse(page: LeasedReviewPage, rawIndex: string): stri
     detailedFilePaths: new Set(),
     includeTrustRows: false,
   });
-  return renderStoryStepPanel(repo, model, loadComments(repo), index - 1);
+  return renderStoryStepPanel(
+    repo,
+    model,
+    commentsForStory(loadComments(repo), leaseStoryId(page.lease)),
+    index - 1,
+  );
 }
 
 function renderTrustResponse(page: LeasedReviewPage): string {

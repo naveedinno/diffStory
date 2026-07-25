@@ -1,14 +1,16 @@
 ---
 name: diffstory-storyteller
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces .diffstory/story.json for diffStory — a context-first, guided reading path through your own diff that opens with recovered intent and drives exact viewport and highlight beats. Run before handing work back for review.
+description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces a diffStory story file — .diffstory/story.json for one change, or several scoped stories under .diffstory/stories/ when the diff splits into independent concerns — a context-first, guided reading path through your own diff that opens with recovered intent and drives exact viewport and highlight beats. Run before handing work back for review.
 ---
 
 # Writing a diffStory
 
 You just changed code. The reviewer now has to understand it, distrust it in the
 right places, and get through it without reading a raw alphabetical diff. Your
-job is to write `.diffstory/story.json`: order and narrative only, never copied
-code. diffStory renders the real git diff.
+job is to write a story file — order and narrative only, never copied code.
+diffStory renders the real git diff. See "Where to write the story" for whether
+that is one `.diffstory/story.json` or several scoped files under
+`.diffstory/stories/`.
 
 The story should feel like a sharp teammate guiding review over your shoulder:
 why the change exists, entry point, flow, helpers, boundaries, tests. It should expose your judgment,
@@ -26,6 +28,12 @@ tell the user to open or refresh the installed diffStory app.
 
 ## Non-Negotiable Contract
 
+- Write one `.diffstory/story.json` by default. Split into several scoped files
+  under `.diffstory/stories/` only when the diff meets every splitting test in
+  "Where to write the story". Never write both for the same change.
+- Every story under `.diffstory/stories/` must carry a top-level `storyScope`
+  with `includedFiles`, and every code step's `file` must appear in it. The app
+  rejects the story otherwise.
 - Newly generated stories use `"version": 2`. Version 1 stories remain readable;
   do not rewrite an existing v1 story merely to modernize its number.
 - Open the story with an `intent` block whose `goal` cites real `sources`; use
@@ -71,10 +79,72 @@ tell the user to open or refresh the installed diffStory app.
 - `intent.nonGoals` lists deliberate omissions the reviewer should not flag.
   Only claim non-goals your intent evidence supports; never invent them.
 
+## Where to write the story
+
+diffStory reads three locations, in this order:
+
+1. `.diffstory/story.json` — the primary story. **This is the default.**
+2. `.diffstory/review-tour.json` — legacy name, still read. Never write it.
+3. `.diffstory/stories/<slug>.json` — named, scoped stories. The reviewer picks
+   between them in the app and reviews each one separately.
+
+If the prompt names a path or gives selected story files, obey it exactly and
+stop here. Otherwise apply the splitting test below.
+
+### The splitting test
+
+Write **one** `.diffstory/story.json` unless *all four* of these hold:
+
+1. **Independent concerns.** The diff contains two or more changes a reviewer
+   could accept or reject on their own merits, without deciding about the others.
+2. **No narrative crossing.** No `calls` or `returnsTo` link you would want to
+   write crosses a concern boundary. If the reading path genuinely flows from one
+   concern into another, it is one story.
+3. **Clean file ownership.** Each concern owns most of its files outright. A few
+   files may straddle concerns; most files straddling means the concerns are not
+   really separate.
+4. **Length that costs the reviewer.** One combined story would run long enough
+   to lose the thread — roughly 40+ steps or 25+ files. Below that, a single
+   well-chaptered story reads better than a picker.
+
+Any doubt: write one story. A single story with good `chapter` values is almost
+always the better answer, and splitting a change that reads as one narrative
+makes review harder, not easier.
+
+### If you split
+
+- One file per concern: `.diffstory/stories/<kebab-slug>.json`, named for the
+  concern (`transient-execution-context.json`), not the layer or directory.
+- Give each story its own `title`, `summary`, `intent`, and `base` — each is a
+  complete story, not a chapter of a larger one.
+- Set `storyScope.includedFiles` to exactly the files that story's steps touch.
+  The app validates this: a code step whose `file` is absent from
+  `includedFiles` invalidates the whole story.
+- **Straddling files** — a file two concerns both touch — go in `includedFiles`
+  for both stories. Each story narrates only the hunks that belong to its
+  concern, and says so in the step `why` so the reviewer is not surprised by
+  unexplained nearby changes.
+- Use `storyScope.reviewerNote` to say what this story deliberately leaves to
+  another one: "QuoteV2 pricing is reviewed separately in quote-v2.json."
+- Every changed hunk in the diff must be claimed by exactly one story. Run the
+  coverage ledger per story, then check the union covers the whole diff. A hunk
+  no story claims is the failure mode splitting invites.
+- Do not also write `.diffstory/story.json`. If one already exists from an
+  earlier run and is now superseded, tell the user it is stale rather than
+  deleting or overwriting it yourself.
+
+### Do not split
+
+- By directory, package, language, or file type.
+- To separate tests, docs, or generated files from the behavior they support —
+  those belong with their behavior.
+- To make an over-long story shorter. If the story is bloated, cut narration and
+  group mechanical hunks; do not shard it.
+
 ## Detail levels
 
 The prompt may ask for `"mode": "brief"`, `"mode": "guided"`, or
-`"mode": "detailed"`. Write that top-level field in `.diffstory/story.json`.
+`"mode": "detailed"`. Write that top-level field in every story file you write.
 
 Concept-primer budgets are hard maxima, not targets:
 
@@ -238,8 +308,10 @@ new outcome.
 
 ### 3. Make a reviewer map before JSON
 
-Before writing `.diffstory/story.json`, privately build a reviewer map. Do not
-include this map in the file.
+Before writing the story file, privately build a reviewer map. Do not include
+this map in the file. If you are splitting into scoped stories, build one map
+per story — the split is a decision about the reviewer's path, so make it here
+rather than after the steps are written.
 
 Identify:
 
@@ -808,10 +880,15 @@ Coverage is necessary, but not sufficient.
 
 ### Coverage ledger
 
-Before writing `.diffstory/story.json`, build a private coverage ledger from the
-exact diff: file, changed hunk range, semantic purpose, and planned step id.
-Every changed hunk must appear in the ledger and must be claimed by a
-`changed` or `new-file` step. Context steps never count as coverage.
+Before writing the story file, build a private coverage ledger from the exact
+diff: file, changed hunk range, semantic purpose, and planned step id. Every
+changed hunk must appear in the ledger and must be claimed by a `changed` or
+`new-file` step. Context steps never count as coverage.
+
+When you split into scoped stories, keep one ledger per story and add the story
+id to each row. Every changed hunk is claimed by exactly one story; the union of
+the ledgers must cover the whole diff with no hunk claimed twice and none left
+out.
 
 **Count the hunks before you plan the steps.** Run
 `git diff <base> -- <paths> | grep -c '^@@'` and write the number down. For each
@@ -1127,7 +1204,9 @@ Omit `head` when the story is for working tree vs base instead of a fixed
 
 ## Save and verify
 
-Write `.diffstory/story.json`, then verify it against the diff yourself:
+Write the story to the path chosen in "Where to write the story" —
+`.diffstory/story.json` by default, or one `.diffstory/stories/<slug>.json` per
+concern if the splitting test passed. Then verify it against the diff yourself:
 
 - Every changed hunk is covered by a `changed` / `new-file` step. The in-app
   trust check uses top-level `ranges` when present and otherwise `range`, so
@@ -1162,10 +1241,23 @@ Write `.diffstory/story.json`, then verify it against the diff yourself:
   `text`, beat `highlights` — are the ones real stories lose first. Check them
   explicitly rather than assuming.
 
+If you split into scoped stories, also verify across the set:
+
+- Every story has a top-level `storyScope.includedFiles`, and every code step's
+  `file` appears in its own story's list. This is a hard app validation, not a
+  style preference.
+- The union of the per-story ledgers covers every changed hunk in the diff
+  exactly once. Name any hunk you deliberately left unclaimed and why.
+- No `calls` or `returnsTo` id points at a step in another story — ids only
+  resolve within one file, so a crossing link invalidates the story.
+- `.diffstory/story.json` was not also written for this same change.
+
 Fix every issue before handing back. If a clean story is impossible, report the
 blocker instead of pretending it is ready.
 
-Tell the user: "Story ready — open the diff in the diffStory app to review."
+Tell the user: "Story ready — open the diff in the diffStory app to review." If
+you wrote several scoped stories, name them and say the app's story picker is
+where to switch between them.
 
 ## Don't
 

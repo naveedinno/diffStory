@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteStory, diffFingerprint, listStories, storyPathForId } from '../dist/stories.js';
+import { deleteStory, diffFingerprint, listStories, storyIdForPath, storyPathForId } from '../dist/stories.js';
 import { getDiff } from '../dist/git.js';
 import { captureStorySnapshot } from '../dist/story-drift.js';
 
@@ -242,6 +242,29 @@ test('deleteStory removes only known story files', () => {
   assert.equal(deleteStory(repo, '../comments.json'), false);
   assert.equal(deleteStory(repo, 'comments.json'), false);
   assert.deepEqual(listStories(repo).map((s) => s.id), ['story.json']);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('storyIdForPath inverts storyPathForId without scanning the directory', () => {
+  const repo = tmp();
+  writeStory(repo, 'story.json', 'Primary');
+  writeStory(repo, 'stories/deeper/b.json', 'Nested');
+
+  for (const { id, path } of listStories(repo)) {
+    assert.equal(storyIdForPath(repo, path), id, `${id} should round-trip`);
+  }
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('storyIdForPath rejects paths outside the repo data dir', () => {
+  const repo = tmp();
+
+  assert.equal(storyIdForPath(repo, join(repo, '.diffstory')), null, 'the data dir itself is not a story');
+  assert.equal(storyIdForPath(repo, join(repo, 'story.json')), null, 'outside .diffstory');
+  assert.equal(storyIdForPath(repo, '/etc/passwd'), null, 'absolute escape');
+  assert.equal(storyIdForPath(repo, join(repo, '..', 'other', 'story.json')), null, 'parent escape');
 
   rmSync(repo, { recursive: true, force: true });
 });

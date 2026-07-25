@@ -73,6 +73,17 @@ export function loadCommentsWithHealth(repo) {
 export function loadComments(repo) {
     return loadCommentsWithHealth(repo).comments;
 }
+/**
+ * The comments one story owns. An untagged comment belongs to every story: repos that
+ * predate separable stories keep all their feedback visible, and nothing is rewritten
+ * on disk to achieve that. Pass `null` for surfaces with no active story (the all-files
+ * diff view), which see the whole store.
+ */
+export function commentsForStory(comments, storyId) {
+    if (storyId === null)
+        return comments;
+    return comments.filter((c) => c.story === undefined || c.story === storyId);
+}
 function saveComments(repo, comments, expectedSourceDigest) {
     const path = commentsPath(repo);
     const current = loadCommentsWithHealth(repo);
@@ -115,6 +126,8 @@ export function addComment(repo, input) {
         status: 'open',
         createdAt: new Date().toISOString(),
     };
+    if (typeof input.story === 'string' && input.story.trim())
+        comment.story = input.story.trim();
     if (typeof input.step === 'string' && input.step)
         comment.step = input.step;
     const side = cleanSide(input.side);
@@ -240,6 +253,8 @@ function validateStoredComment(value, seen) {
         return `status must be one of ${STATUSES.join(', ')}`;
     if (!nonEmptyString(value.createdAt))
         return 'createdAt must be a non-empty string';
+    if (!optionalString(value.story))
+        return 'story must be a string when present';
     if (!optionalString(value.step))
         return 'step must be a string when present';
     if (value.side !== undefined && !SIDES.includes(value.side)) {

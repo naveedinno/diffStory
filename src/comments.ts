@@ -111,6 +111,17 @@ export function loadComments(repo: string): Comment[] {
   return loadCommentsWithHealth(repo).comments;
 }
 
+/**
+ * The comments one story owns. An untagged comment belongs to every story: repos that
+ * predate separable stories keep all their feedback visible, and nothing is rewritten
+ * on disk to achieve that. Pass `null` for surfaces with no active story (the all-files
+ * diff view), which see the whole store.
+ */
+export function commentsForStory(comments: Comment[], storyId: string | null): Comment[] {
+  if (storyId === null) return comments;
+  return comments.filter((c) => c.story === undefined || c.story === storyId);
+}
+
 function saveComments(repo: string, comments: Comment[], expectedSourceDigest: string): void {
   const path = commentsPath(repo);
   const current = loadCommentsWithHealth(repo);
@@ -129,6 +140,7 @@ function writableComments(repo: string): CommentLoadResult {
 }
 
 export interface NewComment {
+  story?: string;
   step?: string;
   file: string;
   line: number;
@@ -167,6 +179,7 @@ export function addComment(repo: string, input: NewComment): Comment {
     status: 'open',
     createdAt: new Date().toISOString(),
   };
+  if (typeof input.story === 'string' && input.story.trim()) comment.story = input.story.trim();
   if (typeof input.step === 'string' && input.step) comment.step = input.step;
   const side = cleanSide(input.side);
   if (side) comment.side = side;
@@ -290,6 +303,7 @@ function validateStoredComment(value: unknown, seen: Set<string>): string | null
   if (!nonEmptyString(value.body)) return 'body must be a non-empty string';
   if (!STATUSES.includes(value.status as CommentStatus)) return `status must be one of ${STATUSES.join(', ')}`;
   if (!nonEmptyString(value.createdAt)) return 'createdAt must be a non-empty string';
+  if (!optionalString(value.story)) return 'story must be a string when present';
   if (!optionalString(value.step)) return 'step must be a string when present';
   if (value.side !== undefined && !SIDES.includes(value.side as CommentSide)) {
     return `side must be one of ${SIDES.join(', ')}`;

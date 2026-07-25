@@ -213,6 +213,13 @@ export interface CommentSelection {
 /** A reviewer comment anchored to selected text, persisted for the agent to consume. */
 export interface Comment {
   id: string;
+  /**
+   * Story this comment was left against, as a listStories() id ("story.json",
+   * "stories/quote-v2.json"). Absent on comments written before stories were
+   * separable, and on comments left outside a story; an absent value reads as
+   * "belongs to every story" so no existing feedback disappears.
+   */
+  story?: string;
   /** Optional Story-view placement hint; absent for comments left in the All-files view. */
   step?: string;
   /** Diff side selected by the reviewer. Absent means the legacy right/current side. */

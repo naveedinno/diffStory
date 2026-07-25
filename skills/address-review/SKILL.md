@@ -15,7 +15,9 @@ user to refresh the installed diffStory app when the review is ready.
 
 ## Steps
 
-1. **Read** `.diffstory/comments.json`. Each comment has `id`, optional `step`, optional
+1. **Read** `.diffstory/comments.json`. Each comment has `id`, optional `story` (which
+   story it was left against — `"story.json"` or `"stories/<slug>.json"`; absent means it
+   predates separable stories or was left outside one), optional `step`, optional
    `side` (`left` = target/old side, `right` = current/new side), `file`, `line`, optional
    `selectedText`, optional `selection`, `type` (`change` | `question` | `nit`),
    `body`, `status`, and an optional `turns` array — an ordered `{role:"user"|"ai",text,at}`
@@ -54,8 +56,15 @@ user to refresh the installed diffStory app when the review is ready.
    Write the full array back to `.diffstory/comments.json` (valid JSON).
 
 5. **Refresh the tour.** If your edits moved code or added/removed logic, re-run the
-   **diffstory-storyteller** skill so `.diffstory/story.json` reflects the new state (line ranges will
+   **diffstory-storyteller** skill so the story reflects the new state (line ranges will
    have shifted). At minimum, make sure every change is still covered by a step.
+
+   Refresh the story file the reviewer was actually reading. If `.diffstory/stories/`
+   holds scoped stories, update the one whose `storyScope.includedFiles` covers the
+   files you touched — regenerate only that story, leave the others alone, and never
+   collapse the set back into a single `.diffstory/story.json`. If your fix pulled in
+   a file outside every existing scope, add it to the closest story's `includedFiles`
+   and say so when you hand back.
 
 6. **Hand back.** Tell the user: *"Addressed N comments — refresh the diffStory app to see the
    replies and re-review."* Summarize briefly what changed and flag anything you pushed back on.

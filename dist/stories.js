@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, isAbsolute, join, relative, sep } from 'node:path';
 import { DATA_DIR, LEGACY_STORY_FILENAME, STORY_FILENAME, dataDir } from './config.js';
 import { loadTour } from './tour.js';
 import { getDiff, resolveBase } from './git.js';
@@ -23,6 +23,18 @@ export function listStories(repo) {
 /** Resolve a story id from listStories() back to a real path, or null if it is not known. */
 export function storyPathForId(repo, id) {
     return listStories(repo).find((s) => s.id === id)?.path ?? null;
+}
+/**
+ * The listStories() id for a story path — the inverse of storyPathForId, but a pure
+ * path relation rather than a directory scan, so it is cheap enough to call per request.
+ * Returns null for anything outside `.diffstory`, which keeps a stray path from being
+ * written into comments as if it were a story id.
+ */
+export function storyIdForPath(repo, path) {
+    const rel = relative(dataDir(repo), path);
+    if (!rel || isAbsolute(rel) || rel.split(sep)[0] === '..')
+        return null;
+    return rel.split(sep).join('/');
 }
 /** Delete a known story file by id. Unknown ids are ignored so callers cannot escape `.diffstory`. */
 export function deleteStory(repo, id) {
