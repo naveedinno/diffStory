@@ -2,7 +2,19 @@
 // over HTTP. Uses a temp HOME so recents never touch the real ~/.diffstory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+  writeSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,6 +63,7 @@ test('server exposes a narrow same-origin bridge to the Aloud reader', async () 
   const status = { jobId: 'story-1', ok: true, paused: false, protocolVersion: 2, running: true, service: 'aloud-speech-daemon', state: { status: 'reading' } };
   const aloud = {
     async status() { calls.push(['status']); return status; },
+    async prepare(input) { calls.push(['prepare', input]); },
     async speak(input) { calls.push(['speak', input]); return status; },
     async control(action) { calls.push(['control', action]); return { ...status, paused: action === 'pause' }; },
   };
@@ -67,6 +80,15 @@ test('server exposes a narrow same-origin bridge to the Aloud reader', async () 
       }),
     });
     assert.equal(spoken.status, 200);
+    const prepared = await fetch(`${app.base}/api/aloud/prepare`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        batches: ['  Review this beat. '],
+        text: '  Review this beat.  ',
+      }),
+    });
+    assert.equal(prepared.status, 204);
     const paused = await fetch(`${app.base}/api/aloud/control`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'pause' }),
     });
@@ -77,6 +99,10 @@ test('server exposes a narrow same-origin bridge to the Aloud reader', async () 
         batches: ['Review this beat.', 'Then this one.'],
         prefetch: 3,
         text: 'Review this beat. Then this one.',
+      }],
+      ['prepare', {
+        batches: ['Review this beat.'],
+        text: 'Review this beat.',
       }],
       ['control', 'pause'],
     ]);
@@ -214,6 +240,14 @@ test('lazy file evidence remains available when only another file changes', asyn
     const pageHtml = await (await fetch(`${base}${route}`)).text();
     const token = reviewPageToken(pageHtml);
 
+    const codeSearch = await fetch(leased(`${base}/api/review/file-search?q=review%20changed`, token));
+    assert.equal(codeSearch.status, 200);
+    assert.deepEqual((await codeSearch.json()).files, ['review.txt']);
+
+    const trust = await fetch(leased(`${base}/api/review/trust`, token));
+    assert.equal(trust.status, 200);
+    assert.match(await trust.text(), /data-trust-pending="0"/);
+
     writeFileSync(join(repo, 'other.txt'), 'other changed again\n');
 
     const unchangedFileEndpoints = [
@@ -234,6 +268,64 @@ test('lazy file evidence remains available when only another file changes', asyn
     const wholeReviewPanel = await fetch(leased(`${base}/api/review/step-panel?index=1`, token));
     assert.equal(wholeReviewPanel.status, 409, 'story-wide evidence stays bound to the full change');
 
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('initial review and excluded preview stay bounded for a 100 MB single-line diff', { timeout: 30_000 }, async () => {
+  const repo = gitRepo();
+  const path = join(repo, 'hundred-megabytes.txt');
+  const fd = openSync(path, 'w');
+  const chunk = Buffer.alloc(64 * 1024, 97);
+  try {
+    for (let written = 0; written < 100 * 1024 * 1024; written += chunk.length) {
+      writeSync(fd, chunk);
+    }
+  } finally {
+    closeSync(fd);
+  }
+
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
+    const response = await fetch(`${base}${route}`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.ok(Buffer.byteLength(html) < 5 * 1024 * 1024, 'initial HTML is independent of changed bytes');
+    assert.match(html, /hundred-megabytes\.txt/);
+    assert.match(html, /Large diff/);
+    assert.doesNotMatch(html, /a{100000}/, 'the changed body is not embedded in initial HTML');
+
+    const token = reviewPageToken(html);
+    const previewResponse = await fetch(leased(
+      `${base}/api/review/excluded-file?file=hundred-megabytes.txt`,
+      token,
+    ));
+    assert.equal(previewResponse.status, 200);
+    const preview = await previewResponse.text();
+    assert.ok(Buffer.byteLength(preview) < 400 * 1024, 'preview is byte-capped');
+    assert.match(preview, /\[line truncated\]/);
+
+    const lazyEndpoints = [
+      `/api/fullfile?file=hundred-megabytes.txt`,
+      `/api/diff/split?file=hundred-megabytes.txt`,
+      `/api/diff/context?file=hundred-megabytes.txt&from=1&to=500&layout=unified`,
+      `/api/diff/file-panel?file=hundred-megabytes.txt`,
+      `/api/review/trust`,
+      `/api/review/file-search?q=aaaa`,
+    ];
+    for (const endpoint of lazyEndpoints) {
+      const lazyResponse = await fetch(leased(`${base}${endpoint}`, token));
+      assert.equal(lazyResponse.status, 200, `${endpoint} stays available without materializing the large file`);
+      const lazyBody = await lazyResponse.text();
+      assert.ok(
+        Buffer.byteLength(lazyBody) < 400 * 1024,
+        `${endpoint} remains byte-bounded for a 100 MB excluded file`,
+      );
+      assert.doesNotMatch(lazyBody, /a{100000}/, `${endpoint} never returns the changed body`);
+    }
   } finally {
     server.close();
     rmSync(repo, { recursive: true, force: true });

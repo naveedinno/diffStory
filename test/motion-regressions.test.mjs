@@ -89,7 +89,7 @@ test('read aloud focus is static and routine playback state stays in the control
   assert.doesNotMatch(PAGE_CSS, /ds-aloud-active \.ds-live-banner/);
   assert.match(PAGE_CSS, /\.ds-narration-stop::after\{content:"Stop"\}/);
   assert.match(PAGE_CSS, /\.ds-narration-stop\{position:absolute;z-index:13;top:calc\(100% \+ 16px\);right:-40px;width:62px;height:32px/);
-  assert.match(PAGE_CSS, /\.ds-aloud-active \.ds-playstep\{opacity:\.48\}/);
+  assert.doesNotMatch(PAGE_CSS, /ds-playstep/);
   assert.match(PAGE_JS, /document\.body\.classList\.toggle\('ds-aloud-active',playing\)/);
   assert.doesNotMatch(PAGE_JS, /Voice paused|Voice resumed/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading/);

@@ -4,15 +4,27 @@
 // agent isn't sent chasing coverage it can't usefully narrate. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  mkdtempSync,
+  openSync,
+  writeFileSync,
+  writeSync,
+  rmSync,
+  mkdirSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   excludedReviewFiles,
   getDiff,
+  getFileDiff,
   noiseFiles,
+  readFileRange,
   reviewChangeFingerprint,
+  reviewFileIndex,
   stagedWorktreeDivergentFiles,
 } from '../dist/git.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
@@ -298,6 +310,81 @@ test('staged-only review noise remains an explicit exclusion when worktree match
       },
     ]);
     assert.equal(getDiff(d, 'HEAD'), '', 'the staged remainder is bounded by the same noise policy');
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('metadata index includes every review path without carrying diff bodies', () => {
+  const { d } = repo();
+  try {
+    mkdirSync(join(d, 'dist'));
+    writeFileSync(join(d, 'ordinary.ts'), 'export const answer = 42;\n');
+    writeFileSync(join(d, 'large.txt'), 'changed\n'.repeat(1600));
+    writeFileSync(join(d, 'dist', 'bundle.js'), 'generated\n');
+    writeFileSync(join(d, 'binary.dat'), Buffer.from([0, 1, 2, 3]));
+    chmodSync(join(d, 'seed.txt'), 0o755);
+    mkdirSync(join(d, '.diffstory'));
+    writeFileSync(join(d, '.diffstory', 'review-state.json'), '{"version":1}\n');
+
+    const index = reviewFileIndex(d, 'HEAD');
+    assert.deepEqual(index.map((file) => file.path), [
+      'binary.dat',
+      'dist/bundle.js',
+      'large.txt',
+      'ordinary.ts',
+      'seed.txt',
+    ]);
+    assert.equal(index.find((file) => file.path === 'binary.dat').binary, true);
+    assert.equal(index.find((file) => file.path === 'dist/bundle.js').generated, true);
+    assert.equal(index.find((file) => file.path === 'large.txt').large, true);
+    assert.equal(index.find((file) => file.path === 'seed.txt').metadataOnly, true);
+    assert.match(index.find((file) => file.path === 'ordinary.ts').reviewHash, /^[0-9a-f]{64}$/);
+    assert.ok(
+      !index.some((file) => file.path.startsWith('.diffstory/')),
+      'app state is never part of the review index',
+    );
+
+    const ordinary = parseUnifiedDiff(getFileDiff(d, 'HEAD', 'ordinary.ts'));
+    assert.deepEqual(ordinary.map((file) => file.newPath), ['ordinary.ts']);
+    assert.match(ordinary[0].hunks[0].lines.find((line) => line.type === 'add').content, /answer/);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('metadata index stays bounded for a real 100 MB text change', { timeout: 30_000 }, () => {
+  const { d } = repo();
+  try {
+    const path = join(d, 'hundred-megabytes.txt');
+    const fd = openSync(path, 'w');
+    const chunk = Buffer.alloc(64 * 1024, 97);
+    try {
+      for (let written = 0; written < 100 * 1024 * 1024; written += chunk.length) {
+        writeSync(fd, chunk);
+      }
+    } finally {
+      closeSync(fd);
+    }
+
+    const before = process.memoryUsage().heapUsed;
+    const index = reviewFileIndex(d, 'HEAD');
+    const heapGrowth = process.memoryUsage().heapUsed - before;
+    assert.equal(index.length, 1);
+    assert.equal(index[0].path, 'hundred-megabytes.txt');
+    assert.equal(index[0].added, 1);
+    assert.equal(index[0].byteSize, 100 * 1024 * 1024);
+    assert.equal(index[0].large, true, 'byte size catches giant single-line changes');
+    assert.match(index[0].reviewHash, /^[0-9a-f]{64}$/);
+    assert.equal(getDiff(d, 'HEAD'), '', 'the bounded diff never materializes the 100 MB body');
+    const preview = readFileRange(d, 'hundred-megabytes.txt', 1, 500);
+    assert.equal(preview.lines.length, 1);
+    assert.match(preview.lines[0], /\[line truncated\]$/);
+    assert.ok(preview.lines[0].length < 300 * 1024, 'range preview caps a giant single line');
+    assert.ok(
+      heapGrowth < 16 * 1024 * 1024,
+      `metadata indexing should not retain changed bytes in the JS heap (grew ${heapGrowth} bytes)`,
+    );
   } finally {
     rmSync(d, { recursive: true, force: true });
   }

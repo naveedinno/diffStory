@@ -82,6 +82,7 @@ function scopeQuery(base, head) {
 export function renderChangePage(sum, opts) {
     const label = opts.scopeLabel ?? sum.baseLabel;
     const active = opts.active ?? '';
+    const scopeSummaryLabel = active === 'compare' ? 'Selected comparison' : active === 'commit' ? 'Selected commit' : 'Selected scope';
     const routeBase = opts.routeBase ?? '';
     const total = totals(sum);
     const notice = opts.notice
@@ -104,7 +105,7 @@ export function renderChangePage(sum, opts) {
         `<span class="sopt-k">Single commit</span><span class="sopt-t">Parent → selected commit</span>` +
         `</button>` +
         `<button class="sopt${active === 'compare' ? ' on' : ''}" data-open-panel="compare" type="button" aria-controls="comparePanel" aria-expanded="${active === 'compare' ? 'true' : 'false'}">` +
-        `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Base → compare, any branch or commit</span>` +
+        `<span class="sopt-k">Compare any refs</span><span class="sopt-t">Source → target, any branch or commit</span>` +
         `</button>` +
         `</div>`;
     const diffHref = `${routeBase}/diff${scopeQuery(opts.base, opts.head)}`;
@@ -116,11 +117,27 @@ export function renderChangePage(sum, opts) {
     const compareHeadIsWorktree = !inCompare || !opts.head;
     const compareHeadValue = compareHeadIsWorktree ? 'Working tree' : opts.head ?? '';
     const compareHeadWorktree = compareHeadIsWorktree ? ' data-worktree="1"' : '';
+    const scopeSummary = inCompare
+        ? `<div class="scope-current scope-current-split" role="group" aria-label="Selected comparison">
+        <span class="scope-side" aria-label="Source: ${esc(compareBaseValue)}">
+          <span class="scope-side-label">Source <i>older</i></span>
+          <b title="${esc(compareBaseValue)}">${esc(compareBaseValue)}</b>
+        </span>
+        <span class="scope-current-arrow" aria-hidden="true">→</span>
+        <span class="scope-side" aria-label="Target: ${esc(compareHeadValue)}">
+          <span class="scope-side-label">Target <i>newer</i></span>
+          <b title="${esc(compareHeadValue)}">${esc(compareHeadValue)}</b>
+        </span>
+      </div>`
+        : `<div class="scope-current scope-current-single" aria-label="Selected review scope">
+        <span class="scope-current-mark" aria-hidden="true"></span>
+        <span class="scur"><span>${scopeSummaryLabel}</span><b title="${esc(label)}">${esc(label)}</b></span>
+      </div>`;
     const cardBody = sum.hasChanges
         ? renderFileSummary(sum, diffHref)
         : `<div class="card"><div class="empty">
         <p class="empty-clean">✓ working tree clean</p>
-        <h2 class="empty-title">Nothing to review for ${esc(label)}</h2>
+        <h2 class="empty-title">Nothing to review</h2>
         <p class="empty-sub">Pick another scope above, or make a change. When your agent writes code, the changes appear here.</p>
         <div class="empty-actions"><button class="empty-recheck" type="button" onclick="location.reload()">Re-check</button><a class="empty-history" href="${esc(routeBase)}/stories">Review history →</a></div>
       </div></div>`;
@@ -157,12 +174,21 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
 .card{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius-island);overflow:hidden}
 .scope-card{grid-column:1;padding:16px;overflow:visible}
-.scope{display:flex;flex-direction:column;gap:14px;font-size:13px;color:var(--l2)}
-.scope-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.scur{display:flex;flex-direction:column;gap:4px}
+.scope{display:flex;flex-direction:column;font-size:13px;color:var(--l2)}
+.scope-current{display:grid;align-items:stretch;margin-top:12px}
+.scope-current-single{grid-template-columns:3px minmax(0,1fr);align-items:center;gap:12px;min-height:58px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg))}
+.scope-current-split{grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:10px}
+#comparePanel:not([hidden]) + .scope-current-split{display:none}
+.scope-current-mark{align-self:stretch;border-radius:999px;background:var(--blue)}
+.scur{display:flex;min-width:0;flex-direction:column;gap:4px}
 .scur span{font-family:var(--font-mono);font-size:10.5px;color:var(--l3);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
-.scur b{color:var(--label);font-size:20px;line-height:1.15;font-weight:700;letter-spacing:-.02em}
-.scope-command{font-family:var(--font-mono);font-size:11.5px;color:var(--l3);background:var(--subbg);border:1px solid var(--sep);border-radius:var(--radius-sm);padding:6px 10px;white-space:nowrap}
+.scur b{display:block;min-width:0;color:var(--label);font-size:16px;line-height:1.2;font-weight:700;letter-spacing:-.012em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scope-side{position:relative;display:flex;min-width:0;min-height:64px;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg));overflow:hidden}
+.scope-side:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--blue)}
+.scope-side-label{font-family:var(--font-mono);font-size:10.5px;color:var(--l3);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
+.scope-side-label i{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;margin-left:5px}
+.scope-side b{display:block;min-width:0;color:var(--label);font-size:15px;line-height:1.2;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scope-current-arrow{align-self:center;display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--sep);border-radius:999px;background:var(--subbg);color:var(--l3);font-size:16px}
 .sopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:100%}
 .sopt{position:relative;display:flex;flex-direction:column;gap:4px;min-height:64px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:1px solid var(--sep);cursor:pointer;padding:10px 12px;border-radius:var(--radius);text-decoration:none;white-space:normal;transition:background-color var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,transform var(--motion-duration-press) var(--motion-ease-out),box-shadow var(--motion-duration-fast) ease}
 .sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
@@ -179,11 +205,14 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .refpanel{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px;margin-top:12px;padding:13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:var(--subbg);transform-origin:50% 0}
 .refpanel[hidden]{display:none}
 .refpanel[data-panel="commit"]{grid-template-columns:minmax(220px,1fr);align-items:end}
-.refpanel[data-panel="compare"]{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.refpanel[data-panel="compare"]{grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:10px;padding:0;border:0;background:transparent}
 .refrow{position:relative;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--l2);min-width:0}
+.refpanel[data-panel="compare"] .refrow{min-height:72px;justify-content:center;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:var(--subbg)}
+.refpanel[data-panel="compare"] .refrow:focus-within{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft)}
 .refrow span{font-weight:600;color:var(--l2)}
 .refrow span i{font-style:normal;font-weight:400;color:var(--l3);margin-left:5px;font-size:11.5px}
 .refhint{grid-column:1 / -1;margin:0;color:var(--l3);font-size:12px;line-height:1.4}
+.refpanel[data-panel="compare"] .refhint{padding:0 2px}
 .refhint code{font-family:var(--font-mono);font-size:11px}
 .refpanel input{font:inherit;font-size:13px;color:var(--label);background-color:var(--elev);border:1px solid var(--hair);border-radius:var(--radius);height:var(--control-h-lg);padding:0 11px;min-width:0;width:100%}
 .refpanel input:hover{border-color:var(--l3)}
@@ -196,7 +225,7 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .refpick-kind{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--l3);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .refpick-meta{grid-column:1;color:var(--l2);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .refpick-empty{padding:9px 10px;color:var(--l3);font-size:12px}
-.cmparrow{color:var(--l3);display:inline-flex;align-self:center;padding-bottom:8px}
+.cmparrow{display:grid;place-items:center;align-self:center;width:28px;height:28px;border:1px solid var(--sep);border-radius:999px;background:var(--subbg);color:var(--l3);font-size:16px}
 .file-card{grid-column:1;min-width:0}
 .file-summary-card{overflow:hidden}
 .fsum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-bottom:1px solid var(--sep);background:var(--subbg);font-size:13px;color:var(--l2);flex-wrap:wrap}
@@ -230,13 +259,13 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .empty-recheck,.empty-history{display:inline-flex;align-items:center;height:var(--control-h);padding:0 13px;font:inherit;font-size:12.5px;font-weight:600;color:var(--label);background:transparent;border:1px solid var(--hair);border-radius:var(--radius);cursor:pointer;text-decoration:none}
 .empty-recheck:hover,.empty-history:hover{background:var(--fill)}
 .empty-recheck:focus-visible,.empty-history:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
-@media (prefers-reduced-motion:no-preference){.wrap{animation:change-page-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.refpanel:not([hidden]){animation:change-panel-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.refpicker:not([hidden]){animation:change-picker-in var(--motion-duration-ui) var(--motion-ease-out) backwards}@keyframes change-page-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes change-panel-in{from{opacity:0;clip-path:inset(0 0 100% round 12px);transform:translateY(-5px)}to{opacity:1;clip-path:inset(0 round 12px);transform:none}}@keyframes change-picker-in{from{opacity:0;clip-path:inset(0 0 100% round 10px);transform:translateY(-4px) scale(.985)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
+@media (prefers-reduced-motion:no-preference){.refpicker:not([hidden]){animation:change-picker-in var(--motion-duration-ui) var(--motion-ease-out) backwards}@keyframes change-picker-in{from{opacity:0;clip-path:inset(0 0 100% round 10px);transform:translateY(-4px) scale(.985)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
 @media (prefers-reduced-motion:reduce){.sopt,.openreview{transition:none}.sopt:active,.openreview:active{transform:none}}
-@media (prefers-contrast:more){.card,.sopt,.refpanel,.refpanel input,.scope-command,.notice,.metric{border-color:var(--label)}}
+@media (prefers-contrast:more){.card,.sopt,.refpanel,.refpanel input,.refpanel[data-panel="compare"] .refrow,.cmparrow,.scope-current-single,.scope-side,.scope-current-arrow,.notice,.metric{border-color:var(--label)}}
 @media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:980px){.scope-card,.file-card{grid-column:1}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
-@media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}}
-@media (max-width:600px){.wrap{padding:20px 14px 26px}.wrap>.ds-thread-layer{top:-51px}.review-path{display:flex;width:100%}.review-path>b{flex:1;min-width:12px;max-width:none;margin:0 10px}.review-path span{flex:none;gap:0;font-size:0}.review-path .active{gap:7px;font-size:10.5px}.review-path i{font-size:16px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-head{display:block}.scope-command{display:inline-flex;margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.sopts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.sopt{min-height:44px;justify-content:center;text-align:center;padding:8px 6px}.sopt-k{font-size:12px}.sopt-t{display:none}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
+@media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}.refpanel[data-panel="compare"] .refrow{min-height:72px}}
+@media (max-width:600px){.wrap{padding:20px 14px 26px}.wrap>.ds-thread-layer{top:-51px}.review-path{display:flex;width:100%}.review-path>b{flex:1;min-width:12px;max-width:none;margin:0 10px}.review-path span{flex:none;gap:0;font-size:0}.review-path .active{gap:7px;font-size:10.5px}.review-path i{font-size:16px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-current-single{min-height:54px;padding:9px 11px}.scope-current-split{grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:7px}.scope-side{min-height:60px;padding:9px 10px}.scope-side b{font-size:13px}.scope-current-arrow{width:24px;height:24px;font-size:14px}.sopts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.sopt{min-height:44px;justify-content:center;text-align:center;padding:8px 6px}.sopt-k{font-size:12px}.sopt-t{display:none}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
 @media (max-width:480px){.reload-label{display:none}.nv-history{padding-left:9px;padding-right:9px}}
 </style></head>
 <body class="ds-map-bg">
@@ -260,10 +289,6 @@ ${nav}
   <div class="layout">
     <section class="card scope-card" aria-label="Review scope">
       <div class="scope">
-        <div class="scope-head">
-          <span class="scur"><span>Reviewing</span><b>${esc(label)}</b></span>
-          <span class="scope-command">git diff ${esc(opts.base ?? sum.base)}${opts.head ? ` ${esc(opts.head)}` : ''}</span>
-        </div>
         ${scopeControls}
       </div>
       <div class="refpanel" data-panel="commit" id="commitPanel"${active === 'commit' ? '' : ' hidden'}>
@@ -271,11 +296,11 @@ ${nav}
         <p class="refhint">Shows that commit against its first parent; root commits are shown against the empty tree.</p>
       </div>
       <div class="refpanel" data-panel="compare" id="comparePanel"${active === 'compare' ? '' : ' hidden'}>
-        <label class="refrow"><span>Base <i>older</i></span><input id="cmpBase" data-picker="base" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="branch, tag, or commit" value="${esc(compareBaseValue)}" autocomplete="off" spellcheck="false"></label>
+        <label class="refrow"><span>Source <i>older</i></span><input id="cmpBase" data-picker="base" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="branch, tag, or commit" value="${esc(compareBaseValue)}" autocomplete="off" spellcheck="false"></label>
         <span class="cmparrow" aria-hidden="true">→</span>
-        <label class="refrow"><span>Compare <i>newer</i></span><input id="cmpHead" data-picker="head" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="branch, tag, or commit" value="${esc(compareHeadValue)}"${compareHeadWorktree} autocomplete="off" spellcheck="false"></label>
-        <p class="refhint">Each side takes anything git does — a branch, tag, SHA, or <code>main~2</code>. Leave the right side on Working tree to include uncommitted edits.</p>
+        <label class="refrow"><span>Target <i>newer</i></span><input id="cmpHead" data-picker="head" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="refPicker" aria-expanded="false" placeholder="branch, tag, or commit" value="${esc(compareHeadValue)}"${compareHeadWorktree} autocomplete="off" spellcheck="false"></label>
       </div>
+      ${scopeSummary}
       <div class="refpicker" id="refPicker" role="listbox" aria-label="Available git references" hidden></div>
     </section>
     <section class="file-card" aria-label="Changed files">

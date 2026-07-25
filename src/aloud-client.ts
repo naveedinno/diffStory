@@ -4,6 +4,7 @@ const DEFAULT_ALOUD_URL = 'http://127.0.0.1:17878';
 const ALOUD_SERVICE = 'aloud-speech-daemon';
 const ALOUD_PROTOCOL = 2;
 const ALOUD_BATCH_CAPABILITY = 'explicit-batches';
+const ALOUD_PREPARE_CAPABILITY = 'prepare-speech';
 const MAX_RESPONSE_BYTES = 256 * 1024;
 
 export interface AloudStatus {
@@ -25,6 +26,7 @@ export interface AloudStatus {
 
 export interface AloudReader {
   control(action: 'pause' | 'resume' | 'stop'): Promise<AloudStatus>;
+  prepare(input: AloudSpeechRequest): Promise<void>;
   speak(input: AloudSpeechRequest): Promise<AloudStatus>;
   status(): Promise<AloudStatus>;
 }
@@ -48,6 +50,13 @@ export function createAloudReader(baseUrl = DEFAULT_ALOUD_URL): AloudReader {
   const status = async (): Promise<AloudStatus> => verifyStatus(await requestJson(baseUrl, 'GET', '/status'));
   return {
     status,
+    async prepare(input) {
+      await verifyAloudDaemon(baseUrl, ALOUD_PREPARE_CAPABILITY);
+      const prepared = await requestJson(baseUrl, 'POST', '/prepare', input);
+      if (!isAloudProtocol(prepared)) {
+        throw new AloudUnavailableError('Aloud returned an incompatible preparation response.');
+      }
+    },
     async speak(input) {
       await verifyAloudDaemon(baseUrl);
       return verifyStatus(await requestJson(baseUrl, 'POST', '/speak', input));
@@ -63,13 +72,16 @@ export function createAloudReader(baseUrl = DEFAULT_ALOUD_URL): AloudReader {
   };
 }
 
-async function verifyAloudDaemon(baseUrl: string): Promise<void> {
+async function verifyAloudDaemon(baseUrl: string, capability = ALOUD_BATCH_CAPABILITY): Promise<void> {
   const health = await requestJson(baseUrl, 'GET', '/health');
   if (!isAloudProtocol(health)) {
     throw new AloudUnavailableError('The local reader on port 17878 is not a compatible Aloud service.');
   }
   const capabilities = (health as { capabilities?: unknown }).capabilities;
-  if (!Array.isArray(capabilities) || !capabilities.includes(ALOUD_BATCH_CAPABILITY)) {
+  if (!Array.isArray(capabilities) || !capabilities.includes(capability)) {
+    if (capability === ALOUD_PREPARE_CAPABILITY) {
+      throw new AloudUnavailableError('Aloud needs an update before DiffStory can prepare narration in the background.');
+    }
     throw new AloudUnavailableError('Aloud needs an update before it can prefetch DiffStory narration. Reinstall Aloud Services, then try again.');
   }
 }

@@ -14,7 +14,7 @@ const STATUS = {
   state: { status: 'reading' },
 };
 const HEALTH = {
-  capabilities: ['explicit-batches', 'prefetch-playback'],
+  capabilities: ['explicit-batches', 'prefetch-playback', 'prepare-speech'],
   ok: true,
   protocolVersion: 2,
   service: 'aloud-speech-daemon',
@@ -51,10 +51,16 @@ test('Aloud client verifies the daemon before delegating speech and controls', a
       prefetch: 3,
       text: 'Review this beat. Then this one.',
     })).jobId, 'job-1');
+    await aloud.prepare({
+      batches: ['Review this beat.'],
+      text: 'Review this beat.',
+    });
     assert.equal((await aloud.control('pause')).service, 'aloud-speech-daemon');
     assert.deepEqual(calls.map(({ method, path }) => `${method} ${path}`), [
       'GET /health',
       'POST /speak',
+      'GET /health',
+      'POST /prepare',
       'GET /health',
       'POST /pause',
       'GET /status',
@@ -63,6 +69,10 @@ test('Aloud client verifies the daemon before delegating speech and controls', a
       batches: ['Review this beat.', 'Then this one.'],
       prefetch: 3,
       text: 'Review this beat. Then this one.',
+    });
+    assert.deepEqual(JSON.parse(calls[3].body), {
+      batches: ['Review this beat.'],
+      text: 'Review this beat.',
     });
   } finally {
     fixture.server.close();

@@ -234,10 +234,14 @@ test('a historical committed story reads context and full-file content from its 
     const route = repoRoute(repo);
     const review = await (await fetch(`${base}${route}/review?story=story.json`)).text();
     assert.ok(review.includes('Historical story'), 'opens the selected story');
-    assert.ok(review.includes('head-one'), 'context step reads the story head side');
-    assert.ok(!review.includes('live-one'), 'context step does not read the live working tree');
 
     const token = reviewPageToken(review);
+    const context = await (await fetch(
+      `${base}/api/review/step-panel?index=1&page=${encodeURIComponent(token)}`,
+    )).text();
+    assert.ok(context.includes('head-one'), 'lazy context step reads the story head side');
+    assert.ok(!context.includes('live-one'), 'lazy context step does not read the live working tree');
+
     const full = await (await fetch(`${base}/api/fullfile?file=a.txt&page=${encodeURIComponent(token)}`)).text();
     assert.ok(full.includes('head-two'), 'full-file view reads the story head side');
     assert.ok(!full.includes('live-two'), 'full-file view does not read the live working tree');

@@ -32,7 +32,14 @@ test('compact session cards preserve trust and review facts on mobile', () => {
   assert.doesNotMatch(html, /Round /);
   assert.match(html, /<b>2<\/b> open notes/);
   assert.doesNotMatch(html, /session-facts>span:nth-child/);
-  assert.match(html, /\.row-del::after\{content:"";position:absolute;inset:-5px\}/);
+  assert.match(html, /\.story-row\{position:relative;display:block;border:1px solid var\(--line-soft\)[^}]*background:color-mix\(in srgb,var\(--surface\) 58%,var\(--surface-2\)\)[^}]*overflow:hidden/);
+  assert.match(html, /\.row-main\{[^}]*padding:15px 19px[^}]*background:transparent/, 'lets the action column use the full card width');
+  assert.match(html, /\.row-del\{position:absolute;z-index:2;top:13px;right:13px;width:34px;height:34px[^}]*background:transparent/);
+  assert.match(html, /\.row-del::after\{content:"";position:absolute;inset:-4px\}/);
+  assert.match(html, /\.row-main\{grid-template-columns:24px minmax\(0,1fr\);padding:16px 19px 15px;gap:12px\}/, 'removes the full-height mobile delete gutter');
+  assert.match(html, /\.row-head\{padding-right:44px\}/, 'reserves only the title row for delete on narrow screens');
+  assert.match(html, /:root\[data-theme="light"\]\{--story-blue-ink:#005cae;--story-green-ink:var\(--diff-add-text\);--story-amber-ink:#875200\}/);
+  assert.match(html, /\.resume\{[^}]*min-height:34px[^}]*border:1px solid var\(--accent-line\)[^}]*background:var\(--accent-soft\);color:var\(--story-blue-ink\)/);
   assert.equal((html.match(/>Start review</g) || []).length, 1, 'offers one clear new-review action');
   assert.match(html, /Review history/);
   assert.match(html, /<b>1<\/b> review has open notes/, 'makes clear this is a review count, not a note count');

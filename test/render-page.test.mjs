@@ -669,9 +669,16 @@ test('diff panels expose automatic first-change navigation controls', () => {
 test('the review chrome delegates its one narration control to Aloud', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /class="ds-readaloud ds-readaloud-primary" data-readaloud[^>]*aria-label="Play story"/);
-  assert.match(html, /class="ds-playstep" data-playstep/, 'step narration remains available in context');
+  assert.equal(
+    (html.match(/class="ds-readaloud ds-readaloud-primary"/g) || []).length,
+    1,
+    'the page exposes one narration control',
+  );
+  assert.doesNotMatch(html, /data-playstep|ds-playstep/, 'step chrome does not repeat the global play action');
   assert.match(html, /function aloudFetch\(path,body,signal\)/);
   assert.match(html, /fetch\('\/api\/aloud\/'\+path,init\)/);
+  assert.match(html, /function prepareStepNarration\(stepIndex\)/);
+  assert.match(html, /aloudFetch\('prepare',\{text:prepareChunks\.join\(' '\),batches:prepareChunks\}\)/);
   assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
   assert.match(html, /aloudFetch\('status'\)/);
   assert.match(html, /aloudFetch\('control',\{action:action\}\)/);
@@ -706,6 +713,11 @@ test('Aloud keeps routine playback state inside its controls', () => {
 test('read aloud submits future narration beats together so Aloud can prefetch them', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /function speechSequenceFrom\(stepIndex,unitIndex,manual\)/);
+  assert.match(html, /function splitSpeechUnit\(text\)/);
+  assert.match(html, /var limit=chunks\.length\?480:140,/);
+  assert.match(html, /splitSpeechUnit\(unit\.text\)\.forEach/);
+  assert.match(html, /prepareChunks=chunks\.slice\(0,2\)/);
+  assert.match(html, /batches:prepareChunks/);
   assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
   assert.match(html, /function applyAloudSequenceProgress\(status\)/);
   assert.doesNotMatch(
@@ -734,7 +746,6 @@ test('read aloud visually focuses the code rows for the step being spoken', () =
   assert.match(html, /if\(opts\.stepIndex!=null\)\{if\(opts\.focusGroup!=null\)setActiveBeat\(opts\.stepIndex,opts\.focusGroup\);else startVoiceFocusSequence\(opts\.stepIndex,text\);\}/);
   assert.match(html, /if\(opts\.stepIndex!=null\)clearVoiceFocus\(\)/);
   assert.match(html, /finishAloudSpeech\(token,opts,state==='done'/);
-  assert.match(html, /speakStepIndex\(sp,true\)/);
 });
 
 test('explicit story focus narrows which rows are highlighted during read aloud', () => {
@@ -904,7 +915,7 @@ test('story beats render as separate spoken notes with exact focus groups', () =
   assert.match(html, /function stepSpeechUnits\(panel\)/);
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
   assert.match(html, /setActiveBeat\(stepIndex,group\)/);
-  assert.match(html, /b=closest\(t,'\[data-playstep\]'\);if\(b\)\{var pp=closest\(t,'\.ds-step'\);if\(pp\)\{var sp=parseInt\(pp\.getAttribute\('data-step-panel'\)\|\|'0',10\);speakStepIndex\(sp,true\);\}return;\}/);
+  assert.doesNotMatch(html, /closest\(t,'\[data-playstep\]'\)/);
 });
 
 test('silent story navigation persistently centers the first authored focus', () => {
@@ -986,9 +997,7 @@ test('story steps default to split while compact review keeps code readable in u
   assert.match(html, /class="ds-modetoggle" role="group" aria-label="Diff display mode"/);
   assert.match(html, /data-mode="diff" aria-pressed="false">Unified<\/button>/);
   assert.match(html, /class="is-active" data-mode="split" aria-pressed="true">Split<\/button>/);
-  assert.match(html, /data-playstep title="Read this step aloud" aria-label="Read this step aloud"/);
-  assert.match(html, /class="ds-playstep-icon" aria-hidden="true"><svg viewBox="0 0 16 16"/);
-  assert.doesNotMatch(html, /data-playstep[^>]*>▸<\/button>/);
+  assert.doesNotMatch(html, /data-playstep|ds-playstep/);
   assert.match(html, /<div data-diff-inner hidden>[\s\S]*class="ds-diffbody ds-diffbody-unified"/);
   assert.match(html, /<div data-split-inner data-loaded="1">[\s\S]*class="ds-diffbody"/);
   assert.match(html, /function applyResponsiveStoryMode\(panel\)/);
@@ -1015,7 +1024,7 @@ test('beat controls cross step boundaries', () => {
   assert.match(html, /if\(delta>0&&index===beats\.length-1&&stepIndex<total-1\)\{focusStoryStepBoundary\(stepIndex\+1,false\);return true;\}/);
   assert.match(html, /if\(next\)next\.disabled=index>=beats\.length-1&&panelIndex>=total-1;/);
   assert.match(html, /function focusStoryStepBoundary\(stepIndex,atEnd\)/);
-  assert.match(html, /var boundaryTarget=panel\?\(atEnd\?\$\('\.ds-concept-next',panel\):\$\('\[data-playstep\]',panel\)\):null;/);
+  assert.match(html, /var boundaryTarget=panel&&atEnd\?\$\('\.ds-concept-next',panel\):null;/);
   assert.match(html, /var conceptScroll=panel&&\$\('\.ds-concept-scroll',panel\);/);
   assert.match(html, /if\(conceptScroll\)conceptScroll\.scrollTop=atEnd\?conceptScroll\.scrollHeight:0;/);
   assert.match(html, /if\(workspaceTransition&&workspaceTransition\.finished\)Promise\.resolve\(workspaceTransition\.finished\)\.then\(focus,focus\);else focus\(\);/);
@@ -1511,20 +1520,17 @@ test('intent text is HTML-escaped in the intro panel', () => {
   assert.doesNotMatch(html, /a (?:&|&amp;) b/);
 });
 
-test('all-files view exposes reviewed and unreviewed controls bound to file hashes', () => {
+test('all-files shell keeps review identity while file controls load on demand', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.doesNotMatch(html, /<div class="ds-fileshead"|<[^>]+ data-file-hint/);
   assert.doesNotMatch(html, /class="ds-untoured-badge"|class="ds-stepchip"|class="ds-symbols"|class="ds-cardstat"/);
-  assert.match(html, /class="ds-cardpath"/);
-  assert.match(html, /class="ds-changejump"/);
-  assert.match(html, /class="ds-modetoggle"/);
-  assert.match(html, /class="ds-filepanel[\s\S]*?class="is-active" data-mode="split" aria-pressed="true">Split<\/button>/);
-  assert.match(html, /class="ds-filepanel-body">[\s\S]*?<div data-diff-inner hidden>[\s\S]*?<div data-split-inner><div class="ds-diffnote" role="status">Loading the split view…<\/div>/);
-  assert.match(html, /var want=stored\|\|\(compactScreen\(\)\?'diff':'split'\)/);
+  assert.match(html, /class="ds-filepanel-loading" data-file-panel-lazy role="status">Loading file review…/);
+  assert.match(html, /\/api\/diff\/file-panel\?file=/);
+  assert.match(html, /var want=panel\.hasAttribute\('data-context-file'\)\?'diff':\(stored\|\|\(compactScreen\(\)\?'diff':'split'\)\)/);
   assert.match(html, /data-viewed-scope="/);
   assert.match(html, /data-viewed-progress/);
-  assert.match(html, /data-viewed-toggle aria-pressed="false"/);
-  assert.match(html, /data-viewed-label>Mark reviewed</);
+  assert.match(html, /data-viewed-toggle/);
+  assert.match(html, /data-viewed-label/);
   assert.match(html, /\.ds-filepanel-head>\.ds-viewed-toggle\{order:8;width:auto;padding:0 10px\}/);
   assert.match(html, /\.ds-filepanel-head>\.ds-viewed-toggle \.ds-viewed-toggle-label\{display:inline\}/);
   assert.match(html, /data-review-hash="[a-f0-9]{64}"/);
@@ -1584,6 +1590,39 @@ test('storyless exclusions remain inspectable and acknowledgeable from review st
   assert.match(html, /No story-coverage claim is applied in this view/);
 });
 
+test('an excluded-only 100 MB scope stays truthful without mounting or offering its body', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'HEAD' },
+    files: [],
+    fileIndex: [],
+    baseLabel: 'main',
+    comments: [],
+    storyless: true,
+    excludedFiles: [{
+      path: 'hundred-megabytes.txt', reason: 'large-diff',
+      addedLines: 1, removedLines: 0, changedLines: 1,
+    }],
+  });
+
+  assert.match(
+    html,
+    /class="ds-fact-n">1<\/span><span class="ds-fact-l">file changed/,
+    'the visible scope count includes files intentionally kept outside the diff DOM',
+  );
+  assert.match(html, /<span class="ds-stat-add">\+1<\/span> <span class="ds-stat-del">−0<\/span>/);
+  assert.match(html, /Large file kept lazy/);
+  assert.match(html, /Inspect bounded preview/);
+  assert.match(html, /class="ds-excluded-only-path">hundred-megabytes\.txt<\/code>/);
+  assert.match(html, /class="ds-excluded-rail-file" data-trust-open aria-label="hundred-megabytes\.txt, inspect bounded preview"/);
+  assert.doesNotMatch(html, /Review file/);
+  assert.match(html, /1 excluded file/);
+  assert.match(html, /data-viewed-progress data-excluded-count="1">1 file<\/span>/);
+  assert.doesNotMatch(html, /Review depth/, 'does not offer story generation when no bounded file can be narrated');
+  assert.doesNotMatch(html, /No files in this change/, 'never describes an excluded-only exact scope as empty');
+  assert.doesNotMatch(html, /a{100000}/, 'never embeds the excluded body');
+});
+
 test('reviewed-file hash follows code identity instead of story coverage state', () => {
   const covered = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   const uncovered = renderPage({
@@ -1599,7 +1638,7 @@ test('reviewed-file hash follows code identity instead of story coverage state',
   assert.equal(uncoveredHash, coveredHash);
 });
 
-test('file search indexes changed code beyond the old 2400-character cutoff', () => {
+test('initial file search metadata stays bounded when changed code is large', () => {
   const searchFiles = [{
     ...files[0],
     hunks: [{
@@ -1611,7 +1650,25 @@ test('file search indexes changed code beyond the old 2400-character cutoff', ()
     }],
   }];
   const html = renderPage({ repo: process.cwd(), tour, files: searchFiles, baseLabel: 'main', comments: [] });
-  assert.match(html, /data-filter-code="[^"]*late_search_marker/);
+  assert.doesNotMatch(html, /data-filter-code=/);
+  assert.match(html, /data-filter-path="[^"]*a\.ts/);
+  assert.match(html, /\/api\/review\/file-search\?q=/);
+});
+
+test('context-only files open on their available evidence without a meaningless split mode', () => {
+  const contextTour = {
+    ...tour,
+    steps: [{
+      ...tour.steps[0],
+      id: 'context-step',
+      kind: 'context',
+      file: 'src/render.ts',
+      range: [1, 2],
+    }],
+  };
+  const html = renderPage({ repo: process.cwd(), tour: contextTour, files: [], baseLabel: 'main', comments: [] });
+  assert.match(html, /data-context-file="1"/);
+  assert.match(html, /panel\.hasAttribute\('data-context-file'\)\?'diff'/);
 });
 
 test('review question prefers an authored falsifiable question over tag heuristics', () => {
@@ -1718,6 +1775,15 @@ test('long stories receive collapsible chapters while explicit chapter labels ar
   assert.match(html, />Request path<\/span><small>5 steps<\/small>/);
   assert.match(html, />Proof and boundaries<\/span><small>6 steps<\/small>/);
   assert.match(html, /chapter\.open=true/);
+  const storyRail = html.slice(
+    html.indexOf('<div class="ds-railsteps"'),
+    html.indexOf('<div class="ds-railfiles"'),
+  );
+  assert.doesNotMatch(
+    storyRail,
+    /data-rail-beat/,
+    'long stories must not duplicate every beat in the initial sidebar DOM',
+  );
 });
 
 test('a new file has no expandable eof gap in the split view', () => {

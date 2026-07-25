@@ -7,6 +7,8 @@
 // no risk of a cycle.
 /** A single-file diff at or above this size is omitted from the bounded default view. */
 export const REVIEW_NOISE_MAX_LINES = 1500;
+/** Byte-heavy single-line/minified files must not bypass the line-count bound. */
+export const REVIEW_NOISE_MAX_BYTES = 8 * 1024 * 1024;
 /** Paths recognized as generated, vendored, or machine-produced artifacts. */
 export function isGeneratedPath(path) {
     const p = path.toLowerCase();
@@ -17,7 +19,7 @@ export function isGeneratedPath(path) {
         /\.abi\.json$/.test(p));
 }
 /** Explain why a file is omitted from the bounded diff, or null when it stays. */
-export function reviewExclusionMetadata(path, addedLines, removedLines) {
+export function reviewExclusionMetadata(path, addedLines, removedLines, byteSize) {
     const changedLines = addedLines == null || removedLines == null ? null : addedLines + removedLines;
     const reason = isGeneratedPath(path)
         ? 'generated-path'
@@ -25,7 +27,8 @@ export function reviewExclusionMetadata(path, addedLines, removedLines) {
             ? 'binary'
             : changedLines === 0
                 ? 'metadata-only'
-                : changedLines >= REVIEW_NOISE_MAX_LINES
+                : changedLines >= REVIEW_NOISE_MAX_LINES ||
+                    (byteSize != null && byteSize >= REVIEW_NOISE_MAX_BYTES)
                     ? 'large-diff'
                     : null;
     if (!reason)

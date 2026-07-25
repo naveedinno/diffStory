@@ -272,3 +272,24 @@ export interface DiffFile {
   status: FileStatus;
   hunks: DiffHunk[];
 }
+
+/**
+ * Bounded metadata for one changed path. Unlike DiffFile this shape never
+ * carries hunk or source bytes, so it is safe to build for the initial page
+ * even when the underlying change is extremely large.
+ */
+export interface ReviewFileIndexEntry {
+  oldPath: string;
+  path: string;
+  status: FileStatus;
+  added: number | null;
+  removed: number | null;
+  /** Current-side size, or base-side size for a deletion. */
+  byteSize: number | null;
+  binary: boolean;
+  large: boolean;
+  generated: boolean;
+  metadataOnly: boolean;
+  /** Stable identity for lazy detail responses and stale-response rejection. */
+  reviewHash: string;
+}

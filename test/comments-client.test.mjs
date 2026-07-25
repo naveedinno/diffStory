@@ -1,7 +1,18 @@
 // The review-page client wiring for cross-view comments. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
+
+test('the generated browser client is valid JavaScript', () => {
+  assert.doesNotThrow(() => new vm.Script(PAGE_JS));
+});
+
+test('client initialization preserves excluded-only scope truth', () => {
+  assert.match(PAGE_JS, /if\(progress&&!fileItems\.length&&excludedCount\)progress\.textContent=excludedCount\+/);
+  assert.match(PAGE_JS, /excluded\?', '\+excluded\+' excluded '/);
+  assert.doesNotMatch(PAGE_JS, /excludedCount\+' '\+\(excludedCount===1\?'file':'files'\)\+' · kept lazy'/);
+});
 
 test('resume control contains long file paths inside the resizable sidebar', () => {
   assert.match(PAGE_CSS, /\.ds-resume-review\{[^}]*min-width:0[^}]*overflow:hidden/);

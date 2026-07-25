@@ -42,7 +42,7 @@ impl Default for Preferences {
             zoom: 1.0,
             window_width: 1380.0,
             window_height: 880.0,
-            maximized: true,
+            maximized: false,
             last_path: "/".into(),
         }
     }
@@ -71,6 +71,23 @@ fn support_directory() -> PathBuf {
 
 fn preferences_path() -> PathBuf {
     support_directory().join("preferences.json")
+}
+
+fn clamped_window_size(
+    saved_width: f64,
+    saved_height: f64,
+    work_area_width: f64,
+    work_area_height: f64,
+) -> (f64, f64) {
+    // A display change or old zoomed session can leave impossible logical
+    // dimensions in preferences. Let the window occupy most of the current
+    // work area without asking macOS to squeeze a 4K WebView onto a laptop.
+    let max_width = (work_area_width * 0.94).min(1600.0).max(920.0);
+    let max_height = (work_area_height * 0.92).min(1000.0).max(620.0);
+    (
+        saved_width.clamp(920.0, max_width),
+        saved_height.clamp(620.0, max_height),
+    )
 }
 
 fn log_path() -> PathBuf {
@@ -549,10 +566,28 @@ fn main() {
                 .menu(&tray_menu)
                 .build(app)?;
 
+            let (window_width, window_height) = app
+                .primary_monitor()
+                .ok()
+                .flatten()
+                .map(|monitor| {
+                    let scale = monitor.scale_factor().max(1.0);
+                    let work_area = monitor.work_area();
+                    clamped_window_size(
+                        initial_window.window_width,
+                        initial_window.window_height,
+                        work_area.size.width as f64 / scale,
+                        work_area.size.height as f64 / scale,
+                    )
+                })
+                .unwrap_or((
+                    initial_window.window_width,
+                    initial_window.window_height,
+                ));
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("diffStory")
-                    .inner_size(initial_window.window_width, initial_window.window_height)
+                    .inner_size(window_width, window_height)
                     .min_inner_size(920.0, 620.0)
                     .maximized(initial_window.maximized)
                     .build()?;
@@ -654,5 +689,29 @@ mod tests {
 
         assert_eq!(probe_address(address), PortState::DiffStory);
         responder.join().expect("join test server");
+    }
+
+    #[test]
+    fn restored_window_size_is_clamped_to_the_current_work_area() {
+        assert_eq!(
+            clamped_window_size(3832.0, 2114.0, 1512.0, 944.0),
+            (1421.28, 868.48),
+        );
+    }
+
+    #[test]
+    fn ordinary_saved_window_size_is_preserved() {
+        assert_eq!(
+            clamped_window_size(1280.0, 760.0, 1512.0, 944.0),
+            (1280.0, 760.0),
+        );
+    }
+
+    #[test]
+    fn a_native_4k_work_area_does_not_create_a_wall_sized_review_window() {
+        assert_eq!(
+            clamped_window_size(3832.0, 2114.0, 3840.0, 2160.0),
+            (1600.0, 1000.0),
+        );
     }
 }

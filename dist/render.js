@@ -1,7 +1,6 @@
 // Turn a validated tour + the parsed diff into a single review page. Authored
 // text and code are escaped server-side. The one client-side HTML insertion is
 // locally rendered Mermaid SVG, parsed and sanitized before it reaches the DOM.
-import { createHash } from 'node:crypto';
 import { PAGE_CSS, PAGE_JS } from './page-assets.js';
 import { progressPanelStyles, progressPanelMarkup, progressPanelScript } from './progress-ui.js';
 import { APP_BRAND } from './config.js';
@@ -12,6 +11,19 @@ import { intraLineMap } from './intra-line.js';
 import { renderSplitRow, renderUnifiedRow, renderHunkGap } from './diff-render.js';
 import { normalizeComment } from './comments.js';
 import { readWholeFile } from './git.js';
+function exactScopeFacts(model, excludedFiles) {
+    return excludedFiles.reduce((facts, file) => ({
+        changedFiles: facts.changedFiles + 1,
+        addedLines: facts.addedLines + (file.addedLines ?? 0),
+        removedLines: facts.removedLines + (file.removedLines ?? 0),
+        hasUnknownLines: facts.hasUnknownLines || file.addedLines == null || file.removedLines == null,
+    }), {
+        changedFiles: model.filesChanged,
+        addedLines: model.totalAdd,
+        removedLines: model.totalDel,
+        hasUnknownLines: false,
+    });
+}
 const FLAVOR_LABEL = {
     change: 'Change request',
     question: 'Question',
@@ -72,7 +84,15 @@ export function renderPage(input) {
     };
     const excludedFiles = input.excludedFiles ?? [];
     const indexDivergentFiles = input.stagedWorktreeDivergentFiles ?? [];
-    const model = buildReviewModel(repo, tour, files, headRef, { storyless });
+    const model = buildReviewModel(repo, tour, files, headRef, {
+        storyless,
+        detailedStepIndexes: input.fileIndex ? new Set() : new Set([0]),
+        detailedFilePaths: new Set(),
+        fileIndex: input.fileIndex,
+        trustPending: !!input.fileIndex,
+    });
+    const exactFiles = model.files.length + excludedFiles.length;
+    const excludedOnly = model.files.length === 0 && excludedFiles.length > 0;
     const pageTitle = storyless ? 'Reviewing the diff' : tour.title;
     // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
     // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
@@ -86,7 +106,8 @@ export function renderPage(input) {
     const feedbackRecovery = reviewState.feedbackHealth?.status === 'invalid'
         ? reviewState.feedbackHealth.recovery
         : '';
-    const reviewClean = feedbackHealthy &&
+    const reviewClean = !model.trust.pending &&
+        feedbackHealthy &&
         blockingOpenCount === 0 &&
         uncoveredCount === 0 &&
         storyFreshness === 'current' &&
@@ -95,17 +116,21 @@ export function renderPage(input) {
         !focusedStory;
     // No story → no coverage to report, so the coverage row is meaningless; hide it.
     const showTrustPill = !storyless || excludedFiles.length > 0 || indexDivergentFiles.length > 0;
-    const trustPillClean = !indexDivergentFiles.length && (storyless || (storyFreshness === 'current' && !uncoveredCount));
+    const trustPillClean = !model.trust.pending &&
+        !indexDivergentFiles.length &&
+        (storyless || (storyFreshness === 'current' && !uncoveredCount));
     const trustPill = showTrustPill
         ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-trust-open title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${indexDivergentFiles.length
             ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before deciding</span><span class="ds-review-row-arrow">›</span>`
-            : storyless && excludedFiles.length
-                ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
-                : storyFreshness !== 'current'
-                    ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate it</span><span class="ds-review-row-arrow">›</span>`
-                    : uncoveredCount
-                        ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
-                        : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
+            : model.trust.pending
+                ? `<span class="ds-tri">◌</span><span><b>Coverage loads on demand</b> · unloaded evidence is never treated as clean</span><span class="ds-review-row-arrow">›</span>`
+                : storyless && excludedFiles.length
+                    ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
+                    : storyFreshness !== 'current'
+                        ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate it</span><span class="ds-review-row-arrow">›</span>`
+                        : uncoveredCount
+                            ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
+                            : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
         : '';
     const railCards = storyRail(model.steps);
     const railFiles = railFileTree(model.files, comments, []);
@@ -113,7 +138,7 @@ export function renderPage(input) {
         // The Overview is active initially, so keep only its adjacent first step in
         // the document. Later steps load when approached instead of multiplying a
         // large story's highlighted diff rows in the initial DOM.
-        .map((s, i) => i === 0
+        .map((s, i) => !input.fileIndex && i === 0
         ? stepPanel(s, i, model.totalSteps, comments, stepIndexById)
         : lazyStepPanel(s, i))
         .join('');
@@ -262,10 +287,10 @@ ${BRAND_HEAD_LINKS}
     <div class="ds-readhead" data-rail="files" hidden>
       <div class="ds-readhead-row">
         <span class="ds-readhead-label">Files</span>
-        <span class="ds-readhead-count" data-viewed-progress>${model.files.length} ${plural(model.files.length, 'file')}</span>
+        <span class="ds-readhead-count" data-viewed-progress data-excluded-count="${excludedFiles.length}">${exactFiles} ${plural(exactFiles, 'file')}${excludedFiles.length && model.files.length ? ` · ${excludedFiles.length} kept lazy` : ''}</span>
       </div>
-      <div class="ds-filetools">
-        <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Search files or changed code" aria-label="Search changed file paths, declarations, and code"></label>
+      ${model.files.length ? `<div class="ds-filetools">
+        <label class="ds-file-search"><span aria-hidden="true">⌕</span><input data-file-search type="search" placeholder="Search paths, symbols, or changed code" aria-label="Search changed file paths, declarations, and code"></label>
         <details class="ds-filefilter-menu">
           <summary>Filter: <strong data-file-filter-label>All</strong><span aria-hidden="true">⌄</span></summary>
           <div class="ds-filefilters" role="group" aria-label="File filters">
@@ -278,7 +303,7 @@ ${BRAND_HEAD_LINKS}
           </div>
         </details>
         <button class="ds-next-unviewed" data-next-unviewed type="button">Next unreviewed <span aria-hidden="true">→</span></button>
-      </div>
+      </div>` : ''}
     </div>
     <div class="ds-railscroll">
       <div class="ds-railsteps" data-rail="tour">
@@ -286,7 +311,7 @@ ${BRAND_HEAD_LINKS}
         ${railCards}
       </div>
       <div class="ds-railfiles" data-rail="files" hidden>
-        ${railFiles || '<div class="ds-empty ds-empty-rail">No files in this change.</div>'}
+        ${railFiles || (excludedOnly ? excludedScopeNotice(excludedFiles, true) : '<div class="ds-empty ds-empty-rail">No files in this change.</div>')}
       </div>
     </div>
     <div class="ds-rail-resizer" data-sidebar-resizer role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0" title="Resize sidebar"></div>
@@ -295,19 +320,19 @@ ${BRAND_HEAD_LINKS}
 
   <main class="ds-main">
     <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
-      ${storyless ? generateCta(model, routeBase, tour.base, headRef) : introPanel(model, tour, storyFreshness, routeBase, storyDrift)}
+      ${storyless ? generateCta(model, routeBase, tour.base, headRef, excludedFiles) : introPanel(model, tour, storyFreshness, routeBase, storyDrift)}
       ${storyless ? '' : stepPanels}
-      ${storyless ? storylessThread() : filmstripThread(model.steps)}
+      ${storyless ? storylessThread(excludedOnly) : filmstripThread(model.steps)}
     </div>
     <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
       <div class="ds-filedetail" id="ds-file-detail">
-        ${filePanels || '<div class="ds-empty">No files in this change.</div>'}
+        ${filePanels || (excludedOnly ? excludedScopeNotice(excludedFiles, false) : '<div class="ds-empty">No files in this change.</div>')}
       </div>
     </div>
   </main>
 </div>
 
-${trustDrawer(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
+${renderTrustDrawer(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
 ${feedbackDrawer(repo, headRef, comments, model)}
 ${driftDrawer(storyDrift)}
 ${commandPalette()}
@@ -335,9 +360,6 @@ function reviewChromeIcon(name) {
     };
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">${paths[name]}</svg>`;
 }
-function playStepIcon() {
-    return '<span class="ds-playstep-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M5 3.6v8.8L12 8 5 3.6Z"/></svg></span>';
-}
 function repairStepIcon() {
     return '<span class="ds-story-tune-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"/></svg></span>';
 }
@@ -355,7 +377,7 @@ function introCard(model) {
 // A rail card carries only what tells steps apart: the number, the headline, and
 // the file's base name (full path on hover). The kind badge appears only when it
 // is *not* a plain change — "Changed" on every card is noise, so it is dropped.
-function railCard(s, i) {
+function railCard(s, i, includeBeats = true) {
     if (s.kind === 'concept') {
         return `<div class="ds-railstory-node" data-story-step-node="${i + 1}">
       <button class="ds-stepcard is-concept" data-step-index="${i + 1}" data-step-id="${esc(s.id)}">
@@ -383,7 +405,7 @@ function railCard(s, i) {
         </span>
       </span>
     </button>
-    ${railBeatTree(s, i + 1)}
+    ${includeBeats ? railBeatTree(s, i + 1) : ''}
   </div>`;
 }
 function railBeatTree(step, stepIndex) {
@@ -415,6 +437,11 @@ function railBeatLabel(text) {
 function storyRail(steps) {
     if (steps.length <= 10)
         return steps.map((step, index) => railCard(step, index)).join('');
+    // A long story already exposes its beat controls inside each lazily loaded
+    // step. Repeating every beat in the sidebar makes the initial DOM scale with
+    // the full narration body (nearly 1 MB for a 245-step real-world story).
+    // Keep the rail as a lightweight step index instead.
+    const compactCard = (step, index) => railCard(step, index, false);
     const explicit = steps.some((step) => step.chapter);
     const groups = [];
     if (explicit) {
@@ -442,7 +469,7 @@ function storyRail(steps) {
     }
     return groups.map((group, index) => `<details class="ds-railchapter" data-story-chapter${index === 0 ? ' open' : ''}>
     <summary><span>${esc(group.label)}</span><small>${group.items.length} ${plural(group.items.length, 'step')}</small></summary>
-    <div class="ds-railchapter-steps">${group.items.map(({ step, index: stepIndex }) => railCard(step, stepIndex)).join('')}</div>
+    <div class="ds-railchapter-steps">${group.items.map(({ step, index: stepIndex }) => compactCard(step, stepIndex)).join('')}</div>
   </details>`).join('');
 }
 // Filmstrip navigation (Signal 3b): a horizontal numeral thread that is the whole
@@ -469,10 +496,10 @@ function filmstripThread(steps) {
 // Storyless Story view has no numerals to walk, but it still needs the thread bar's
 // "All files" escape — the rail (and its tabs) is hidden outside the files view, so
 // without this the generate screen would be a navigation dead end.
-function storylessThread() {
+function storylessThread(excludedOnly = false) {
     return `<nav class="ds-filmthread is-storyless" data-filmthread aria-label="Review navigation">
     <div class="ds-filmthread-scroll"></div>
-    <button type="button" class="ds-filmthread-allfiles" data-open-all-files>All files <span aria-hidden="true">→</span></button>
+    <button type="button" class="ds-filmthread-allfiles"${excludedOnly ? ' data-trust-open' : ' data-open-all-files'}>${excludedOnly ? 'Review excluded file' : 'All files'} <span aria-hidden="true">→</span></button>
   </nav>`;
 }
 // The Overview panel: the change's title and summary up front (this is the only
@@ -682,25 +709,47 @@ function storyScopeControls(files) {
       </div>
     </details>`;
 }
-function generateCta(model, routeBase, baseRef, headRef) {
-    const filesLabel = `${plural(model.filesChanged, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
+function excludedScopeNotice(excludedFiles, compact) {
+    if (compact) {
+        return `<div class="ds-excluded-rail-list">${excludedFiles.map((file) => `<button type="button" class="ds-excluded-rail-file" data-trust-open aria-label="${esc(file.path)}, inspect bounded preview">
+        <span class="ds-excluded-rail-file-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.75 1.75h5.1l3.4 3.4v9.1h-8.5z"/><path d="M8.75 1.75v3.5h3.5"/></svg></span>
+        <code>${esc(file.path)}</code>
+        <span aria-hidden="true">›</span>
+      </button>`).join('')}</div>`;
+    }
+    const largeCount = excludedFiles.filter((file) => file.reason === 'large-diff').length;
+    const singlePath = excludedFiles.length === 1 ? excludedFiles[0]?.path : undefined;
+    const title = largeCount === 1 && excludedFiles.length === 1
+        ? 'Large file kept lazy'
+        : `${excludedFiles.length} ${plural(excludedFiles.length, 'file')} kept lazy`;
+    return `<div class="ds-excluded-only" role="note">
+    <span class="ds-excluded-only-icon" aria-hidden="true">↯</span>
+    <div>
+      <strong>${title}</strong>
+      <p>${singlePath ? `<code class="ds-excluded-only-path">${esc(singlePath)}</code> remains` : 'Still'} part of this exact scope, but kept outside the diff DOM so the page stays fast.</p>
+    </div>
+    <button type="button" class="ds-btn ds-btn-ghost" data-trust-open>Inspect bounded preview</button>
+  </div>`;
+}
+function generateCta(model, routeBase, baseRef, headRef, excludedFiles = []) {
+    const scope = exactScopeFacts(model, excludedFiles);
+    const filesLabel = `${plural(scope.changedFiles, 'file')} changed${model.contextFiles ? ` · ${model.contextFiles} for context` : ''}`;
     const dataBase = baseRef ? ` data-base="${esc(baseRef)}"` : '';
     const dataHead = headRef ? ` data-head="${esc(headRef)}"` : '';
-    return `<section class="ds-step is-intro" data-step-panel="0">
-    <div class="ds-introwrap">
-      <span class="ds-intro-eyebrow">${STORY_MARK}<span>No story yet</span></span>
-      <h1 class="ds-intro-title">Read the diff, or have the agent narrate it</h1>
-      <p class="ds-intro-lede">The real diff is under <b>All files</b>. Keep reading it directly, or generate a story for this exact scope.</p>
-      <div class="ds-intro-facts">
-        <div class="ds-fact"><span class="ds-fact-n">${model.filesChanged}</span><span class="ds-fact-l">${filesLabel}</span></div>
-        <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${model.totalAdd}</span> <span class="ds-stat-del">−${model.totalDel}</span></span><span class="ds-fact-l">lines</span></div>
-      </div>
-      <div class="ds-storygen-card">
+    const excludedOnly = model.filesChanged === 0 && excludedFiles.length > 0;
+    const lede = excludedOnly
+        ? 'This exact scope contains a file too large for the diff DOM. Its bounded preview remains available without loading the full body.'
+        : excludedFiles.length
+            ? `Read the bounded diff under <b>All files</b>. ${excludedFiles.length} ${plural(excludedFiles.length, 'file')} ${excludedFiles.length === 1 ? 'stays' : 'stay'} available separately under <b>Review</b>.`
+            : 'The real diff is under <b>All files</b>. Keep reading it directly, or generate a story for this exact scope.';
+    const storySetup = excludedOnly
+        ? excludedScopeNotice(excludedFiles, false)
+        : `<div class="ds-storygen-card">
         <div class="ds-storygen-head">
           <div>
             <span class="ds-storygen-eyebrow">Story setup</span>
             <strong>Choose how the story should guide your review</strong>
-            <p>Every mode reviews the same selected changes. Depth changes the grouping, context, and explanation—not the coverage.</p>
+            <p>${excludedFiles.length ? `The story covers the ${model.filesChanged} bounded ${plural(model.filesChanged, 'file')} you select. Review the ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} separately.` : 'Every mode reviews the same selected changes. Depth changes the grouping, context, and explanation—not the coverage.'}</p>
           </div>
         </div>
         <div class="ds-storygen-grid">
@@ -744,7 +793,17 @@ function generateCta(model, routeBase, baseRef, headRef) {
           <span class="ds-intro-start-sub" data-storygen-cta-sub>${plural(model.filesChanged, 'file')} selected · gaps are flagged as Unexplained</span>
         </button>
         <p class="ds-storygen-warn" id="storySkillWarn" hidden><span id="storySkillWarnText"></span><button class="ds-storygen-fix" id="storySkillUpdateBtn" type="button">Update skills</button></p>
+      </div>`;
+    return `<section class="ds-step is-intro" data-step-panel="0">
+    <div class="ds-introwrap">
+      <span class="ds-intro-eyebrow">${STORY_MARK}<span>No story yet</span></span>
+      <h1 class="ds-intro-title">${excludedOnly ? 'Large change, lightweight review' : 'Read the diff, or have the agent narrate it'}</h1>
+      <p class="ds-intro-lede">${lede}</p>
+      <div class="ds-intro-facts">
+        <div class="ds-fact"><span class="ds-fact-n">${scope.changedFiles}</span><span class="ds-fact-l">${filesLabel}</span></div>
+        <div class="ds-fact"><span class="ds-fact-n"><span class="ds-stat-add">+${scope.addedLines}</span> <span class="ds-stat-del">−${scope.removedLines}</span></span><span class="ds-fact-l">${scope.hasUnknownLines ? 'known lines · binary counts separate' : 'lines'}</span></div>
       </div>
+      ${storySetup}
     </div>
   </section>`;
 }
@@ -824,13 +883,7 @@ function railFileItem(f, i, depth, meta) {
     const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(test|spec)\.[^.]+$/i.test(f.file);
     const reviewHash = fileReviewHash(f);
     const declarationTitle = f.symbols.length ? ` · Changed: ${f.symbols.slice(0, 2).join(', ')}` : '';
-    const searchCode = f.hunks
-        .flat()
-        .filter((row) => row.type !== 'ctx')
-        .map((row) => row.content)
-        .join(' ')
-        .toLowerCase();
-    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-file-path="${esc(f.file)}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(f.file.toLowerCase())}" data-filter-code="${esc(`${f.symbols.join(' ')} ${searchCode}`)}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}${esc(declarationTitle)}">
+    return `<button class="ds-fileitem${f.untoured ? ' is-untoured' : ''}" data-file-index="${i}" data-file-path="${esc(f.file)}" data-goto-file="${esc(f.file)}" data-review-hash="${reviewHash}" data-filter-path="${esc(`${f.file} ${f.symbols.join(' ')}`.toLowerCase())}" data-filter-status="${f.status}" data-filter-test="${isTest ? '1' : '0'}" data-filter-comments="${meta.comments.has(f.file) ? '1' : '0'}" data-filter-unexplained="${f.untoured ? '1' : '0'}" data-filter-since="${meta.since.has(f.file) ? '1' : '0'}" style="--tree-indent:${depth * 14}px" title="${esc(f.file)} — ${esc(f.kindLabel)}${esc(declarationTitle)}">
     <span class="ds-fileitem-spacer" aria-hidden="true"></span>
     <span class="ds-fileitem-icon k-${kindClass}" aria-hidden="true">${FILE_TREE_FILE}</span>
     <span class="ds-fileitem-path"><span class="ds-fileitem-base">${esc(base || dir)}</span></span>
@@ -974,7 +1027,6 @@ function conceptStepPanel(s, i, total, stepIndexById) {
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
         <div class="ds-concept-heading">
           <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
-          <button class="ds-playstep" data-playstep title="Read this primer aloud" aria-label="Read this primer aloud">${playStepIcon()}</button>
         </div>
         <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${esc(s.title)}</h1>
         <div class="ds-concept-body ds-md">${renderMarkdown(s.body)}</div>
@@ -1002,7 +1054,6 @@ function stepStoryHtml(s, diffRegionId) {
         return `<div class="ds-beatdock is-single">
     <span class="ds-beatdock-count">Review note</span>
     <p class="ds-why-text">${nl(esc(s.why))}</p>
-    <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">${playStepIcon()}</button>
   </div>`;
     return `<div class="ds-beatdock" data-beat-dock>
     <span class="ds-beatdock-count"><b data-beat-current>01</b><span>/ ${String(s.beats.length).padStart(2, '0')}</span></span>
@@ -1010,7 +1061,6 @@ function stepStoryHtml(s, diffRegionId) {
       <div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div>
     </div>
     <span class="ds-beatdock-actions">
-      <button class="ds-playstep" data-playstep title="Read this step aloud" aria-label="Read this step aloud">${playStepIcon()}</button>
       <button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button>
       <button type="button" data-beat-move="1" aria-label="Next review beat">→</button>
     </span>
@@ -1201,10 +1251,10 @@ function authorOf(_c) {
     return 'You';
 }
 // ---- all files ----
-function filePanel(f, i, stepIndexById) {
+function filePanel(f, i, _stepIndexById) {
     const reviewHash = fileReviewHash(f);
-    return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(f.file)}" data-review-hash="${reviewHash}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${i === 0 ? '' : ' hidden'}>
-    ${i === 0 ? renderFilePanelContent(f, stepIndexById) : '<div class="ds-filepanel-loading" data-file-panel-lazy role="status">Loading file review…</div>'}
+    return `<section class="ds-filepanel${f.untoured ? ' is-untoured' : ''}" data-file-panel="${i}" data-file="${esc(f.file)}" data-review-hash="${reviewHash}"${f.kind === 'new' ? ' data-newfile="1"' : ''}${f.kind === 'context' ? ' data-context-file="1"' : ''}${i === 0 ? '' : ' hidden'}>
+    <div class="ds-filepanel-loading" data-file-panel-lazy role="status">Loading file review…</div>
   </section>`;
 }
 /** Inner master/detail panel markup, also served lazily for non-active files. */
@@ -1237,13 +1287,15 @@ export function renderFilePanelContent(f, _stepIndexById) {
         })
             .join('') + gapAfterLast
         : '<div class="ds-diffnote">No diff to show.</div>';
-    // Split is the review-first default. Unified stays immediately available;
-    // split and full-file evidence are fetched only when their panel is mounted.
-    const toggle = f.hasFull
-        ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
-        : f.hunks.length
-            ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button></div>`
-            : '';
+    // Changed files default to Split. A context-only file has no before/after
+    // diff, so Unified is its real evidence and Split must not be offered.
+    const toggle = f.kind === 'context'
+        ? `<div class="ds-modetoggle" role="group" aria-label="File display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>${f.hasFull ? '<button data-mode="full" aria-pressed="false">Full file</button>' : ''}</div>`
+        : f.hasFull
+            ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
+            : f.hunks.length
+                ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button></div>`
+                : '';
     return `<div class="ds-filepanel-head">
       <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(base)}</span></span>
       <span class="ds-flex"></span>
@@ -1252,24 +1304,16 @@ export function renderFilePanelContent(f, _stepIndexById) {
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
-      <div data-diff-inner hidden><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
-      <div data-split-inner><div class="ds-diffnote" role="status">Loading the split view…</div></div>
+      <div data-diff-inner${f.kind === 'context' ? '' : ' hidden'}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-split-inner${f.kind === 'context' ? ' hidden' : ''}><div class="ds-diffnote" role="status">Loading the split view…</div></div>
       <div data-full-inner hidden></div>
     </div>
   `;
 }
 function fileReviewHash(file) {
-    const stableHunks = file.hunks.map((hunk) => hunk.map((row) => ({
-        type: row.type,
-        no: row.no,
-        content: row.content,
-    })));
-    return createHash('sha256')
-        // Story-derived presentation flags are intentionally absent: repairing the
-        // narrative must not clear a review mark when the file diff is unchanged.
-        .update(JSON.stringify([file.status, file.oldFile, file.file, file.hunkRanges, stableHunks]))
-        .digest('hex')
-        .slice(0, 64);
+    // Story-derived presentation flags are intentionally absent: repairing the
+    // narrative must not clear a review mark when the file diff is unchanged.
+    return file.reviewHash;
 }
 function unifiedRow(row, file, oldFile = file, intra) {
     const target = row.no === undefined
@@ -1447,14 +1491,16 @@ function commandPalette() {
   </div>`;
 }
 // ---- trust drawer ----
-function trustDrawer(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
+export function renderTrustDrawer(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
     const clean = !trust.uncovered.length;
     const cards = trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('');
-    const body = storyless
-        ? `<div class="ds-trust-clean">The full bounded diff is available file by file. No story-coverage claim is applied in this view.</div>`
-        : clean
-            ? `<div class="ds-trust-clean">✓ Every changed range in the bounded renderer is fully explained by a step.</div>`
-            : `<div class="ds-trust-section">Unexplained ${plural(trust.uncovered.length, 'change')}</div>${cards}`;
+    const body = trust.pending
+        ? `<div class="ds-trust-clean">Coverage is calculated from lazy file evidence as it is requested. This page does not call an unloaded change “covered.”</div>`
+        : storyless
+            ? `<div class="ds-trust-clean">The full bounded diff is available file by file. No story-coverage claim is applied in this view.</div>`
+            : clean
+                ? `<div class="ds-trust-clean">✓ Every changed range in the bounded renderer is fully explained by a step.</div>`
+                : `<div class="ds-trust-section">Unexplained ${plural(trust.uncovered.length, 'change')}</div>${cards}`;
     const exclusions = excludedFiles.length
         ? `<section class="ds-exclusions" aria-labelledby="ds-exclusions-title">
         <div class="ds-trust-section" id="ds-exclusions-title">Outside the bounded renderer · ${excludedFiles.length}</div>
@@ -1470,7 +1516,7 @@ function trustDrawer(trust, stepIndexById, excludedFiles, indexDivergentFiles, s
         ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join('')}
       </section>`
         : '';
-    return `<div class="ds-drawer-root" id="ds-trust-drawer" hidden>
+    return `<div class="ds-drawer-root" id="ds-trust-drawer" data-trust-pending="${trust.pending ? '1' : '0'}" hidden>
     <div class="ds-drawer-scrim" data-trust-close></div>
     <div class="ds-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-trust-title" tabindex="-1">
       <div class="ds-drawer-head">
@@ -1481,7 +1527,7 @@ function trustDrawer(trust, stepIndexById, excludedFiles, indexDivergentFiles, s
         <button class="ds-drawer-x" data-trust-close title="Close" aria-label="Close trust check">×</button>
       </div>
       <div class="ds-drawer-body">
-        ${storyless ? '' : `<div class="ds-trust-stats">
+        ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
           <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
           <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
         </div>`}

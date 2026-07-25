@@ -207,7 +207,7 @@ test('review dialogs expose complete client-side focus and radio semantics', () 
   assert.match(source, /severity\.addEventListener\('keydown',function\(e\)\{moveComposerRadio\(severity,'\.ds-severity-choice',e\);\}\)/);
   assert.match(source, /ta\.setAttribute\('aria-label','Review note'\)/);
   assert.match(source, /ta\.setAttribute\('aria-label','Reply to '\+BRAND\)/);
-  assert.match(source, /\.ds-concept-heading \.ds-playstep\{[^}]*width:44px;height:44px/);
+  assert.doesNotMatch(source, /ds-playstep/);
 });
 
 test('cover support stays visually quiet beside the compact walkthrough action', () => {

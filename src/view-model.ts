@@ -11,6 +11,7 @@ import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
+import { createHash } from 'node:crypto';
 import type {
   CodeStepKind,
   CodeTourStep,
@@ -20,6 +21,7 @@ import type {
   DiffHunk,
   DiffLine,
   FileStatus,
+  ReviewFileIndexEntry,
   Tour,
   TourStep,
   StepKind,
@@ -142,6 +144,8 @@ export interface FileView {
   hasFull: boolean;
   /** Best-effort changed declarations, used only for navigation/search. */
   symbols: string[];
+  /** Stable identity of the code diff, independent of story coverage state. */
+  reviewHash: string;
 }
 
 export interface UncoveredView {
@@ -156,6 +160,8 @@ export interface TrustView {
   coveredLines: number;
   uncoveredLines: number;
   uncovered: UncoveredView[];
+  /** Initial metadata-only pages have not loaded enough hunk evidence yet. */
+  pending?: boolean;
 }
 
 /** One author-declared distrust spot, resolved against the ordered reading path. */
@@ -184,12 +190,32 @@ export interface ReviewModel {
   storyFilesChanged: number;
 }
 
+export interface BuildReviewModelOptions {
+  storyless?: boolean;
+  /**
+   * Detail is opt-out for non-page callers. The review page passes an explicit
+   * set so off-screen story steps do not read and shape their source files.
+   */
+  detailedStepIndexes?: ReadonlySet<number>;
+  /**
+   * File summaries remain available to navigation while hunk rows are built
+   * only for the requested detail panel.
+   */
+  detailedFilePaths?: ReadonlySet<string>;
+  /** Lazy detail endpoints do not need the trust drawer's code excerpts. */
+  includeTrustRows?: boolean;
+  /** Bounded changed-file summaries used before individual diffs are loaded. */
+  fileIndex?: readonly ReviewFileIndexEntry[];
+  /** Never present unloaded coverage evidence as a clean result. */
+  trustPending?: boolean;
+}
+
 export function buildReviewModel(
   repo: string,
   tour: Tour,
   files: DiffFile[],
   headRef?: string,
-  opts?: { storyless?: boolean },
+  opts?: BuildReviewModelOptions,
 ): ReviewModel {
   const steps = orderedSteps(tour);
   const byId = new Map(steps.map((s) => [s.id, s]));
@@ -218,9 +244,18 @@ export function buildReviewModel(
     if (reason && !hotspotByStep.has(spot.step)) hotspotByStep.set(spot.step, reason);
   }
 
-  const stepViews = steps.map((step) =>
+  const stepViews = steps.map((step, index) =>
     isCodeStep(step)
-      ? buildCodeStep(repo, step, files, byId, steps.length, headRef, hotspotByStep.get(step.id))
+      ? buildCodeStep(
+          repo,
+          step,
+          files,
+          byId,
+          steps.length,
+          headRef,
+          hotspotByStep.get(step.id),
+          opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index),
+        )
       : buildConceptStep(step, byId),
   );
   const hotspots: HotspotView[] = steps.flatMap((step, index) => {
@@ -229,8 +264,18 @@ export function buildReviewModel(
       ? [{ stepId: step.id, panelIndex: index + 1, order: step.order, title: step.title, reason }]
       : [];
   });
-  const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef);
-  const trust = buildTrust(coverageFiles, uncovered, stepByFile);
+  const fileViews = buildFiles(
+    repo,
+    codeSteps,
+    files,
+    stepByFile,
+    uncoveredByFile,
+    headRef,
+    opts?.detailedFilePaths,
+    opts?.fileIndex,
+  );
+  const trust = buildTrust(coverageFiles, uncovered, stepByFile, opts?.includeTrustRows !== false);
+  if (opts?.trustPending) trust.pending = true;
   const changedFileViews = fileViews.filter((file) => file.kind !== 'context');
   const storyPaths = new Set(coverageFiles.map((file) => file.newPath));
   const storyFileViews = changedFileViews.filter((file) => storyPaths.has(file.file));
@@ -266,8 +311,9 @@ function buildCodeStep(
   total: number,
   headRef?: string,
   hotspot?: string,
+  detailed = true,
 ): CodeStepView {
-  const { blocks, note } = stepBlocks(repo, step, files, headRef);
+  const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef) : { blocks: [] };
   const diffFile = files.find((f) => f.newPath === step.file);
   const viewport = stepViewport(step);
   const highlights = stepHighlights(step);
@@ -447,33 +493,52 @@ function buildFiles(
   stepByFile: Map<string, CodeTourStep>,
   uncoveredByFile: Map<string, Array<[number, number]>>,
   headRef?: string,
+  detailedFilePaths?: ReadonlySet<string>,
+  fileIndex?: readonly ReviewFileIndexEntry[],
 ): FileView[] {
   const views: FileView[] = [];
   const seen = new Set<string>();
 
-  for (const file of files) {
-    if (!file.hunks.length) continue; // pure metadata (e.g. mode change) — skip
-    seen.add(file.newPath);
-    const uncovered = uncoveredByFile.get(file.newPath) ?? [];
-    const hunks = file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered)));
-    const add = countLines(file, 'add');
-    const del = countLines(file, 'del');
-    const step = stepByFile.get(file.newPath);
+  const summaries = fileIndex ?? files.map((file): ReviewFileIndexEntry => ({
+    oldPath: file.oldPath,
+    path: file.newPath,
+    status: file.status,
+    added: countLines(file, 'add'),
+    removed: countLines(file, 'del'),
+    byteSize: null,
+    binary: false,
+    large: false,
+    generated: false,
+    metadataOnly: !file.hunks.length,
+    reviewHash: diffFileReviewHash(file),
+  }));
+  const diffByPath = new Map(files.map((file) => [file.newPath, file]));
+
+  for (const summary of summaries) {
+    const file = diffByPath.get(summary.path);
+    seen.add(summary.path);
+    const uncovered = uncoveredByFile.get(summary.path) ?? [];
+    const hunks =
+      file && (detailedFilePaths === undefined || detailedFilePaths.has(summary.path))
+        ? file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered)))
+        : [];
+    const step = stepByFile.get(summary.path);
     views.push({
-      file: file.newPath,
-      oldFile: file.oldPath,
-      status: file.status,
-      kind: file.status === 'added' ? 'new' : 'changed',
-      kindLabel: file.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
-      add,
-      del,
+      file: summary.path,
+      oldFile: summary.oldPath,
+      status: summary.status,
+      kind: summary.status === 'added' ? 'new' : 'changed',
+      kindLabel: summary.status === 'added' ? FILE_KIND_LABEL.new : FILE_KIND_LABEL.changed,
+      add: summary.added ?? 0,
+      del: summary.removed ?? 0,
       untoured: uncovered.length,
       stepId: step?.id,
       stepOrder: step?.order,
       hunks,
-      hunkRanges: file.hunks.map(hunkNewRange),
-      hasFull: file.status !== 'deleted',
-      symbols: changedSymbols(file),
+      hunkRanges: file?.hunks.map(hunkNewRange) ?? [],
+      hasFull: summary.status !== 'deleted',
+      symbols: file ? changedSymbols(file) : [],
+      reviewHash: summary.reviewHash,
     });
   }
 
@@ -481,7 +546,10 @@ function buildFiles(
   for (const step of steps) {
     if (step.kind !== 'context' || seen.has(step.file)) continue;
     seen.add(step.file);
-    const r = readFileRange(repo, step.file, step.range[0], step.range[1], headRef);
+    const detailed = detailedFilePaths === undefined || detailedFilePaths.has(step.file);
+    const r = detailed
+      ? readFileRange(repo, step.file, step.range[0], step.range[1], headRef)
+      : null;
     const rows = r ? r.lines.map((c, i) => ({ type: 'ctx' as const, no: r.startLine + i, content: c })) : [];
     views.push({
       file: step.file,
@@ -496,12 +564,40 @@ function buildFiles(
       stepOrder: step.order,
       hunks: rows.length ? [rows] : [],
       hunkRanges: r ? [[r.startLine, r.startLine + rows.length - 1]] : [],
-      hasFull: r !== null,
+      hasFull: detailed ? r !== null : true,
       symbols: [],
+      reviewHash: contextFileReviewHash(step.file, rows),
     });
   }
 
   return views.sort(byStepOrderThenPath);
+}
+
+function diffFileReviewHash(file: DiffFile): string {
+  const stableHunks = file.hunks.map((hunk) =>
+    hunk.lines.map((line) => ({
+      type: line.type,
+      no: line.type === 'del' ? line.oldNo : line.newNo,
+      content: line.content,
+    })),
+  );
+  return createHash('sha256')
+    .update(JSON.stringify([
+      file.status,
+      file.oldPath,
+      file.newPath,
+      file.hunks.map(hunkNewRange),
+      stableHunks,
+    ]))
+    .digest('hex')
+    .slice(0, 64);
+}
+
+function contextFileReviewHash(file: string, rows: UnifiedRow[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify(['modified', file, file, rows.length ? [[rows[0].no, rows[rows.length - 1].no]] : [], [rows]]))
+    .digest('hex')
+    .slice(0, 64);
 }
 
 /** Conservative declaration extraction for findability, never correctness claims. */
@@ -524,6 +620,7 @@ function buildTrust(
   files: DiffFile[],
   uncovered: ReturnType<typeof computeCoverage>['uncovered'],
   stepByFile: Map<string, CodeTourStep>,
+  includeRows: boolean,
 ): TrustView {
   const byPath = new Map(files.map((f) => [f.newPath, f]));
   let totalAdd = 0;
@@ -532,7 +629,7 @@ function buildTrust(
   let uncoveredAdds = 0;
   const views: UncoveredView[] = uncovered.map((u) => {
     const file = byPath.get(u.file);
-    const rows = file
+    const rows = includeRows && file
       ? file.hunks
           .filter((h) => rangesOverlap(hunkNewRange(h), u.range))
           .flatMap((h) => h.lines)

@@ -1,10 +1,25 @@
 // Thin wrapper over the `git` CLI. No external deps — just child_process.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readlinkSync,
+  readSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_CONTEXT_LINES } from './config.js';
-import { reviewExclusionMetadata, type ReviewExclusionMetadata } from './noise.js';
+import {
+  isGeneratedPath,
+  REVIEW_NOISE_MAX_BYTES,
+  REVIEW_NOISE_MAX_LINES,
+  reviewExclusionMetadata,
+  type ReviewExclusionMetadata,
+} from './noise.js';
+import type { FileStatus, ReviewFileIndexEntry } from './types.js';
 
 const APP_DATA_PATHSPEC = ':(exclude).diffstory/**';
 
@@ -145,6 +160,232 @@ export function getDiff(repo: string, base: string, head?: string): string {
   return joinDiffs([tracked, staged, ...untracked]);
 }
 
+interface ChangedPathMetadata {
+  oldPath: string;
+  path: string;
+  status: FileStatus;
+}
+
+/**
+ * Build the initial review file list without generating or parsing unified
+ * diff bodies. Git may inspect changed files to calculate numstat and object
+ * ids, but Node only receives bounded metadata regardless of changed-byte size.
+ */
+export function reviewFileIndex(repo: string, base: string, head?: string): ReviewFileIndexEntry[] {
+  const entries = new Map<string, ChangedPathMetadata>();
+  for (const file of nameStatus(repo, base, head)) entries.set(file.path, file);
+
+  if (!head) {
+    for (const path of stagedOnlyReviewPaths(repo, base)) {
+      for (const file of nameStatus(repo, base, undefined, [path], true)) {
+        if (!entries.has(file.path)) entries.set(file.path, file);
+      }
+    }
+    const indexDivergent = new Set(stagedWorktreeDivergentFiles(repo, base));
+    for (const path of untrackedFiles(repo)) {
+      if (!indexDivergent.has(path)) {
+        entries.set(path, { oldPath: '/dev/null', path, status: 'added' });
+      }
+    }
+  }
+
+  const counts = new Map(numstat(repo, base, head).map((file) => [file.path, file]));
+  const changedFiles = [...entries.values()];
+  const paths = changedFiles.map((file) => file.path);
+  const resolvedBase = tryGit(repo, ['rev-parse', '--verify', `${base}^{tree}`])?.trim() ?? base;
+  const resolvedHead = head
+    ? tryGit(repo, ['rev-parse', '--verify', `${head}^{tree}`])?.trim() ?? head
+    : 'working-tree';
+  const workingIdentities = head ? new Map<string, string>() : workingPathIdentities(repo, paths);
+  const indexOids = head ? new Map<string, string>() : indexBlobOids(repo, paths);
+  return changedFiles
+    .map((file) => {
+      const count = counts.get(file.path) ?? { added: null, removed: null };
+      const changedLines =
+        count.added == null || count.removed == null ? null : count.added + count.removed;
+      const byteSize = reviewPathByteSize(repo, base, head, file.path);
+      return {
+        ...file,
+        added: count.added,
+        removed: count.removed,
+        byteSize,
+        binary: count.added == null || count.removed == null,
+        large:
+          (changedLines != null && changedLines >= REVIEW_NOISE_MAX_LINES) ||
+          (byteSize != null && byteSize >= REVIEW_NOISE_MAX_BYTES),
+        generated: isGeneratedPath(file.path),
+        metadataOnly: changedLines === 0,
+        reviewHash: reviewFileIndexHash(
+          file,
+          resolvedBase,
+          resolvedHead,
+          indexOids.get(file.path),
+          workingIdentities.get(file.path),
+        ),
+      };
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * Generate the unified diff for exactly one path. This is the content boundary
+ * used by lazy file and story-step endpoints; initial-page code must use
+ * reviewFileIndex() instead.
+ */
+export function getFileDiff(repo: string, base: string, path: string, head?: string): string {
+  const args = [
+    'diff',
+    '--no-color',
+    '--no-ext-diff',
+    `-U${DIFF_CONTEXT_LINES}`,
+    base,
+  ];
+  if (head) args.push(head);
+  args.push('--', literalPathspec(path));
+  const tracked = git(repo, args);
+  if (head || tracked) return tracked;
+
+  if (stagedOnlyReviewPaths(repo, base).includes(path)) {
+    return git(repo, [
+      'diff',
+      '--cached',
+      '--no-color',
+      '--no-ext-diff',
+      `-U${DIFF_CONTEXT_LINES}`,
+      base,
+      '--',
+      literalPathspec(path),
+    ]);
+  }
+  if (untrackedFiles(repo).includes(path)) return untrackedFileDiff(repo, path);
+  return '';
+}
+
+function nameStatus(
+  repo: string,
+  base: string,
+  head?: string,
+  onlyPaths: string[] = [],
+  cached = false,
+): ChangedPathMetadata[] {
+  const args = ['diff'];
+  if (cached) args.push('--cached');
+  args.push('--name-status', '-z', '--no-renames', base);
+  if (head) args.push(head);
+  args.push('--', ...(onlyPaths.length ? onlyPaths.map(literalPathspec) : [APP_DATA_PATHSPEC]));
+  const out = tryGit(repo, args);
+  if (!out) return [];
+  const fields = out.split('\0').filter(Boolean);
+  const files: ChangedPathMetadata[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const code = fields[i]![0];
+    const path = fields[i + 1]!;
+    if (isAppDataPath(path)) continue;
+    const status: FileStatus =
+      code === 'A' ? 'added' : code === 'D' ? 'deleted' : code === 'R' ? 'renamed' : 'modified';
+    files.push({
+      oldPath: status === 'added' ? '/dev/null' : path,
+      path,
+      status,
+    });
+  }
+  return files;
+}
+
+function reviewFileIndexHash(
+  file: ChangedPathMetadata,
+  resolvedBase: string,
+  resolvedHead: string,
+  indexOid: string | undefined,
+  workingIdentity: string | undefined,
+): string {
+  const hash = createHash('sha256');
+  hash.update('diffstory-file-index-v1\0');
+  hash.update(file.oldPath);
+  hash.update('\0');
+  hash.update(file.path);
+  hash.update('\0');
+  hash.update(file.status);
+  hash.update('\0');
+  hash.update(resolvedBase);
+  hash.update('\0');
+  hash.update(resolvedHead);
+  hash.update('\0');
+  if (resolvedHead !== 'working-tree') {
+    hash.update('fixed-ref');
+  } else {
+    hash.update(indexOid ?? 'missing-index');
+    hash.update('\0');
+    hash.update(workingIdentity ?? 'missing-worktree');
+  }
+  return hash.digest('hex');
+}
+
+function indexBlobOids(repo: string, paths: string[]): Map<string, string> {
+  const identities = new Map<string, string>();
+  for (let offset = 0; offset < paths.length; offset += 500) {
+    const batch = paths.slice(offset, offset + 500);
+    const out = tryGit(repo, [
+      'ls-files',
+      '--stage',
+      '-z',
+      '--',
+      ...batch.map(literalPathspec),
+    ]);
+    for (const entry of out?.split('\0').filter(Boolean) ?? []) {
+      const match = entry.match(/^\d+ ([0-9a-f]+) 0\t([\s\S]+)$/);
+      if (match) identities.set(match[2], match[1]);
+    }
+  }
+  return identities;
+}
+
+function workingPathIdentities(repo: string, paths: string[]): Map<string, string> {
+  const identities = new Map<string, string>();
+  const regular: string[] = [];
+  for (const path of paths) {
+    const abs = join(repo, path);
+    if (!existsSync(abs)) {
+      identities.set(path, 'missing');
+      continue;
+    }
+    const stat = lstatSync(abs);
+    if (stat.isSymbolicLink()) identities.set(path, `symlink:${readlinkSync(abs)}`);
+    else if (stat.isFile()) regular.push(path);
+    else identities.set(path, `special:${stat.mode & 0o170000}`);
+  }
+  for (let offset = 0; offset < regular.length; offset += 500) {
+    const batch = regular.slice(offset, offset + 500);
+    const out = tryGit(repo, ['hash-object', '--no-filters', '--', ...batch]);
+    const oids = out?.trim().split('\n') ?? [];
+    for (let i = 0; i < batch.length; i++) {
+      identities.set(batch[i], oids[i] ? `blob:${oids[i]}` : 'unreadable');
+    }
+  }
+  return identities;
+}
+
+function reviewPathByteSize(
+  repo: string,
+  base: string,
+  head: string | undefined,
+  path: string,
+): number | null {
+  if (!head) {
+    try {
+      const stat = lstatSync(join(repo, path));
+      if (stat.isFile() || stat.isSymbolicLink()) return stat.size;
+    } catch {
+      // Deleted working-tree paths fall through to their base object.
+    }
+  }
+  const ref = head ?? base;
+  const size = tryGit(repo, ['cat-file', '-s', `${ref}:${path}`])?.trim();
+  if (!size || !/^\d+$/.test(size)) return null;
+  const parsed = Number(size);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 /**
  * Paths omitted from the bounded default diff. Kept for compatibility; callers
  * that show review scope should use excludedReviewFiles() so the omission and
@@ -161,7 +402,14 @@ export function noiseFiles(repo: string, base: string, head?: string): string[] 
  */
 export function excludedReviewFiles(repo: string, base: string, head?: string): ReviewExclusionMetadata[] {
   return numstat(repo, base, head)
-    .map((file) => reviewExclusionMetadata(file.path, file.added, file.removed))
+    .map((file) =>
+      reviewExclusionMetadata(
+        file.path,
+        file.added,
+        file.removed,
+        reviewPathByteSize(repo, base, head, file.path),
+      ),
+    )
     .filter((file): file is ReviewExclusionMetadata => file !== null)
     .sort((a, b) => a.path.localeCompare(b.path));
 }
@@ -237,9 +485,39 @@ export function reviewChangeFingerprint(repo: string, base: string, head?: strin
         ...untrackedFiles(repo),
       ]),
     ].sort();
-    for (const path of paths) updateWorkingPathFingerprint(repo, path, hash);
+    const identities = workingPathIdentities(repo, paths);
+    for (const path of paths) updateWorkingPathFingerprint(path, identities.get(path), hash);
   }
 
+  return hash.digest('hex');
+}
+
+/**
+ * Cheap identity for the set of live review sources. Existing-file byte
+ * changes are caught by per-path stat signatures; this companion catches new
+ * paths, staging transitions, and moving refs without hashing file bodies.
+ */
+export function reviewSourceMetadataFingerprint(repo: string, base: string, head?: string): string {
+  const hash = createHash('sha256');
+  hash.update(tryGit(repo, ['rev-parse', '--verify', base])?.trim() ?? base);
+  hash.update('\0');
+  if (head) {
+    hash.update(tryGit(repo, ['rev-parse', '--verify', head])?.trim() ?? head);
+  } else {
+    hash.update(tryGit(repo, ['rev-parse', '--verify', 'HEAD'])?.trim() ?? 'no-head');
+    hash.update('\0');
+    hash.update(
+      tryGit(repo, [
+        'status',
+        '--porcelain=v1',
+        '-z',
+        '--untracked-files=all',
+        '--',
+        '.',
+        APP_DATA_PATHSPEC,
+      ]) ?? '',
+    );
+  }
   return hash.digest('hex');
 }
 
@@ -256,32 +534,16 @@ function updateFingerprintPart(
   hash.update('\0');
 }
 
-function updateWorkingPathFingerprint(repo: string, path: string, hash: ReturnType<typeof createHash>): void {
+function updateWorkingPathFingerprint(
+  path: string,
+  identity: string | undefined,
+  hash: ReturnType<typeof createHash>,
+): void {
   hash.update('path\0');
   hash.update(path);
   hash.update('\0');
-  const abs = join(repo, path);
-  if (!existsSync(abs)) {
-    hash.update('missing\0');
-    return;
-  }
-  const stat = lstatSync(abs);
-  hash.update(`${stat.mode & 0o7777}\0`);
-  if (stat.isSymbolicLink()) {
-    hash.update('symlink\0');
-    hash.update(readlinkSync(abs));
-    hash.update('\0');
-    return;
-  }
-  if (!stat.isFile()) {
-    // Submodules and other special entries are already represented by the raw
-    // Git record. Including their filesystem type prevents accidental aliasing.
-    hash.update(`special:${stat.mode & 0o170000}\0`);
-    return;
-  }
-  const oid = tryGit(repo, ['hash-object', '--no-filters', '--', path])?.trim();
-  if (oid) hash.update(`blob:${oid}\0`);
-  else hash.update(readFileSync(abs));
+  hash.update(identity ?? 'missing');
+  hash.update('\0');
 }
 
 /** Git pathspecs that subtract the given paths from a diff (`:(exclude)<path>`). */
@@ -596,15 +858,30 @@ function untrackedNumstat(repo: string): Array<{ path: string; added: number | n
 }
 
 function countFileLines(repo: string, path: string): number | null {
+  let fd: number | null = null;
   try {
-    const bytes = readFileSync(join(repo, path));
-    if (bytes.includes(0)) return null;
-    if (bytes.length === 0) return 0;
+    fd = openSync(join(repo, path), 'r');
+    const bytes = Buffer.allocUnsafe(64 * 1024);
+    let totalBytes = 0;
     let lines = 0;
-    for (const byte of bytes) if (byte === 10) lines++;
-    return bytes[bytes.length - 1] === 10 ? lines : lines + 1;
+    let lastByte = -1;
+    while (true) {
+      const read = readSync(fd, bytes, 0, bytes.length, null);
+      if (read === 0) break;
+      totalBytes += read;
+      for (let i = 0; i < read; i++) {
+        const byte = bytes[i]!;
+        if (byte === 0) return null;
+        if (byte === 10) lines++;
+        lastByte = byte;
+      }
+    }
+    if (totalBytes === 0) return 0;
+    return lastByte === 10 ? lines : lines + 1;
   } catch {
     return null;
+  } finally {
+    if (fd != null) closeSync(fd);
   }
 }
 
@@ -619,12 +896,98 @@ export function readFileRange(
   end: number,
   ref?: string,
 ): { lines: string[]; startLine: number } | null {
-  const text = readFileText(repo, file, ref);
-  if (text == null) return null;
-  const all = text.split('\n');
+  if (ref) {
+    const text = readFileText(repo, file, ref);
+    if (text == null) return null;
+    const all = text.split('\n');
+    const from = Math.max(1, start);
+    const to = Math.min(all.length, Math.max(from, end));
+    return { lines: all.slice(from - 1, to), startLine: from };
+  }
+  return readWorkingFileRange(repo, file, start, end);
+}
+
+const RANGE_READ_CHUNK_BYTES = 64 * 1024;
+const RANGE_READ_MAX_LINE_BYTES = 256 * 1024;
+const RANGE_READ_MAX_RESULT_BYTES = 2 * 1024 * 1024;
+
+function readWorkingFileRange(
+  repo: string,
+  file: string,
+  start: number,
+  end: number,
+): { lines: string[]; startLine: number } | null {
   const from = Math.max(1, start);
-  const to = Math.min(all.length, Math.max(from, end));
-  return { lines: all.slice(from - 1, to), startLine: from };
+  const to = Math.max(from, end);
+  let fd: number | null = null;
+  try {
+    fd = openSync(join(repo, file), 'r');
+    const chunk = Buffer.allocUnsafe(RANGE_READ_CHUNK_BYTES);
+    const lines: string[] = [];
+    let lineNo = 1;
+    let lineParts: Buffer[] = [];
+    let lineBytes = 0;
+    let resultBytes = 0;
+    let lineTruncated = false;
+    let sawBytes = false;
+    let endedWithNewline = false;
+
+    const append = (part: Buffer): void => {
+      if (lineNo < from || lineNo > to || resultBytes >= RANGE_READ_MAX_RESULT_BYTES) return;
+      const available = Math.min(
+        RANGE_READ_MAX_LINE_BYTES - lineBytes,
+        RANGE_READ_MAX_RESULT_BYTES - resultBytes,
+      );
+      if (available <= 0) {
+        lineTruncated = true;
+        return;
+      }
+      const kept = part.length > available ? part.subarray(0, available) : part;
+      if (kept.length) {
+        lineParts.push(Buffer.from(kept));
+        lineBytes += kept.length;
+        resultBytes += kept.length;
+      }
+      if (kept.length < part.length) lineTruncated = true;
+    };
+    const finishLine = (): void => {
+      if (lineNo >= from && lineNo <= to) {
+        let text = Buffer.concat(lineParts, lineBytes).toString('utf8');
+        if (text.endsWith('\r')) text = text.slice(0, -1);
+        if (lineTruncated) text += ' … [line truncated]';
+        lines.push(text);
+      }
+      lineNo++;
+      lineParts = [];
+      lineBytes = 0;
+      lineTruncated = false;
+    };
+
+    while (lineNo <= to) {
+      const read = readSync(fd, chunk, 0, chunk.length, null);
+      if (read === 0) break;
+      sawBytes = true;
+      let offset = 0;
+      while (offset < read && lineNo <= to) {
+        const newline = chunk.indexOf(10, offset);
+        if (newline < 0 || newline >= read) {
+          append(chunk.subarray(offset, read));
+          endedWithNewline = false;
+          break;
+        }
+        append(chunk.subarray(offset, newline));
+        finishLine();
+        endedWithNewline = true;
+        offset = newline + 1;
+      }
+    }
+    if (lineNo <= to && (lineParts.length || !sawBytes || endedWithNewline)) finishLine();
+    return { lines, startLine: from };
+  } catch {
+    return null;
+  } finally {
+    if (fd != null) closeSync(fd);
+  }
 }
 
 /**

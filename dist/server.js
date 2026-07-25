@@ -4,11 +4,11 @@
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { loadTour, validateGeneratedConceptSteps, validateGeneratedTour } from './tour.js';
-import { isGitRepo, resolveBase, getDiff, describeBase, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, stagedWorktreeDivergentFiles, numstat, } from './git.js';
+import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGeneratedTour } from './tour.js';
+import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, renderTrustDrawer, } from './render.js';
 import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
@@ -20,7 +20,7 @@ import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.
 import { buildReviewModel } from './view-model.js';
 import { loadComments, loadCommentsWithHealth, addComment, deleteComment, setCommentStatus, appendUserMessage, InvalidCommentStoreError, } from './comments.js';
 import { commentsPath, resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
-import { isCodeStep } from './types.js';
+import { isCodeStep, } from './types.js';
 import { availableAgents, streamAgent, addressPrompt, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, resumedCodexTaskMatches, storyRepairPrompt, } from './agent.js';
 import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent, observedPhase, phaseRank, noteEventsFromText, createFileEnricher, } from './progress.js';
 import { skillStatus, updateSkills } from './repo-setup.js';
@@ -235,6 +235,9 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
         if (method === 'POST' && url.pathname === '/api/aloud/speak') {
             return readBody(req, res, (body) => runAloudSpeak(res, aloud, body));
         }
+        if (method === 'POST' && url.pathname === '/api/aloud/prepare') {
+            return readBody(req, res, (body) => runAloudPrepare(res, aloud, body));
+        }
         if (method === 'POST' && url.pathname === '/api/aloud/control') {
             return readBody(req, res, (body) => runAloudControl(res, aloud, body));
         }
@@ -356,7 +359,7 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
                 if (!page.ok)
                     return sendReviewPageConflict(res, page.error);
                 const allowed = new Set([
-                    ...page.files.map((candidate) => candidate.newPath),
+                    ...boundedReviewIndex(page.fileIndex).map((candidate) => candidate.path),
                     ...(page.storyless ? [] : page.tour.steps.filter(isCodeStep).map((step) => step.file)),
                 ]);
                 if (!allowed.has(file))
@@ -486,6 +489,26 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
             return sendLeasedHtml(res, session, page, renderStoryStepResponse(page, url.searchParams.get('index') ?? ''));
+        }
+        if (method === 'GET' && url.pathname === '/api/review/file-search') {
+            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            if (!page.ok)
+                return sendReviewPageConflict(res, page.error);
+            const query = (url.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 120);
+            if (query.length < 2)
+                return sendJson(res, 200, { query, files: [] });
+            const matches = boundedReviewIndex(page.fileIndex)
+                .map((entry) => materializePageFile(page, entry.path))
+                .filter((file) => !!file)
+                .filter((file) => file.hunks.some((hunk) => hunk.lines.some((line) => line.type !== 'ctx' && line.content.toLowerCase().includes(query))))
+                .map((file) => file.newPath);
+            return sendJson(res, 200, { query, files: matches });
+        }
+        if (method === 'GET' && url.pathname === '/api/review/trust') {
+            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            if (!page.ok)
+                return sendReviewPageConflict(res, page.error);
+            return sendLeasedHtml(res, session, page, renderTrustResponse(page));
         }
         if (method === 'GET' && url.pathname === '/api/review/excluded-file') {
             const page = validateReviewPageLease(session, url.searchParams.get('page'));
@@ -766,10 +789,9 @@ function diffScreen(session, params) {
     session.base = scope.base;
     session.head = scope.head;
     const repo = session.repo;
-    const data = sessionReviewData(session);
-    const { base, head, diff, files: fullFiles } = data;
-    const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles, data.changeFingerprint);
-    const files = fullFiles;
+    const data = sessionReviewIndex(session);
+    const { base, head, fileIndex } = data;
+    const reviewState = reviewStateSummary(repo, base, head, '', [], data.changeFingerprint);
     const tour = { version: 1, title: '', summary: '', steps: [], base };
     const storyPath = selectedStoryPath(session);
     const pageLease = issueReviewPageLease(session, {
@@ -782,12 +804,14 @@ function diffScreen(session, params) {
         storyIdentity: reviewStoryIdentity(storyPath, tour, true),
         storyPath,
         storyFingerprint: storyFileFingerprint(storyPath),
-        fileFingerprints: reviewFileFingerprints(repo, head, files, tour, true),
+        fileFingerprints: reviewIndexFingerprints(fileIndex, tour, true, data.changeFingerprint),
     });
+    cacheReviewPageSnapshot(pageLease.token, { tour, base, head, fileIndex }, true, reviewPageRaceSignature(pageLease));
     return renderPage({
         repo,
         tour,
-        files,
+        files: [],
+        fileIndex: boundedReviewIndex(fileIndex),
         baseLabel: describeBase(repo, base),
         headRef: head,
         comments: loadComments(repo),
@@ -803,6 +827,78 @@ function diffScreen(session, params) {
 /** The recents list, each entry enriched with its current repo state for the picker. */
 function listRecentRepos(home) {
     return loadRecents(home).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
+}
+// Lazy evidence must reuse the immutable snapshot that produced its page.
+// Re-reading and parsing the complete diff for one off-screen panel defeats the
+// lazy boundary and makes every click scale with total change size.
+const reviewPageSnapshots = new Map();
+/**
+ * Capture the initial review from bounded Git metadata only. This deliberately
+ * does not call getDiff() or parseUnifiedDiff(); exact file bodies belong to
+ * the lazy detail boundary.
+ */
+function sessionReviewIndex(session, requireSelectedStory = false) {
+    if (!session.repo)
+        throw new Error('No repo is open.');
+    const repo = session.repo;
+    let tour = { version: 1, title: '', summary: '', steps: [] };
+    if (session.selectedStory !== null) {
+        try {
+            tour = loadTour(selectedStoryPath(session));
+        }
+        catch (error) {
+            if (requireSelectedStory)
+                throw error;
+        }
+    }
+    const sessionHasScope = session.base !== undefined || session.head !== undefined;
+    let base = resolveBase(repo, session.base ?? tour.base);
+    let head = session.head ?? tour.head;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const before = reviewChangeFingerprint(repo, base, head);
+        let fileIndex = reviewFileIndex(repo, base, head);
+        if (!sessionHasScope &&
+            tour.base === 'HEAD' &&
+            head === undefined &&
+            fileIndex.length === 0 &&
+            !isDirty(repo)) {
+            base = hasParentCommit(repo) ? 'HEAD~1' : emptyTree(repo);
+            head = 'HEAD';
+            continue;
+        }
+        const confirmedFingerprint = reviewChangeFingerprint(repo, base, head);
+        if (confirmedFingerprint === before) {
+            return { tour, base, head, fileIndex, changeFingerprint: confirmedFingerprint };
+        }
+    }
+    throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
+}
+function reviewIndexFingerprints(fileIndex, tour, storyless, changeFingerprint) {
+    const fingerprints = Object.create(null);
+    for (const file of fileIndex)
+        fingerprints[file.path] = file.reviewHash;
+    if (!storyless) {
+        // Context-only paths are live evidence too. Using the stricter whole-change
+        // identity is safe: any concurrent change invalidates their lazy request.
+        for (const step of tour.steps) {
+            if (isCodeStep(step) && !fingerprints[step.file]) {
+                fingerprints[step.file] = changeFingerprint;
+            }
+        }
+    }
+    return fingerprints;
+}
+function boundedReviewIndex(fileIndex) {
+    return fileIndex.filter((file) => !file.binary && !file.large && !file.generated && !file.metadataOnly);
+}
+function cacheReviewPageSnapshot(token, data, storyless, sourceSignature) {
+    reviewPageSnapshots.set(token, { ...data, storyless, sourceSignature });
+    while (reviewPageSnapshots.size > 16) {
+        const oldest = reviewPageSnapshots.keys().next().value;
+        if (!oldest)
+            break;
+        reviewPageSnapshots.delete(oldest);
+    }
 }
 function reviewDiff(repo, session, tour) {
     const sessionHasScope = session.base !== undefined || session.head !== undefined;
@@ -827,10 +923,9 @@ function loadReview(session) {
 }
 function renderReview(session) {
     const repo = session.repo;
-    const data = sessionReviewData(session, true);
-    const { tour, base, head, files: fullFiles, diff } = data;
-    const reviewState = reviewStateSummary(repo, base, head, diff, fullFiles, data.changeFingerprint);
-    const files = fullFiles;
+    const data = sessionReviewIndex(session, true);
+    const { tour, base, head, fileIndex } = data;
+    const reviewState = reviewStateSummary(repo, base, head, '', [], data.changeFingerprint);
     const storyDrift = tour.storySnapshot
         ? storyDriftView(inspectStoryDrift({
             repo,
@@ -838,11 +933,6 @@ function renderReview(session) {
             expected: storyDriftBinding(base, head, tour),
         }))
         : undefined;
-    const storyFreshness = !tour.diffFingerprint
-        ? 'unverified'
-        : diffFingerprint(diff) === tour.diffFingerprint
-            ? 'current'
-            : 'unverified';
     const storyPath = selectedStoryPath(session);
     const pageLease = issueReviewPageLease(session, {
         repo,
@@ -854,20 +944,21 @@ function renderReview(session) {
         storyIdentity: reviewStoryIdentity(storyPath, tour, false),
         storyPath,
         storyFingerprint: storyFileFingerprint(storyPath),
-        fileFingerprints: reviewFileFingerprints(repo, head, files, tour, false),
+        fileFingerprints: reviewIndexFingerprints(fileIndex, tour, false, data.changeFingerprint),
     });
+    cacheReviewPageSnapshot(pageLease.token, { tour, base, head, fileIndex }, false, reviewPageRaceSignature(pageLease));
     return renderPage({
         repo,
         routeBase: repoRouteBase(repo),
         repoName: basename(repo),
         tour,
-        files,
+        files: [],
+        fileIndex: boundedReviewIndex(fileIndex),
         baseLabel: describeBase(repo, base),
         headRef: head,
         comments: loadComments(repo),
         reviewState,
         reviewPageToken: pageLease.token,
-        storyFreshness,
         storyDrift,
         stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
         excludedFiles: excludedReviewFiles(repo, base, head),
@@ -902,20 +993,58 @@ function readSessionReviewData(session, requireSelectedStory = false) {
 /** Read diff evidence and its full-change fingerprint as one optimistic
  * snapshot. A changing working tree is retried; it is never paired with a
  * fingerprint from a different repository state. */
+function sessionReviewScope(session, requireSelectedStory) {
+    const repo = session.repo;
+    if (session.selectedStory !== null) {
+        try {
+            const tour = loadTour(selectedStoryPath(session));
+            return {
+                base: resolveBase(repo, session.base ?? tour.base),
+                head: session.head ?? tour.head,
+            };
+        }
+        catch (error) {
+            if (requireSelectedStory)
+                throw error;
+        }
+    }
+    return { base: resolveBase(repo, session.base), head: session.head };
+}
 function sessionReviewData(session, requireSelectedStory = false) {
     if (!session.repo)
         throw new Error('No repo is open.');
     const repo = session.repo;
+    let expectedScope = sessionReviewScope(session, requireSelectedStory);
     for (let attempt = 0; attempt < 3; attempt += 1) {
+        const before = reviewChangeFingerprint(repo, expectedScope.base, expectedScope.head);
         const data = readSessionReviewData(session, requireSelectedStory);
-        const changeFingerprint = reviewChangeFingerprint(repo, data.base, data.head);
-        const confirmedDiff = getDiff(repo, data.base, data.head);
+        if (data.base !== expectedScope.base || (data.head ?? '') !== (expectedScope.head ?? '')) {
+            expectedScope = { base: data.base, head: data.head };
+            continue;
+        }
         const confirmedFingerprint = reviewChangeFingerprint(repo, data.base, data.head);
-        if (confirmedDiff === data.diff && confirmedFingerprint === changeFingerprint) {
-            return { ...data, changeFingerprint };
+        if (confirmedFingerprint === before) {
+            return { ...data, changeFingerprint: confirmedFingerprint };
         }
     }
     throw new Error('The change is moving too quickly to capture a stable review snapshot. Try again.');
+}
+function reviewPageRaceSignature(lease) {
+    const paths = lease.head
+        ? [lease.storyPath]
+        : [lease.storyPath, ...Object.keys(lease.fileFingerprints).map((file) => join(lease.repo, file))];
+    return `${reviewSourceMetadataFingerprint(lease.repo, lease.base, lease.head)}\0${paths
+        .sort()
+        .map((path) => {
+        try {
+            const stat = statSync(path, { bigint: true });
+            return `${path}\0${stat.size}\0${stat.mtimeNs}\0${stat.mode}`;
+        }
+        catch {
+            return `${path}\0missing`;
+        }
+    })
+        .join('\0')}`;
 }
 function reviewStoryIdentity(storyPath, tour, storyless) {
     if (storyless)
@@ -968,21 +1097,6 @@ function reviewFileFingerprint(repo, head, files, file) {
         return undefined;
     return diffFingerprint(JSON.stringify({ currentLines }));
 }
-function reviewFileFingerprints(repo, head, files, tour, storyless) {
-    const paths = new Set(files.map((file) => file.newPath));
-    if (!storyless) {
-        for (const step of tour.steps)
-            if (isCodeStep(step))
-                paths.add(step.file);
-    }
-    const fingerprints = Object.create(null);
-    for (const file of paths) {
-        const fingerprint = reviewFileFingerprint(repo, head, files, file);
-        if (fingerprint)
-            fingerprints[file] = fingerprint;
-    }
-    return fingerprints;
-}
 /**
  * Resolve an opaque page token and re-check every piece of review identity
  * against one stable live read. The stored mode/from marker is authoritative;
@@ -996,6 +1110,49 @@ function validateReviewPageLease(session, token, file) {
         return { ok: false, error: 'The repository changed after this review page loaded.' };
     }
     const storyless = lease.storyIdentity === 'storyless';
+    const snapshot = reviewPageSnapshots.get(lease.token);
+    if (snapshot) {
+        try {
+            const liveTour = storyless ? snapshot.tour : loadTour(lease.storyPath);
+            if (reviewStoryIdentity(lease.storyPath, liveTour, storyless) !== lease.storyIdentity) {
+                return { ok: false, error: 'The guided review changed after this page loaded.' };
+            }
+            const liveSourceSignature = reviewPageRaceSignature(lease);
+            const unchangedByMetadata = liveSourceSignature === snapshot.sourceSignature;
+            const liveFingerprint = unchangedByMetadata
+                ? lease.fingerprint
+                : reviewChangeFingerprint(lease.repo, lease.base, lease.head);
+            const unchangedWholeReview = unchangedByMetadata || liveFingerprint === lease.fingerprint;
+            const unchangedRequestedFile = !unchangedWholeReview && file
+                ? reviewFileIndex(lease.repo, lease.base, lease.head)
+                    .find((entry) => entry.path === file)?.reviewHash === lease.fileFingerprints[file]
+                : false;
+            if (unchangedWholeReview || unchangedRequestedFile) {
+                return {
+                    ok: true,
+                    lease,
+                    raceSignature: liveSourceSignature,
+                    repo: lease.repo,
+                    tour: snapshot.tour,
+                    base: snapshot.base,
+                    head: snapshot.head,
+                    diff: '',
+                    fileIndex: snapshot.fileIndex,
+                    fullFiles: [],
+                    files: [],
+                    storyless: snapshot.storyless,
+                };
+            }
+        }
+        catch (error) {
+            return {
+                ok: false,
+                error: storyless
+                    ? 'The review evidence moved while this page was open.'
+                    : `The selected story cannot be validated: ${error.message}`,
+            };
+        }
+    }
     let data;
     try {
         data = reviewDataForLease(lease);
@@ -1030,11 +1187,13 @@ function validateReviewPageLease(session, token, file) {
     return {
         ok: true,
         lease,
+        raceSignature: reviewPageRaceSignature(lease),
         repo: lease.repo,
         tour: data.tour,
         base: data.base,
         head: data.head,
         diff: data.diff,
+        fileIndex: reviewFileIndex(lease.repo, data.base, data.head),
         fullFiles: data.files,
         files,
         storyless,
@@ -1048,11 +1207,25 @@ function sendReviewPageConflict(res, detail) {
     });
 }
 /** Re-check after synchronous rendering to close the external working-tree race. */
-function sendLeasedHtml(res, session, page, html, file) {
-    const confirmed = validateReviewPageLease(session, page.lease.token, file);
-    if (!confirmed.ok)
-        return sendReviewPageConflict(res, confirmed.error);
+function sendLeasedHtml(res, _session, page, html, _file) {
+    // The expensive full fingerprint was checked immediately before rendering.
+    // Re-stat only the live files the renderer could have read to close that
+    // synchronous race without making every lazy request hash the whole change
+    // a second time. Fixed-ref evidence is immutable; only its story file is live.
+    if (reviewPageRaceSignature(page.lease) !== page.raceSignature) {
+        return sendReviewPageConflict(res, 'The change moved while this panel was loading.');
+    }
     sendHtml(res, html);
+}
+function materializePageFile(page, file) {
+    const already = page.files.find((candidate) => candidate.newPath === file);
+    if (already)
+        return already;
+    const entry = page.fileIndex.find((candidate) => candidate.path === file);
+    if (!entry || entry.binary || entry.large || entry.generated || entry.metadataOnly)
+        return undefined;
+    const diff = getFileDiff(page.repo, page.base, file, page.head);
+    return parseUnifiedDiff(diff).find((candidate) => candidate.newPath === file);
 }
 /** The lazily-loaded "Full file" side-by-side view for one file. Works with or
  *  without a story: story-less, there's no coverage to flag, so it's just the
@@ -1060,14 +1233,15 @@ function sendLeasedHtml(res, session, page, html, file) {
 function renderFullFileResponse(page, file) {
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
-    const { repo, tour, head, files, storyless } = page;
+    const { repo, tour, head, storyless } = page;
     const allowed = new Set([
-        ...files.map((f) => f.newPath),
+        ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
         ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
-    const df = files.find((f) => f.newPath === file);
+    const df = materializePageFile(page, file);
+    const files = df ? [df] : [];
     const newLines = readWholeFile(repo, file, head) ?? [];
     const ranges = storyless
         ? []
@@ -1083,14 +1257,15 @@ function renderFullFileResponse(page, file) {
 function renderSplitResponse(page, file) {
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
-    const { tour, files, storyless } = page;
+    const { tour, storyless } = page;
     const allowed = new Set([
-        ...files.map((f) => f.newPath),
+        ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
         ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
-    const df = files.find((f) => f.newPath === file);
+    const df = materializePageFile(page, file);
+    const files = df ? [df] : [];
     const ranges = storyless
         ? []
         : computeCoverage(tour, files)
@@ -1109,8 +1284,20 @@ function renderSplitResponse(page, file) {
 function renderFilePanelResponse(page, file) {
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
-    const { repo, tour, files, head, storyless } = page;
-    const model = buildReviewModel(repo, tour, files, head, { storyless });
+    const { repo, tour, head, storyless } = page;
+    const entry = page.fileIndex.find((candidate) => candidate.path === file);
+    if (entry && (entry.binary || entry.large || entry.generated || entry.metadataOnly)) {
+        return `<div class="ds-diffnote">This file stays outside the bounded diff renderer. Open Trust check to inspect its safe preview.</div>`;
+    }
+    const df = materializePageFile(page, file);
+    const files = df ? [df] : [];
+    const model = buildReviewModel(repo, tour, files, head, {
+        storyless,
+        detailedStepIndexes: new Set(),
+        detailedFilePaths: new Set([file]),
+        includeTrustRows: false,
+        fileIndex: entry ? [entry] : undefined,
+    });
     const view = model.files.find((candidate) => candidate.file === file);
     if (!view)
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
@@ -1126,9 +1313,29 @@ function renderStoryStepResponse(page, rawIndex) {
     if (!Number.isInteger(index) || index < 1) {
         return `<div class="ds-diffnote">No valid story step requested.</div>`;
     }
-    const { repo, tour, files, head } = page;
-    const model = buildReviewModel(repo, tour, files, head, { storyless: false });
+    const { repo, tour, head } = page;
+    const step = orderedSteps(tour)[index - 1];
+    const df = step && isCodeStep(step) ? materializePageFile(page, step.file) : undefined;
+    const files = df ? [df] : [];
+    const model = buildReviewModel(repo, tour, files, head, {
+        storyless: false,
+        detailedStepIndexes: new Set([index - 1]),
+        detailedFilePaths: new Set(),
+        includeTrustRows: false,
+    });
     return renderStoryStepPanel(repo, model, loadComments(repo), index - 1);
+}
+function renderTrustResponse(page) {
+    const diff = getDiff(page.repo, page.base, page.head);
+    const files = parseUnifiedDiff(diff);
+    const model = buildReviewModel(page.repo, page.tour, files, page.head, {
+        storyless: page.storyless,
+        detailedStepIndexes: new Set(),
+        detailedFilePaths: new Set(),
+        includeTrustRows: true,
+    });
+    const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
+    return renderTrustDrawer(model.trust, stepIndexById, excludedReviewFiles(page.repo, page.base, page.head), stagedWorktreeDivergentFiles(page.repo, page.base, page.head), page.storyless);
 }
 function renderExcludedFileResponse(page, file) {
     if (!file)
@@ -1141,18 +1348,16 @@ function renderExcludedFileResponse(page, file) {
     if (excluded.reason === 'binary') {
         return `<div class="ds-diffnote">Binary contents are not decoded in the review. The file is still part of the exact change fingerprint and must be acknowledged before approval.</div>`;
     }
-    let lines = readWholeFile(repo, file, head);
+    let preview = readFileRange(repo, file, 1, 500, head);
     let side = 'Current file';
-    if (!lines) {
-        lines = readWholeFile(repo, file, base);
+    if (!preview) {
+        preview = readFileRange(repo, file, 1, 500, base);
         side = 'File before deletion';
     }
-    if (!lines)
+    if (!preview)
         return `<div class="ds-diffnote">This binary or missing file cannot be previewed as text.</div>`;
-    const limit = 500;
-    const shown = lines.slice(0, limit);
-    const rows = shown.map((line, index) => `<span><i>${index + 1}</i><code>${esc(line) || ' '}</code></span>`).join('');
-    return `<div class="ds-excluded-file-head"><strong>${side}</strong><span>This is a text preview, not story coverage or a before/after diff.</span></div><pre class="ds-excluded-code">${rows}</pre>${lines.length > limit ? `<div class="ds-diffnote">Showing the first ${limit} of ${lines.length} lines.</div>` : ''}`;
+    const rows = preview.lines.map((line, index) => `<span><i>${preview.startLine + index}</i><code>${esc(line) || ' '}</code></span>`).join('');
+    return `<div class="ds-excluded-file-head"><strong>${side}</strong><span>Bounded preview · first ${preview.lines.length} lines, not story coverage or a before/after diff.</span></div><pre class="ds-excluded-code">${rows}</pre>`;
 }
 function storyDriftView(report) {
     const state = report.storyFreshness === 'unverified'
@@ -1214,7 +1419,7 @@ function metadataOnlyDriftDescription(result) {
 /** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
  *  file, clamped to [from, to] new-file line numbers. */
 function renderContextResponse(page, params) {
-    const { repo, tour, files, head, storyless } = page;
+    const { repo, tour, head, storyless } = page;
     const file = params.get('file') ?? '';
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
@@ -1227,12 +1432,12 @@ function renderContextResponse(page, params) {
     // Mirror renderFullFileResponse exactly: context-only story files are valid,
     // but a since-feedback page can only expand files from its issued model.
     const allowed = new Set([
-        ...files.map((f) => f.newPath),
+        ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
         ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
-    const df = files.find((f) => f.newPath === file);
+    const df = materializePageFile(page, file);
     const newLines = readWholeFile(repo, file, head) ?? [];
     if (!newLines.length)
         return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
@@ -1950,6 +2155,33 @@ function runAloudSpeak(res, aloud, body) {
         ...(Number.isFinite(prefetch) ? { prefetch } : {}),
     })
         .then((status) => sendJson(res, 200, status))
+        .catch((error) => sendAloudError(res, error));
+}
+function runAloudPrepare(res, aloud, body) {
+    let input;
+    try {
+        input = JSON.parse(body || '{}');
+    }
+    catch {
+        return sendJson(res, 400, { error: 'invalid JSON' });
+    }
+    const text = typeof input.text === 'string' ? input.text.trim() : '';
+    if (!text)
+        return sendJson(res, 400, { error: 'No text to prepare.' });
+    const batches = Array.isArray(input.batches)
+        ? input.batches.map((batch) => typeof batch === 'string' ? batch.trim() : '')
+        : undefined;
+    if (batches && (batches.length === 0 || batches.some((batch) => !batch))) {
+        return sendJson(res, 400, { error: 'Narration batches must be non-empty strings.' });
+    }
+    aloud.prepare({
+        text,
+        ...(batches ? { batches } : {}),
+    })
+        .then(() => {
+        res.statusCode = 204;
+        res.end();
+    })
         .catch((error) => sendAloudError(res, error));
 }
 function runAloudControl(res, aloud, body) {

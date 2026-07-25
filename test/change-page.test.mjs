@@ -55,7 +55,7 @@ test('renderChangePage shows the change summary, base label, and review-viewer a
   assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
   assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has one rev selector per compare side');
   assert.ok(!html.includes('id="cmpBaseRef"') && !html.includes('id="cmpHeadRef"'), 'drops the separate branch-vs-commit inputs');
-  assert.ok(html.includes('<span>Base <i>older</i></span>') && html.includes('<span>Compare <i>newer</i></span>'), 'labels the sides by meaning, not position');
+  assert.ok(html.includes('<span>Source <i>older</i></span>') && html.includes('<span>Target <i>newer</i></span>'), 'labels the sides by meaning, not position');
   assert.ok(!html.includes('<span>From</span>') && !html.includes('<span>To</span>'), 'does not use from/to labels');
   assert.ok(!html.includes('id="commitGo"') && !html.includes('Review commit'), 'single-commit scope auto-applies without a button');
   assert.ok(!html.includes('id="cmpGo"') && !html.includes('Compare refs'), 'compare scope auto-applies without a button');
@@ -208,12 +208,21 @@ test('renderChangePage escapes file paths and shows an empty-change guard', () =
     { repoName: 'd' },
   );
   assert.ok(empty.toLowerCase().includes('nothing to review'));
+  assert.match(empty, /<h2 class="empty-title">Nothing to review<\/h2>/, 'keeps the empty result concise beneath the exact scope summary');
+  assert.doesNotMatch(empty, /Nothing to review for /, 'does not repeat long refs in the empty-state headline');
   assert.ok(!empty.includes('Generate guided review'));
 });
 
 test('renderChangePage shows the human scope label and highlights the active segment', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', scopeLabel: 'Uncommitted changes', active: 'uncommitted' });
   assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
+  assert.match(html, /class="scope-current scope-current-single" aria-label="Selected review scope"/, 'presents the active scope in a stable summary row');
+  assert.doesNotMatch(html, /scope-command|git diff /, 'does not expose the raw git command in the product UI');
+  assert.match(html, /\.scur b\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis/, 'keeps long scope names to one stable line');
+  assert.ok(
+    html.indexOf('id="comparePanel"') < html.indexOf('class="scope-current scope-current-single"'),
+    'places the changing scope summary below the controls so the upper layout stays anchored',
+  );
   assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
   assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
   assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
@@ -227,6 +236,38 @@ test('renderChangePage shows the human scope label and highlights the active seg
     html.includes('.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}'),
     'commit and compare pickers stack on mobile',
   );
+});
+
+test('compare editor is the primary stable source and target presentation', () => {
+  const html = renderChangePage(withChanges, {
+    repoName: 'demo',
+    active: 'compare',
+    base: 'origin/fix/liquidation-partyb-funding-events',
+    head: 'fix/liquidation-partyb-funding-events',
+  });
+
+  assert.match(html, /class="scope-current scope-current-split" role="group" aria-label="Selected comparison"/);
+  assert.match(html, /class="scope-side" aria-label="Source: origin\/fix\/liquidation-partyb-funding-events"/);
+  assert.match(html, /class="scope-side-label">Source <i>older<\/i>/);
+  assert.match(html, /class="scope-side" aria-label="Target: fix\/liquidation-partyb-funding-events"/);
+  assert.match(html, /class="scope-side-label">Target <i>newer<\/i>/);
+  assert.match(html, /<label class="refrow"><span>Source <i>older<\/i><\/span><input id="cmpBase"/);
+  assert.match(html, /<label class="refrow"><span>Target <i>newer<\/i><\/span><input id="cmpHead"/);
+  assert.match(
+    html,
+    /#comparePanel:not\(\[hidden\]\) \+ \.scope-current-split\{display:none\}/,
+    'hides the duplicate selected-comparison cards while the exact editable refs are visible',
+  );
+  assert.match(
+    html,
+    /\.refpanel\[data-panel="compare"\]\{grid-template-columns:minmax\(0,1fr\) 28px minmax\(0,1fr\);gap:10px;padding:0;border:0;background:transparent\}/,
+    'renders source and target as equal independent editor sections without a nested container',
+  );
+  assert.ok(html.includes('Source → target, any branch or commit'), 'uses one consistent direction vocabulary in the scope control');
+  assert.doesNotMatch(html, /Each side takes anything git does/, 'removes the tutorial-length duplicate hint');
+  assert.doesNotMatch(html, /Branches, tags, or SHAs\. Target may be Working tree\./, 'leaves picker-specific options to the picker instead of repeating them below the fields');
+  assert.match(html, /\.scope-current-split\{grid-template-columns:minmax\(0,1fr\) 28px minmax\(0,1fr\)/);
+  assert.match(html, /\.scope-side b\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis/);
 });
 
 test('compare panel prefills from the active scope and defaults the right side to the working tree', () => {
@@ -801,9 +842,10 @@ test('change page routes its Thread Path through content-free bands', () => {
   assert.match(html, /max-width:600px\)\{\.wrap\{[^}]+\}\.wrap>\.ds-thread-layer\{top:-51px\}/);
 });
 
-test('change page unfolds scope controls from their source and supports reduced motion', () => {
+test('change page keeps ref navigation stable while preserving anchored picker motion', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.match(html, /\.refpanel:not\(\[hidden\]\)\{animation:change-panel-in var\(--motion-duration-spatial\)/);
+  assert.doesNotMatch(html, /\.wrap\{animation:change-page-in/, 'does not replay the whole page entrance after a ref navigation');
+  assert.doesNotMatch(html, /\.refpanel:not\(\[hidden\]\)\{animation:change-panel-in/, 'does not clip and re-enter the selected scope panel');
   assert.match(html, /\.refpicker:not\(\[hidden\]\)\{animation:change-picker-in var\(--motion-duration-ui\)/);
   assert.match(html, /prefers-reduced-motion:reduce\)\{\.sopt,\.openreview\{transition:none\}/);
 });

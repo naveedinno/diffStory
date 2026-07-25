@@ -8,6 +8,8 @@
 
 /** A single-file diff at or above this size is omitted from the bounded default view. */
 export const REVIEW_NOISE_MAX_LINES = 1500;
+/** Byte-heavy single-line/minified files must not bypass the line-count bound. */
+export const REVIEW_NOISE_MAX_BYTES = 8 * 1024 * 1024;
 
 export type ReviewExclusionReason = 'generated-path' | 'large-diff' | 'binary' | 'metadata-only';
 
@@ -36,6 +38,7 @@ export function reviewExclusionMetadata(
   path: string,
   addedLines: number | null,
   removedLines: number | null,
+  byteSize?: number | null,
 ): ReviewExclusionMetadata | null {
   const changedLines = addedLines == null || removedLines == null ? null : addedLines + removedLines;
   const reason: ReviewExclusionReason | null = isGeneratedPath(path)
@@ -44,7 +47,8 @@ export function reviewExclusionMetadata(
       ? 'binary'
       : changedLines === 0
         ? 'metadata-only'
-        : changedLines >= REVIEW_NOISE_MAX_LINES
+        : changedLines >= REVIEW_NOISE_MAX_LINES ||
+            (byteSize != null && byteSize >= REVIEW_NOISE_MAX_BYTES)
           ? 'large-diff'
           : null;
   if (!reason) return null;
