@@ -4,7 +4,7 @@
     {
       "name": "diffstory",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["dist/cli.js", "--no-open", "--port", "7777"],
+      "runtimeArgs": ["dist/app-server.js", "--dir", ".", "--no-open", "--port", "7777"],
       "port": 7777
     },
     {

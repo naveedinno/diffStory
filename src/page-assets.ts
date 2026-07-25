@@ -883,7 +883,7 @@ const PAGE_JS_HEAD = `
   var SEVERITY={blocking:'Blocking',concern:'Concern',nit:'Minor'};
   var STATUS={open:'Open',addressed:'Needs verification',resolved:'Resolved'};
   var tourView,filesView,drawer,feedbackDrawer,driftDrawer,commandRoot,toastEl,selectionMenu,filmThread,filmTooltip,filmTooltipTarget=null,filmMagnifyFrame=0,filmPointerX=null,selectionContext=null,selectionRects=[],selectionContextMenuPending=false,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,toastSequence=0,storyFocusIndex=-1,storyFocusGroup=-1,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[],voiceSequenceToken=0,currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false,sidebarReturnFocus=null,reviewMenuReturnFocus=null,commandReturnFocus=null,agentChooserReturnFocus=null,agentChooserRequest=0,activeCommentSurface=null,commentSurfaceReturnFocus=null,commentSurfaceSeq=0,commentSurfaceCollapsedSidebar=false,composerReturnFocus=null,composerCollapsedSidebar=false,modalStack=[],modalBackgroundSnapshots=[];
-  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,readAloud=false,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='';
+  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,readAloud=false,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
   var activeFileFilter='all',activeFeedbackFilter='all',restoringReviewPosition=false,reviewSaveTimer=null,reviewPositionReady=false,driftRequestAbort=null,driftRequestToken=0,driftLayoutMode=compactScreen()?'unified':'split';
   var mermaidModulePromise=null,mermaidRenderId=0;
   var liveEventSource=null,liveDisconnectTimer=null,liveOriginalStoryFreshness='',liveIssues={diff:false,story:false,disconnected:false},liveGenerations={diff:0,story:0,disconnected:0},liveDismissed={diff:0,story:0,disconnected:0};
@@ -1873,7 +1873,17 @@ const PAGE_JS_HEAD = `
   }
   function readJsonOrError(r,msg){
     if(r.ok)return r.json();
-    return r.json().then(function(j){throw new Error((j&&j.error)||msg);},function(){throw new Error(msg);});
+    // Carry the reader's own "this was only a blip" signal onto the Error so the
+    // narration loop can retry instead of tearing playback down.
+    return r.json().then(function(j){
+      var err=new Error((j&&j.error)||msg);
+      if(j&&j.transient)err.transient=true;
+      throw err;
+    },function(){
+      var err=new Error(msg);
+      if(r.status===504)err.transient=true;
+      throw err;
+    });
   }
   function isAbortError(err){
     return err&&(err.name==='AbortError'||/aborted|cancelled/i.test(String(err.message||err)));
@@ -1912,6 +1922,9 @@ const PAGE_JS_HEAD = `
     if(typeof status.rate==='number'&&isFinite(status.rate)&&status.rate>0)aloudRate=status.rate;
     var state=status.state||{},phase=String(state.status||'');
     aloudPhase=aloudPaused?'paused':(phase==='starting'||phase==='generating'||phase==='reading'?phase:(aloudActive?'starting':'idle'));
+    // Aloud reports exactly which chunk it is preparing. Keep it so the control
+    // can say what is happening instead of spinning silently.
+    aloudStateMessage=typeof state.message==='string'?state.message:'';
   }
   function focusAloudSequenceUnit(index){
     if(index<0||index>=aloudSequence.length)return;
@@ -1946,14 +1959,40 @@ const PAGE_JS_HEAD = `
   function finishAloudSpeech(token,opts,completed,message){
     if(token!==aloudRequestToken)return;
     if(aloudPollTimer){clearTimeout(aloudPollTimer);aloudPollTimer=0;}
-    aloudActive=false;aloudPaused=false;aloudJobId='';aloudPhase='idle';speechLoadingLabel='';
+    var wasActive=aloudActive;
+    aloudActive=false;aloudPaused=false;aloudJobId='';aloudPhase='idle';speechLoadingLabel='';aloudPollFails=0;
+    aloudStateMessage='';aloudStartedAt=0;aloudSlowNotice=false;
     if(opts.stepIndex!=null)clearVoiceFocus();
     aloudSequence=[];aloudSequenceIndex=-1;clearSpeechCursor();
     if(!opts.manual)readAloud=false;
     var btn=$('[data-readaloud]');if(btn)btn.classList.remove('is-speaking');
     updateReadAloudButton();
+    // Giving up on our side does not silence Aloud. Without this the reviewer
+    // gets an error toast and a reset button while the narration keeps talking.
+    // A jobId handover passes no message, so it never stops the incoming job.
+    if(message&&wasActive)aloudControl('stop',true);
     if(message)toast(message,'error');
     if(completed&&typeof opts.onDone==='function')opts.onDone();
+  }
+  // A cold start can run half a minute: Aloud unloads its speech model after two
+  // idle minutes, so the first play after reading a while pays to reload it. Say
+  // that out loud instead of leaving the reviewer with a silent spinner.
+  function noticeSlowNarration(){
+    if(aloudSlowNotice||!aloudStartedAt)return;
+    if(aloudPhase!=='starting'&&aloudPhase!=='generating')return;
+    if(Date.now()-aloudStartedAt<8000)return;
+    aloudSlowNotice=true;
+    toast(aloudStateMessage
+      ?'Aloud is still generating audio — '+aloudStateMessage.charAt(0).toLowerCase()+aloudStateMessage.slice(1)+'.'
+      :'Aloud is still generating audio. The first play after a pause can take a moment.');
+  }
+  // This loop runs hundreds of times per playback. Tight beat highlighting only
+  // needs a fast poll while Aloud is actually reading; while it generates, a
+  // slower poll tracks progress just as well with far fewer round trips. After a
+  // failure, back off rather than hammering a reader that is already struggling.
+  function aloudPollDelay(){
+    if(aloudPollFails)return Math.min(1200,200*aloudPollFails);
+    return aloudPhase==='reading'?100:500;
   }
   function pollAloudSpeech(token,opts){
     if(token!==aloudRequestToken)return;
@@ -1967,15 +2006,23 @@ const PAGE_JS_HEAD = `
         if(aloudJobId&&status.jobId!==aloudJobId){
           finishAloudSpeech(token,opts,false);return;
         }
+        aloudPollFails=0;
         applyAloudStatus(status);applyAloudSequenceProgress(status);updateReadAloudButton();
+        noticeSlowNarration();
         if(status.running){pollAloudSpeech(token,opts);return;}
         var state=status.state&&status.state.status;
         finishAloudSpeech(token,opts,state==='done',state==='error'?(status.state.message||'Aloud could not finish playback.'):'');
       }).catch(function(err){
         if(token!==aloudRequestToken)return;
+        // One dropped poll is not a failed narration: Aloud keeps reading while
+        // a timeout or a restarting server briefly hides it from us. Ride out a
+        // short run of failures on a backoff before admitting defeat, otherwise
+        // a single blip silently kills playback that is still audible.
+        aloudPollFails++;
+        if(aloudPollFails<=6){pollAloudSpeech(token,opts);return;}
         finishAloudSpeech(token,opts,false,err.message||'Aloud is unavailable.');
       });
-    },100);
+    },aloudPollDelay());
   }
   function speak(text,opts){
     if(!text)return false;
@@ -1985,6 +2032,7 @@ const PAGE_JS_HEAD = `
     if(aloudRequestAbort){try{aloudRequestAbort.abort();}catch(e){}}
     var ctrl=typeof AbortController!=='undefined'?new AbortController():null;
     aloudRequestAbort=ctrl;aloudActive=false;aloudPaused=false;aloudJobId='';aloudPhase='starting';speechLoadingLabel='Starting Aloud';
+    aloudPollFails=0;aloudStateMessage='';aloudSlowNotice=false;aloudStartedAt=Date.now();
     aloudSequence=opts.sequence||[];aloudSequenceIndex=-1;
     if(aloudSequence.length)focusAloudSequenceUnit(0);
     else if(opts.stepIndex!=null){if(opts.focusGroup!=null)setActiveBeat(opts.stepIndex,opts.focusGroup);else startVoiceFocusSequence(opts.stepIndex,text);}
@@ -2011,6 +2059,9 @@ const PAGE_JS_HEAD = `
     var loading=!!speechLoadingLabel||(aloudActive&&!aloudPaused&&(aloudPhase==='starting'||aloudPhase==='generating'));
     var playing=readAloud||aloudActive||!!speechLoadingLabel,action=speechLoadingLabel?'Starting':(aloudPaused?'Resume':(aloudActive?'Pause':'Play'));
     var buttonLabel=aloudPaused?'Resume narration':(aloudActive?'Pause narration':(speechLoadingLabel?'Starting narration':'Play story with Aloud'));
+    // While Aloud is still generating, its own progress is more useful than a
+    // static label — a 30s cold start should never look like a hung button.
+    if(loading&&aloudStateMessage)buttonLabel=buttonLabel+' — '+aloudStateMessage;
     btn.classList.toggle('is-active',playing);
     btn.classList.toggle('is-loading',loading);
     btn.disabled=!!speechLoadingLabel;

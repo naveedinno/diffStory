@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import test from 'node:test';
-import { AloudUnavailableError, createAloudReader } from '../dist/aloud-client.js';
+import { AloudTimeoutError, AloudUnavailableError, createAloudReader } from '../dist/aloud-client.js';
 
 const STATUS = {
   jobId: 'job-1',
@@ -110,6 +110,81 @@ test('Aloud client explains when Services predate explicit narration batches', a
     fixture.server.close();
     await once(fixture.server, 'close');
   }
+});
+
+// Aloud's HTTP server closes idle keep-alive sockets on Node's 5s default, so a
+// pooled socket can die between two narration polls. Reusing it surfaced as
+// "Aloud did not respond in time." even though Aloud was healthy and answering in
+// single-digit milliseconds. One dropped connection must not fail the request.
+test('Aloud client recovers when the daemon drops a pooled connection', async () => {
+  let attempts = 0;
+  const fixture = await fakeAloud((req, res) => {
+    attempts += 1;
+    if (attempts === 1) {
+      req.socket.destroy();
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(STATUS));
+  });
+  try {
+    const status = await createAloudReader(fixture.url).status();
+    assert.equal(status.jobId, 'job-1');
+    assert.equal(attempts, 2, 'expected the dropped connection to be retried once');
+  } finally {
+    fixture.server.close();
+    await once(fixture.server, 'close');
+  }
+});
+
+test('Aloud client retries a dropped connection for speech, not just reads', async () => {
+  const seen = [];
+  const fixture = await fakeAloud((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    // Fail the POST once, after /health has already been accepted.
+    if (req.url === '/speak' && seen.filter((entry) => entry === 'POST /speak').length === 1) {
+      req.socket.destroy();
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(req.url === '/health' ? HEALTH : STATUS));
+  });
+  try {
+    const status = await createAloudReader(fixture.url).speak({ text: 'Narrate this beat.' });
+    assert.equal(status.jobId, 'job-1');
+    assert.equal(seen.filter((entry) => entry === 'POST /speak').length, 2);
+  } finally {
+    fixture.server.close();
+    await once(fixture.server, 'close');
+  }
+});
+
+test('Aloud client gives up honestly when every attempt is dropped', async () => {
+  let attempts = 0;
+  const fixture = await fakeAloud((req) => {
+    attempts += 1;
+    req.socket.destroy();
+  });
+  try {
+    await assert.rejects(createAloudReader(fixture.url).status());
+    assert.equal(attempts, 3, 'expected a bounded number of attempts, not an endless retry');
+  } finally {
+    fixture.server.close();
+    await once(fixture.server, 'close');
+  }
+});
+
+// The narration loop must be able to tell "retry this" apart from "Aloud is
+// gone", otherwise one blip tears down playback that is still audible.
+test('Aloud timeouts are marked transient and distinct from unavailability', () => {
+  const timeout = new AloudTimeoutError();
+  assert.equal(timeout.transient, true);
+  assert.equal(timeout.statusCode, 504);
+  assert.ok(timeout instanceof AloudUnavailableError, 'existing instanceof checks must keep working');
+  assert.match(timeout.message, /did not respond in time/);
+  const unavailable = new AloudUnavailableError();
+  assert.equal(unavailable.transient, false);
+  assert.equal(unavailable.statusCode, 503);
 });
 
 test('Aloud client uses the authoritative control response without an extra status poll', async () => {

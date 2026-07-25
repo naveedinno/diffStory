@@ -2248,7 +2248,14 @@ function runAloudControl(res, aloud, body) {
 }
 function sendAloudError(res, error) {
     const status = Number(error?.statusCode);
-    sendJson(res, Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503, { error: error instanceof Error ? error.message : 'Aloud is unavailable.' });
+    // Flag blips the reader can recover from (a timeout, a dropped keep-alive
+    // socket) so the narration loop can retry instead of tearing playback down and
+    // telling the reviewer narration is unavailable.
+    const transient = error?.transient === true;
+    sendJson(res, Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503, {
+        error: error instanceof Error ? error.message : 'Aloud is unavailable.',
+        ...(transient ? { transient: true } : {}),
+    });
 }
 const MERMAID_BROWSER_ASSET = new URL('./mermaid.esm.min.mjs', import.meta.url);
 function sendMermaidBrowserAsset(res) {

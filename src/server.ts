@@ -2570,10 +2570,17 @@ function runAloudControl(res: ServerResponse, aloud: AloudReader, body: string):
 
 function sendAloudError(res: ServerResponse, error: unknown): void {
   const status = Number((error as { statusCode?: unknown } | undefined)?.statusCode);
+  // Flag blips the reader can recover from (a timeout, a dropped keep-alive
+  // socket) so the narration loop can retry instead of tearing playback down and
+  // telling the reviewer narration is unavailable.
+  const transient = (error as { transient?: unknown } | undefined)?.transient === true;
   sendJson(
     res,
     Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503,
-    { error: error instanceof Error ? error.message : 'Aloud is unavailable.' },
+    {
+      error: error instanceof Error ? error.message : 'Aloud is unavailable.',
+      ...(transient ? { transient: true } : {}),
+    },
   );
 }
 
