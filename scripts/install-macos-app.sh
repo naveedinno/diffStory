@@ -1,12 +1,21 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 
 set -euo pipefail
 
-PROJECT_DIR="${0:A:h:h}"
+# Resolve the project root without depending on which shell was used to start
+# this. `${0:A:h:h}` is zsh-only, so `bash scripts/install-macos-app.sh` failed
+# with "A: unbound variable" before reaching any real work. dirname + `pwd -P`
+# behaves the same in bash, zsh, and sh, and still resolves symlinks the way the
+# zsh `:A` modifier did.
+PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 SOURCE_DIR="$PROJECT_DIR/macos/DiffStoryApp"
 INSTALL_DIR="$HOME/Applications"
 APP_PATH="$INSTALL_DIR/diffStory.app"
-BUILD_DIR="$(mktemp -d "${TMPDIR%/}/diffstory-macos.XXXXXX")"
+# Default TMPDIR: it is normally set on macOS but absent under launchd and cron,
+# where `set -u` would otherwise abort here for the same "depends on how you
+# invoked it" reason. macOS sets it with a trailing slash, so strip that too.
+TMP_ROOT="${TMPDIR:-/tmp}"
+BUILD_DIR="$(mktemp -d "${TMP_ROOT%/}/diffstory-macos.XXXXXX")"
 BUILD_APP="$BUILD_DIR/diffStory.app"
 CARGO_TARGET_DIR="$PROJECT_DIR/.macos-build/target"
 INSTALLED_EXECUTABLE="$APP_PATH/Contents/MacOS/diffStory"
