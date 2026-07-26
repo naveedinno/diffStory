@@ -2527,7 +2527,7 @@ function runAloudSpeak(res: ServerResponse, aloud: AloudReader, body: string): v
 }
 
 function runAloudPrepare(res: ServerResponse, aloud: AloudReader, body: string): void {
-  let input: { batches?: unknown; text?: unknown };
+  let input: { batches?: unknown; prefetch?: unknown; text?: unknown };
   try {
     input = JSON.parse(body || '{}') as typeof input;
   } catch {
@@ -2541,9 +2541,13 @@ function runAloudPrepare(res: ServerResponse, aloud: AloudReader, body: string):
   if (batches && (batches.length === 0 || batches.some((batch) => !batch))) {
     return sendJson(res, 400, { error: 'Narration batches must be non-empty strings.' });
   }
+  // Forwarded, not dropped: this is how far ahead the page wants warmed, and
+  // without it Aloud falls back to its own default depth.
+  const prefetch = Number(input.prefetch);
   aloud.prepare({
     text,
     ...(batches ? { batches } : {}),
+    ...(Number.isFinite(prefetch) ? { prefetch } : {}),
   })
     .then(() => {
       res.statusCode = 204;

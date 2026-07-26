@@ -1308,17 +1308,42 @@ function conceptStepPanel(
   </section>`;
 }
 
+/**
+ * Ends a spoken segment with sentence punctuation, without doubling it.
+ *
+ * Joining these segments with a bare ". " produced "…where to continue.. The
+ * primer sits…" whenever a segment already ended in punctuation.
+ */
+function endsSentence(text: string): string {
+  return /[.!?:;]$/.test(text) ? text : `${text}.`;
+}
+
 function conceptSpeechText(s: ConceptStepView): string {
   const body = s.body
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/^#{1,4}\s+/gm, '')
-    .replace(/^\s*(?:[-*]|\d+[.)])\s+/gm, '')
+    // A list item is its own spoken sentence. Stripping the bullet and then
+    // collapsing newlines ran the items together into one unreadable clause
+    // ("item one item two item three"), so terminate each item as it is unmarked.
+    .replace(/^\s*(?:[-*]|\d+[.)])\s+(.*)$/gm, (_line, item: string) => `${endsSentence(item.trim())} `)
     .replace(/^>\s?/gm, '')
     .replace(/[*_`]/g, '')
+    // Paragraph breaks are sentence boundaries; a single space is not enough when
+    // the paragraph did not end in punctuation of its own.
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map(endsSentence)
+    .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
   const caption = s.diagram?.caption?.trim();
-  return [s.title, body, caption].filter(Boolean).join('. ');
+  return [s.title, body, caption]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .map(endsSentence)
+    .join(' ')
+    .trim();
 }
 
 function stepStoryHtml(s: CodeStepView, diffRegionId: string): string {

@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import { renderFullFile, renderPage, renderSplitHunks } from '../dist/render.js';
+import { PAGE_JS } from '../dist/page-assets.js';
 
 const tour = {
   version: 1,
@@ -122,6 +124,16 @@ test('concept steps render as safe document primers linked to the next code step
   assert.match(speech, /The request envelope/);
   assert.match(speech, /Parse &lt;then&gt; apply\./);
   assert.doesNotMatch(speech, /##|\*\*|```|img src/);
+
+  // Assembly regressions found by listening to real stories:
+  // Segments were joined with a bare ". ", so any segment already ending in
+  // punctuation produced "…where to continue.. The primer sits…".
+  assert.doesNotMatch(speech, /\.\./, 'must not double sentence punctuation');
+  // A bullet list had its markers stripped and its newlines collapsed, which ran
+  // the items together into one unreadable clause. Each item is a sentence.
+  assert.match(speech, /Normalize once\. Apply the policy\./);
+  // The title has no trailing period of its own, so one is supplied.
+  assert.match(speech, /The request envelope\. /);
 });
 
 test('agent activity console starts hidden and idle', () => {
@@ -678,7 +690,7 @@ test('the review chrome delegates its one narration control to Aloud', () => {
   assert.match(html, /function aloudFetch\(path,body,signal\)/);
   assert.match(html, /fetch\('\/api\/aloud\/'\+path,init\)/);
   assert.match(html, /function prepareStepNarration\(stepIndex\)/);
-  assert.match(html, /aloudFetch\('prepare',\{text:prepareChunks\.join\(' '\),batches:prepareChunks\}\)/);
+  assert.match(html, /aloudFetch\('prepare',\{text:prepareChunks\.join\(' '\),batches:prepareChunks,prefetch:ALOUD_PREPARE_BEATS\}\)/);
   assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
   assert.match(html, /aloudFetch\('status'\)/);
   assert.match(html, /aloudFetch\('control',\{action:action\}\)/);
@@ -714,9 +726,20 @@ test('read aloud submits future narration beats together so Aloud can prefetch t
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /function speechSequenceFrom\(stepIndex,unitIndex,manual\)/);
   assert.match(html, /function splitSpeechUnit\(text\)/);
-  assert.match(html, /var limit=chunks\.length\?480:140,/);
+  // Chunks are split at sentence ends, not at a character budget. Every chunk is a
+  // separate synthesis and a separate audio clip, so a boundary is audible: the
+  // old word-packer cut mid-sentence and left stub chunks that were then read with
+  // full sentence intonation.
+  assert.match(html, /function splitSpeechSentences\(text\)/);
+  assert.match(html, /var ALOUD_FIRST_CHUNK_CHARS=\d+,ALOUD_CHUNK_CHARS=\d+,ALOUD_MIN_TAIL_CHARS=\d+;/);
+  assert.match(html, /splitSpeechSentences\(clean\)\.forEach/);
+  assert.doesNotMatch(html, /var limit=chunks\.length\?480:140,/);
   assert.match(html, /splitSpeechUnit\(unit\.text\)\.forEach/);
-  assert.match(html, /prepareChunks=chunks\.slice\(0,2\)/);
+  // Warms a usable window, not just enough to start talking. Two beats meant
+  // playback caught up with synthesis by beat three.
+  assert.match(html, /var ALOUD_PREPARE_BEATS=(\d+);/);
+  assert.ok(Number(/var ALOUD_PREPARE_BEATS=(\d+);/.exec(html)[1]) > 2);
+  assert.match(html, /prepareChunks=chunks\.slice\(0,ALOUD_PREPARE_BEATS\)/);
   assert.match(html, /batches:prepareChunks/);
   assert.match(html, /aloudFetch\('speak',\{text:text,batches:batches,prefetch:3\}/);
   assert.match(html, /function applyAloudSequenceProgress\(status\)/);
@@ -1510,6 +1533,11 @@ test('read aloud starts with overview context before advancing to step one', () 
   assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechClean\(node\.textContent\|\|''\),group:null\};\}\)/);
   assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
   assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)setActive\(n\);/);
+  assert.doesNotMatch(
+    html,
+    /\.ds-overview-active \.ds-narration/,
+    'the Overview must keep Play, Pause, Resume, and Stop reachable',
+  );
 });
 
 test('intent text is HTML-escaped in the intro panel', () => {
@@ -1994,4 +2022,216 @@ test('stories without hotspots or non-goals render no empty distrust chrome', ()
   assert.doesNotMatch(html, /<div class="ds-intro-hotspots"/);
   assert.doesNotMatch(html, /<div class="ds-intro-nongoals"/);
   assert.doesNotMatch(html, /class="ds-hotspot-flag"/);
+});
+
+test('narration text expands code identifiers into speakable words', () => {
+  // Runs the shipped speechClean rather than a copy, so the assertions cannot
+  // drift from what the page actually sends Aloud.
+  const context = { module: {} };
+  const start = PAGE_JS.indexOf('function speechClean(text){');
+  assert.ok(start > 0, 'speechClean must exist in the client bundle');
+  const end = PAGE_JS.indexOf('\n  }', start) + '\n  }'.length;
+  vm.runInNewContext(`${PAGE_JS.slice(start, end)}\nthis.speechClean=speechClean;`, context);
+  const { speechClean } = context;
+
+  // A phonemizer handed a raw identifier either spells it out or slurs it, which
+  // is what made narration of code beats hard to follow.
+  assert.equal(speechClean('MAX_DAEMON_TEXT_CHARACTERS is the cap.'), 'MAX DAEMON TEXT CHARACTERS is the cap.');
+  assert.equal(speechClean('createManagedKokoroSynthesizer runs once.'), 'create Managed Kokoro Synthesizer runs once.');
+  assert.equal(speechClean('HTTPServer handles it.'), 'HTTP Server handles it.');
+  assert.match(speechClean('aloud-client.ts now retries.'), /dot ts/);
+  assert.match(speechClean('src/aloud-client.ts changed.'), /src slash/);
+  assert.match(speechClean('if (a === b) return;'), /a equals b/);
+  assert.equal(speechClean('if (a !== b) return;'), 'if (a is not equal to b) return;');
+  assert.equal(speechClean('if (a != b) return;'), 'if (a is not equal to b) return;');
+  assert.match(speechClean('count >= 3 && ready'), /at least 3 and ready/);
+
+  // Ordinary prose is the common case and must come through untouched.
+  for (const prose of [
+    'The reviewer should confirm the request handler rejects malformed payloads.',
+    'A fast-start mode reads line-by-line without narrating every line.',
+    'It costs 1.5 seconds, or about 2.25 per beat.',
+  ]) {
+    assert.equal(speechClean(prose), prose);
+  }
+
+  // A digit separator is not a word break.
+  assert.match(speechClean('120_000 milliseconds'), /120000 milliseconds/);
+
+  // Regressions found by reading real stories aloud:
+  // A pluralised acronym must not split at its own last letter.
+  assert.equal(speechClean('removed from accessibility APIs, and'), 'removed from accessibility APIs, and');
+  assert.equal(speechClean('two IDs remain'), 'two IDs remain');
+  assert.equal(speechClean('the OSError path'), 'the OS Error path');
+  // Our own name is one word, and it appears in almost every story.
+  for (const [input, expected] of [
+    ['I bundle Mermaid with diffStory, then', 'I bundle Mermaid with diffstory, then'],
+    ["from diffStory's own asset route", "from diffstory's own asset route"],
+    ['A non-diffStory first result', 'A non-diffstory first result'],
+  ]) {
+    assert.equal(speechClean(input), expected);
+  }
+  // A prose semicolon is a clause pause, not noise: deleting it ran two
+  // independent clauses together into one breathless line.
+  assert.equal(
+    speechClean('the full modern gate; legacy repairs still validate'),
+    'the full modern gate; legacy repairs still validate',
+  );
+  // Braces are still noise.
+  assert.equal(speechClean('the handler {} returns'), 'the handler returns');
+
+  // Idempotency is load-bearing: Aloud rejects a /speak whose batches do not
+  // rejoin to exactly the text field, and the client cleans each beat twice on
+  // the way there (stepSpeechUnits, then splitSpeechUnit).
+  for (const text of [
+    'Step 3 rewires prepareStepNarration so it warms 4 beats, not 2.',
+    'KOKORO_IDLE_UNLOAD_MS went from 120_000 to 30 * 60_000.',
+    'See src/kokoro-tts.ts for voicesByEngine[currentEngine].',
+  ]) {
+    const once = speechClean(text);
+    assert.equal(speechClean(once), once, `speechClean must be idempotent for ${text}`);
+  }
+});
+
+test('narration preparation identity follows the active Aloud settings', () => {
+  const context = {};
+  const start = PAGE_JS.indexOf('function aloudPreparationIdentity(status){');
+  assert.ok(start > 0, 'aloudPreparationIdentity must exist in the client bundle');
+  const end = PAGE_JS.indexOf('\n  }', start) + '\n  }'.length;
+  vm.runInNewContext(`${PAGE_JS.slice(start, end)}\nthis.aloudPreparationIdentity=aloudPreparationIdentity;`, context);
+  const { aloudPreparationIdentity } = context;
+
+  const base = { engine: 'kokoro', resolvedVoice: 'af_sarah', rate: 1, mode: 'auto' };
+  assert.notEqual(aloudPreparationIdentity(base), aloudPreparationIdentity({ ...base, resolvedVoice: 'af_bella' }));
+  assert.notEqual(aloudPreparationIdentity(base), aloudPreparationIdentity({ ...base, engine: 'pocket' }));
+  assert.notEqual(aloudPreparationIdentity(base), aloudPreparationIdentity({ ...base, rate: 1.25 }));
+  assert.notEqual(aloudPreparationIdentity(base), aloudPreparationIdentity({ ...base, mode: 'fast' }));
+});
+
+test('Play waits for the selected lazy step instead of jumping to a loaded step', () => {
+  const loadCalls = [];
+  const speakCalls = [];
+  let fallbackCalls = 0;
+  let updateCalls = 0;
+  const context = {
+    active: 3,
+    readAloud: true,
+    aloudActive: false,
+    speechLoadingLabel: '',
+    stepPanels: [
+      null,
+      null,
+      null,
+      { hasAttribute: (name) => name === 'data-step-lazy' },
+    ],
+    loadStoryStep(index, callback) {
+      loadCalls.push({ index, callback });
+    },
+    speakStep(index) {
+      speakCalls.push(index);
+      return true;
+    },
+    firstSpeakableStep() {
+      fallbackCalls++;
+      return 5;
+    },
+    setActive() {
+      assert.fail('Play must not leave the selected lazy step');
+    },
+    updateReadAloudButton() {
+      updateCalls++;
+    },
+  };
+  const start = PAGE_JS.indexOf('function startReadAloudFromActive(){');
+  assert.ok(start > 0, 'startReadAloudFromActive must exist in the client bundle');
+  const end = PAGE_JS.indexOf('\n  }', start) + '\n  }'.length;
+  vm.runInNewContext(`${PAGE_JS.slice(start, end)}\nthis.startReadAloudFromActive=startReadAloudFromActive;`, context);
+
+  assert.equal(context.startReadAloudFromActive(), true);
+  assert.deepEqual(loadCalls.map(({ index }) => index), [3]);
+  assert.deepEqual(speakCalls, []);
+  assert.equal(fallbackCalls, 0);
+
+  context.stepPanels[3] = { hasAttribute: () => false };
+  loadCalls[0].callback(true);
+  assert.deepEqual(speakCalls, [3]);
+  assert.equal(fallbackCalls, 0);
+  assert.equal(updateCalls, 0);
+});
+
+test('client regex escapes survive the plain-string bundle', () => {
+  // This file keeps its client JS in a plain string, so every regex escape has to
+  // be written doubled. A single backslash is silently eaten and the regex still
+  // compiles as something else entirely — /\s+/ became /s+/, which split every
+  // narration beat on the letter "s" and rejoined it with spaces. That shipped
+  // undetected because nothing crashes; the audio just says the wrong words.
+  const literals = PAGE_JS.match(/\/(?:\\.|\[[^\]]*\]|[^/\n\\])+\/[gimsuy]*/g) ?? [];
+  const suspect = literals.filter((lit) => lit.length < 90
+    && (/(?<!\\)\b[sdwSDW]\+/.test(lit) || /(?<!\\)\b[sdw]\$/.test(lit)));
+  assert.deepEqual(suspect, [], `regex literals look like they lost a backslash: ${suspect.join(', ')}`);
+  // And the sites that actually regressed, asserted directly. The whitespace split
+  // moved into splitSpeechUnit's long-sentence fallback when chunking became
+  // sentence-aware; it is the same load-bearing escape, in a new place.
+  assert.match(PAGE_JS, /sentence\.split\(\/\\s\+\/\)/);
+  assert.match(PAGE_JS, /\.replace\(\/\\s\+\$\/,''\)/);
+  // The sentence-boundary regex is the newest escape-dependent line: unescaped, the
+  // character class would swallow literal letters and cut beats in the wrong places.
+  assert.match(PAGE_JS, /boundary=\/\[\.!\?\]\+\(\?:\["'\)\\\]\]\+\)\?\(\?=\\s\+\|\$\)\/g/);
+});
+
+test('narration chunks break at sentence ends, never mid-sentence or into stubs', () => {
+  // Every chunk is a separate synthesis request and a separate audio clip played
+  // back to back, so a chunk boundary is audible. The old splitter packed words to
+  // a character budget (140 then 480), which cut sentences in half and left tiny
+  // remainders — an 8-character chunk got read as a whole sentence, so what you
+  // heard did not match what the beat said.
+  const context = {};
+  const head = PAGE_JS.indexOf('function splitSpeechSentences(text){');
+  const tail = PAGE_JS.indexOf('\n  function speechSequenceFrom');
+  assert.ok(head > 0 && tail > head, 'splitter must exist in the client bundle');
+  const cleanStart = PAGE_JS.indexOf('function speechClean(text){');
+  const cleanEnd = PAGE_JS.indexOf('\n  }', cleanStart) + '\n  }'.length;
+  const consts = /var ALOUD_FIRST_CHUNK_CHARS=[^;]+;/.exec(PAGE_JS)[0];
+  vm.runInNewContext(
+    `${PAGE_JS.slice(cleanStart, cleanEnd)}\n${consts}\n${PAGE_JS.slice(head, tail)}\nthis.splitSpeechUnit=splitSpeechUnit;`,
+    context,
+  );
+  const { splitSpeechUnit } = context;
+
+  const beat = 'Finish the UI-only hardening pass with readable light-theme diff text and progress feedback that assistive technology can follow without hearing a one-second stream of updates. Keep Signal colors for rails and fills, introduce darker semantic ink for small text, and isolate meaningful progress milestones in one polite atomic status region while elapsed time stays explicitly non-live.';
+  const chunks = splitSpeechUnit(beat);
+
+  // Nothing is cut mid-sentence.
+  for (const chunk of chunks) {
+    assert.match(chunk, /[.!?]["')\]]?$/, `chunk must end a sentence: ${JSON.stringify(chunk)}`);
+  }
+  // No stub clips.
+  for (const chunk of chunks) {
+    assert.ok(chunk.length >= 60, `chunk too short to stand alone: ${JSON.stringify(chunk)}`);
+  }
+  // The contract Aloud enforces: batches must rejoin to exactly the text sent.
+  const normalize = (value) => value.replace(/\s+/g, ' ').trim();
+  assert.equal(normalize(chunks.join(' ')), normalize(splitSpeechUnit(beat).join(' ')));
+  assert.equal(normalize(chunks.join(' ')).length > 0, true);
+
+  // Decimals and dotted filenames must not be mistaken for sentence ends, which
+  // would both mangle them and break the rejoin contract.
+  const tricky = 'It costs 1.5 seconds. The change lands in app.ts and holds.';
+  for (const chunk of splitSpeechUnit(tricky)) {
+    assert.doesNotMatch(chunk, /\b1\.$/, 'a decimal must not end a chunk');
+  }
+  assert.match(splitSpeechUnit(tricky).join(' '), /1\.5 seconds/);
+
+  // A brief opening sentence must not ship as its own clip just because the next
+  // sentence pushes the pair over the budget.
+  const shortLead = 'The direct handler lands here. ' + 'The reviewer confirms the request handler rejects malformed payloads before the parser ever sees them and records the outcome.';
+  for (const chunk of splitSpeechUnit(shortLead)) {
+    assert.ok(chunk.length >= 60, `short leading sentence must be merged, got: ${JSON.stringify(chunk)}`);
+  }
+
+  // A single sentence longer than a whole chunk still has to be broken up.
+  const long = `${'The reviewer confirms the request handler rejects malformed payloads before the parser sees them and '.repeat(8)}done.`;
+  const longChunks = splitSpeechUnit(long);
+  assert.ok(longChunks.length > 1, 'an over-long sentence must still be split');
+  for (const chunk of longChunks) assert.ok(chunk.length <= 520, 'chunks stay within the synthesis budget');
 });

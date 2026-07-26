@@ -770,7 +770,7 @@ body:not([data-read-view="files"]){gap:4px}
 .ds-intro-utility{display:flex;align-items:center;flex-wrap:wrap;gap:7px 18px;max-width:820px;margin-top:15px;color:var(--dim);font-size:11.5px}.ds-intro-scope{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em}.ds-intro-notes{min-width:0}.ds-intro-notes>summary{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 0;list-style:none;color:var(--muted);font-weight:600;cursor:pointer}.ds-intro-notes>summary::-webkit-details-marker{display:none}.ds-intro-notes>summary:hover{color:var(--text)}.ds-intro-notes-caret{color:var(--dim);font-size:13px;transition:transform var(--motion-duration-fast) var(--motion-ease-in-out)}.ds-intro-notes[open]{flex-basis:100%;width:100%}.ds-intro-notes[open] .ds-intro-notes-caret{transform:rotate(180deg)}.ds-intro-notes-body{margin-top:8px;padding:14px 16px 16px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel2)}
 .ds-intro-notes .ds-intro-hotspots{margin:0}.ds-intro-notes .ds-intro-hotspots ul{margin:9px 0 0;gap:0}.ds-intro-notes .ds-intro-hotspots li+li{border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-hotspots button{padding:10px 8px;border:0;border-radius:7px;background:transparent}.ds-intro-notes .ds-intro-hotspots button:hover{border-color:transparent;background:var(--fill-1)}.ds-intro-notes .ds-intro-context{max-width:none;margin:0;padding:0;border:0}.ds-intro-notes .ds-intro-hotspots+.ds-intro-context{margin-top:16px;padding-top:15px;border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-nongoals{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-nongoals:first-child{margin-top:0;padding-top:0;border-top:0}
 .ds-intro-allfiles{min-height:28px;padding:2px 0;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;cursor:pointer}.ds-intro-allfiles:hover{color:var(--text)}
-.ds-overview-active .ds-narration,.ds-overview-active .ds-review-menu-wrap{display:none}
+.ds-overview-active .ds-review-menu-wrap{display:none}
 .ds-symbols{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden}.ds-symbols code{max-width:130px;overflow:hidden;text-overflow:ellipsis;padding:3px 6px;border:1px solid var(--line-soft);border-radius:6px;background:var(--fill-1);color:var(--muted);font-family:var(--mono);font-size:9.5px;white-space:nowrap}.ds-fileitem-symbol{min-width:0;max-width:82px;overflow:hidden;text-overflow:ellipsis;color:var(--dim);font-family:var(--mono);font-size:9px;white-space:nowrap}
 .ds-filefilter-menu{position:relative}.ds-filefilter-menu>summary{display:flex;align-items:center;justify-content:space-between;gap:6px;height:28px;padding:0 9px;list-style:none;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font-size:10.5px;cursor:pointer}.ds-filefilter-menu>summary::-webkit-details-marker{display:none}.ds-filefilter-menu>summary strong{margin-right:auto;color:var(--text)}.ds-filefilter-menu[open] .ds-filefilters{display:flex}.ds-filefilter-menu .ds-filefilters{display:none;padding:7px;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel3);box-shadow:var(--shadow)}
 .ds-filepanel-loading,.ds-filepanel-loaderror,.ds-step-loading,.ds-step-loaderror{display:flex;min-height:180px;align-items:center;justify-content:center;gap:10px;padding:24px;color:var(--muted);font-size:12px}.ds-filepanel-loaderror,.ds-step-loaderror{flex-direction:column;color:var(--del-text)}.ds-step-lazy{align-items:center;justify-content:center}
@@ -878,7 +878,7 @@ const PAGE_JS_HEAD = `
   var SEVERITY={blocking:'Blocking',concern:'Concern',nit:'Minor'};
   var STATUS={open:'Open',addressed:'Needs verification',resolved:'Resolved'};
   var tourView,filesView,drawer,feedbackDrawer,driftDrawer,commandRoot,toastEl,selectionMenu,filmThread,filmTooltip,filmTooltipTarget=null,filmMagnifyFrame=0,filmPointerX=null,selectionContext=null,selectionRects=[],selectionContextMenuPending=false,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,toastSequence=0,storyFocusIndex=-1,storyFocusGroup=-1,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[],voiceSequenceToken=0,currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false,sidebarReturnFocus=null,reviewMenuReturnFocus=null,commandReturnFocus=null,agentChooserReturnFocus=null,agentChooserRequest=0,activeCommentSurface=null,commentSurfaceReturnFocus=null,commentSurfaceSeq=0,commentSurfaceCollapsedSidebar=false,composerReturnFocus=null,composerCollapsedSidebar=false,modalStack=[],modalBackgroundSnapshots=[];
-  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,readAloud=false,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
+  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,readAloud=false,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPrepareRequest=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
   var activeFileFilter='all',activeFeedbackFilter='all',restoringReviewPosition=false,reviewSaveTimer=null,reviewPositionReady=false,driftRequestAbort=null,driftRequestToken=0,driftLayoutMode=compactScreen()?'unified':'split';
   var mermaidModulePromise=null,mermaidRenderId=0;
   var liveEventSource=null,liveDisconnectTimer=null,liveOriginalStoryFreshness='',liveIssues={diff:false,story:false,disconnected:false},liveGenerations={diff:0,story:0,disconnected:0},liveDismissed={diff:0,story:0,disconnected:0};
@@ -1321,7 +1321,7 @@ const PAGE_JS_HEAD = `
     var code=$('[data-comment-code]',row);if(!code)return null;
     var file=code.getAttribute('data-comment-file')||'',line=parseInt(code.getAttribute('data-comment-line')||'0',10),side=code.getAttribute('data-comment-side')||'right';
     if(!file||!line)return null;
-    var selectedText=(code.textContent||'').replace(/\s+$/,'');
+    var selectedText=(code.textContent||'').replace(/\\s+$/,'');
     return {anchorRow:row,file:file,line:line,side:side,step:row.getAttribute('data-step')||'',selectedText:selectedText,selection:{startLine:line,endLine:line,startColumn:1,endColumn:selectedText.length+1}};
   }
   function ensureSelectionMenu(){
@@ -1736,14 +1736,56 @@ const PAGE_JS_HEAD = `
     var btn=$('[data-readaloud]');if(btn)btn.classList.remove('is-speaking');
     updateReadAloudButton();
   }
+  // Narration is full of identifiers, and a phonemizer handed MAX_DAEMON_TEXT or
+  // aloud-client.ts has no good options: it either spells letters out or slurs the
+  // whole token. Splitting them into ordinary words first is what makes a beat
+  // about code sound like a sentence instead of a stumble. Kept idempotent, since
+  // stepSpeechUnits cleans a beat and splitSpeechUnit cleans it again.
   function speechClean(text){
     return (text||'')
       .replace(/→/g,' to ')
       .replace(/↵/g,' return ')
+      // Our own name is one word. The camelCase rule below would otherwise read it
+      // as "diff Story" every time a beat mentions the tool, which is most of them;
+      // lowering the inner capital removes the boundary without a placeholder.
+      .replace(/\\bdiffStory\\b/g,'diffstory')
       .replace(/\\bfn\\b/g,'function')
       .replace(/\\(\\)/g,' function ')
-      .replace(/[{};]+/g,' ')
+      // Operators, before punctuation stripping removes the characters they use.
+      .replace(/!==|!=/g,' is not equal to ')
+      .replace(/===|==/g,' equals ')
+      .replace(/=>/g,' arrow ')
+      .replace(/->/g,' to ')
+      .replace(/&&/g,' and ')
+      .replace(/\\|\\|/g,' or ')
+      .replace(/>=/g,' at least ')
+      .replace(/<=/g,' at most ')
+      // A dotted file name reads as a word plus its extension, not as a decimal.
+      .replace(/\\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|sh|yml|yaml)\\b/gi,' dot $1 ')
+      // Paths: say the separator rather than running the segments together.
+      .replace(/([A-Za-z0-9_)\\]])\\/([A-Za-z0-9_.])/g,'$1 slash $2')
+      .replace(/::/g,' colon colon ')
+      // A digit separator is not a word break: 120_000 has to stay one number,
+      // or it reads as "one hundred twenty" followed by "zero".
+      .replace(/([0-9])_([0-9])/g,'$1$2')
+      // snake_case identifiers become separate words.
+      .replace(/([A-Za-z0-9])_([A-Za-z0-9])/g,'$1 $2')
+      // camelCase and PascalCase boundaries, including runs like HTTPServer.
+      .replace(/([a-z0-9])([A-Z])/g,'$1 $2')
+      // The acronym boundary needs two lowercase letters to follow, or a plural
+      // acronym splits at its own last letter: APIs became "AP Is", IDs became
+      // "I Ds". Requiring a real word after the capital keeps HTTPServer working
+      // while leaving pluralised acronyms alone.
+      .replace(/([A-Z]+)([A-Z][a-z]{2,})/g,'$1 $2')
+      // Braces only. Semicolons used to be stripped alongside them, which read two
+      // independent clauses as one breathless run-on ("the full modern gate legacy
+      // repairs still validate..."). espeak-ng already treats a semicolon as a
+      // clause pause, so deleting it threw away phrasing the narrator wanted.
+      .replace(/[{}]+/g,' ')
       .replace(/\\s+/g,' ')
+      // Expanding a token mid-sentence can leave a gap before the punctuation
+      // that followed it, which the phonemizer voices as a stumble.
+      .replace(/ +([,;:.!?])/g,'$1')
       .trim();
   }
   function fallbackStepText(panel){
@@ -1768,14 +1810,64 @@ const PAGE_JS_HEAD = `
   function stepText(panel){
     return stepSpeechUnits(panel).map(function(unit){return unit.text;}).join(' ');
   }
+  // Each chunk becomes its own synthesis request and its own audio clip, played
+  // back to back. So a chunk boundary is an audible boundary: the narrator stops,
+  // and the next clip starts with fresh sentence intonation. Boundaries therefore
+  // belong at sentence ends, never wherever a character budget happens to run out.
+  var ALOUD_FIRST_CHUNK_CHARS=170,ALOUD_CHUNK_CHARS=480,ALOUD_MIN_TAIL_CHARS=60;
+  // Only split where punctuation is followed by whitespace or the end of the text,
+  // so "1.5 seconds" and "app.ts" stay intact. Splitting on any period would both
+  // mangle them and break the batches-rejoin-to-text contract Aloud checks.
+  function splitSpeechSentences(text){
+    var boundary=/[.!?]+(?:["')\\]]+)?(?=\\s+|$)/g,out=[],start=0,match;
+    while((match=boundary.exec(text))!==null){
+      var end=match.index+match[0].length,segment=text.slice(start,end).trim();
+      if(segment)out.push(segment);
+      start=end;
+    }
+    var tail=text.slice(start).trim();
+    if(tail)out.push(tail);
+    return out.length?out:[text.trim()];
+  }
   function splitSpeechUnit(text){
-    var clean=speechClean(text),words=clean?clean.split(/\s+/):[],chunks=[],current='';
-    words.forEach(function(word){
-      var limit=chunks.length?480:140,combined=current?current+' '+word:word;
-      if(current&&combined.length>limit){chunks.push(current);current=word;}
-      else current=combined;
+    // The whitespace class needs a doubled backslash. This client code lives in a
+    // plain string, so a single one is eaten before the browser sees it, and this
+    // line read as "split on the letter s" — every beat was split on its own s
+    // characters and rejoined with spaces, so narration said "Concept validation
+    // i  a reu able profile". Every regex escape in this file must be doubled.
+    var clean=speechClean(text);
+    if(!clean)return [];
+    // A sentence only gets broken apart when it alone exceeds a whole chunk.
+    var units=[];
+    splitSpeechSentences(clean).forEach(function(sentence){
+      if(sentence.length<=ALOUD_CHUNK_CHARS){units.push(sentence);return;}
+      var current='';
+      sentence.split(/\\s+/).forEach(function(word){
+        var combined=current?current+' '+word:word;
+        if(current&&combined.length>ALOUD_CHUNK_CHARS){units.push(current);current=word;}
+        else current=combined;
+      });
+      if(current)units.push(current);
     });
-    if(current)chunks.push(current);
+    var chunks=[],pending='';
+    units.forEach(function(unit){
+      // The first chunk stays small so playback can start sooner, but never at the
+      // cost of cutting a sentence: an over-long opening sentence ships whole.
+      var limit=chunks.length?ALOUD_CHUNK_CHARS:ALOUD_FIRST_CHUNK_CHARS;
+      var combined=pending?pending+' '+unit:unit;
+      // The budget must not force out a chunk too short to stand on its own. A brief
+      // opening sentence ("The direct handler lands here.") followed by a long one
+      // exceeded the limit immediately, so the short one shipped alone and was read
+      // as an isolated utterance. Keep absorbing until it can carry a clip.
+      if(pending&&combined.length>limit&&pending.length>=ALOUD_MIN_TAIL_CHARS){chunks.push(pending);pending=unit;}
+      else pending=combined;
+    });
+    if(pending){
+      // A short tail rides along with the previous chunk. Left alone it became its
+      // own clip — an 8-character fragment read as a complete sentence.
+      if(chunks.length&&pending.length<ALOUD_MIN_TAIL_CHARS)chunks[chunks.length-1]+=' '+pending;
+      else chunks.push(pending);
+    }
     return chunks;
   }
   function speechSequenceFrom(stepIndex,unitIndex,manual){
@@ -1888,8 +1980,22 @@ const PAGE_JS_HEAD = `
     if(body!=null)init.body=JSON.stringify(body);
     return fetch('/api/aloud/'+path,init).then(function(r){return readJsonOrError(r,'Aloud is unavailable.');});
   }
+  // How many beats of the step under the cursor to warm ahead of a play. Matches
+  // the daemon's own prepare depth; it clamps anything larger.
+  var ALOUD_PREPARE_BEATS=4;
+  function aloudPreparationIdentity(status){
+    status=status||{};
+    return [
+      String(status.engine||''),
+      String(status.voice||''),
+      String(status.resolvedVoice||status.voice||''),
+      String(status.rate||''),
+      String(status.mode||'')
+    ].join('|');
+  }
   function prepareStepNarration(stepIndex){
     if(!stepPanels||stepIndex<=0||stepIndex>=stepPanels.length||readAloud||aloudActive||speechLoadingLabel)return;
+    var prepareRequest=++aloudPrepareRequest;
     if(aloudPrepareTimer)clearTimeout(aloudPrepareTimer);
     aloudPrepareTimer=setTimeout(function(){
       aloudPrepareTimer=0;
@@ -1900,11 +2006,25 @@ const PAGE_JS_HEAD = `
       }
       var units=stepSpeechUnits(panel),chunks=[];
       units.forEach(function(unit){splitSpeechUnit(unit.text).forEach(function(chunk){chunks.push(chunk);});});
-      var prepareChunks=chunks.slice(0,2),preparedKey=prepareChunks.join('\\n');
-      if(!prepareChunks.length||preparedKey===aloudPreparedText)return;
-      aloudPreparedText=preparedKey;
-      aloudFetch('prepare',{text:prepareChunks.join(' '),batches:prepareChunks}).catch(function(){
-        if(aloudPreparedText===preparedKey)aloudPreparedText='';
+      // Warm the whole step, not its first two beats. Two was enough to start
+      // talking and not enough to keep talking: by beat three playback was waiting
+      // on synthesis again. The daemon caps how deep it actually goes.
+      var prepareChunks=chunks.slice(0,ALOUD_PREPARE_BEATS);
+      if(!prepareChunks.length)return;
+      // A text-only key reused audio prepared for the previous engine, voice,
+      // speed, or mode. Ask Aloud for the settings it will actually use before
+      // deciding this step is warm.
+      aloudFetch('status').then(function(status){
+        if(prepareRequest!==aloudPrepareRequest||readAloud||aloudActive||speechLoadingLabel)return;
+        if(!status||status.service!=='aloud-speech-daemon'||status.protocolVersion!==2)return;
+        var preparedKey=aloudPreparationIdentity(status)+'\\n'+prepareChunks.join('\\n');
+        if(preparedKey===aloudPreparedText)return;
+        aloudPreparedText=preparedKey;
+        return aloudFetch('prepare',{text:prepareChunks.join(' '),batches:prepareChunks,prefetch:ALOUD_PREPARE_BEATS}).catch(function(){
+          if(aloudPreparedText===preparedKey)aloudPreparedText='';
+        });
+      }).catch(function(){
+        // Preparation is opportunistic. Play owns the user-visible error path.
       });
     },120);
   }
@@ -2069,18 +2189,41 @@ const PAGE_JS_HEAD = `
     if(stop)stop.hidden=!aloudActive;
     document.body.classList.toggle('ds-aloud-active',playing);
   }
+  function startReadAloudFromActive(){
+    var requestedStep=active,panel=stepPanels&&stepPanels[requestedStep];
+    if(panel&&panel.hasAttribute('data-step-lazy')){
+      // A newly selected step may still contain only its loading skeleton. It is
+      // not an empty narration step, so do not fall through to some later panel
+      // that happened to load first.
+      loadStoryStep(requestedStep,function(ok){
+        if(!ok){
+          if(active===requestedStep){readAloud=false;updateReadAloudButton();}
+          return;
+        }
+        // setActive's own load callback starts narration when it is queued ahead
+        // of this one. Only start here when no request is already in flight.
+        if(!readAloud||active!==requestedStep||aloudActive||speechLoadingLabel)return;
+        if(!speakStep(requestedStep)){readAloud=false;updateReadAloudButton();}
+      });
+      return true;
+    }
+    if(speakStep(requestedStep))return true;
+    var si=firstSpeakableStep();
+    if(si>=0){setActive(si);return true;}
+    readAloud=false;updateReadAloudButton();return false;
+  }
   function restartReadAloud(){
     cancelSpeech(false);
     readAloud=true;
     updateReadAloudButton();
-    if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
+    startReadAloudFromActive();
   }
   function toggleReadAloud(){
     if(speechLoadingLabel)return;
     if(aloudActive){toggleVoicePause();return;}
     readAloud=true;
     updateReadAloudButton();
-    if(!speakStep(active)){var si=firstSpeakableStep();if(si>=0)setActive(si);}
+    startReadAloudFromActive();
   }
   function stopReadAloud(){
     if(!(readAloud||aloudActive||speechLoadingLabel))return false;
