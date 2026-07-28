@@ -883,7 +883,7 @@ const PAGE_JS_HEAD = `
   var SEVERITY={blocking:'Blocking',concern:'Concern',nit:'Minor'};
   var STATUS={open:'Open',addressed:'Needs verification',resolved:'Resolved'};
   var tourView,filesView,drawer,feedbackDrawer,driftDrawer,commandRoot,toastEl,selectionMenu,filmThread,filmTooltip,filmTooltipTarget=null,filmMagnifyFrame=0,filmPointerX=null,selectionContext=null,selectionRects=[],selectionContextMenuPending=false,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,toastSequence=0,storyFocusIndex=-1,storyFocusGroup=-1,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[],voiceSequenceToken=0,currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false,sidebarReturnFocus=null,reviewMenuReturnFocus=null,commandReturnFocus=null,agentChooserReturnFocus=null,agentChooserRequest=0,activeCommentSurface=null,commentSurfaceReturnFocus=null,commentSurfaceSeq=0,commentSurfaceCollapsedSidebar=false,composerReturnFocus=null,composerCollapsedSidebar=false,modalStack=[],modalBackgroundSnapshots=[];
-  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,readAloud=false,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPrepareRequest=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
+  var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,aloudIntent='off',aloudResumeDirty=false,aloudControlTimer=0,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPrepareRequest=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
   var activeFileFilter='all',activeFeedbackFilter='all',restoringReviewPosition=false,reviewSaveTimer=null,reviewPositionReady=false,driftRequestAbort=null,driftRequestToken=0,driftLayoutMode=compactScreen()?'unified':'split';
   var mermaidModulePromise=null,mermaidRenderId=0;
   var liveEventSource=null,liveDisconnectTimer=null,liveOriginalStoryFreshness='',liveIssues={diff:false,story:false,disconnected:false},liveGenerations={diff:0,story:0,disconnected:0},liveDismissed={diff:0,story:0,disconnected:0};
@@ -1449,7 +1449,7 @@ const PAGE_JS_HEAD = `
     };
     if(reviewPositionReady&&previous!==v)runWorkspaceTransition('view',v==='files'?1:-1,update);else update();
     if(v==='files'&&selectedFile<0)selectFile(0);
-    if(v!=='tour'){cancelFocusScroll();readAloud=false;cancelSpeech();}
+    if(v!=='tour'){cancelFocusScroll();setAloudIntent('off');cancelSpeech();}
     saveReviewPositionSoon();
   }
 
@@ -1478,7 +1478,7 @@ const PAGE_JS_HEAD = `
   }
   function activateStep(i,autoSpeak){
     if(i<0)i=0;if(i>total-1)i=total-1;var previous=active;active=i;visited[i]=true;
-    if(!readAloud)clearVoiceFocus();
+    if(aloudIntent==='off')clearVoiceFocus();
     var update=function(){
       stepPanels.forEach(function(p,idx){p.hidden=idx!==i;});
       stepCards.forEach(function(c,idx){
@@ -1516,11 +1516,20 @@ const PAGE_JS_HEAD = `
     if(i===0)clearStoryFocus();
     var storyFocused=ap&&i>0?selectStoryFocus(i,0,true):false;
     if(ap&&!storyFocused)jumpToFirstChange($('.ds-diff',ap));
-    if(autoSpeak!==false)speakStep(i);
+    // The autoSpeak branch is exactly the user-driven navigation path — the
+    // narration engine advances the story with activateStep(i,false). Moving
+    // while paused stays silent (speakStep is intent-gated) and re-points Resume
+    // at the step the reviewer actually landed on.
+    if(autoSpeak!==false){markResumeMoved();speakStep(i);}
     saveReviewPositionSoon();
   }
   function setActive(i,autoSpeak){
     if(i<0)i=0;if(i>total-1)i=total-1;
+    // setActive is the user-driven entry point, so re-point Resume here rather
+    // than relying on activateStep's autoSpeak branch: on a lazy step that branch
+    // only runs from the load callback, which leaves a pause resuming into the
+    // step the reviewer had already walked away from.
+    markResumeMoved();
     var panel=stepPanels&&stepPanels[i];
     if(panel&&panel.hasAttribute('data-step-lazy')){
       activateStep(i,false);
@@ -1726,17 +1735,41 @@ const PAGE_JS_HEAD = `
     }
   }
 
+  // The reviewer's intent — 'off', 'playing' or 'paused' — and the only thing
+  // that decides whether moving through the story narrates. Deliberately never
+  // written by the status poll: aloudActive and aloudPaused mirror what the
+  // daemon last reported, which is an observation, and it arrives late and
+  // sometimes stale. Conflating the two is why pause never held. A pause used to
+  // leave "narrate as I navigate" armed, so clicking any step, pressing j/k or
+  // pressing an arrow key started a brand new job talking over the pause.
+  function narrationPlaying(){return aloudIntent==='playing';}
+  function setAloudIntent(next){
+    aloudIntent=next;
+    if(next!=='paused')aloudResumeDirty=false;
+  }
+  // Moving the reading cursor while paused must stay silent, but it also
+  // invalidates the daemon's paused job — it is parked somewhere the reviewer
+  // has left. Remember that, so Resume speaks from where they actually are
+  // instead of resuming a job pointing at the step they walked away from.
+  function markResumeMoved(){
+    if(aloudIntent==='paused')aloudResumeDirty=true;
+  }
   function cancelSpeech(stopPlayback){
     cancelFocusScroll();
     voiceSequenceToken++;
     clearSpeechCursor();
     aloudRequestToken++;
     aloudControlToken++;aloudControlPending=false;
+    if(aloudControlTimer){clearTimeout(aloudControlTimer);aloudControlTimer=0;}
     if(aloudPollTimer){clearTimeout(aloudPollTimer);aloudPollTimer=0;}
     if(aloudRequestAbort){try{aloudRequestAbort.abort();}catch(e){}}
     aloudRequestAbort=null;
-    if(stopPlayback!==false&&(aloudActive||aloudJobId))aloudControl('stop',true);
-    aloudActive=false;aloudPaused=false;aloudJobId='';aloudPhase='idle';aloudSequence=[];aloudSequenceIndex=-1;speechLoadingLabel='';
+    // speechLoadingLabel belongs in this guard: aborting our own fetch does not
+    // un-send the POST, and the daemon starts the job whether or not we are still
+    // listening. Without it, giving up mid-start left Aloud reading a story the
+    // page had already forgotten, with every control hidden or idle.
+    if(stopPlayback!==false&&(aloudActive||aloudJobId||speechLoadingLabel))aloudControl('stop',true);
+    aloudActive=false;aloudPaused=false;aloudResumeDirty=false;aloudJobId='';aloudPhase='idle';aloudSequence=[];aloudSequenceIndex=-1;speechLoadingLabel='';
     clearVoiceFocus();
     var btn=$('[data-readaloud]');if(btn)btn.classList.remove('is-speaking');
     updateReadAloudButton();
@@ -1918,7 +1951,7 @@ const PAGE_JS_HEAD = `
     if(index>=units.length)return false;
     return speakNarrationSequence(speechSequenceFrom(stepIndex,index,manual),manual);
   }
-  function speakStep(i){if(readAloud)return speakStepIndex(i,false);return false;}
+  function speakStep(i){if(!narrationPlaying())return false;return speakStepIndex(i,false);}
   function nextSpeakableStep(i){
     for(var j=i+1;j<total;j++){if(stepSpeechUnits(stepPanels[j]).length)return j;}
     return -1;
@@ -1945,13 +1978,26 @@ const PAGE_JS_HEAD = `
   }
   function moveSpeechBeat(delta){
     if(isTextEntryTarget(document.activeElement))return false;
-    if(!(readAloud||aloudActive||currentSpeechStep>=0))return false;
+    if(!(aloudIntent!=='off'||currentSpeechStep>=0))return false;
     var baseStep=currentSpeechStep>=0?currentSpeechStep:active,baseUnit=currentSpeechUnit;
     var target=speechBeatTarget(baseStep,baseUnit,delta);if(!target)return true;
-    var manual=currentSpeechManual&&!readAloud;
     var units=stepSpeechUnits(stepPanels[target.step]);if(!units.length)return true;
+    // Skipping beats while paused has to stay paused. This used to cancel the job
+    // and immediately speak the neighbouring beat, so an arrow key silently
+    // un-paused the story — and because speakStepUnit builds a sequence running
+    // to the end, it replaced the paused job with a whole new full-story one.
+    if(aloudIntent==='paused'){
+      cancelSpeech(true);
+      aloudResumeDirty=true;
+      currentSpeechStep=target.step;currentSpeechUnit=target.unit;
+      activateStep(target.step,false);
+      var held=units[target.unit];if(held)setActiveBeat(target.step,held.group);
+      updateReadAloudButton();
+      return true;
+    }
+    var manual=currentSpeechManual&&!narrationPlaying();
     cancelSpeech(false);
-    readAloud=!manual;
+    setAloudIntent(manual?'off':'playing');
     activateStep(target.step,false);
     updateReadAloudButton();
     voiceSequenceToken++;
@@ -1988,6 +2034,10 @@ const PAGE_JS_HEAD = `
   // How many beats of the step under the cursor to warm ahead of a play. Matches
   // the daemon's own prepare depth; it clamps anything larger.
   var ALOUD_PREPARE_BEATS=4;
+  // Long enough that a normal pause/resume always answers first, short enough
+  // that a wedged one hands the control back while the reviewer is still looking
+  // at it. aloudControl never rejects, so this only fires on a genuine stall.
+  var ALOUD_CONTROL_TIMEOUT_MS=6000;
   function aloudPreparationIdentity(status){
     status=status||{};
     return [
@@ -1999,7 +2049,7 @@ const PAGE_JS_HEAD = `
     ].join('|');
   }
   function prepareStepNarration(stepIndex){
-    if(!stepPanels||stepIndex<=0||stepIndex>=stepPanels.length||readAloud||aloudActive||speechLoadingLabel)return;
+    if(!stepPanels||stepIndex<=0||stepIndex>=stepPanels.length||aloudIntent!=='off'||aloudActive||speechLoadingLabel)return;
     var prepareRequest=++aloudPrepareRequest;
     if(aloudPrepareTimer)clearTimeout(aloudPrepareTimer);
     aloudPrepareTimer=setTimeout(function(){
@@ -2020,7 +2070,7 @@ const PAGE_JS_HEAD = `
       // speed, or mode. Ask Aloud for the settings it will actually use before
       // deciding this step is warm.
       aloudFetch('status').then(function(status){
-        if(prepareRequest!==aloudPrepareRequest||readAloud||aloudActive||speechLoadingLabel)return;
+        if(prepareRequest!==aloudPrepareRequest||aloudIntent!=='off'||aloudActive||speechLoadingLabel)return;
         if(!status||status.service!=='aloud-speech-daemon'||status.protocolVersion!==2)return;
         var preparedKey=aloudPreparationIdentity(status)+'\\n'+prepareChunks.join('\\n');
         if(preparedKey===aloudPreparedText)return;
@@ -2038,6 +2088,10 @@ const PAGE_JS_HEAD = `
   }
   function applyAloudStatus(status){
     if(!status)return;
+    // Observation, never intent. A status snapshot taken before the reviewer's
+    // pause reached the daemon must not repaint the control with the state they
+    // just left, so an in-flight control owns the truth until it answers.
+    if(aloudControlPending)return;
     aloudActive=!!status.running;aloudPaused=!!status.paused;
     if(typeof status.rate==='number'&&isFinite(status.rate)&&status.rate>0)aloudRate=status.rate;
     var state=status.state||{},phase=String(state.status||'');
@@ -2045,6 +2099,11 @@ const PAGE_JS_HEAD = `
     // Aloud reports exactly which chunk it is preparing. Keep it so the control
     // can say what is happening instead of spinning silently.
     aloudStateMessage=typeof state.message==='string'?state.message:'';
+    // Aloud has its own menu bar and a global shortcut, so it can be paused from
+    // outside this page. Adopt that rather than insisting on an intent the
+    // reviewer can plainly hear is wrong — but only while a job really exists,
+    // so a story we paused and whose job we cancelled stays paused.
+    if(aloudActive&&aloudIntent!=='off')setAloudIntent(aloudPaused?'paused':'playing');
   }
   function focusAloudSequenceUnit(index){
     if(index<0||index>=aloudSequence.length)return;
@@ -2079,18 +2138,23 @@ const PAGE_JS_HEAD = `
   function finishAloudSpeech(token,opts,completed,message){
     if(token!==aloudRequestToken)return;
     if(aloudPollTimer){clearTimeout(aloudPollTimer);aloudPollTimer=0;}
-    var wasActive=aloudActive;
     aloudActive=false;aloudPaused=false;aloudJobId='';aloudPhase='idle';speechLoadingLabel='';aloudPollFails=0;
     aloudStateMessage='';aloudStartedAt=0;aloudSlowNotice=false;
     if(opts.stepIndex!=null)clearVoiceFocus();
     aloudSequence=[];aloudSequenceIndex=-1;clearSpeechCursor();
-    if(!opts.manual)readAloud=false;
+    if(!opts.manual)setAloudIntent('off');
     var btn=$('[data-readaloud]');if(btn)btn.classList.remove('is-speaking');
     updateReadAloudButton();
     // Giving up on our side does not silence Aloud. Without this the reviewer
     // gets an error toast and a reset button while the narration keeps talking.
     // A jobId handover passes no message, so it never stops the incoming job.
-    if(message&&wasActive)aloudControl('stop',true);
+    //
+    // The message alone is the guard. It used to also require wasActive, which is
+    // false on precisely the path that needs the stop most: a /speak that the
+    // daemon accepted and started before the reply failed on our side. There the
+    // browser had cleared aloudActive on the way in, so the compensating stop was
+    // skipped and Aloud read the whole story to a page showing an idle button.
+    if(message)aloudControl('stop',true);
     if(message)toast(message,'error');
     if(completed&&typeof opts.onDone==='function')opts.onDone();
   }
@@ -2168,7 +2232,7 @@ const PAGE_JS_HEAD = `
       applyAloudSequenceProgress(status);updateReadAloudButton();pollAloudSpeech(token,opts);
     }).catch(function(err){
       if(token!==aloudRequestToken||isAbortError(err))return;
-      aloudRequestAbort=null;readAloud=false;
+      aloudRequestAbort=null;setAloudIntent('off');
       finishAloudSpeech(token,opts,false,err.message||'Open Aloud and install its Services to enable narration.');
     });
     return true;
@@ -2176,22 +2240,35 @@ const PAGE_JS_HEAD = `
   function updateReadAloudButton(){
     var btn=$('[data-readaloud]');if(!btn)return;
     var label=$('[data-readaloud-label]',btn),ico=$('.ds-readaloud-ico',btn),stop=$('[data-aloud-stop]');
-    var loading=!!speechLoadingLabel||(aloudActive&&!aloudPaused&&(aloudPhase==='starting'||aloudPhase==='generating'));
-    var playing=readAloud||aloudActive||!!speechLoadingLabel,action=speechLoadingLabel?'Starting':(aloudPaused?'Resume':(aloudActive?'Pause':'Play'));
-    var buttonLabel=aloudPaused?'Resume narration':(aloudActive?'Pause narration':(speechLoadingLabel?'Starting narration':'Play story with Aloud'));
+    // Rendered from intent, not from the daemon snapshot. The poll used to own
+    // these flags, so a /status reply taken before the click reached the daemon
+    // repainted the button with the state the reviewer had just left — the
+    // control said "Pause" while the audio was already stopping.
+    var paused=aloudIntent==='paused',speaking=aloudIntent==='playing';
+    var busy=!!speechLoadingLabel||aloudControlPending;
+    var loading=!!speechLoadingLabel||(speaking&&aloudActive&&(aloudPhase==='starting'||aloudPhase==='generating'));
+    var playing=aloudIntent!=='off'||!!speechLoadingLabel;
+    var action=paused?'Resume':(speechLoadingLabel?'Starting':(speaking?'Pause':'Play'));
+    var buttonLabel=paused?'Resume narration':(speaking?'Pause narration':(speechLoadingLabel?'Starting narration':'Play story with Aloud'));
     // While Aloud is still generating, its own progress is more useful than a
     // static label — a 30s cold start should never look like a hung button.
     if(loading&&aloudStateMessage)buttonLabel=buttonLabel+' — '+aloudStateMessage;
     btn.classList.toggle('is-active',playing);
-    btn.classList.toggle('is-loading',loading);
-    btn.disabled=!!speechLoadingLabel;
-    btn.setAttribute('aria-busy',speechLoadingLabel?'true':'false');
-    btn.setAttribute('aria-pressed',aloudActive&&!aloudPaused?'true':'false');
+    btn.classList.toggle('is-loading',loading||aloudControlPending);
+    // An in-flight pause/resume now reads as busy instead of looking live and
+    // swallowing every press through the aloudControlPending guard.
+    btn.disabled=busy;
+    btn.setAttribute('aria-busy',busy?'true':'false');
+    btn.setAttribute('aria-pressed',speaking?'true':'false');
     btn.setAttribute('aria-label',buttonLabel);
     btn.setAttribute('title',buttonLabel);
     if(label)label.textContent=action;
-    if(ico){ico.classList.toggle('is-pause',aloudActive&&!aloudPaused&&!loading);ico.classList.toggle('is-play',!loading&&(!aloudActive||aloudPaused));ico.textContent=loading?'◌':'';}
-    if(stop)stop.hidden=!aloudActive;
+    if(ico){ico.classList.toggle('is-pause',speaking&&!loading);ico.classList.toggle('is-play',!loading&&!speaking);ico.textContent=loading?'◌':'';}
+    // Stop stays reachable through the start handshake, which is exactly when a
+    // mis-started or wedged narration needs abandoning. It used to be hidden
+    // there (aloudActive is false until /speak answers), so a start in progress
+    // could not be called off from anywhere in the page.
+    if(stop)stop.hidden=!(aloudIntent!=='off'||speechLoadingLabel);
     document.body.classList.toggle('ds-aloud-active',playing);
   }
   function startReadAloudFromActive(){
@@ -2202,50 +2279,87 @@ const PAGE_JS_HEAD = `
       // that happened to load first.
       loadStoryStep(requestedStep,function(ok){
         if(!ok){
-          if(active===requestedStep){readAloud=false;updateReadAloudButton();}
+          if(active===requestedStep){setAloudIntent('off');updateReadAloudButton();}
           return;
         }
         // setActive's own load callback starts narration when it is queued ahead
         // of this one. Only start here when no request is already in flight.
-        if(!readAloud||active!==requestedStep||aloudActive||speechLoadingLabel)return;
-        if(!speakStep(requestedStep)){readAloud=false;updateReadAloudButton();}
+        if(!narrationPlaying()||active!==requestedStep||aloudActive||speechLoadingLabel)return;
+        if(!speakStep(requestedStep)){setAloudIntent('off');updateReadAloudButton();}
       });
       return true;
     }
     if(speakStep(requestedStep))return true;
     var si=firstSpeakableStep();
     if(si>=0){setActive(si);return true;}
-    readAloud=false;updateReadAloudButton();return false;
+    setAloudIntent('off');updateReadAloudButton();return false;
   }
   function restartReadAloud(){
     cancelSpeech(false);
-    readAloud=true;
+    setAloudIntent('playing');
     updateReadAloudButton();
     startReadAloudFromActive();
   }
   function toggleReadAloud(){
-    if(speechLoadingLabel)return;
-    if(aloudActive){toggleVoicePause();return;}
-    readAloud=true;
+    if(speechLoadingLabel||aloudControlPending)return;
+    // Intent decides, not the daemon: a paused story whose job we already
+    // cancelled (skipping beats does that) still has to resume from this button.
+    if(aloudIntent!=='off'){toggleVoicePause();return;}
+    setAloudIntent('playing');
     updateReadAloudButton();
     startReadAloudFromActive();
   }
   function stopReadAloud(){
-    if(!(readAloud||aloudActive||speechLoadingLabel))return false;
-    readAloud=false;cancelSpeech();toast('Narration stopped');return true;
+    if(!(aloudIntent!=='off'||aloudActive||speechLoadingLabel))return false;
+    setAloudIntent('off');cancelSpeech();toast('Narration stopped');return true;
   }
-  function toggleVoicePause(){
-    if(!aloudActive)return false;
+  /**
+   * Pause and resume are an intent change first and a daemon call second. The
+   * old version wrote the daemon's own aloudPaused optimistically and let the
+   * next status poll overwrite it with a pre-click snapshot.
+   */
+  function setNarrationPaused(next){
     if(aloudControlPending)return true;
-    var wasPaused=aloudPaused,action=wasPaused?'resume':'pause',token=++aloudControlToken;
-    aloudControlPending=true;aloudPaused=!wasPaused;aloudPhase=aloudPaused?'paused':aloudPhase;updateReadAloudButton();
-    aloudControl(action,false).then(function(status){
+    if(next&&aloudIntent!=='playing')return false;
+    if(!next&&aloudIntent!=='paused')return false;
+    // Read the moved flag before changing intent: setAloudIntent clears it on the
+    // way to 'playing', so checking it afterwards can only ever see false.
+    var previous=aloudIntent,moved=aloudResumeDirty;
+    setAloudIntent(next?'paused':'playing');
+    // Resuming after the reviewer moved: the daemon's job is parked on a step
+    // they have walked away from, so speak from where they actually are instead
+    // of resuming into the wrong place. Same when the job is already gone.
+    if(!next&&(moved||!aloudActive)){
+      aloudResumeDirty=false;
+      cancelSpeech(true);
+      setAloudIntent('playing');
+      updateReadAloudButton();
+      startReadAloudFromActive();
+      return true;
+    }
+    var token=++aloudControlToken;
+    aloudControlPending=true;
+    if(aloudControlTimer)clearTimeout(aloudControlTimer);
+    // A control request that never settles used to leave the button looking live
+    // while silently dropping every press. Time out and hand control back.
+    aloudControlTimer=setTimeout(function(){
       if(token!==aloudControlToken)return;
+      aloudControlTimer=0;aloudControlPending=false;updateReadAloudButton();
+    },ALOUD_CONTROL_TIMEOUT_MS);
+    updateReadAloudButton();
+    aloudControl(next?'pause':'resume',false).then(function(status){
+      if(token!==aloudControlToken)return;
+      if(aloudControlTimer){clearTimeout(aloudControlTimer);aloudControlTimer=0;}
       aloudControlPending=false;
-      if(!status){aloudPaused=wasPaused;updateReadAloudButton();return;}
+      if(!status){setAloudIntent(previous);updateReadAloudButton();return;}
       applyAloudStatus(status);updateReadAloudButton();
     });
     return true;
+  }
+  function toggleVoicePause(){
+    if(aloudIntent==='playing')return setNarrationPaused(true);
+    if(aloudIntent==='paused')return setNarrationPaused(false);
+    return false;
   }
   function loadFilePanel(panel){
     if(!panel||!$('[data-file-panel-lazy]',panel)||panel.getAttribute('data-panel-loading')==='1')return Promise.resolve(panel);
@@ -3747,7 +3861,17 @@ const PAGE_JS_TAIL = `
       if(vp){toggleViewed(vp.getAttribute('data-file'));e.preventDefault();return;}
     }
     var wantsSpacePause=e.key===' '||e.code==='Space'||e.key==='Spacebar';
-    if(wantsSpacePause&&!isTextEntryTarget(e.target)&&(isReadAloudShortcutTarget(e.target)||!isKeyboardControlTarget(e.target))){if(toggleVoicePause()){e.preventDefault();return;}}
+    // Space is documented as "Toggle read aloud", so it has to be able to start
+    // narration, not only pause a running one. It used to call toggleVoicePause,
+    // which returns false whenever nothing is playing — so the advertised
+    // play/pause key did nothing at all until narration was already going, and
+    // the keystroke was not even consumed.
+    if(wantsSpacePause&&!isTextEntryTarget(e.target)&&(isReadAloudShortcutTarget(e.target)||!isKeyboardControlTarget(e.target))){
+      // On the button itself, let the browser's own activation do the work —
+      // handling it here as well would toggle twice for one press.
+      if(isReadAloudShortcutTarget(e.target))return;
+      if($('[data-readaloud]')){e.preventDefault();toggleReadAloud();return;}
+    }
     if(isTextEntryTarget(e.target)||isKeyboardControlTarget(e.target))return;
   }
   // ---- resizable sidebar ----
@@ -3855,6 +3979,17 @@ const PAGE_JS_TAIL = `
     filterFeedback(activeFeedbackFilter);
     refreshComments();
     startLiveEvents();
+    // Reloading or closing the tab must not leave Aloud reading to a page that
+    // no longer exists. The fresh page starts idle, so it hides the stop button
+    // and every control refers to a job it has never heard of — there was no way
+    // left in diffStory to silence a voice the reviewer could still hear.
+    window.addEventListener('pagehide',function(){
+      if(aloudIntent==='off'&&!aloudActive&&!aloudJobId&&!speechLoadingLabel)return;
+      try{
+        var body=new Blob([JSON.stringify({action:'stop'})],{type:'application/json'});
+        if(navigator.sendBeacon)navigator.sendBeacon('/api/aloud/control',body);
+      }catch(e){}
+    });
     var rab=$('[data-readaloud]');
     if(rab)updateReadAloudButton();
     prepareStepNarration(active===0?1:active);

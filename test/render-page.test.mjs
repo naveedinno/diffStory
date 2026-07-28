@@ -716,10 +716,221 @@ test('Aloud keeps routine playback state inside its controls', () => {
   assert.match(html, /if\(status\.running\)\{pollAloudSpeech\(token,opts\);return;\}/);
   assert.match(html, /finishAloudSpeech\(token,opts,state==='done'/);
   assert.match(html, /Open Aloud and install its Services to enable narration/);
-  assert.match(html, /btn\.classList\.toggle\('is-loading',loading\)/);
-  assert.match(html, /action=speechLoadingLabel\?'Starting':\(aloudPaused\?'Resume':\(aloudActive\?'Pause':'Play'\)\)/);
+  assert.match(html, /btn\.classList\.toggle\('is-loading',loading\|\|aloudControlPending\)/);
+  // The control renders from the reviewer's intent, not from the daemon snapshot.
+  // Rendering from aloudActive/aloudPaused let a status reply that predated the
+  // click repaint the button with the state they had just left.
+  assert.match(html, /action=paused\?'Resume':\(speechLoadingLabel\?'Starting':\(speaking\?'Pause':'Play'\)\)/);
+  assert.match(html, /var paused=aloudIntent==='paused',speaking=aloudIntent==='playing';/);
   assert.doesNotMatch(html, /data-aloud-status|ds-narration-status|data-aloud-phase|data-aloud-message/);
   assert.doesNotMatch(html, /Playback is paused|Reading selected text|ds-narration-track|ds-narration-dot/);
+});
+
+// The client bundle is a template string, so the only way to exercise a browser
+// function is to cut it back out and run it against stubs.
+function clientFunction(signature) {
+  const start = PAGE_JS.indexOf(signature);
+  assert.ok(start > 0, `${signature} must exist in the client bundle`);
+  let depth = 0;
+  for (let i = PAGE_JS.indexOf('{', start); i < PAGE_JS.length; i += 1) {
+    if (PAGE_JS[i] === '{') depth += 1;
+    else if (PAGE_JS[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return PAGE_JS.slice(start, i + 1);
+    }
+  }
+  throw new Error(`unbalanced braces extracting ${signature}`);
+}
+
+test('a paused story stays silent when the reviewer navigates to another step', () => {
+  const spoken = [];
+  const context = {
+    aloudIntent: 'paused',
+    aloudResumeDirty: false,
+    speakStepIndex(index) { spoken.push(index); return true; },
+  };
+  vm.runInNewContext(
+    `${clientFunction('function narrationPlaying(){')}\n${clientFunction('function speakStep(i){')}\nthis.speakStep=speakStep;`,
+    context,
+  );
+  // Pause used to leave "narrate as I navigate" armed, so clicking a step card or
+  // pressing j/k started a brand new job talking over the pause.
+  assert.equal(context.speakStep(4), false, 'a paused story must not narrate the step just navigated to');
+  assert.deepEqual(spoken, [], 'no speech request may be issued while paused');
+  context.aloudIntent = 'playing';
+  assert.equal(context.speakStep(4), true, 'playing narration still follows navigation');
+  assert.deepEqual(spoken, [4]);
+});
+
+test('skipping beats while paused moves the cursor without starting playback', () => {
+  const events = [];
+  const context = {
+    aloudIntent: 'paused',
+    aloudResumeDirty: false,
+    currentSpeechStep: 2,
+    currentSpeechUnit: 0,
+    currentSpeechManual: false,
+    voiceSequenceToken: 0,
+    active: 2,
+    document: { activeElement: null },
+    isTextEntryTarget: () => false,
+    stepPanels: [null, null, {}, {}],
+    stepSpeechUnits: () => [{ group: 0, text: 'a' }, { group: 1, text: 'b' }],
+    speechBeatTarget: (step, unit, delta) => ({ step: 2, unit: unit + delta }),
+    cancelSpeech(stopPlayback) { events.push(['cancelSpeech', stopPlayback]); },
+    activateStep(step, autoSpeak) { events.push(['activateStep', step, autoSpeak]); },
+    setActiveBeat(step, group) { events.push(['setActiveBeat', step, group]); },
+    updateReadAloudButton() {},
+    speakStepUnit(step, units, unit, manual) { events.push(['speakStepUnit', step, unit, manual]); },
+  };
+  vm.runInNewContext(
+    [
+      clientFunction('function narrationPlaying(){'),
+      clientFunction('function setAloudIntent(next){'),
+      clientFunction('function moveSpeechBeat(delta){'),
+      'this.moveSpeechBeat=moveSpeechBeat;',
+    ].join('\n'),
+    context,
+  );
+  assert.equal(context.moveSpeechBeat(1), true);
+  // An arrow key used to cancel the paused job and immediately speak the next
+  // beat — and because the new sequence runs to the end of the story, it replaced
+  // a paused job with a whole new full-story one.
+  assert.ok(!events.some((event) => event[0] === 'speakStepUnit'), 'an arrow key must not un-pause the story');
+  assert.equal(context.aloudIntent, 'paused', 'skipping beats leaves the pause in place');
+  assert.equal(context.aloudResumeDirty, true, 'Resume has to know the cursor moved');
+  assert.ok(events.some((event) => event[0] === 'setActiveBeat'), 'the beat highlight still follows the arrow key');
+});
+
+test('resuming after navigating speaks from the new step, not the abandoned one', () => {
+  const calls = [];
+  const base = {
+    aloudIntent: 'paused',
+    aloudActive: true,
+    aloudControlPending: false,
+    aloudControlToken: 0,
+    aloudControlTimer: 0,
+    ALOUD_CONTROL_TIMEOUT_MS: 6000,
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    cancelSpeech(stopPlayback) { calls.push(['cancelSpeech', stopPlayback]); },
+    startReadAloudFromActive() { calls.push(['startReadAloudFromActive']); return true; },
+    updateReadAloudButton() {},
+    applyAloudStatus() {},
+    aloudControl(action) { calls.push(['aloudControl', action]); return { then() {} }; },
+  };
+  const source = [
+    clientFunction('function setAloudIntent(next){'),
+    clientFunction('function setNarrationPaused(next){'),
+    'this.setNarrationPaused=setNarrationPaused;',
+  ].join('\n');
+
+  // Navigated while paused: the daemon's job is parked on a step the reviewer has
+  // left, so resuming it would narrate the wrong place.
+  const moved = { ...base, aloudResumeDirty: true };
+  vm.runInNewContext(source, moved);
+  moved.setNarrationPaused(false);
+  assert.deepEqual(calls, [['cancelSpeech', true], ['startReadAloudFromActive']]);
+  assert.equal(moved.aloudIntent, 'playing');
+  assert.equal(moved.aloudResumeDirty, false, 'the moved flag is consumed');
+
+  // Stayed put: resuming the existing job is correct and keeps the position.
+  calls.length = 0;
+  const stayed = { ...base, aloudResumeDirty: false };
+  vm.runInNewContext(source, stayed);
+  stayed.setNarrationPaused(false);
+  assert.deepEqual(calls, [['aloudControl', 'resume']], 'an untouched pause resumes in place');
+});
+
+test('user-driven navigation re-points Resume even when the step loads lazily', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  // activateStep's autoSpeak branch only runs from the load callback on a lazy
+  // step, so marking there alone let a pause resume into the abandoned step.
+  assert.match(html, /function setActive\(i,autoSpeak\)\{[\s\S]{0,500}?markResumeMoved\(\);/);
+});
+
+test('an in-flight pause is not overwritten by a status reply that predates it', () => {
+  const context = {
+    aloudControlPending: true,
+    aloudIntent: 'paused',
+    aloudResumeDirty: false,
+    aloudActive: true,
+    aloudPaused: true,
+    aloudPhase: 'paused',
+    aloudRate: 1,
+    aloudStateMessage: '',
+  };
+  vm.runInNewContext(
+    [
+      clientFunction('function setAloudIntent(next){'),
+      clientFunction('function applyAloudStatus(status){'),
+      'this.applyAloudStatus=applyAloudStatus;',
+    ].join('\n'),
+    context,
+  );
+  // A snapshot the daemon took before the pause reached it. Applying this is what
+  // flipped the button back to "Pause" a beat after the reviewer paused.
+  context.applyAloudStatus({ running: true, paused: false, state: { status: 'reading' } });
+  assert.equal(context.aloudPaused, true, 'a stale status must not clear the pause');
+  assert.equal(context.aloudIntent, 'paused', 'intent survives a status reply it predates');
+
+  // Once the control has answered, the daemon is authoritative again — including
+  // for a pause the reviewer made from Aloud's own menu bar.
+  context.aloudControlPending = false;
+  context.applyAloudStatus({ running: true, paused: false, state: { status: 'reading' } });
+  assert.equal(context.aloudPaused, false);
+  assert.equal(context.aloudIntent, 'playing', 'an external resume is adopted');
+});
+
+test('Stop stays reachable while narration is still starting', () => {
+  const attributes = {};
+  const button = { classList: { toggle() {} }, setAttribute(name, value) { attributes[name] = value; }, disabled: false };
+  const stop = { hidden: true };
+  const context = {
+    aloudIntent: 'off',
+    aloudActive: false,
+    aloudPaused: false,
+    aloudPhase: 'idle',
+    aloudControlPending: false,
+    aloudStateMessage: '',
+    speechLoadingLabel: 'Starting Aloud',
+    document: { body: { classList: { toggle() {} } } },
+    $: (selector) => (selector === '[data-readaloud]' ? button : selector === '[data-aloud-stop]' ? stop : null),
+  };
+  vm.runInNewContext(`${clientFunction('function updateReadAloudButton(){')}\nthis.updateReadAloudButton=updateReadAloudButton;`, context);
+  context.updateReadAloudButton();
+  // The stop button used to be hidden until aloudActive turned true, which is
+  // after /speak answers — so a start in progress could not be called off from
+  // anywhere in the page.
+  assert.equal(stop.hidden, false, 'a narration that is still starting must be cancellable');
+  assert.equal(button.disabled, true, 'the play button reads as busy while starting');
+  assert.equal(attributes['aria-busy'], 'true');
+});
+
+test('narration can be called off during the start handshake and on the way out', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  // Aborting our own fetch does not un-send the POST, and the daemon starts the
+  // job regardless, so a start in flight still has to be stopped at the daemon.
+  assert.match(html, /if\(stopPlayback!==false&&\(aloudActive\|\|aloudJobId\|\|speechLoadingLabel\)\)aloudControl\('stop',true\);/);
+  // The compensating stop must not also require wasActive: a /speak the daemon
+  // accepted but whose reply failed on our side is exactly the case needing it,
+  // and there aloudActive was already cleared on the way in.
+  assert.match(html, /if\(message\)aloudControl\('stop',true\);/);
+  assert.doesNotMatch(html, /if\(message&&wasActive\)aloudControl/);
+  // A reload must not leave Aloud reading to a page that no longer exists.
+  assert.match(html, /navigator\.sendBeacon\('\/api\/aloud\/control',body\)/);
+});
+
+test('Space starts narration as well as pausing it', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  // Space is advertised as "Toggle read aloud" but routed to toggleVoicePause,
+  // which returns false whenever nothing is playing — so the documented
+  // play/pause key did nothing at all until narration was already running.
+  assert.match(html, /if\(\$\('\[data-readaloud\]'\)\)\{e\.preventDefault\(\);toggleReadAloud\(\);return;\}/);
+  assert.doesNotMatch(html, /if\(toggleVoicePause\(\)\)\{e\.preventDefault\(\);return;\}/);
+  // On the button itself the browser's own activation already fires a click, so
+  // handling the key here as well would toggle twice for one press.
+  assert.match(html, /if\(isReadAloudShortcutTarget\(e\.target\)\)return;/);
 });
 
 test('read aloud submits future narration beats together so Aloud can prefetch them', () => {
@@ -1200,12 +1411,17 @@ test('space pauses and resumes voice without stealing focused controls', () => {
   assert.match(html, /function isReadAloudShortcutTarget\(t\)/);
   assert.match(html, /\^\(BUTTON\|A\)\$/);
   assert.match(html, /function toggleVoicePause\(\)/);
-  assert.match(html, /if\(!aloudActive\)return false;/);
-  assert.match(html, /var wasPaused=aloudPaused,action=wasPaused\?'resume':'pause'/);
+  // Pause and resume are an intent change first and a daemon call second, so the
+  // control no longer hangs off a flag the status poll also writes.
+  assert.match(html, /if\(aloudIntent==='playing'\)return setNarrationPaused\(true\);/);
+  assert.match(html, /if\(aloudIntent==='paused'\)return setNarrationPaused\(false\);/);
   assert.match(html, /if\(aloudControlPending\)return true;/);
-  assert.match(html, /aloudControl\(action,false\)/);
+  assert.match(html, /aloudControl\(next\?'pause':'resume',false\)/);
+  // A control that never answers used to leave the button looking live while
+  // silently dropping every press.
+  assert.match(html, /var ALOUD_CONTROL_TIMEOUT_MS=\d+;/);
   assert.match(html, /var wantsSpacePause=e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar';/);
-  assert.match(html, /if\(wantsSpacePause&&!isTextEntryTarget\(e\.target\)&&\(isReadAloudShortcutTarget\(e\.target\)\|\|!isKeyboardControlTarget\(e\.target\)\)\)\{if\(toggleVoicePause\(\)\)\{e\.preventDefault\(\);return;\}\}/);
+  assert.match(html, /if\(wantsSpacePause&&!isTextEntryTarget\(e\.target\)&&\(isReadAloudShortcutTarget\(e\.target\)\|\|!isKeyboardControlTarget\(e\.target\)\)\)\{/);
   assert.match(html, /if\(isTextEntryTarget\(e\.target\)\|\|isKeyboardControlTarget\(e\.target\)\)return;/);
   assert.doesNotMatch(html, /if\(e\.key===' '\|\|e\.code==='Space'\|\|e\.key==='Spacebar'\)\{if\(toggleVoicePause\(\)\)e\.preventDefault\(\);return;\}/);
 });
@@ -1232,7 +1448,9 @@ test('arrow keys move through read-aloud beats and auto-advance steps', () => {
 
 test('arrow keys navigate changes while j/k still navigate the story or file list', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /function activateStep\(i,autoSpeak\)[\s\S]*if\(autoSpeak!==false\)speakStep\(i\);/);
+  // The autoSpeak branch is exactly the user-driven navigation path; it now also
+  // re-points Resume, and speakStep is intent-gated so a paused story stays quiet.
+  assert.match(html, /function activateStep\(i,autoSpeak\)[\s\S]*if\(autoSpeak!==false\)\{markResumeMoved\(\);speakStep\(i\);\}/);
   assert.match(html, /if\(handleChangeShortcut\(e\)\)return;/);
   assert.match(html, /var next=e\.key==='j',prev=e\.key==='k';/);
   assert.match(html, /if\(next\|\|prev\)\{[\s\S]*if\(isTextEntryTarget\(e\.target\)\)return;/);
@@ -2115,7 +2333,8 @@ test('Play waits for the selected lazy step instead of jumping to a loaded step'
   let updateCalls = 0;
   const context = {
     active: 3,
-    readAloud: true,
+    aloudIntent: 'playing',
+    narrationPlaying: () => true,
     aloudActive: false,
     speechLoadingLabel: '',
     stepPanels: [
