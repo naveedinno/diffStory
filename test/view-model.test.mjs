@@ -103,18 +103,24 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.codeSteps, 1);
   assert.equal(model.conceptSteps, 1);
   assert.equal(model.steps[0].kind, 'concept');
-  assert.equal(model.steps[0].body, tour.steps[0].body);
-  assert.deepEqual(model.steps[0].preparesFor, [
+  // Narrative arrives projected now, not raw: this plain-prose body is identical
+  // in all three forms, which is exactly what it should be when there is no markup.
+  assert.equal(model.steps[0].body.html, tour.steps[0].body);
+  assert.equal(model.steps[0].body.text, tour.steps[0].body);
+  assert.equal(model.steps[0].body.speech, tour.steps[0].body);
+  assert.deepEqual(model.steps[0].preparesFor.map((p) => ({ id: p.id, order: p.order, title: p.title.text })), [
     { id: 'implementation', order: 2, title: 'Apply the policy' },
   ]);
-  assert.deepEqual(model.steps[0].diagram, tour.steps[0].diagram);
+  assert.equal(model.steps[0].diagram.type, tour.steps[0].diagram.type);
+  assert.equal(model.steps[0].diagram.source, tour.steps[0].diagram.source);
+  assert.equal(model.steps[0].diagram.caption.text, tour.steps[0].diagram.caption);
   assert.equal(model.files.length, 1);
   assert.equal(model.files[0].file, 'a.ts');
   assert.equal(model.files[0].stepId, 'implementation');
   assert.equal(model.trust.uncovered.length, 0);
 });
 
-test('code steps derive focus groups, a review question, and broad-step health', () => {
+test('code steps derive focus groups, chapters, and broad-step health', () => {
   const tour = {
     version: 1,
     title: 'Defensive focus',
@@ -137,7 +143,6 @@ test('code steps derive focus groups, a review question, and broad-step health',
   const model = buildReviewModel(process.cwd(), tour, files);
   const step = model.steps[0];
   assert.equal(step.chapter, 'Execution');
-  assert.equal(step.question, 'Does the code prove this claim: External call stays bounded?');
   assert.deepEqual(step.focusGroups, [[[20, 22]]]);
   assert.equal(step.health.broad, true);
   assert.ok(step.health.reasons.includes('45 lines in one step'));
@@ -166,11 +171,16 @@ test('hotspots resolve to ordered panels and flag their step views', () => {
     ] }],
   }];
   const model = buildReviewModel(process.cwd(), tour, files);
-  assert.deepEqual(model.hotspots, [
-    { stepId: 's2', panelIndex: 2, order: 2, title: 'Retry boundary', reason: 'I never exercised the retry path.' },
-  ]);
+  // title and reason are projections now, so compare their text form.
+  assert.deepEqual(
+    model.hotspots.map((h) => ({
+      stepId: h.stepId, panelIndex: h.panelIndex, order: h.order,
+      title: h.title.text, reason: h.reason.text,
+    })),
+    [{ stepId: 's2', panelIndex: 2, order: 2, title: 'Retry boundary', reason: 'I never exercised the retry path.' }],
+  );
   assert.equal(model.steps[0].hotspot, undefined);
-  assert.equal(model.steps[1].hotspot, 'I never exercised the retry path.');
+  assert.equal(model.steps[1].hotspot.text, 'I never exercised the retry path.');
 });
 
 test('story overview file scope stays focused while All Files keeps complete diff totals', () => {

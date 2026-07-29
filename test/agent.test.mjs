@@ -54,7 +54,10 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   // contracts do not survive being read as prose inside an 8k-word skill; the
   // skill owns judgment. So size alone is not the test — the craft-section
   // assertions above are. This cap just stops the skill leaking back in wholesale.
-  assert.ok(p.length < 4000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  // Raised from 4000 when the HTML format contract landed — that contract is
+  // validator-enforced, so by the rule above it belongs here rather than in the
+  // skill. The craft-section assertions above remain the real drift guard.
+  assert.ok(p.length < 4600, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -70,7 +73,12 @@ test('storyPrompt supports story detail levels', () => {
   assert.ok(detailed.includes('set its "mode" field to "detailed"'));
   for (const mode of ['brief', 'guided', 'detailed']) {
     const prompt = storyPrompt('main', undefined, mode);
-    assert.ok(prompt.length < 4000, `${mode} prompt grew to ${prompt.length} chars`);
+    // Raised from 4000 when the HTML format contract landed. Validator-enforced
+    // contracts have to live in the prompt (see the comment above the field-name
+    // block in agent.ts) because deep-skill prose does not reliably survive being
+    // read — and an out-of-tier tag is now a validation failure. This ceiling
+    // buys correctness, not verbosity; keep new prose out of it.
+    assert.ok(prompt.length < 4600, `${mode} prompt grew to ${prompt.length} chars`);
   }
 });
 
@@ -147,8 +155,7 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
   assert.ok(skill.includes('flowchart`, `sequenceDiagram`, or `stateDiagram-v2'));
   assert.ok(skill.includes('caption is required'));
   assert.ok(skill.includes('No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives'));
-  assert.ok(flat.includes('must not contain `file`, `range`, `ranges`, `viewport`, `highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`'));
-  assert.match(flat, /`question`[^.]{0,400}(?:optional|except)/i);
+  assert.ok(flat.includes('must not contain `file`, `range`, `ranges`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`'));
   for (const tag of ['`skim`', '`sweep`', '`mechanical`']) assert.ok(flat.includes(tag));
   assert.ok(skill.includes('Stories longer than 10 steps'));
 });
@@ -646,14 +653,12 @@ test('bundled diffstory-storyteller skill demands honest hotspots and non-goals'
   assert.ok(skill.includes('an accidental gap'));
 });
 
-test('bundled diffstory-storyteller skill bans rhetorical review questions', () => {
+test('bundled diffstory-storyteller skill makes every stop name the failure it rules out', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
-  assert.ok(skill.includes('Run the flip test on every `question`'));
+  assert.ok(skill.includes('A stop earns its place by naming the failure its evidence rules out'));
   assert.ok(skill.includes('name the specific bug'));
-  assert.ok(skill.includes('rhetorical'));
-  assert.ok(skill.includes('REJECT, rhetorical'));
-  assert.ok(skill.includes('KEEP, names a real bug'));
-  assert.ok(skill.includes('Question flip test'));
+  assert.ok(skill.includes('Failure test'));
+  assert.doesNotMatch(skill, /`question`/);
 });
 
 test('bundled diffstory-storyteller skill shows the same diff as changelog vs story', () => {
@@ -661,7 +666,7 @@ test('bundled diffstory-storyteller skill shows the same diff as changelog vs st
   assert.ok(skill.includes('the same diff, told twice'));
   assert.ok(skill.includes('The changelog (do not write this)'));
   assert.ok(skill.includes('The story (write this)'));
-  assert.ok(skill.includes('each question names a failure the evidence must rule out'));
+  assert.ok(skill.includes('each beat names the failure its evidence rules out'));
 });
 
 test('bundled diffstory-storyteller skill teaches beat prose that unlocks, not inventories', () => {
@@ -730,7 +735,6 @@ test('storyPrompt pins machine-checked field names the skill prose cannot convey
   assert.ok(p.includes('Exact field names (never paraphrase)'));
   assert.ok(p.includes('"order" (number 1..N)'));
   assert.ok(p.includes('optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical"'));
-  assert.ok(p.includes('"question" is required unless tagged that way'));
   assert.ok(p.includes('"text" (not "body" or "prose")'));
   assert.ok(p.includes('"body" is concept-only'));
   assert.ok(p.includes('One omission invalidates the story'));
@@ -808,7 +812,6 @@ test('storyPrompt self-check names every required field, not a sample', () => {
   for (const f of ['id', 'order', 'title', 'kind', 'file', 'range', 'viewport', 'highlights', 'why', 'beats']) {
     assert.ok(p.includes(`"${f}"`), `self-check omits ${f}`);
   }
-  assert.ok(p.includes('has "question" unless tagged "skim", "sweep", or "mechanical"'));
   assert.ok(p.includes('every beat has "text" and "highlights"'));
   assert.ok(p.includes('One omission invalidates the story'));
 });
@@ -855,4 +858,34 @@ test('bundled diffstory-storyteller skill bridges chapter seams without blanket 
   assert.ok(flat.includes('one repeated mechanical pattern in one file'));
   assert.ok(flat.includes('Substantive changes still need enough local steps to explain every decision'));
   assert.ok(!flat.includes('Prose is the only lever here; step count is not.'));
+});
+
+test('the storyteller skill teaches the HTML tiers and the caption rule', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.match(skill, /Narrative fields are HTML/);
+  assert.match(skill, /<caption>/, 'the caption requirement must be shown, not merely described');
+  assert.match(skill, /inline only/i, 'beats and why are inline-only');
+  assert.match(skill, /plain text — no tags at all/, 'titles carry no markup');
+  assert.doesNotMatch(skill, /add Markdown links\/images/, 'the Markdown-era prohibition is stale');
+  // The five signal classes must match the sanitizer's vocabulary exactly.
+  for (const cls of ['ds-bit', 'ds-slot', 'ds-flag', 'ds-val', 'ds-warn']) {
+    assert.ok(skill.includes(cls), `${cls} missing from the authoring contract`);
+  }
+});
+
+test('both authoring prompts pin the HTML format contract', () => {
+  for (const mode of ['brief', 'guided', 'detailed']) {
+    const prompt = storyPrompt('main', undefined, mode);
+    assert.match(prompt, /restricted HTML, never Markdown/);
+    assert.match(prompt, /INLINE tags only/);
+    assert.match(prompt, /needs a <caption>/);
+  }
+  const repair = storyRepairPrompt({ action: 'rewrite', base: 'main', stepId: 's1' });
+  assert.match(repair, /restricted HTML, never Markdown/);
+});
+
+test('review threads stay Markdown, so the two surfaces do not bleed', () => {
+  const skill = readFileSync(new URL('../skills/address-review/SKILL.md', import.meta.url), 'utf8');
+  assert.match(skill, /Turn text is \*\*Markdown\*\*, not HTML/);
+  assert.match(skill, /comments and replies stay Markdown/);
 });

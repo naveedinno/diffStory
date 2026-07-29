@@ -54,23 +54,23 @@ test('concept steps render as safe document primers linked to the next code step
         title: 'The request envelope',
         kind: 'concept',
         body: [
-          '## Request envelope',
-          'A **request envelope** carries `identity` into the policy.',
-          '',
-          '- Normalize once',
-          '- Apply the policy',
-          '',
+          '<h2>Request envelope</h2>',
+          '<p>A <strong>request envelope</strong> carries <code>identity</code> into the policy.</p>',
+          '<ul><li>Normalize once</li><li>Apply the policy</li></ul>',
           '<script>alert("primer")</script>',
-          '',
-          '```html',
-          '<img src=x onerror=alert("fence")>',
-          '```',
+          '<p><img src=x onerror=alert("fence")></p>',
+          '<table><caption>Envelope fields and where each is normalized.</caption>',
+          '<thead><tr><th scope="col">Field</th><th scope="col">Normalized by</th></tr></thead>',
+          '<tbody><tr><td><code>identity</code></td><td><span class="ds-slot">normalize()</span></td></tr></tbody>',
+          '</table>',
         ].join('\n'),
         preparesFor: ['implementation'],
         diagram: {
           type: 'mermaid',
           source: 'flowchart LR\n  Request --> Normalize --> Policy',
-          caption: 'Parse <then> apply.',
+          // The caption is authored prose now, so a literal angle bracket is
+          // written as an entity — same rule as every other narrative field.
+          caption: 'Parse &lt;then&gt; apply.',
         },
       },
       {
@@ -97,9 +97,25 @@ test('concept steps render as safe document primers linked to the next code step
   assert.match(html, /<h2>Request envelope<\/h2>/);
   assert.match(html, /<strong>request envelope<\/strong>/);
   assert.match(html, /<ul><li>Normalize once<\/li><li>Apply the policy<\/li><\/ul>/);
-  assert.match(html, /&lt;script&gt;alert\(&quot;primer&quot;\)&lt;\/script&gt;/);
-  assert.match(html, /&lt;img src=x onerror=alert\(&quot;fence&quot;\)&gt;/);
+  // These two used to come back entity-encoded, because the body was Markdown and
+  // every angle bracket was escaped on the way out. The body is HTML now, so the
+  // sanitizer removes them outright: <script> is dropped with its contents, and
+  // <img> is not on the allowlist, so it unwraps to nothing.
+  assert.doesNotMatch(html, /alert\(&quot;primer&quot;\)/);
+  assert.doesNotMatch(html, /alert\(&quot;fence&quot;\)/);
+  assert.doesNotMatch(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script>alert\("primer"\)<\/script>/);
+  // Scoped to the primer: the page's own bundle legitimately contains an
+  // `onerror=` handler of its own, so a whole-document scan would be meaningless.
+  const conceptBody = html.match(/<div class="ds-concept-body ds-md">([\s\S]*?)<\/div>/)?.[1] ?? '';
+  assert.ok(conceptBody, 'concept body did not render');
+  assert.doesNotMatch(conceptBody, /onerror/);
+  assert.doesNotMatch(conceptBody, /<img/);
+  assert.doesNotMatch(conceptBody, /alert/);
+  // A captioned table survives, wrapped in the one element the serializer invents.
+  assert.match(html, /<div class="ds-md-tablewrap"><table><caption>Envelope fields/);
+  assert.match(html, /<th scope="col">Field<\/th>/);
+  assert.match(html, /<span class="ds-slot">normalize\(\)<\/span>/);
 
   assert.match(html, /class="ds-concept-diagram" data-concept-diagram/);
   assert.match(html, /\.ds-concept-diagram figcaption\{[^}]*color:var\(--muted\)/);
@@ -134,6 +150,38 @@ test('concept steps render as safe document primers linked to the next code step
   assert.match(speech, /Normalize once\. Apply the policy\./);
   // The title has no trailing period of its own, so one is supplied.
   assert.match(speech, /The request envelope\. /);
+});
+
+test('narrative tables and signal classes are styled in both themes', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  // A wide table owns its own horizontal scroll, so the concept column never
+  // scrolls sideways — the same contract .ds-concept-diagram-output has.
+  assert.match(html, /\.ds-md \.ds-md-tablewrap\{[^}]*overflow-x:auto/);
+  // `anywhere`, inherited from .ds-md, feeds the min-content width and collapses
+  // a column to one character per line. Only `normal` undoes it; `break-word`
+  // would not.
+  assert.match(html, /\.ds-md th,\.ds-md td\{[^}]*overflow-wrap:normal/);
+  // A narrative <pre> arrives without .ds-md-code (only renderMarkdown stamps
+  // that), and a bare UA <pre> would push the concept column sideways.
+  assert.match(html, /\.ds-md pre\{[^}]*overflow-x:auto/);
+  for (const cls of ['ds-bit', 'ds-slot', 'ds-flag', 'ds-val', 'ds-warn']) {
+    assert.match(html, new RegExp(`\\.ds-md \\.${cls}\\{`), `${cls} has no styling`);
+  }
+  // The caption carries the table's meaning and is spoken in its place, so it
+  // must not sit below the AA floor in either theme.
+  assert.match(html, /\.ds-md caption\{[^}]*var\(--muted\)/);
+  // --text-3 is used raw. An alpha mix toward transparent reads asymmetrically
+  // across the two themes, so one mixed value cannot serve both.
+  assert.doesNotMatch(html, /\.ds-md thead th\{[^}]*color-mix\([^)]*transparent/);
+  // .ds-warn clears AA on its own rather than only under prefers-contrast.
+  assert.match(html, /\.ds-md \.ds-warn\{color:var\(--text\);background:var\(--amber-soft\)/);
+  // The concept document restates the metrics at its own type size, and must
+  // come after the .ds-md base rules to win at equal specificity.
+  assert.ok(
+    html.indexOf('.ds-concept-body table{') > html.indexOf('.ds-md table{'),
+    'concept table rules must follow the .ds-md base rules in source order',
+  );
 });
 
 test('agent activity console starts hidden and idle', () => {
@@ -189,11 +237,11 @@ test('overview keeps the primary walkthrough action ahead of supporting detail',
   assert.match(html, /\.ds-intro-notes>summary\{[^}]*display:inline-flex/);
 });
 
-test('step narrative tells the reviewer what to verify', () => {
+test('the step leads with its claim, not a review question the reviewer skips', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-review-question"/);
-  assert.match(html, /class="ds-sr-only">Review question:/);
-  assert.match(html, /class="ds-reviewfocus">Does the code prove this claim:/);
+  assert.doesNotMatch(html, /ds-review-question|ds-reviewfocus/);
+  assert.doesNotMatch(html, /Review question/);
+  assert.match(html, /<div class="ds-step-titlerow">\s*<h1 class="ds-step-title">/);
   assert.doesNotMatch(html, /class="ds-step-file"/);
   assert.match(html, /class="ds-diffhead-path">a\.ts<\/span>/);
   assert.doesNotMatch(html, /Why this step/);
@@ -201,7 +249,7 @@ test('step narrative tells the reviewer what to verify', () => {
 
 test('step header states progress once and leaves position navigation to the filmstrip', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  const panel = html.match(/<section class="ds-step is-code-step"[\s\S]*?<div class="ds-review-question">/)?.[0] ?? '';
+  const panel = html.match(/<section class="ds-step is-code-step"[\s\S]*?<div class="ds-diffscroll">/)?.[0] ?? '';
 
   assert.equal((panel.match(/class="ds-step-count"/g) ?? []).length, 1);
   assert.match(panel, />Step 1 of 1<\/span>/);
@@ -252,15 +300,47 @@ test('story narrative lives in a nested rail tree and a compact bottom dock', ()
   assert.match(html, /\.ds-railstory-node\.is-active>\.ds-railbeats\{display:block\}/);
   assert.match(html, /\.ds-railbeats\{[^}]*border-left:1px solid/);
   assert.doesNotMatch(html, /ds-story-tune\.is-icon\.has-health|story-tune\.is-icon\.has-health/);
-  assert.match(html, /class="ds-beatdock"/);
+  assert.match(html, /class="ds-beatdock" data-beat-dock data-dock-step="1" hidden/);
   assert.match(html, /\.ds-beatdock\{[^}]*grid-template-columns:auto minmax\(0,1fr\) auto/);
   assert.match(html, /\.ds-beatdock-note\.is-selected\{display:block;background:transparent\}/);
   assert.match(html, /\.ds-beatdock-note:hover\{background:transparent\}/);
   assert.doesNotMatch(html, /move beats|ds-beatdock-hint/);
-  assert.match(html, /class="ds-review-question"/);
   assert.doesNotMatch(html, /<div class="ds-why">/);
   assert.doesNotMatch(html, /<div class="ds-step-health/);
   assert.match(html, /@media \(max-width:470px\)\{\.ds-step-meta\{gap:6px\}\.ds-step-count\{white-space:nowrap\}\.ds-step-meta>\.ds-dot,\.ds-step-meta>\.ds-flowchip\{display:none\}\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
+});
+
+test('transport, beats and the numeral thread share one floating island', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+
+  // One island, in this order: play/pause, the beat stage, then the thread.
+  const dock = html.match(/<div class="ds-dock" data-story-dock>[\s\S]*?<\/nav>\n  <\/div>/)?.[0] ?? '';
+  assert.ok(dock, 'the story view ends in a single dock island');
+  assert.ok(
+    dock.indexOf('data-readaloud') < dock.indexOf('data-dock-slot')
+      && dock.indexOf('data-dock-slot') < dock.indexOf('data-filmthread'),
+    'the island reads transport, then beat, then thread',
+  );
+  // The transport moved out of the page chrome — it belongs next to the words it reads.
+  assert.doesNotMatch(
+    html.slice(0, html.indexOf('<div class="ds-layout"')),
+    /data-readaloud/,
+    'the chrome no longer carries the narration control',
+  );
+
+  // Steps still render their own dock; the client adopts each one into the stage.
+  assert.match(html, /class="ds-dock-stage" data-dock-slot/);
+  assert.match(PAGE_JS, /function adoptStepDocks\(\)\{[\s\S]*?stage\.appendChild\(dock\);/);
+  assert.match(PAGE_JS, /mountThreads\(fresh\);adoptStepDocks\(\);/);
+  // Beat lookups now cross trees: the beat lives in the island, its diff in the panel.
+  assert.match(PAGE_JS, /function beatHost\(panel\)\{/);
+  assert.match(PAGE_JS, /function beatPanel\(node\)\{/);
+
+  // Nothing floats over the diff any more, so the scroller reserves no dock height.
+  assert.doesNotMatch(html, /--ds-dock-h/);
+  // The code is full-bleed to the island's edges — only the top gap survives, to
+  // part the title block from the toolbar. The island is the one frame around it.
+  assert.match(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:8px 0 0/);
 });
 
 test('review page closes the story to review history with an explicit action', () => {
@@ -444,7 +524,7 @@ test('review interaction regressions keep hidden states, note actions, and resum
   assert.doesNotMatch(html, /data-ghost-prev|data-ghost-next|ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
   assert.match(html, /width:calc\(100% - 24px\);max-width:none/);
   assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
-  assert.match(html, /\.ds-filmthread\{[^}]*margin:0 12px 12px[^}]*padding:7px 12px 8px/);
+  assert.match(html, /\.ds-dock\{[^}]*margin:0 12px 12px[^}]*border-radius:16px/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
   assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
 });
@@ -962,7 +1042,9 @@ test('read aloud submits future narration beats together so Aloud can prefetch t
 
 test('read aloud visually focuses the code rows for the step being spoken', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /\.ds-step\.is-voice-active \.ds-diff/);
+  // The reading-here accent rings the island, not the diff card — the card is
+  // full-bleed inside it and draws no frame of its own.
+  assert.match(html, /#ds-view-tour>\.ds-step\.is-voice-active:not\(\[hidden\]\)\{border-color:var\(--accent-line\)/);
   assert.match(html, /\.ds-row\.is-voice-focus/);
   assert.match(html, /voiceFocusIndex=-1/);
   assert.match(html, /function clearVoiceFocus\(\)/);
@@ -1149,6 +1231,9 @@ test('story beats render as separate spoken notes with exact focus groups', () =
   assert.match(html, /function stepSpeechUnits\(panel\)/);
   assert.match(html, /function speakStepUnit\(stepIndex,units,index,manual\)/);
   assert.match(html, /setActiveBeat\(stepIndex,group\)/);
+  // The dock counter and the shown note follow the voice: without this the
+  // stepper sat on beat one while narration read its way down the step.
+  assert.match(html, /selectStoryFocus\(stepIndex,group,false,true\);/);
   assert.doesNotMatch(html, /closest\(t,'\[data-playstep\]'\)/);
 });
 
@@ -1184,7 +1269,7 @@ test('silent story navigation persistently centers the first authored focus', ()
 
   assert.match(html, /data-step-panel="1"[^>]*data-story-focus="authored"/);
   assert.match(html, /storyFocusIndex=-1,storyFocusGroup=-1/);
-  assert.match(html, /function selectStoryFocus\(stepIndex,group,shouldScroll\)/);
+  assert.match(html, /function selectStoryFocus\(stepIndex,group,shouldScroll,fromVoice\)/);
   assert.match(html, /var storyFocused=ap&&i>0\?selectStoryFocus\(i,0,true\):false;/);
   assert.match(html, /if\(ap&&!storyFocused\)jumpToFirstChange/);
   assert.match(html, /var rendered=rows\.filter\(function\(row\)\{return !closest\(row,'\[hidden\]'\)&&row\.getClientRects\(\)\.length>0;\}\)/);
@@ -1717,21 +1802,21 @@ test('intro panel leads with recovered intent without duplicating it in a review
     },
   };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede" data-speech-overview>We wanted ops to cap runaway fees before settlement\./);
-  assert.match(html, /class="ds-intro-design" data-speech-overview>The keeper clamps through one shared helper\./);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview[^>]*>We wanted ops to cap runaway fees before settlement\./);
+  assert.match(html, /class="ds-intro-design" data-speech-overview[^>]*>The keeper clamps through one shared helper\./);
   assert.doesNotMatch(html, /ds-reviewmap|ds-review-evidence|What deserves attention/);
 });
 
 test('intro panel keeps the summary as the reading map when intent exists', () => {
   const intentTour = { ...tour, intent: { goal: 'Cap runaway fees.' } };
   const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede" data-speech-overview>Cap runaway fees\./);
-  assert.match(html, /class="ds-intro-design" data-speech-overview>One changed line\./);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview[^>]*>Cap runaway fees\./);
+  assert.match(html, /class="ds-intro-design" data-speech-overview[^>]*>One changed line\./);
 });
 
 test('intro panel falls back to the summary lede without an intent block', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /class="ds-intro-lede" data-speech-overview>One changed line\./);
+  assert.match(html, /class="ds-intro-lede" data-speech-overview[^>]*>One changed line\./);
   assert.doesNotMatch(html, /ds-intro-sources/);
   assert.doesNotMatch(html, /class="ds-intro-design"/);
 });
@@ -1748,7 +1833,12 @@ test('read aloud starts with overview context before advancing to step one', () 
 
   assert.equal((html.match(/<p class="ds-intro-(?:lede|design)" data-speech-overview/g) ?? []).length, 3);
   assert.match(html, /var overview=\$all\('\[data-speech-overview\],\[data-speech-concept\]',panel\)/);
-  assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechClean\(node\.textContent\|\|''\),group:null\};\}\)/);
+  // The overview now narrates the server-built speech projection carried in
+  // data-speech-text, falling back to textContent only when the attribute is
+  // absent. Reading textContent directly would speak flattened markup.
+  assert.match(html, /overview\.map\(function\(node\)\{return \{text:speechFrom\(node\),group:null\};\}\)/);
+  assert.match(html, /function speechFrom\(node\)\{/);
+  assert.match(html, /speechClean\(node\.getAttribute\('data-speech-text'\)\|\|node\.textContent\|\|''\)/);
   assert.match(html, /function advanceAfterSpeechStep\(stepIndex,manual\)/);
   assert.match(html, /var n=nextSpeakableStep\(stepIndex\);if\(n>=0\)setActive\(n\);/);
   assert.doesNotMatch(
@@ -1758,11 +1848,24 @@ test('read aloud starts with overview context before advancing to step one', () 
   );
 });
 
-test('intent text is HTML-escaped in the intro panel', () => {
-  const intentTour = { ...tour, intent: { goal: 'Guard <script> tags', sources: ['a & b'] } };
-  const html = renderPage({ repo: process.cwd(), tour: intentTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /Guard &lt;script&gt; tags/);
-  assert.doesNotMatch(html, /Guard <script> tags/);
+test('intent text is sanitized in the intro panel', () => {
+  // intent.goal is an inline-tier narrative field, so a literal <script> is not
+  // escaped into visible text any more — it is dropped with its contents. An
+  // author who wants to talk about the tag writes the entity, and that survives
+  // as inert text.
+  const dropped = { ...tour, intent: { goal: 'Guard <script>alert(1)</script> tags', sources: ['a & b'] } };
+  const html = renderPage({ repo: process.cwd(), tour: dropped, files, baseLabel: 'main', comments: [] });
+  const lede = html.match(/<p class="ds-intro-lede"[^>]*>([\s\S]*?)<\/p>/)?.[1] ?? '';
+  assert.ok(lede, 'intro lede did not render');
+  assert.doesNotMatch(lede, /<script/);
+  assert.doesNotMatch(lede, /alert\(1\)/);
+  assert.match(lede, /Guard\s+tags/);
+
+  const encoded = { ...tour, intent: { goal: 'Guard &lt;script&gt; tags', sources: ['a & b'] } };
+  const encodedHtml = renderPage({ repo: process.cwd(), tour: encoded, files, baseLabel: 'main', comments: [] });
+  assert.match(encodedHtml, /Guard &lt;script&gt; tags/);
+  assert.doesNotMatch(encodedHtml, /Guard <script> tags/);
+  // intent.sources is never rendered.
   assert.doesNotMatch(html, /a (?:&|&amp;) b/);
 });
 
@@ -1917,7 +2020,7 @@ test('context-only files open on their available evidence without a meaningless 
   assert.match(html, /panel\.hasAttribute\('data-context-file'\)\?'diff'/);
 });
 
-test('review question prefers an authored falsifiable question over tag heuristics', () => {
+test('a legacy authored question renders nowhere, tags included', () => {
   const cueTour = {
     ...tour,
     steps: [{
@@ -1928,9 +2031,8 @@ test('review question prefers an authored falsifiable question over tag heuristi
     }],
   };
   const html = renderPage({ repo: process.cwd(), tour: cueTour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /Review question/);
-  assert.match(html, /Can an untrusted caller mutate state before authorization succeeds\?/);
-  assert.doesNotMatch(html, /<h3>Review focus<\/h3>|Authored story tag|Suggested from this step|ds-reviewcue|ds-railcue|ds-reviewmap/);
+  assert.doesNotMatch(html, /Can an untrusted caller mutate state before authorization succeeds\?/);
+  assert.doesNotMatch(html, /Review question|Review focus|ds-reviewcue|ds-railcue|ds-reviewmap/);
 });
 
 test('story repair is a named control with rewrite shorten and split outcomes', () => {
@@ -1942,7 +2044,7 @@ test('story repair is a named control with rewrite shorten and split outcomes', 
   assert.doesNotMatch(html, /<span aria-hidden="true">•••<\/span>/);
   assert.match(html, /data-story-repair="rewrite"/);
   assert.match(html, /<strong>Make shorter<\/strong><small>Condense this explanation without dropping its risk\.<\/small>/);
-  assert.match(html, /<strong>Split into smaller stops<\/strong><small>Give each review question its own local camera\.<\/small>/);
+  assert.match(html, /<strong>Split into smaller stops<\/strong><small>Give each decision its own local camera\.<\/small>/);
 });
 
 test('story steps stay in focus mode and expose explicit beat navigation', () => {

@@ -79,9 +79,29 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 test('desktop story stages reclaim redundant side-navigation gutters', () => {
   assert.match(
     source,
-    /#ds-view-tour>:not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:calc\(100% - 24px\)/,
+    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:calc\(100% - 24px\)/,
   );
   assert.doesNotMatch(source, /ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
+});
+
+test('a code step draws exactly one frame around the diff', () => {
+  const diffSource = readFileSync(new URL('../src/diff-assets.ts', import.meta.url), 'utf8');
+  // The island keeps its border; the card inside it gives one up, so the two
+  // concentric rounded frames collapse into one.
+  assert.match(
+    source,
+    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*border:1px solid var\(--line-soft\)/,
+  );
+  assert.match(diffSource, /\.ds-step\.is-code-step \.ds-diff\{border:0;border-radius:0;box-shadow:none\}/);
+  // Nothing may reintroduce a ring on the card: the accent states moved to the island.
+  assert.doesNotMatch(diffSource, /\.ds-step\.is-(story|voice)-active[^{]*\.ds-diff\{/);
+  // Both accent rules must carry :not([hidden]) — without it they under-score the
+  // island rule's (1,3,0) and the border color silently stays --line-soft.
+  assert.match(source, /#ds-view-tour>\.ds-step\.is-story-active:not\(\.is-voice-active\):not\(\[hidden\]\)\{border-color:/);
+  assert.match(source, /#ds-view-tour>\.ds-step\.is-voice-active:not\(\[hidden\]\)\{border-color:/);
+  // Full-bleed: no side gutter between the island edge and the code.
+  assert.match(source, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:8px 0 0/);
+  assert.doesNotMatch(source, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:\d+px [1-9]/);
 });
 
 test('compact review surfaces are width-contained while code and film navigation stay usable', () => {
@@ -94,14 +114,17 @@ test('compact review surfaces are width-contained while code and film navigation
     /\.ds-reviewchrome>\.ds-reviewchrome-rail\{display:none;position:fixed/,
     'the compact rail must outrank the shared positioned-child rule instead of pushing header utilities off canvas',
   );
-  assert.match(source, /\.ds-filmthread\{[^}]*width:calc\(100% - 24px\);min-width:0;max-width:calc\(100% - 24px\)/);
+  // The thread is a row inside the dock island now, so the island is what has to
+  // stay inside the viewport; the thread only has to refuse to push it wider.
+  assert.match(source, /\.ds-dock\{[^}]*width:calc\(100% - 24px\);min-width:0;max-width:calc\(100% - 24px\)/);
+  assert.match(source, /\.ds-filmthread\{[^}]*min-width:0/);
   assert.match(
     source,
-    /#ds-view-tour>:not\(\.ds-filmthread\):not\(\[hidden\]\)\{width:calc\(100% - 16px\)\}/,
+    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{width:calc\(100% - 16px\)\}/,
   );
   assert.match(
     source,
-    /\.ds-filmthread\{width:calc\(100% - 16px\);max-width:calc\(100% - 16px\);gap:6px;margin:0 8px 8px/,
+    /\.ds-dock\{width:calc\(100% - 16px\);max-width:calc\(100% - 16px\);margin:0 8px 8px/,
   );
   assert.match(source, /\.ds-filmthread-allfiles\{height:44px;padding:0 9px\}/);
   assert.match(source, /\.ds-filmthread\.is-overview\{display:none\}/);

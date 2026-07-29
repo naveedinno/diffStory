@@ -21,7 +21,6 @@ const v2CodeStep = (id = 'code', order = 2, overrides = {}) => ({
   range: [1, 2],
   kind: 'changed',
   why: 'This is where the new behavior is implemented.',
-  question: 'Does this implementation prove the intended behavior?',
   ...overrides,
 });
 
@@ -108,7 +107,6 @@ test('generated-story validation keeps the changed range in frame and in at leas
       beats: [{ text: 'This only points at the caller.', highlights: [[10, 12]] }],
       kind: 'changed',
       why: 'The changed branch sits downstream.',
-      question: 'Does the changed branch return the intended result?',
     }],
   };
 
@@ -882,7 +880,7 @@ test('intent.nonGoals tolerates an empty array as "no deliberate omissions"', ()
   assert.ok(validateTour(tour([' '])).includes('intent.nonGoals[0] must be a non-empty string'));
 });
 
-test('skim steps need no review question; substantive stops still do', () => {
+test('a legacy question field is ignored, and malformed tags stay a validation error', () => {
   const step = (overrides) => v2CodeStep('s1', 1, {
     viewport: [1, 10], highlights: [[1, 2]],
     beats: [{ text: 'Same rename as above; nothing reads the old field.', highlights: [[1, 2]] }],
@@ -890,19 +888,11 @@ test('skim steps need no review question; substantive stops still do', () => {
   });
   const tour = (s) => v2Tour([s], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
 
-  // A mechanical sweep stop exists for coverage, not interrogation — forcing a
-  // question there only produces rhetorical filler.
-  const skim = tour(step({ question: undefined, tags: ['skim'] }));
-  assert.ok(!validateGeneratedTour(skim).some((e) => e.includes('question is required')));
-  for (const tag of ['sweep', 'mechanical', 'SKIM']) {
-    assert.ok(!validateGeneratedTour(tour(step({ question: undefined, tags: [tag] })))
-      .some((e) => e.includes('question is required')));
-  }
-  // Anything the reviewer must actually weigh still needs one.
-  assert.ok(validateGeneratedTour(tour(step({ question: undefined })))
-    .some((e) => e.includes('question is required')));
-  assert.ok(validateGeneratedTour(tour(step({ question: undefined, tags: ['core'] })))
-    .some((e) => e.includes('question is required')));
+  // Review questions are gone from the product. Stories written before that
+  // still carry the field, and they must keep loading rather than fail a gate
+  // for a value nothing reads any more.
+  assert.deepEqual(validateGeneratedTour(tour(step({ question: 'Does this hold?' }))), []);
+  assert.deepEqual(validateGeneratedTour(tour(step({ question: undefined }))), []);
 
   // Agent output is untrusted JSON. A non-string tag is a useful validation
   // error, never a `.trim is not a function` crash in the generation result.
@@ -1027,4 +1017,76 @@ test('coverage counts every span a step claims via ranges', async () => {
   // ...and claiming both spans closes it, with no change to what is displayed.
   const swept = { version: 2, title: 'T', summary: '', steps: [{ ...base, range: [10, 11], ranges: [[10, 11], [40, 41]] }] };
   assert.equal(computeCoverage(swept, files).uncovered.length, 0);
+});
+
+test('narrative validation names the tag it rejected, per field tier', () => {
+  const bad = {
+    version: 2,
+    title: 'A <em>marked-up</em> title',
+    summary: 'Fine.',
+    steps: [{
+      id: 's1', order: 1, title: 'Fine', kind: 'changed', file: 'a.ts',
+      range: [1, 1], viewport: [1, 1], highlights: [[1, 1]],
+      why: 'A <table><caption>c</caption><tr><td>x</td></tr></table> in a why.',
+      beats: [{ text: 'Fine.', highlights: [[1, 1]] }],
+    }],
+  };
+  const errors = validateTour(bad);
+  // Tier C: a title carries no markup at all, not even inline emphasis.
+  assert.ok(
+    errors.some((e) => e.startsWith('title ') && e.includes('<em>') && e.includes('plain-text')),
+    errors.join(' | '),
+  );
+  // Tier B: block markup is rejected where it could not legally render.
+  assert.ok(
+    errors.some((e) => e.includes('.why ') && e.includes('<table>') && e.includes('inline')),
+    errors.join(' | '),
+  );
+});
+
+test('an uncaptioned table is an authoring error, not a silent drop', () => {
+  const body = `<p>${Array.from({ length: 70 }, (_, i) => `word${i}`).join(' ')}</p>`
+    + '<table><tr><td>cell</td></tr></table>';
+  const errors = validateTour({
+    version: 2, title: 'T', summary: 'S',
+    steps: [
+      { id: 'c1', order: 1, title: 'Primer', kind: 'concept', preparesFor: ['s1'], body },
+      { id: 's1', order: 2, title: 'Code', kind: 'changed', file: 'a.ts',
+        range: [1, 1], viewport: [1, 1], highlights: [[1, 1]], why: 'Because.',
+        beats: [{ text: 'Fine.', highlights: [[1, 1]] }] },
+    ],
+  });
+  assert.ok(errors.some((e) => e.includes('caption')), errors.join(' | '));
+});
+
+test('the concept word budget counts words, not tags', () => {
+  const words = Array.from({ length: 70 }, (_, i) => `word${i}`).join(' ');
+  const errors = validateTour({
+    version: 2, title: 'T', summary: 'S',
+    steps: [
+      { id: 'c1', order: 1, title: 'Primer', kind: 'concept', preparesFor: ['s1'],
+        body: `<p>${words}</p>` },
+      { id: 's1', order: 2, title: 'Code', kind: 'changed', file: 'a.ts',
+        range: [1, 1], viewport: [1, 1], highlights: [[1, 1]], why: 'Because.',
+        beats: [{ text: 'Fine.', highlights: [[1, 1]] }] },
+    ],
+  });
+  // 70 real words clears the 60-word floor. Counting the raw string would score
+  // the <p> as the word "p" and inflate the total.
+  assert.deepEqual(errors.filter((e) => e.includes('60 words')), []);
+});
+
+test('the beat prose gates read the text projection, not the raw markup', () => {
+  const withMarkup = validateGeneratedTour({
+    version: 2, title: 'T', summary: 'A summary that is long enough to pass.',
+    steps: [{
+      id: 's1', order: 1, title: 'Code', kind: 'changed', file: 'a.ts',
+      range: [1, 1], viewport: [1, 1], highlights: [[1, 1]],
+      why: 'This explains the change in enough words to satisfy the gate.',
+      // LINE_NUMBER_OPENER is ^-anchored: a leading tag would disarm it unless
+      // the gate reads the projection.
+      beats: [{ text: '<strong>Line 742</strong> adds the clamp.', highlights: [[1, 1]] }],
+    }],
+  });
+  assert.ok(withMarkup.some((e) => e.toLowerCase().includes('line')), withMarkup.join(' | '));
 });

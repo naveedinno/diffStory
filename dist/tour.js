@@ -2,6 +2,7 @@
 // but thorough — a malformed story should fail loudly with a useful message,
 // not render a broken page.
 import { readFileSync } from 'node:fs';
+import { narrativeIssues, narrativeText } from './narrative.js';
 const CODE_KINDS = ['changed', 'context', 'new-file'];
 const KINDS = [...CODE_KINDS, 'concept'];
 const MODES = ['brief', 'guided', 'detailed'];
@@ -14,7 +15,6 @@ const CONCEPT_CODE_FIELDS = [
     'beats',
     'focus',
     'why',
-    'question',
     'calls',
     'returnsTo',
 ];
@@ -34,10 +34,29 @@ const CONTEXT_ALLOWANCE = 12;
  * `VALUE_TRANSITION` — "650 → 600", "650->600". Both sides are already rendered
  * in colour, so restating them costs a line and teaches nothing. Prose arrows
  * between words ("request → handler") stay legal: only digit-to-digit matches.
+ *
+ * Both run against the text projection, never the raw field. "<strong>Line
+ * 742</strong> makes …" and "650 &rarr; 600" are the same sentence to a reader,
+ * so they have to be the same sentence to the gate.
  */
 const LINE_NUMBER_OPENER = /^lines?\s+\d/i;
 const VALUE_TRANSITION = /\d\s*(?:→|->|—>|–>)\s*\d/;
 export class TourError extends Error {
+}
+/**
+ * Authoring problems in one narrative field, reported under the field's own path.
+ * `narrativeIssues` returns an empty array for prose the sanitizer keeps intact,
+ * so a clean story adds nothing here.
+ */
+function validateNarrative(value, name, tier, errors) {
+    if (typeof value !== 'string')
+        return;
+    for (const issue of narrativeIssues(value, tier))
+        errors.push(`${name} ${issue}`);
+}
+/** True when a field carries no readable prose once its markup is stripped. */
+function isBlankNarrative(value) {
+    return typeof value !== 'string' || !narrativeText(value).trim();
 }
 function isLineNumber(v) {
     return typeof v === 'number' && Number.isInteger(v) && v > 0;
@@ -166,9 +185,10 @@ function validateBeats(step, containerRange, containerName, where, errors, allow
             return;
         }
         const beat = rawBeat;
-        if (typeof beat.text !== 'string' || !beat.text.trim()) {
+        if (isBlankNarrative(beat.text)) {
             errors.push(`${where}.beats[${i}].text is required`);
         }
+        validateNarrative(beat.text, `${where}.beats[${i}].text`, 'inline', errors);
         validateBeatHighlights(beat, i, containerRange, containerName, where, errors, allowDeletionAnchor);
     });
 }
@@ -180,10 +200,12 @@ function validateIntent(t, errors) {
         return;
     }
     const intent = t.intent;
-    if (typeof intent.goal !== 'string' || !intent.goal.trim())
+    if (isBlankNarrative(intent.goal))
         errors.push('intent.goal is required');
+    validateNarrative(intent.goal, 'intent.goal', 'inline', errors);
     if (intent.design !== undefined && typeof intent.design !== 'string')
         errors.push('intent.design must be a string');
+    validateNarrative(intent.design, 'intent.design', 'inline', errors);
     if (intent.sources !== undefined) {
         if (!Array.isArray(intent.sources) || intent.sources.length === 0) {
             errors.push('intent.sources must be a non-empty array');
@@ -192,6 +214,8 @@ function validateIntent(t, errors) {
             intent.sources.forEach((s, i) => {
                 if (typeof s !== 'string' || !s.trim())
                     errors.push(`intent.sources[${i}] must be a non-empty string`);
+                // Sources are evidence labels the reviewer scans, never formatted prose.
+                validateNarrative(s, `intent.sources[${i}]`, 'text', errors);
             });
         }
     }
@@ -206,6 +230,7 @@ function validateIntent(t, errors) {
             intent.nonGoals.forEach((s, i) => {
                 if (typeof s !== 'string' || !s.trim())
                     errors.push(`intent.nonGoals[${i}] must be a non-empty string`);
+                validateNarrative(s, `intent.nonGoals[${i}]`, 'inline', errors);
             });
         }
     }
@@ -226,8 +251,9 @@ function validateHotspots(t, errors) {
         const spot = raw;
         if (typeof spot.step !== 'string' || !spot.step.trim())
             errors.push(`hotspots[${i}].step is required`);
-        if (typeof spot.reason !== 'string' || !spot.reason.trim())
+        if (isBlankNarrative(spot.reason))
             errors.push(`hotspots[${i}].reason is required`);
+        validateNarrative(spot.reason, `hotspots[${i}].reason`, 'inline', errors);
     });
 }
 function validateStringArray(value, name, errors, opts = {}) {
@@ -265,6 +291,8 @@ function validateStoryScope(t, errors) {
     if (scope.reviewerNote !== undefined && typeof scope.reviewerNote !== 'string') {
         errors.push('storyScope.reviewerNote must be a string');
     }
+    // Reviewer guidance is echoed back into agent prompts, not into the page.
+    validateNarrative(scope.reviewerNote, 'storyScope.reviewerNote', 'text', errors);
 }
 function validateConceptDiagram(value, where, errors) {
     if (value === undefined)
@@ -279,6 +307,7 @@ function validateConceptDiagram(value, where, errors) {
     if (typeof diagram.caption !== 'string' || !diagram.caption.trim()) {
         errors.push(`${where}.diagram.caption is required`);
     }
+    validateNarrative(diagram.caption, `${where}.diagram.caption`, 'inline', errors);
     if (typeof diagram.source !== 'string' || !diagram.source.trim()) {
         errors.push(`${where}.diagram.source is required`);
         return;
@@ -311,8 +340,10 @@ function validateConceptDiagram(value, where, errors) {
     }
 }
 function validateConceptStep(step, where, errors) {
-    if (typeof step.body !== 'string' || !step.body.trim())
+    if (isBlankNarrative(step.body))
         errors.push(`${where}.body is required`);
+    // The one block-tier field in the whole story: headings, lists, tables, code.
+    validateNarrative(step.body, `${where}.body`, 'block', errors);
     validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, { required: true, nonEmpty: true });
     if (Array.isArray(step.preparesFor)) {
         const refs = step.preparesFor.filter((ref) => typeof ref === 'string');
@@ -331,9 +362,7 @@ function validateCodeStep(step, where, storyFiles, errors) {
         errors.push(`${where}.file is required`);
     if (typeof step.why !== 'string')
         errors.push(`${where}.why is required`);
-    if (step.question !== undefined && (typeof step.question !== 'string' || !step.question.trim())) {
-        errors.push(`${where}.question must be a non-empty string`);
-    }
+    validateNarrative(step.why, `${where}.why`, 'inline', errors);
     validateStringArray(step.calls, `${where}.calls`, errors);
     if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
         errors.push(`${where}.returnsTo must be a string`);
@@ -460,10 +489,12 @@ export function validateTour(obj) {
     if (t.mode !== undefined && !MODES.includes(t.mode)) {
         errors.push(`mode must be one of ${MODES.join(', ')}`);
     }
-    if (typeof t.title !== 'string' || !t.title.trim())
+    if (isBlankNarrative(t.title))
         errors.push('title is required');
+    validateNarrative(t.title, 'title', 'text', errors);
     if (typeof t.summary !== 'string')
         errors.push('summary is required (use "" if none)');
+    validateNarrative(t.summary, 'summary', 'inline', errors);
     validateIntent(t, errors);
     validateHotspots(t, errors);
     validateStoryScope(t, errors);
@@ -506,10 +537,16 @@ export function validateTour(obj) {
         }
         if (typeof step.title !== 'string' || !step.title)
             errors.push(`${where}.title is required`);
+        validateNarrative(step.title, `${where}.title`, 'text', errors);
         if (step.chapter !== undefined && (typeof step.chapter !== 'string' || !step.chapter.trim())) {
             errors.push(`${where}.chapter must be a non-empty string`);
         }
+        // Chapters group the rail by string equality, so they carry no markup.
+        validateNarrative(step.chapter, `${where}.chapter`, 'text', errors);
         validateStringArray(step.tags, `${where}.tags`, errors);
+        if (Array.isArray(step.tags)) {
+            step.tags.forEach((tag, tagIndex) => validateNarrative(tag, `${where}.tags[${tagIndex}]`, 'text', errors));
+        }
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
             errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
@@ -612,9 +649,14 @@ export function validateTour(obj) {
     }
     return errors;
 }
+/**
+ * Words the reviewer actually hears. Counting the raw field would let markup pad
+ * a thin primer past the minimum — "<strong>" is not a word — so the count runs
+ * on the text projection, the same string the speech stream is built from.
+ */
 function conceptWordCount(body) {
     return typeof body === 'string'
-        ? body.match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0
+        ? narrativeText(body).match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0
         : 0;
 }
 /**
@@ -664,14 +706,14 @@ export function validateGeneratedTour(tour) {
     // Callers normally hand this a tour that already passed validateTour(), but it
     // is exported and agent output can be arbitrary — report a missing field
     // rather than throwing, so the reviewer sees a fixable message.
-    if (typeof tour.summary !== 'string' || !tour.summary.trim()) {
+    if (isBlankNarrative(tour.summary)) {
         errors.push('summary must explain the generated reading path');
     }
     if (!tour.intent) {
         errors.push('intent is required for a generated story');
     }
     else {
-        if (typeof tour.intent.design !== 'string' || !tour.intent.design.trim()) {
+        if (isBlankNarrative(tour.intent.design)) {
             errors.push('intent.design must explain the existing app path, attachment point, and new outcome');
         }
         if (!Array.isArray(tour.intent.sources) || !tour.intent.sources.length) {
@@ -686,18 +728,11 @@ export function validateGeneratedTour(tour) {
         if (step.kind === 'concept') {
             return;
         }
-        if (typeof step.why !== 'string' || !step.why.trim()) {
+        if (isBlankNarrative(step.why)) {
             errors.push(`${where}.why must be a non-empty fallback recap`);
         }
         if (step.ranges !== undefined && !isSkimStep(step)) {
             errors.push(`${where}.ranges requires a "skim", "sweep", or "mechanical" tag for a generated story`);
-        }
-        // A `skim` step exists to keep the coverage gate honest over a mechanical
-        // sweep, not to pose a review question. Demanding one there only produces
-        // rhetorical filler ("did the rename apply?"), which reviewers discount and
-        // graders penalise — so the requirement applies to substantive stops only.
-        if (!isSkimStep(step) && (typeof step.question !== 'string' || !step.question.trim())) {
-            errors.push(`${where}.question is required for a generated story`);
         }
         if (!step.viewport)
             errors.push(`${where}.viewport is required for a generated story`);
@@ -739,7 +774,9 @@ export function validateGeneratedTour(tour) {
             // Two prose failures that make a beat say nothing the diff hasn't already
             // shown. Both are asked for in the skill, but prose guidance lands
             // inconsistently across runs, so the ones that can be checked are checked.
-            const beatText = typeof beat?.text === 'string' ? beat.text.trim() : '';
+            // Both patterns read the text projection, so markup and entities cannot
+            // hide a line-number opener or a value transition from them.
+            const beatText = narrativeText(typeof beat?.text === 'string' ? beat.text : '').trim();
             if (LINE_NUMBER_OPENER.test(beatText)) {
                 errors.push(`${where}.beats[${beatIndex}].text must not open by naming line numbers; ` +
                     `the highlight already points there — say why those lines matter`);

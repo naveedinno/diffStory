@@ -69,9 +69,6 @@ tell the user to open or refresh the installed diffStory app.
 - `concept` is a short, fileless primer that teaches a mental model immediately
   before dependent code. It never claims coverage and must not contain `ranges`.
 - Do not reproduce code in the story. diffStory pulls code from git.
-- Every substantive code step includes a short `question` the reviewer can
-  answer from the highlighted evidence. A step tagged `skim`, `sweep`, or
-  `mechanical` may omit `question`; concept primers do not use it.
 - Stories longer than 10 steps give every step a concise `chapter`; reuse each
   chapter across 3-7 consecutive steps so the rail stays scannable.
 - Top-level `hotspots` (at most 3) anchor your honest doubt to code steps: each
@@ -168,7 +165,7 @@ elsewhere.
 ### Balanced mode
 
 This is the default for `"mode": "guided"`. Keep the story compact but useful:
-one stop per review question, grouped by runtime/control/data flow. The reviewer
+one stop per review decision, grouped by runtime/control/data flow. The reviewer
 should know where to read, what changed, and where to slow down.
 
 Use only the few context bridges needed to restore the task-local app flow. Do
@@ -378,22 +375,18 @@ One small diff — `settleFunding()` in `Funding.sol` gains a clamp, a new
 `_capRate()` helper lands in `RateMath.sol`, and `RateMath.t.sol` gets a test.
 Two stories.
 
-**The changelog (do not write this).** File order, diff-restating beats,
-rhetorical questions:
+**The changelog (do not write this).** File order, diff-restating beats:
 
 ```text
 1. "Update Funding.sol"       — why: "Adds a cap check to settleFunding()."
-                                 question: "Is the cap checked?"
 2. "Add RateMath.sol helper"  — why: "Adds a _capRate() helper for clamping."
-                                 question: "Does the helper clamp?"
 3. "Add tests"                — why: "Adds tests for the new helper."
-                                 question: "Do the tests cover the helper?"
 ```
 
 Every hunk is covered, every gate passes — and the reviewer learned nothing the
 diff didn't already say. Each `why` restates its own hunk, no step hands off to
-the next, and every question answers itself with "yes" while the real question
-(can an unclamped rate still reach balances?) is never asked.
+the next, and the real hinge (can an unclamped rate still reach balances?) is
+never named.
 
 **The story (write this).** Same three stops, ordered by the runtime path,
 each beat picking up what the previous stop established:
@@ -404,19 +397,16 @@ each beat picking up what the previous stop established:
           handed the raw rate straight to settlement."
    beat: "Now the rate passes through _capRate() first — the review hinge is
           that this happens before any balance mutation."
-   question: "Can any path still reach the balance write with an unclamped rate?"
 2. "Helper: _capRate() owns the inclusive boundary"
    beat: "This is where the entry point just sent us; the cap is inclusive, so
           rate == cap must pass."
-   question: "Does the <= match the doc'd inclusive cap, or did an off-by-one slip in?"
 3. "Proof: the boundary test pins rate == cap"
    beat: "Final proof: this test fails if the boundary flips to exclusive —
           it guards exactly the hinge from step 2."
-   question: "Would this test actually fail if <= became < ?"
 ```
 
 The difference is not length or polish — it is that each stop exists because of
-the previous one, and each question names a failure the evidence must rule out.
+the previous one, and each beat names the failure its evidence rules out.
 If your draft reads like the first version, reorder around the runtime path and
 rewrite each beat to say what it unlocks, not what it edits.
 
@@ -441,10 +431,39 @@ Its `preparesFor` must include that immediately following code step and may list
 other later dependent code-step ids. Never place two concept primers next to each other. Never end the story with a concept primer.
 
 Write the primer `body` as a short document of 60-180 words, with a hard maximum
-of 220 words. Use compact paragraphs, small lists, emphasis, and inline code.
-Do not paste implementation code, add Markdown links/images, or inflate a
-primer to hit the word target. If the model does not earn 60 useful words, teach
-it in the code beat instead.
+of 220 words, counted as prose with tags excluded. Do not paste implementation
+code or inflate a primer to hit the word target. If the model does not earn 60
+useful words, teach it in the code beat instead.
+
+#### Narrative fields are HTML
+
+Story prose is authored as restricted HTML, not Markdown. `**bold**` renders as
+the literal characters `**bold**`. The full contract is `docs/story-schema.md`;
+what you need while writing:
+
+| Field | You may write |
+| --- | --- |
+| concept `body` | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
+| `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
+| every `title`, `storyScope.reviewerNote` | plain text — no tags at all |
+
+Block tags in an inline field are rejected: those fields render inside a `<p>` or
+a `<button>`, which cannot legally hold them.
+
+The only attributes allowed anywhere are `class` on `<span> <code> <td> <th>`
+(one of `ds-bit`, `ds-slot`, `ds-flag`, `ds-val`, `ds-warn`), `scope` on `<th>`,
+`colspan`/`rowspan` (1-20), and `data-lang` on `<pre>`. There are no links, no
+images, no inline SVG, no `id`, and no `style`. Anything else is dropped.
+
+Writing about a tag? Escape it: `&lt;script&gt;`. A bare `<script>` is removed
+with everything inside it.
+
+**Every `<table>` needs a `<caption>`, and a table without one is dropped.** The
+caption is not a label — it is what the read-aloud voice speaks *in place of* the
+table, because reading a grid cell by cell is unusable as audio. Write the
+caption as the sentence you would say out loud if the table were not there. Reach
+for a table only when a bit layout, an encoding map, or a state transition is
+genuinely clearer as a grid than as a sentence.
 
 Use an optional Mermaid diagram only when it materially clarifies three or more
 actors/components, a real branch, or a state transition. Supported declarations
@@ -470,8 +489,8 @@ Plan by code logic, not filenames:
 - Follow runtime/control/data flow across files. When you dive into a helper, return to the caller if that helps the reader.
 - Put definitions before repeated uses when the definition makes later steps readable.
 - Put core behavior before glue, adapters, docs, generated files, snapshots, and tests.
-- Group related substantive hunks into one stop only when they answer one
-  review question and sit close enough to share one viewport. When substantive
+- Group related substantive hunks into one stop only when they carry one
+  review decision and sit close enough to share one viewport. When substantive
   hunks are far apart, write a step for each. The only scattered grouping is
   one repeated mechanical pattern in one file: use a tagged sweep whose
   top-level `ranges` lists every full changed span while `range` anchors one
@@ -703,9 +722,6 @@ Each code step has:
   points at its own highlighted code.
 - `kind`: `changed`, `new-file`, or `context`.
 - `title`: a sidebar-readable review claim, behavior, invariant, or risk.
-- `question`: one falsifiable question answered by this stop's evidence;
-  required for substantive steps and optional only when `tags` includes
-  `skim`, `sweep`, or `mechanical`.
 - `chapter`: required when the story has more than 10 steps; reuse it for 3-7
   consecutive stops.
 - `why`: the compact fallback recap for the stop.
@@ -729,37 +745,16 @@ Tests
 Changes in api.ts
 ```
 
-Run the flip test on every `question` before keeping it. Substantive steps must
-have one. A tagged skim/sweep/mechanical step may omit it instead of inventing a
-rhetorical question. When a question is present, do not just answer it — **name
-the specific bug that would make the answer come out the other way.** If you
-cannot describe that bug in one concrete sentence, the question is rhetorical
-and must be replaced or, only for a tagged mechanical sweep, omitted.
-
-```text
-Q: "Is the cap checked?"                          (highlight IS the cap check)
-   flip: — nothing; the check is right there.     → REJECT, rhetorical
-Q: "Would this regex catch a renamed class?"
-   flip: — none; a rename changes the string the  → REJECT, only one answer
-          regex matches, so it always catches it.
-Q: "Can an over-cap rate reach balance mutation before the clamp?"
-   flip: — yes, if any caller reaches settle()    → KEEP, names a real bug
-          through the legacy path that skips _capRate().
-Q: "Does the 66px gutter clear the ghost cards at every width above 1120px?"
-   flip: — yes, if the ghost's own 52px body plus → KEEP, falsifiable by math
-          its border exceeds the gutter at 1121px.
-```
-
-Questions that survive the flip test share a shape: they name a *path*, an
-*input*, or a *number* that could be wrong, not a property the diff obviously
-has. Beware the two rhetorical templates that look rigorous but aren't — "Does
-X do what it says?" and "Is Y covered by the test?" — both answer themselves
-from the highlight. If a step supports only rhetorical questions, the step is
-probably restating the diff; sharpen the step, not just the question.
+A stop earns its place by naming the failure its evidence rules out. Before
+keeping a step, state in one concrete sentence the bug that would still be there
+if this code were wrong — a *path*, an *input*, or a *number* that could be off,
+not a property the diff obviously has. If you cannot name one, the step is
+probably restating the diff: sharpen what it points at, or fold it into a tagged
+skim/sweep/mechanical stop.
 
 Each code-step `why` should be a compact fallback recap for the whole stop. The
-read-aloud explanation belongs in `beats`, and each beat should answer one
-local reviewer question. In brief mode, use exactly one short first-person
+read-aloud explanation belongs in `beats`, and each beat should resolve one
+local doubt. In brief mode, use exactly one short first-person
 sentence per beat. In balanced/guided mode, use short first-person beats. In
 line-by-line/detailed mode, use more beats instead of turning one beat into a
 long paragraph:
@@ -767,7 +762,7 @@ long paragraph:
 1. Where this stop sits in the designed runtime/control/data flow.
 2. What the old path failed to handle, preserve, reject, or prove.
 3. What this local change unlocks for the next caller, helper, path, or proof.
-4. The exact invariant, edge case, or review question the human should verify.
+4. The exact invariant or edge case the human should verify.
 
 Good shape:
 
@@ -811,7 +806,7 @@ A concept step has exactly the shared identity fields plus its document fields:
 
 `diagram` and `tags` are optional. Every other field shown above is required.
 A concept step must not contain `file`, `range`, `ranges`, `viewport`,
-`highlights`, `beats`, `why`, `question`, `calls`, or `returnsTo`. It also must
+`highlights`, `beats`, `why`, `calls`, or `returnsTo`. It also must
 not contain legacy `focus`. Link it only through `preparesFor`,
 which must point to later code-step ids and include the immediately following
 code step. Concept primers never claim diff coverage.
@@ -848,7 +843,7 @@ conceptually jump. Concept primers use `preparesFor` instead.
 ### 8. Declare your doubts (hotspots)
 
 The story answers "where do I read?"; `hotspots` answer the reviewer's real
-question: "where should I distrust this?". You just wrote the change — you know
+worry: "where should I distrust this?". You just wrote the change — you know
 exactly where you were least sure. Say so.
 
 After the steps are written, add top-level `hotspots`: 1-3 entries, each
@@ -898,15 +893,16 @@ step count. Substantive changes still need enough local steps to explain every
 decision; only a repeated mechanical pattern may claim scattered spans together.
 
 Grouping does not stretch the local anchor. Substantive hunks can share a step
-only when they are close enough for one viewport and answer one review question.
+only when they are close enough for one viewport and carry one review decision.
 Scattered substantive decisions need separate steps. Top-level `ranges` is the
 single exception for repeated mechanical spans in one file, and every claimed
 span must still appear in the ledger.
 
 **Mechanical sweeps** — the same edit repeated across many places (a removed
 field, a renamed symbol, an import dropped from twenty callers) — are where this
-goes wrong most often. Use one or a few tagged sweep steps, each limited to one
-repeated pattern in one file. Point one local representative camera and beat at
+goes wrong most often. Use one or a few sweep steps tagged `skim`, `sweep`, or
+`mechanical` (only a step with one of those tags may carry top-level `ranges`),
+each limited to one repeated pattern in one file. Point one local representative camera and beat at
 the first useful instance, then put every full repeated changed span claimed by
 that step in top-level `ranges`. If one instance carries a substantive decision,
 give that decision its own normal step and keep it out of the mechanical sweep.
@@ -933,13 +929,11 @@ honest by writing the *pattern* once and pointing at instances:
 A sweep step is shorter, never structurally lighter. "Compact" describes the
 prose only. Every sweep step carries `id`, `order`, `title`, `kind`, `file`, a
 local `range`, the complete top-level `ranges`, `viewport`, `highlights`, `why`,
-`tags`, and one `beats` entry with both `text` and `highlights`. A tag of `skim`,
-`sweep`, or `mechanical` permits the step to omit `question`; substantive steps
-still require one. Never rename a field to save room — beats use `text`, never
-`body` (`body` belongs to concept primers alone).
+`tags`, and one `beats` entry with both `text` and `highlights`. Never rename a
+field to save room — beats use `text`, never `body` (`body` belongs to concept
+primers alone).
 
-Compact valid sweep step — one local camera, every repeated claim, no
-rhetorical `question`:
+Compact valid sweep step — one local camera, every repeated claim:
 
 ```json
 {
@@ -1028,10 +1022,9 @@ Falsifiable checks — run each one, do not skim:
 - Why test: strike any code beat that only restates what the code does. Strike
   any primer that repeats the Overview or could be replaced by one orienting
   code beat.
-- Question flip test: every substantive code step has a `question`; a tagged
-  skim/sweep/mechanical step may omit it. For every question that is present,
-  name the specific bug that would flip its answer. If you cannot state that bug
-  in one concrete sentence, replace it or omit it only on an exempt sweep.
+- Failure test: for every substantive code step, name the specific bug its
+  evidence rules out. If you cannot state that bug in one concrete sentence, the
+  stop is restating the diff — sharpen it or fold it into a tagged sweep.
 - Beat prose test: strike any beat that opens with a line number, any beat whose
   text joins separate line numbers with a semicolon or "and also" (split it),
   and any beat that stops at what the code is without saying what it now
@@ -1088,8 +1081,8 @@ Falsifiable checks — run each one, do not skim:
 {
   "version": 2,
   "mode": "guided",
-  "title": "<short title for the whole change>",
-  "summary": "<1-3 short sentences: how the steps walk the implementation + where to slow down; the goal and designed flow live in intent, not here>",
+  "title": "Short title for the whole change — plain text, no tags",
+  "summary": "1-3 short sentences: how the steps walk the implementation and where to slow down. The goal and designed flow live in intent, not here. Inline tags only, e.g. <code>settleFunding()</code>.",
   "intent": {
     "goal": "We wanted keepers to settle funding without one market's spike draining balances.",
     "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
@@ -1111,7 +1104,6 @@ Falsifiable checks — run each one, do not skim:
       "id": "s1",
       "order": 1,
       "title": "Entry point: settleFunding() clamps before settlement",
-      "question": "Can an over-cap rate reach balance mutation before it is clamped?",
       "file": "contracts/Funding.sol",
       "range": [128, 132],
       "viewport": [120, 145],
@@ -1153,7 +1145,6 @@ Falsifiable checks — run each one, do not skim:
       "id": "s2",
       "order": 3,
       "title": "Helper: _capRate() owns the boundary rule",
-      "question": "Does the shared helper enforce the intended inclusive cap before unchecked math?",
       "file": "contracts/lib/RateMath.sol",
       "range": [40, 58],
       "viewport": [40, 58],
@@ -1177,7 +1168,6 @@ Falsifiable checks — run each one, do not skim:
       "id": "s3",
       "order": 4,
       "title": "Existing marketConfig contract supplies the per-market cap",
-      "question": "Does the helper receive the cap from the matching market configuration?",
       "file": "contracts/storage/MarketConfig.sol",
       "range": [88, 94],
       "viewport": [88, 94],
@@ -1231,8 +1221,7 @@ concern if the splitting test passed. Then verify it against the diff yourself:
     list gets long, and the story is invalid without them);
   - every step has `id`, `order` (a number — never omit it), `title`, `kind`;
   - every code step has `file`, `range`, `viewport`, `highlights`, `why`, and
-    `beats`; every substantive code step also has `question`, while only a step
-    tagged `skim`, `sweep`, or `mechanical` may omit it;
+    `beats`;
   - when a step has top-level `ranges`, it is a changed/new-file mechanical
     sweep, lists every full claimed span, and contains its local `range` anchor;
   - every beat has `text` (never `body` — that field belongs to concept
@@ -1291,8 +1280,8 @@ where to switch between them.
   count them toward coverage; avoid `ranges` on context steps too.
 - Don't invent intent. Every `goal` claim needs a source; `["code-derived"]` is the honest fallback.
 - Don't ship steps in file order without stating why that order genuinely reads best.
-- Don't keep a rhetorical question whose answer is a trivial "yes"; a question
-  that cannot be answered wrong is not review guidance.
+- Don't keep a stop whose evidence cannot be wrong; if nothing about it could
+  fail, it is not review guidance.
 - Don't open a beat with "Line 742 …" — the glow already points there; spend the
   words on why it matters.
 - Don't pack several decisions into one beat with semicolons; that is two or

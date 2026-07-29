@@ -29,9 +29,19 @@ export interface StepFocusTarget {
   label?: string;
 }
 
-/** One read-aloud unit inside a step. */
+/**
+ * One read-aloud unit inside a step.
+ *
+ * Narrative fields across these shapes are authored as restricted HTML, in one
+ * of three tiers — block, inline-only, or plain text — fixed by what the
+ * surrounding markup can legally hold. docs/story-schema.md is the normative
+ * statement of the tiers and the element/attribute allowlist.
+ */
 export interface StoryBeat {
-  /** Short narration spoken as one separate speech unit. */
+  /**
+   * Short narration spoken as one separate speech unit. Inline-tier HTML: this
+   * renders inside a `<button>`, which cannot hold block content.
+   */
   text: string;
   /** Inclusive post-change line ranges this beat points at while it is spoken. */
   highlights: Array<[number, number]>;
@@ -39,13 +49,13 @@ export interface StoryBeat {
 
 /** The recovered "why" behind the change — shown before any step. */
 export interface StoryIntent {
-  /** What we wanted to enable: actor + capability, 1-2 sentences. */
+  /** What we wanted to enable: actor + capability, 1-2 sentences. Inline-tier HTML. */
   goal: string;
-  /** The flow designed to achieve it, 1-2 sentences. */
+  /** The flow designed to achieve it, 1-2 sentences. Inline-tier HTML. */
   design?: string;
   /** Evidence the goal rests on: "commit 41af8b7", "PR #12 body", "conversation", "docs/plan.md", or "code-derived". */
   sources?: string[];
-  /** Deliberate omissions the reviewer should not flag: "does not touch settlement ordering". */
+  /** Deliberate omissions the reviewer should not flag: "does not touch settlement ordering". Inline-tier HTML. */
   nonGoals?: string[];
 }
 
@@ -53,7 +63,7 @@ export interface StoryIntent {
 export interface StoryHotspot {
   /** Id of the code step whose evidence carries the doubt. */
   step: string;
-  /** Why the author is least sure here: a guessed boundary, unexercised path, or unverified invariant. */
+  /** Why the author is least sure here: a guessed boundary, unexercised path, or unverified invariant. Inline-tier HTML. */
   reason: string;
 }
 
@@ -63,7 +73,11 @@ export interface StoryScope {
   includedFiles: string[];
   /** Repo-relative changed files intentionally left out of the story. */
   excludedFiles?: string[];
-  /** Optional reviewer guidance captured from the generation form. */
+  /**
+   * Optional reviewer guidance captured from the generation form. Plain text —
+   * it is reviewer-authored through a browser textarea and has no render
+   * surface, so it never carries markup.
+   */
   reviewerNote?: string;
 }
 
@@ -73,7 +87,11 @@ export interface TourStepBase {
   id: string;
   /** 1-based position in the reading order. */
   order: number;
-  /** Short headline for the step. */
+  /**
+   * Short headline for the step. Plain text — it feeds nine sinks including
+   * `aria-label` and `title` attributes, where markup can only ever show as
+   * literal characters.
+   */
   title: string;
   /** Optional free-form labels (e.g. "entrypoint", "core", "test"). */
   tags?: string[];
@@ -95,10 +113,11 @@ export interface CodeTourStepBase extends TourStepBase {
   beats?: StoryBeat[];
   /** Optional legacy narrower post-change line range(s) to point at while reading aloud. */
   focus?: StepFocusTarget;
-  /** The review-oriented narrative: what to verify, what's subtle, why it's safe. */
+  /**
+   * The review-oriented narrative: what to verify, what's subtle, why it's safe.
+   * Inline-tier HTML — it renders inside a height-capped `<p>`.
+   */
   why: string;
-  /** A short falsifiable question; optional only for skim/sweep/mechanical stops. */
-  question?: string;
   /** Step ids this one leads into (renders the A -> B jump links). */
   calls?: string[];
   /** Step id to return to afterwards (the B -> A jump back). */
@@ -130,14 +149,21 @@ export type CodeTourStep = ChangedCodeTourStep | ContextCodeTourStep;
 export interface ConceptDiagram {
   type: 'mermaid';
   source: string;
-  /** Human-readable fallback and accessible description for the diagram. */
+  /**
+   * Human-readable fallback and accessible description for the diagram.
+   * Inline-tier HTML; it is also what the narrator speaks for the figure.
+   */
   caption: string;
 }
 
 /** A short document stop that teaches a mental model before dependent code. */
 export interface ConceptTourStep extends TourStepBase {
   kind: 'concept';
-  /** Restricted Markdown: headings, paragraphs, lists, quotes, emphasis, and inline code. */
+  /**
+   * Block-tier narrative HTML: paragraphs, h2-h4, lists, quotes, `pre`, tables,
+   * and definition lists. The only field that may carry block markup.
+   * See docs/story-schema.md for the element and attribute allowlist.
+   */
   body: string;
   /** Later code-step ids this primer exists to prepare the reviewer for. */
   preparesFor: string[];
@@ -171,7 +197,9 @@ export interface Tour {
   storySnapshot?: { version: 1; id: string };
   /** Story depth requested at generation time; old stories default to guided. */
   mode?: StoryMode;
+  /** Plain text — it feeds `<title>`, the page header, and a chrome tooltip. */
   title: string;
+  /** Inline-tier HTML — it renders inside the intro `<p>` the narrator reads. */
   summary: string;
   /** Optional recovered intent: the goal, designed flow, and evidence sources. */
   intent?: StoryIntent;

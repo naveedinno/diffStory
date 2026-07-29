@@ -388,8 +388,9 @@ test('targeted story repair uses the shared progress panel', () => {
   assert.match(PAGE_JS, /var openTune=\$\('\.ds-story-tune\[open\]'\)/);
   assert.match(PAGE_CSS, /\.ds-story-tune>summary\{[^}]*min-height:32px[^}]*padding:0 10px/);
   assert.match(PAGE_CSS, /\.ds-story-tune\[open\]>summary\{/);
-  assert.match(PAGE_CSS, /\.ds-review-question-kicker\{[^}]*text-transform:uppercase/);
-  assert.match(PAGE_CSS, /\.ds-review-question \.ds-reviewfocus\{[^}]*-webkit-line-clamp:2/);
+  // Repair rides in the step title row now that the review-question strip is gone.
+  assert.match(PAGE_CSS, /\.ds-step-titlerow \.ds-story-tune\{[^}]*margin-left:auto/);
+  assert.doesNotMatch(PAGE_CSS, /ds-review-question/);
 });
 
 test('live review reconnects through the page lease and recovers durable state', () => {

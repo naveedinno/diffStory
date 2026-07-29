@@ -88,7 +88,9 @@ test('read aloud focus is static and routine playback state stays in the control
   assert.doesNotMatch(PAGE_CSS, /ds-narration-status|ds-narration-track|ds-narration-dot/);
   assert.doesNotMatch(PAGE_CSS, /ds-aloud-active \.ds-live-banner/);
   assert.match(PAGE_CSS, /\.ds-narration-stop::after\{content:"Stop"\}/);
-  assert.match(PAGE_CSS, /\.ds-narration-stop\{position:absolute;z-index:13;top:calc\(100% \+ 16px\);right:-40px;width:62px;height:32px/);
+  // The transport rides in the bottom island now, so the compact Stop has to hang
+  // above the play button — below it is off the bottom of the viewport.
+  assert.match(PAGE_CSS, /\.ds-narration-stop\{position:absolute;z-index:13;bottom:calc\(100% \+ 14px\);left:0;width:62px;height:32px/);
   assert.doesNotMatch(PAGE_CSS, /ds-playstep/);
   assert.match(PAGE_JS, /document\.body\.classList\.toggle\('ds-aloud-active',playing\)/);
   assert.doesNotMatch(PAGE_JS, /Voice paused|Voice resumed/);

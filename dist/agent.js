@@ -70,7 +70,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         storyScopeContract +
         scopeContract +
         `The skill owns the craft. Follow its workflow in order — recover the why, reconstruct the app path, storyboard the camera, then write the steps — and honor every contract it defines: ` +
-        `coverage, ranges, viewport/highlight camera limits, beats, concept-primer budgets, questions, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
+        `coverage, ranges, viewport/highlight camera limits, beats, concept-primer budgets, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
         `The app validates the finished story against those contracts and flags violations, so do not improvise a different format or looser limits.\n\n` +
         // The craft lives in the skill, but these exact field names do not survive
         // being read as prose: real runs paraphrased "text" into "body" and "prose",
@@ -79,13 +79,23 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `Exact field names (never paraphrase):\n` +
         `- Top level: "version", "title", "summary", "base", "mode", "intent", "steps"; "title" and "summary" are required.\n` +
         `- Every step: "id", "order" (number 1..N), "title", "kind".\n` +
-        `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical". "question" is required unless tagged that way.\n` +
+        `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical".\n` +
         `- Every beat: "text" (not "body" or "prose") and non-empty "highlights". "body" is concept-only.\n` +
+        // The format is validator-enforced, so it is pinned here rather than left to
+        // the skill: prose about a format does not survive being read as reliably as
+        // a field name does, and a Markdown-shaped story now renders its asterisks
+        // literally instead of failing loudly.
+        `Prose is restricted HTML, never Markdown ("**bold**" renders as literal asterisks):\n` +
+        `- Concept "body" takes block tags: p, h2-h4, ul, ol, li, blockquote, pre, hr, table, caption, thead, tbody, tr, th, td, dl, dt, dd.\n` +
+        `- "why", beat "text", "summary", "intent.goal"/"design"/"nonGoals", "hotspots[].reason" take INLINE tags only: code, kbd, strong, em, sup, sub, span, br.\n` +
+        `- Every "title" and "storyScope.reviewerNote" is plain text with no tags at all.\n` +
+        `- Every <table> needs a <caption>; a table without one is rejected. The caption is what the read-aloud voice speaks instead of the table.\n` +
+        `- No links, images, SVG, id, or style. Writing about a tag means escaping it: &lt;script&gt;.\n` +
         // The self-check list is what actually gets verified, so it names every
         // required field rather than a sample: a run that checked only order/text/
         // highlights shipped 55 code steps with no "why" at all.
         `Before writing, check EVERY step: every code step has all ten always-required fields ` +
-        `"id", "order", "title", "kind", "file", "range", "viewport", "highlights", "why", "beats"; has "question" unless tagged "skim", "sweep", or "mechanical"; and every beat has "text" and "highlights". ` +
+        `"id", "order", "title", "kind", "file", "range", "viewport", "highlights", "why", "beats"; and every beat has "text" and "highlights". ` +
         `One omission invalidates the story.\n\n` +
         // Coverage fails the same way fields did — silently, and only a pass over the
         // finished JSON catches it. One diff hunk often holds several separate
@@ -186,7 +196,7 @@ export function storyRepairPrompt(input) {
     const instruction = input.action === 'explain'
         ? `Add or repair the smallest story step needed to explain the uncovered change at ${target}.`
         : input.action === 'rewrite'
-            ? `Rewrite ${target} around one falsifiable review question, sharper beat narration, and the same exact code evidence.`
+            ? `Rewrite ${target} around sharper beat narration and the same exact code evidence.`
             : input.action === 'shorten'
                 ? `Rewrite ${target} to be shorter and sharper without dropping its review risk or causal link.`
                 : `Split ${target} into two or more locally focused steps so no step jumps between distant code islands.`;
@@ -199,8 +209,11 @@ export function storyRepairPrompt(input) {
         `- Keep a legacy version 1 story at version 1 when the repair only edits code steps; upgrade it to version 2 only if this repair introduces a concept primer. Preserve version 2 once present.\n` +
         `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
         `- Keep the story short, informal, causal, and review-oriented.\n` +
+        // Same reason the generation prompt pins it: the repair path is a second
+        // authoring entry point, and a repair written in Markdown renders literally.
+        `- Prose is restricted HTML, never Markdown. Concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. No links, images, SVG, id, or style.\n` +
         `- Renumber order fields and repair calls/returnsTo/preparesFor only where the targeted edit requires it.\n` +
-        `- Validate every question, chapter, range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
+        `- Validate every chapter, range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
         `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n`);
 }
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */

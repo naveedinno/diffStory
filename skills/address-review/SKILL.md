@@ -51,6 +51,9 @@ user to refresh the installed diffStory app when the review is ready.
      if it is absent. This is the conversation the reviewer sees and can reply to.
    - Never overwrite `body`, and never rewrite an existing turn — the thread is a running
      conversation, so answer the **latest `user` message** in the context of the whole thread.
+   - Turn text is **Markdown**, not HTML. Review threads are a separate surface from story
+     narrative: stories are authored as restricted HTML, comments and replies stay Markdown.
+     Write `` `code` `` and `**bold**` here, not `<code>` and `<strong>`.
    - Set `status` to `"addressed"`.
    Preserve every other field. **Never delete a comment** — resolving is the reviewer's call.
    Write the full array back to `.diffstory/comments.json` (valid JSON).

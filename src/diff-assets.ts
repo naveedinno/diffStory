@@ -2,7 +2,10 @@
 // change-jump). Same rules as page-assets.ts: plain strings, no backticks,
 // no ${} in the JS. DIFF_JS is function declarations only — page-assets
 // splices it INSIDE the page IIFE, so these share its closure scope.
-export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;overflow-x:hidden;overflow-y:auto;padding:18px 30px 26px}
+/* --ds-scrollpad-t mirrors this scroller's padding-top for the sticky chrome
+   inside it: sticky offsets resolve against the content box, so without pulling
+   that padding back the rows scroll through the band above the stuck toolbar. */
+export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;overflow-x:hidden;overflow-y:auto;padding:18px 30px 26px;--ds-scrollpad-t:18px}
 /* .ds-why (the step narrative, page chrome) rides along in this diff-scoped
    at-rule because it shares one short-viewport breakpoint with .ds-diffscroll —
    they trade vertical space together, so the rule stays coupled rather than
@@ -10,21 +13,32 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 @media (max-height:760px){.ds-why{max-height:120px}.ds-diffscroll{min-height:160px}}
 
 /* ---- diff ---- */
-.ds-diff{position:relative;width:100%;min-width:0;max-width:100%;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
-.ds-step.is-story-active:not(.is-voice-active) .ds-diff{border-color:color-mix(in srgb,var(--accent) 52%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent),inset 0 1px 0 rgba(255,255,255,0.035)}
+/* overflow:clip (not hidden) rounds the corners without making the card a
+   scroll container — the toolbar and file heads inside it stay sticky against
+   .ds-diffscroll. Browsers without clip keep hidden and just lose the sticking. */
+.ds-diff{position:relative;width:100%;min-width:0;max-width:100%;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;overflow:clip;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
+/* In a story step the card runs full-bleed to the island's edges, so it draws no
+   frame of its own — the island is the single border, the sticky toolbar and file
+   head are the headers at the top of the code, and the island clips the corners.
+   The story-focus/voice accent that used to ring this card now rides the island
+   (see the #ds-view-tour rules in page-assets). */
+.ds-step.is-code-step .ds-diff{border:0;border-radius:0;box-shadow:none}
 .ds-step.is-story-active:not(.is-voice-active) .ds-difthint{color:var(--accent-blue);font-weight:700}
 .ds-step.is-story-active:not(.is-voice-active) .ds-difthint::before{content:'Story focus';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--accent-blue);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
-.ds-step.is-voice-active .ds-diff{border-color:var(--accent-line);box-shadow:0 0 0 1px var(--accent-line),0 12px 34px var(--accent-glow)}
 .ds-step.is-voice-active .ds-difthint{color:var(--md-primary);font-weight:700}
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
-.ds-difftoolbar{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
+.ds-difftoolbar{position:sticky;top:calc(0px - var(--ds-scrollpad-t,0px));z-index:9;display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
 .ds-modetoggle{display:inline-flex;align-items:center;gap:1px;padding:2px;border:1px solid var(--line-soft);border-radius:7px;background:transparent}
 .ds-modetoggle button{min-width:44px;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:var(--dim);font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
 .ds-modetoggle button:hover{background:var(--fill-1);color:var(--text)}
 .ds-modetoggle button.is-active{background:var(--fill-2);color:var(--text);box-shadow:none}
 .ds-modetoggle button:focus-visible{outline:2px solid var(--accent-blue);outline-offset:1px}
-.ds-diffhead{display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
+/* The file head sticks under whatever chrome sits above it (the card toolbar in
+   a story step, the panel head in Files view) — --ds-stickytop is that height,
+   measured on the holder. Each file's head is stuck inside its own section, so
+   scrolling to the next file hands the header over instead of stacking them. */
+.ds-diffhead{position:sticky;top:calc(var(--ds-stickytop,0px) - var(--ds-scrollpad-t,0px));z-index:8;display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
 .ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 14px;overflow:hidden}
 .ds-diffhead-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
@@ -54,11 +68,11 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus){box-shadow:none;background-image:none}
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
 .ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary)}
-.ds-row.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
+.ds-row.is-voice-focus::before{content:'▶';position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
 .ds-row.is-voice-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-urow.is-voice-focus{position:relative;box-shadow:inset 3px 0 0 var(--md-primary);background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
-.ds-urow.is-voice-focus::before{content:'▶';position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
+.ds-urow.is-voice-focus::before{content:'▶';position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
 .ds-cell-single{flex:1}
@@ -77,7 +91,11 @@ body.ds-resizing{cursor:col-resize}
 body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 body.ds-selecting-right .ds-code[data-comment-side="left"],
 body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:none;user-select:none}
-.ds-no{width:42px;flex:none;display:flex;align-items:flex-start;justify-content:flex-end;text-align:right;padding:3px 8px 3px 0;color:var(--dim2);background:var(--gutter);border-right:1px solid var(--diff-rule);user-select:none;font-variant-numeric:tabular-nums}
+/* The 12px left pad is the marker lane: line numbers are right-aligned, so a
+   marker parked at a fixed offset lands on the digits of any wide number (1024
+   put the ▶ straight through the 0). The lane keeps that column clear and the
+   digit space unchanged — the extra width is the lane, not narrower numbers. */
+.ds-no{width:54px;flex:none;display:flex;align-items:flex-start;justify-content:flex-end;text-align:right;padding:3px 8px 3px 12px;color:var(--dim2);background:var(--gutter);border-right:1px solid var(--diff-rule);user-select:none;font-variant-numeric:tabular-nums}
 .ds-sign{width:12px;flex:none;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
 .ds-sign-add{color:var(--diff-add-text)}
 .ds-sign-del{color:var(--diff-del-text)}
@@ -89,7 +107,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-urow.ds-row-add{background:rgba(18,150,111,0.12);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-urow.ds-row-del{background:rgba(224,68,94,0.12);box-shadow:inset 3px 0 0 var(--del-rail)}
 .ds-urow.is-untoured{background:var(--amber-soft);border-left:2px solid var(--amber)}
-.ds-urow .ds-no{width:44px}
+.ds-urow .ds-no{width:56px}
 .ds-urow .ds-code{padding:2px 12px 2px 7px}
 .ds-urow .ds-no,.ds-urow .ds-sign{padding-top:2px;padding-bottom:2px}
 .ds-changejump{flex:none;display:flex;align-items:center;gap:4px;padding:2px;border:1px solid var(--diff-rule);border-radius:7px;background:var(--gutter-hi)}

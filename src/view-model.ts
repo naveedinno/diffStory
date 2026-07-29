@@ -2,20 +2,26 @@
 // review page renders: the ordered story steps (side-by-side rows), the All-files
 // overview (unified rows), the trust check, and the reconstructed full-file view.
 //
-// Pure data only — no HTML. The renderer (render.ts) and the /api/fullfile
-// endpoint (server.ts) both consume these, so the diff-shaping logic lives in
-// exactly one place. Code strings are passed through verbatim; escaping happens
-// at the render boundary.
+// Diff data stays pure: code strings pass through verbatim and are escaped at the
+// render boundary. Authored prose does not. Every narrative field is parsed here,
+// exactly once (narrative.ts), and carried as a Narrative — `.html` for template
+// interpolation, `.text` for attributes, labels, and truncation, `.speech` for
+// Aloud. The renderer places those projections; it never escapes, truncates,
+// re-parses, or markdown-renders story prose itself, which is what removes the
+// sanitize-then-reparse gap mXSS lives in.
+//
+// The renderer (render.ts) and the /api/fullfile endpoint (server.ts) both consume
+// these, so the diff-shaping logic lives in exactly one place.
 import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
+import { narrative, narrativeText, type Narrative } from './narrative.js';
 import { createHash } from 'node:crypto';
 import type {
   CodeStepKind,
   CodeTourStep,
-  ConceptDiagram,
   ConceptTourStep,
   DiffFile,
   DiffHunk,
@@ -66,11 +72,13 @@ const FILE_KIND_LABEL: Record<FileKind, string> = {
 export interface StepViewBase {
   id: string;
   order: number;
-  title: string;
+  /** Projected once: `.html` for headings, `.text` for aria labels and titles. */
+  title: Narrative;
   kind: StepKind;
   kindLabel: string;
-  /** Authored review cues carried through from story.json. */
+  /** Authored review cues carried through from story.json, markup stripped. */
   tags: string[];
+  /** Grouping key for long reading paths, so text only — never markup. */
   chapter?: string;
 }
 
@@ -96,10 +104,9 @@ export interface CodeStepView extends StepViewBase {
   focusExplicit: boolean;
   newFile: boolean;
   context: boolean;
-  why: string;
-  question: string;
+  why: Narrative;
   /** Author-declared distrust reason when this step is a story hotspot. */
-  hotspot?: string;
+  hotspot?: Narrative;
   health: StepHealthView;
   beats: StepBeatView[];
   /** Plain-English call-flow summary, e.g. "Calls step 3 · returns to 1". */
@@ -109,17 +116,25 @@ export interface CodeStepView extends StepViewBase {
   note?: string;
 }
 
+/** A primer's diagram: the caption is prose, the source is Mermaid the client parses. */
+export interface ConceptDiagramView {
+  type: 'mermaid';
+  source: string;
+  caption: Narrative;
+}
+
 export interface ConceptStepView extends StepViewBase {
   kind: 'concept';
-  body: string;
-  diagram?: ConceptDiagram;
-  preparesFor: Array<{ id: string; order: number; title: string }>;
+  /** The only block-tier narrative in the model: headings, lists, tables, code. */
+  body: Narrative;
+  diagram?: ConceptDiagramView;
+  preparesFor: Array<{ id: string; order: number; title: Narrative }>;
 }
 
 export type StepView = CodeStepView | ConceptStepView;
 
 export interface StepBeatView {
-  text: string;
+  text: Narrative;
   focusGroup: number;
   highlights: Array<[number, number]>;
 }
@@ -170,11 +185,34 @@ export interface HotspotView {
   /** 1-based panel index of the flagged step (panel 0 is the overview). */
   panelIndex: number;
   order: number;
-  title: string;
-  reason: string;
+  title: Narrative;
+  reason: Narrative;
+}
+
+/** The recovered "why", projected for the Overview panel. */
+export interface StoryIntentView {
+  goal: Narrative;
+  design?: Narrative;
+  /** Evidence labels ("commit 41af8b7", "PR #12 body") — identifiers, not prose. */
+  sources: string[];
+  nonGoals: Narrative[];
+}
+
+/**
+ * Tour-level narrative, projected once. Its existence is the reason render.ts
+ * never touches Tour.title / Tour.summary / Tour.intent directly.
+ */
+export interface StoryView {
+  title: Narrative;
+  /** Absent when the story shipped an empty summary. */
+  summary?: Narrative;
+  /** Absent when no intent was recovered, or its goal was blank. */
+  intent?: StoryIntentView;
 }
 
 export interface ReviewModel {
+  /** Title, summary, and recovered intent — already projected for the renderer. */
+  story: StoryView;
   steps: StepView[];
   files: FileView[];
   hotspots: HotspotView[];
@@ -238,10 +276,10 @@ export function buildReviewModel(
   for (const s of codeSteps) if (!stepByFile.has(s.file)) stepByFile.set(s.file, s);
 
   // First declared reason wins if a step is (incorrectly) flagged twice.
-  const hotspotByStep = new Map<string, string>();
+  const hotspotByStep = new Map<string, Narrative>();
   for (const spot of tour.hotspots ?? []) {
-    const reason = spot.reason?.trim();
-    if (reason && !hotspotByStep.has(spot.step)) hotspotByStep.set(spot.step, reason);
+    const reason = narrative(spot.reason ?? '', 'inline');
+    if (reason.text.trim() && !hotspotByStep.has(spot.step)) hotspotByStep.set(spot.step, reason);
   }
 
   const stepViews = steps.map((step, index) =>
@@ -258,9 +296,12 @@ export function buildReviewModel(
         )
       : buildConceptStep(step, byId),
   );
-  const hotspots: HotspotView[] = steps.flatMap((step, index) => {
+  // Built from the step views, not the raw steps: the title is already projected
+  // there, and parsing it twice would be the second parse this module exists to
+  // remove.
+  const hotspots: HotspotView[] = stepViews.flatMap((step, index) => {
     const reason = hotspotByStep.get(step.id);
-    return reason && isCodeStep(step)
+    return reason && step.kind !== 'concept'
       ? [{ stepId: step.id, panelIndex: index + 1, order: step.order, title: step.title, reason }]
       : [];
   });
@@ -281,6 +322,7 @@ export function buildReviewModel(
   const storyFileViews = changedFileViews.filter((file) => storyPaths.has(file.file));
 
   return {
+    story: storyView(tour),
     steps: stepViews,
     files: fileViews,
     hotspots,
@@ -293,6 +335,34 @@ export function buildReviewModel(
     totalAdd: changedFileViews.reduce((a, f) => a + f.add, 0),
     totalDel: changedFileViews.reduce((a, f) => a + f.del, 0),
     storyFilesChanged: storyFileViews.length,
+  };
+}
+
+/**
+ * The story's own prose, projected once. Everything here lands inside a sentence
+ * or a list item on the Overview panel, so it is inline-tier; the concept body is
+ * the only block-tier narrative in the model.
+ */
+function storyView(tour: Tour): StoryView {
+  const summary = narrative(tour.summary ?? '', 'inline');
+  const intent = tour.intent;
+  const goal = narrative(intent?.goal ?? '', 'inline');
+  const design = narrative(intent?.design ?? '', 'inline');
+  return {
+    title: narrative(tour.title ?? '', 'inline'),
+    summary: summary.text.trim() ? summary : undefined,
+    // A goal that is blank once markup is stripped is no recovered intent at all,
+    // and the Overview's layout hangs off whether one exists.
+    intent: goal.text.trim()
+      ? {
+          goal,
+          design: design.text.trim() ? design : undefined,
+          sources: (intent?.sources ?? []).map((source) => narrativeText(source)).filter(Boolean),
+          nonGoals: (intent?.nonGoals ?? [])
+            .map((nonGoal) => narrative(nonGoal, 'inline'))
+            .filter((nonGoal) => nonGoal.text.trim()),
+        }
+      : undefined,
   };
 }
 
@@ -310,7 +380,7 @@ function buildCodeStep(
   byId: Map<string, TourStep>,
   total: number,
   headRef?: string,
-  hotspot?: string,
+  hotspot?: Narrative,
   detailed = true,
 ): CodeStepView {
   const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef) : { blocks: [] };
@@ -323,8 +393,8 @@ function buildCodeStep(
   return {
     id: step.id,
     order: step.order,
-    title: step.title,
-    chapter: step.chapter?.trim() || undefined,
+    title: narrative(step.title, 'inline'),
+    chapter: chapterLabel(step),
     file: step.file,
     oldFile: diffFile?.oldPath ?? step.file,
     viewport,
@@ -334,11 +404,10 @@ function buildCodeStep(
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
-    tags: step.tags ?? [],
+    tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
-    why: step.why,
-    question: step.question?.trim() || fallbackReviewQuestion(step.title),
+    why: narrative(step.why ?? '', 'inline'),
     hotspot,
     health: stepHealth(step, viewport, focusGroups),
     beats,
@@ -352,24 +421,32 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
   return {
     id: step.id,
     order: step.order,
-    title: step.title,
-    chapter: step.chapter?.trim() || undefined,
+    title: narrative(step.title, 'inline'),
+    chapter: chapterLabel(step),
     kind: 'concept',
     kindLabel: STEP_KIND_LABEL.concept,
-    tags: step.tags ?? [],
-    body: step.body,
-    diagram: step.diagram,
+    tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
+    body: narrative(step.body, 'block'),
+    diagram: step.diagram
+      ? {
+          type: step.diagram.type,
+          // The Mermaid source is not narrative: tour.ts validates it against its
+          // own pattern list and the client parses it, so it stays verbatim.
+          source: step.diagram.source,
+          caption: narrative(step.diagram.caption, 'inline'),
+        }
+      : undefined,
     preparesFor: step.preparesFor
       .map((id) => byId.get(id))
       .filter((target): target is CodeTourStep => !!target && isCodeStep(target))
-      .map((target) => ({ id: target.id, order: target.order, title: target.title }))
+      .map((target) => ({ id: target.id, order: target.order, title: narrative(target.title, 'inline') }))
       .sort((a, b) => a.order - b.order),
   };
 }
 
-function fallbackReviewQuestion(title: string): string {
-  const claim = title.trim().replace(/[.?!]+$/, '');
-  return `Does the code prove this claim: ${claim}?`;
+/** Chapters group the rail, so they are compared and printed as plain text. */
+function chapterLabel(step: TourStep): string | undefined {
+  return narrativeText(step.chapter ?? '').trim() || undefined;
 }
 
 function stepHealth(
@@ -407,7 +484,7 @@ function stepHighlights(step: CodeTourStep): Array<[number, number]> {
 
 function stepBeats(step: CodeTourStep): StepBeatView[] {
   return (step.beats ?? []).map((beat, i) => ({
-    text: beat.text,
+    text: narrative(beat.text, 'inline'),
     focusGroup: i,
     highlights: beat.highlights,
   }));

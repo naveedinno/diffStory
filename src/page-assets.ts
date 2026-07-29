@@ -380,6 +380,9 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step-count{font-size:11.5px;color:var(--dim2);font-variant-numeric:tabular-nums}
 .ds-flex{flex:1}
 .ds-step-titlerow{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
+/* Repair moved up here when the review-question row went away; it stays a quiet
+   icon parked at the end of the title line. */
+.ds-step-titlerow .ds-story-tune{margin-left:auto;align-self:center}
 .ds-step-title{min-width:0;max-width:100%;font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
 .ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);flex:none;max-height:min(24vh,190px);overflow-y:auto}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -477,6 +480,55 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-md blockquote{margin:10px 0 0;padding:0 0 0 12px;border-left:2px solid var(--accent);color:var(--muted)}
 .ds-md .ds-md-code{margin:10px 0 0;padding:10px 12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--gutter);overflow:auto}
 .ds-md .ds-md-code code{display:block;padding:0;border:0;border-radius:0;background:transparent;white-space:pre;overflow-wrap:normal}
+/* ---- narrative markup (src/narrative.ts) ---- */
+/* The sanitizer emits these tags directly, so each one needs a rule here: a bare
+   UA <table> or <pre> ignores the concept column's width and blows it open
+   sideways. Px values are hardcoded to sit with the .ds-md neighbours above —
+   this block deliberately stays off the type-scale tokens. */
+.ds-md .ds-md-tablewrap{margin:12px 0 0;overflow-x:auto;overscroll-behavior-x:contain}
+.ds-md table{width:100%;margin:0;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.ds-md caption{caption-side:top;padding:0 0 7px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.02em;text-align:left}
+/* .ds-md sets overflow-wrap:anywhere at the root and it inherits. Unlike
+   break-word, anywhere feeds the min-content width, so an unreset cell shrinks
+   to one character per line and every column collapses. */
+.ds-md th,.ds-md td{padding:8px 12px;overflow-wrap:normal;word-break:normal;text-align:left;vertical-align:top}
+.ds-md thead th{border-bottom:1px solid var(--text-3);color:var(--text);font-weight:700;white-space:nowrap}
+.ds-md tbody{border-bottom:1px solid var(--text-3)}
+.ds-md tbody th{color:var(--text);font-weight:600}
+.ds-md tbody tr:nth-child(even){background:var(--fill-1)}
+.ds-md dl{margin:10px 0 0}
+.ds-md dt{margin-top:9px;color:var(--text);font-weight:700}
+.ds-md dt:first-child{margin-top:0}
+.ds-md dd{margin:3px 0 0 16px}
+.ds-md hr{height:1px;margin:14px 0;border:0;background:var(--line)}
+.ds-md kbd{display:inline-block;min-width:18px;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--fill-2);color:var(--text);font-family:var(--mono);font-size:.86em;line-height:1.45;text-align:center;white-space:nowrap}
+/* line-height:0 plus a relative offset is the only pair that keeps sup/sub from
+   stretching the line box — the concept document runs 1.67 leading and a
+   footnote marker must not open a gap in the paragraph it annotates. */
+.ds-md sup,.ds-md sub{position:relative;font-size:.72em;line-height:0;vertical-align:baseline}
+.ds-md sup{top:-.46em}
+.ds-md sub{bottom:-.24em}
+/* <pre data-lang> is allowlisted, but only the markdown renderer adds
+   .ds-md-code — a narrative <pre> arrives bare and needs its own box. */
+.ds-md pre{margin:10px 0 0;padding:10px 12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--gutter);overflow-x:auto;color:var(--text);font-family:var(--mono);font-size:11.5px;line-height:1.5;white-space:pre;overflow-wrap:normal}
+/* .ds-md p{margin:0}, so a paragraph following a new block needs the same
+   sibling gap the .ds-md-code+p pair already gets. */
+.ds-md .ds-md-tablewrap+p,.ds-md dl+p,.ds-md hr+p,.ds-md pre+p{margin-top:10px}
+/* The five narrative accents. Each class sets nothing but a hue; the shared
+   rules pull the tint and the chip border off currentColor, so the set stays one
+   declaration wide. Hues are the syntax palette, which theme.ts already tunes
+   for contrast in both themes: bit=literal, slot=identifier, flag=keyword,
+   num=numeral, warn=the amber semantic pair. */
+.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,transparent)}
+.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val){font-family:var(--mono);font-size:.94em;font-weight:600;font-variant-numeric:tabular-nums}
+.ds-md span:is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){padding:1px 5px;border-radius:5px}
+.ds-md code:is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){border-color:color-mix(in srgb,currentColor 34%,transparent)}
+.ds-md :is(th,td).ds-val{text-align:right}
+.ds-md .ds-bit{color:var(--tk-s)}
+.ds-md .ds-slot{color:var(--tk-f)}
+.ds-md .ds-flag{color:var(--tk-k)}
+.ds-md .ds-val{color:var(--tk-n)}
+.ds-md .ds-warn{color:var(--text);background:var(--amber-soft);box-shadow:inset 0 0 0 1px var(--amber);font-weight:600}
 .ds-comment-menu{position:relative;flex:none}.ds-comment-menu>summary{list-style:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}.ds-comment-menu>summary::-webkit-details-marker{display:none}.ds-comment-menu>summary:hover,.ds-comment-menu[open]>summary{background:var(--fill-2);border-color:var(--line-soft);color:var(--text)}
 .ds-comment-menu-pop{position:absolute;z-index:5;top:50px;right:0;width:156px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--md-surface-container-high);box-shadow:var(--shadow)}
 .ds-comment-menu-pop button{width:100%;min-height:44px;display:block;border:0;border-radius:7px;background:transparent;color:var(--text);font:inherit;font-size:11.5px;font-weight:600;text-align:left;padding:8px 9px;cursor:pointer}.ds-comment-menu-pop button:hover{background:var(--fill-2)}.ds-comment-menu-pop .ds-del{color:var(--del-text)}.ds-comment-menu-pop .ds-del:hover{background:var(--del-bg)}
@@ -542,7 +594,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-filedetail{flex:1;overflow-y:auto;background:var(--panel3)}
 .ds-filepanel{display:flex;flex-direction:column;min-height:100%}
 .ds-filepanel[hidden]{display:none}
-.ds-filepanel-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
+.ds-filepanel-head{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
 .ds-filepanel-body{position:relative;flex:1;padding-bottom:40px}
 .ds-cardpath{font-family:var(--mono);font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-cardpath .ds-dim{color:var(--dim)}
@@ -618,7 +670,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-drift-file-meta{display:grid;justify-items:end;gap:4px;flex:none}.ds-drift-file-meta em{padding:2px 5px;border-radius:5px;background:var(--fill-3);color:var(--muted);font-size:9px;font-style:normal;font-weight:700;text-transform:uppercase}.ds-drift-file-meta em.is-story{background:var(--amber-soft);color:var(--amber-text)}
 .ds-drift-lines{display:flex;gap:4px;font:10px var(--font-mono)}.ds-drift-lines i{color:var(--add);font-style:normal}.ds-drift-lines b{color:var(--del);font-weight:500}
 .ds-drift-detail{display:flex;min-width:0;min-height:0;flex-direction:column}.ds-drift-detail-head{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-bottom:1px solid var(--line)}.ds-drift-detail-head code{overflow:hidden;color:var(--muted);font:11px var(--font-mono);text-overflow:ellipsis;white-space:nowrap}
-.ds-drift-preview{overflow:auto;min-height:0;flex:1;padding:14px}.ds-drift-preview .ds-diff{margin:0}.ds-drift-back{display:none;border:0;background:transparent;color:var(--accent-text);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.ds-drift-preview{overflow:auto;min-height:0;flex:1;padding:14px;--ds-scrollpad-t:14px}.ds-drift-preview .ds-diff{margin:0}.ds-drift-back{display:none;border:0;background:transparent;color:var(--accent-text);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
 @media(max-width:720px){.ds-drift-drawer{width:100%;max-width:100vw;border-left:0}.ds-drift-body{display:block;min-height:0}.ds-drift-list,.ds-drift-detail{height:100%;border:0}.ds-drift-detail{display:none}.ds-drawer-root.is-detail .ds-drift-list{display:none}.ds-drawer-root.is-detail .ds-drift-detail{display:flex}.ds-drift-back{display:inline-flex;flex:none}}
 .ds-trust-stats{display:flex;gap:10px;margin-bottom:20px}
 .ds-trust-stat{flex:1;padding:13px;border-radius:11px}
@@ -712,16 +764,22 @@ const SESSION_REDESIGN_CSS = `
 .ds-railbeat-list{display:grid;gap:1px}.ds-railbeat{position:relative;display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:6px;width:100%;min-height:40px;margin:0;padding:5px 7px 5px 0;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;text-align:left;cursor:pointer}.ds-railbeat::before{content:'';position:absolute;left:-13px;top:50%;width:9px;border-top:1px solid var(--line-soft)}.ds-railbeat:hover{background:var(--fill-1);color:var(--muted)}.ds-railbeat-marker{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em}.ds-railbeat-text{min-width:0;overflow:hidden;text-overflow:ellipsis;color:inherit;font-size:10.5px;font-weight:500;line-height:1.32;white-space:nowrap}.ds-railbeat.is-visited:not(.is-selected){color:var(--muted)}.ds-railbeat.is-visited:not(.is-selected) .ds-railbeat-marker::after{content:'✓';font-family:var(--sans);font-size:9px}.ds-railbeat.is-visited:not(.is-selected) .ds-railbeat-marker{font-size:0}.ds-railbeat.is-selected{background:var(--accent-soft);color:var(--text)}.ds-railbeat.is-selected::before{border-color:var(--accent-blue)}.ds-railbeat.is-selected .ds-railbeat-marker{background:var(--accent-blue);color:var(--on-accent)}.ds-railbeat.is-active .ds-railbeat-text{color:var(--accent-text)}
 .ds-stepcard.is-intro{grid-template-columns:42px minmax(0,1fr);margin:9px 10px 2px;padding:9px 10px 10px 0;border:1px solid var(--line-soft);border-radius:10px;background:transparent}.ds-stepcard.is-intro:hover{background:var(--fill-1)}.ds-stepcard.is-intro .ds-num{width:28px;height:28px;margin:0 0 0 10px;border-radius:8px;background:var(--fill-2);color:var(--accent-blue)}.ds-stepcard.is-intro .ds-stepcard-title{font-size:12.5px}.ds-stepcard.is-intro .ds-intro-cardsub{margin-top:2px;font-size:10px;color:var(--dim)}.ds-stepcard.is-intro.is-active{background:var(--fill-2);border-color:var(--line)}.ds-stepcard.is-intro.is-active::after{background:var(--accent-blue)}.ds-stepcard.is-intro.is-active .ds-num{background:var(--accent-soft);color:var(--accent-blue);box-shadow:none}.ds-stepcard.is-intro.is-active .ds-stepcard-title{color:var(--text)}.ds-stepcard.is-intro.is-active .ds-intro-cardsub{color:var(--muted)}
 .ds-step[hidden]{display:none!important}
-.ds-step.is-code-step{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ds-step.is-code-step{position:relative;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .ds-step.is-code-step>.ds-step-top{flex:none;padding:16px 22px 0}
 .ds-step-title{font-size:18px}.ds-step-meta{margin-bottom:8px}
-.ds-review-question{flex:none;display:flex;align-items:baseline;gap:9px;min-height:38px;margin:9px 22px 3px;padding:3px 2px;color:var(--muted)}.ds-review-question-kicker{flex:none;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:var(--tracking-kicker);text-transform:uppercase;color:var(--accent-blue)}.ds-review-question .ds-reviewfocus{min-width:0;display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:12.5px;font-weight:400;line-height:1.45;text-wrap:pretty}.ds-review-question .ds-story-tune{margin-left:auto;align-self:center}.ds-story-tune.is-icon>summary{position:relative;width:34px;min-height:34px;padding:0;border-color:transparent;font-size:9px;letter-spacing:1px}
+.ds-story-tune.is-icon>summary{position:relative;width:34px;min-height:34px;padding:0;border-color:transparent;font-size:9px;letter-spacing:1px}
 .ds-hotspot-flag{flex:none;display:flex;align-items:baseline;gap:9px;margin:2px 22px 3px;padding:6px 11px;border:1px solid color-mix(in srgb,var(--amber) 32%,transparent);border-radius:8px;background:color-mix(in srgb,var(--amber) 6%,var(--panel))}
 .ds-hotspot-flag-kicker{flex:none;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:var(--tracking-kicker);text-transform:uppercase;color:var(--amber)}
 .ds-hotspot-flag-reason{min-width:0;font-size:12.5px;line-height:1.45;color:var(--muted);text-wrap:pretty}
-.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:8px 22px 10px;overflow-x:hidden;overflow-y:auto}
-.ds-beatdock{flex:none;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:11px;margin:0 22px 16px;padding:9px 10px 9px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel2);box-shadow:0 -8px 26px rgba(0,0,0,.08)}.ds-beatdock-count{display:flex;align-items:baseline;gap:3px;min-width:43px;color:var(--dim);font-family:var(--mono);font-size:9px;font-variant-numeric:tabular-nums}.ds-beatdock-count b{color:var(--accent-blue);font-size:10.5px}.ds-beatdock-copy{min-width:0}.ds-beatdock-copy .ds-beats{display:grid}.ds-beatdock-note{display:none;width:100%;min-width:0;margin:0;padding:0;border:0;background:transparent;color:var(--text);font:inherit;font-size:11.5px;font-weight:500;line-height:1.42;text-align:left;cursor:pointer}.ds-beatdock-note.is-selected{display:block;background:transparent}.ds-beatdock-note:hover{background:transparent}.ds-beatdock-note:hover .ds-beat-text{color:var(--accent-text)}.ds-beatdock-note:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-radius:3px}.ds-beatdock-note .ds-beat-text{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty}.ds-beatdock-note.is-active .ds-beat-text{color:var(--accent-text)}.ds-beatdock-actions{display:flex;align-items:center;gap:4px}.ds-beatdock-actions button{width:36px;height:36px;display:grid;place-items:center;padding:0;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font:inherit;cursor:pointer}.ds-beatdock-actions button:hover:not(:disabled){background:var(--fill-2);color:var(--text)}.ds-beatdock-actions button:disabled{opacity:.28;cursor:default}.ds-beatdock.is-single{grid-template-columns:auto minmax(0,1fr)}.ds-beatdock.is-single .ds-why-text{min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11.5px;white-space:nowrap}
-.ds-railbeat{min-height:44px}.ds-beatdock-actions button{width:44px;height:44px;border-radius:9px}
+/* No side or bottom padding: the code is full-bleed to the island's edges, so the
+   island rule is the only frame around it and the toolbar / file head read as its
+   headers. Only the top gap survives, to part the title block from the toolbar. */
+.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:8px 0 0;--ds-scrollpad-t:8px;overflow-x:hidden;overflow-y:auto}
+/* The beat dock is rendered by its step but it lives in the bottom island — the
+   client adopts it into .ds-dock-stage as the step comes up. So it draws no glass
+   of its own: the island is the only floating surface, and this is one row in it. */
+.ds-beatdock{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:11px;min-width:0;margin:0;padding:0;border:0;background:transparent}.ds-beatdock[hidden]{display:none}.ds-beatdock-count{display:flex;align-items:baseline;gap:3px;min-width:43px;color:var(--dim);font-family:var(--mono);font-size:9px;font-variant-numeric:tabular-nums}.ds-beatdock-count b{color:var(--accent-blue);font-size:10.5px}.ds-beatdock-copy{min-width:0}.ds-beatdock-copy .ds-beats{display:grid}.ds-beatdock-note{display:none;width:100%;min-width:0;margin:0;padding:0;border:0;background:transparent;color:var(--text);font:inherit;font-size:11.5px;font-weight:500;line-height:1.42;text-align:left;cursor:pointer}.ds-beatdock-note.is-selected{display:block;background:transparent}.ds-beatdock-note:hover{background:transparent}.ds-beatdock-note:hover .ds-beat-text{color:var(--accent-text)}.ds-beatdock-note:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-radius:3px}.ds-beatdock-note .ds-beat-text{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty}.ds-beatdock-note.is-active .ds-beat-text{color:var(--accent-text)}.ds-beatdock-actions{display:flex;align-items:center;gap:4px}.ds-beatdock-actions button{width:34px;height:34px;display:grid;place-items:center;padding:0;border:1px solid var(--line-soft);border-radius:9px;background:transparent;color:var(--muted);font:inherit;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease}.ds-beatdock-actions button:hover:not(:disabled){background:var(--fill-2);border-color:color-mix(in srgb,var(--accent) 26%,var(--line-soft));color:var(--text)}.ds-beatdock-actions button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}.ds-beatdock-actions button:disabled{opacity:.28;cursor:default}.ds-beatdock.is-single{grid-template-columns:auto minmax(0,1fr)}.ds-beatdock.is-single .ds-why-text{min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11.5px;white-space:nowrap}
+.ds-railbeat{min-height:44px}
 /* ---- Filmstrip walkthrough (Signal 3b): rail hidden in Story view; each step is a
    centered stage with an oversized numeral; the bottom numeral thread is the whole nav. ---- */
 body:not([data-read-view="files"]) .ds-rail{display:none}
@@ -730,9 +788,37 @@ body:not([data-read-view="files"]) .ds-sidebar-toggle{display:none}
 body:not([data-read-view="files"]) .ds-main{background:transparent;border-color:transparent;overflow:visible}
 body:not([data-read-view="files"]){gap:4px}
 #ds-view-tour:not([hidden]){flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;position:relative}
-#ds-view-tour>:not(.ds-filmthread):not([hidden]){flex:1;min-height:0;width:calc(100% - 24px);max-width:none;margin:0 auto;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island)}
-.ds-filmthread{position:relative;z-index:3;flex:none;display:flex;align-items:center;gap:12px;width:calc(100% - 24px);min-width:0;max-width:calc(100% - 24px);margin:0 12px 12px;padding:7px 12px 8px;background:color-mix(in srgb,var(--surface-2) 84%,transparent);border:1px solid color-mix(in srgb,var(--line-soft) 76%,transparent);border-radius:14px;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 7px 24px rgba(0,0,0,.07);backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
+#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){flex:1;min-height:0;width:calc(100% - 24px);max-width:none;margin:0 auto;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island)}
+/* Story focus / reading-here used to ring the .ds-diff card. The card no longer
+   draws a frame of its own, so the accent rides the island — the one frame left.
+   The island rule above scores (1,3,0) — an id plus three :not() arguments — so
+   both of these carry :not([hidden]) to reach it and win on source order. Drop
+   that and border-color silently falls back to --line-soft while the ring lands. */
+#ds-view-tour>.ds-step.is-story-active:not(.is-voice-active):not([hidden]){border-color:color-mix(in srgb,var(--accent) 52%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
+#ds-view-tour>.ds-step.is-voice-active:not([hidden]){border-color:var(--accent-line);box-shadow:0 0 0 1px var(--accent-line),0 12px 34px var(--accent-glow)}
+/* ---- The dock: one floating island at the foot of the story ----
+   Transport, the beat you are on, and the numeral thread were three separate bars
+   answering the same question. Stacked in one island they read as one instrument:
+   press play on the left, the current beat speaks in the middle, the thread below
+   shows where that beat sits in the whole story. */
+.ds-dock{position:relative;z-index:3;flex:none;display:flex;flex-direction:column;width:calc(100% - 24px);min-width:0;max-width:calc(100% - 24px);margin:0 12px 12px;border:1px solid color-mix(in srgb,var(--line-soft) 78%,transparent);border-radius:16px;background:color-mix(in srgb,var(--surface-2) 86%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent),0 1px 2px rgba(0,0,0,.05),0 16px 40px rgba(0,0,0,.17);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
+/* Ink casts a heavier shadow than paper: the dark theme needs the lift to read as
+   floating, the light one only needs a hint or the island looks bruised. */
+:root[data-theme="light"] .ds-dock{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 1px 2px rgba(15,23,42,.05),0 12px 30px rgba(15,23,42,.09)}
+.ds-dock-transport{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;min-width:0;min-height:52px;padding:8px 12px 8px 10px}
+.ds-dock-stage{position:relative;min-width:0}
+.ds-dock-idle{min-width:0;margin:0;overflow:hidden;color:var(--dim);font-size:11.5px;font-weight:600;letter-spacing:-.01em;line-height:1.42;text-overflow:ellipsis;white-space:nowrap}
+.ds-dock-idle[hidden]{display:none}
+/* Hairline seam, not a border: the two rows are one surface split by light. */
+.ds-dock-transport::after{content:'';position:absolute;left:1px;right:1px;bottom:0;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--text) 11%,transparent) 12%,color-mix(in srgb,var(--text) 11%,transparent) 88%,transparent)}
+.ds-filmthread{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:12px;min-width:0;padding:3px 10px 6px}
+/* The thread yields its containing block to the island so a numeral's tooltip
+   clears the whole dock. Anchored to the thread it opened straight onto the beat
+   text one row up — the label covered the sentence it was meant to preview. */
+.ds-dock>.ds-filmthread{position:static}
 .ds-filmthread.is-overview{display:none}
+/* Storyless review has no island to sit in, so that thread keeps its own glass. */
+.ds-filmthread.is-storyless{width:calc(100% - 24px);max-width:calc(100% - 24px);margin:0 12px 12px;padding:7px 12px 8px;border:1px solid color-mix(in srgb,var(--line-soft) 76%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface-2) 84%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 7px 24px rgba(0,0,0,.07);backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
 .ds-filmthread-scroll{position:relative;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;padding:4px;scrollbar-width:none}.ds-filmthread-scroll::-webkit-scrollbar{display:none}
 .ds-filmthread-line{position:absolute;left:0;right:0;top:40px;height:1px;opacity:.82;background:linear-gradient(90deg,var(--thread) 0 var(--thread-pct,0%),var(--thread-dim) var(--thread-pct,0%) 100%)}
 .ds-filmthread-nodes{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:4px;width:max-content;min-width:100%;padding:0 4px}
@@ -746,7 +832,7 @@ body:not([data-read-view="files"]){gap:4px}
 .ds-filmnode.is-visited .ds-filmnode-num{color:var(--text-2)}
 .ds-filmnode.is-active::before{content:'';position:absolute;bottom:0;left:50%;width:4px;height:4px;border-radius:50%;background:var(--accent);transform:translateX(-50%);box-shadow:0 0 8px var(--accent-glow)}.ds-filmnode.is-active .ds-filmnode-num{color:var(--accent);text-shadow:0 0 12px var(--accent-glow)}
 .ds-filmthread-tooltip{position:absolute;left:var(--ds-film-tooltip-x,50%);bottom:calc(100% + 5px);z-index:8;width:max-content;max-width:min(520px,calc(100vw - 32px));max-height:none;overflow:visible;padding:7px 10px;border:1px solid color-mix(in srgb,var(--text) 8%,var(--line-soft));border-radius:8px;background:color-mix(in srgb,var(--panel3) 96%,transparent);box-shadow:0 8px 22px rgba(0,0,0,.2);opacity:0;color:var(--text);font-family:var(--sans);font-size:11px;font-weight:600;line-height:1.35;letter-spacing:0;text-align:center;text-wrap:pretty;white-space:normal;overflow-wrap:anywhere;pointer-events:none;transform:translate(-50%,4px) scale(.98);transform-origin:50% 100%;transition:opacity var(--motion-duration-fast) ease,transform var(--motion-duration-fast) var(--motion-ease-out);backdrop-filter:blur(14px) saturate(125%);-webkit-backdrop-filter:blur(14px) saturate(125%)}.ds-filmthread-tooltip.is-visible{opacity:1;transform:translate(-50%,0) scale(1)}
-@media (hover:none),(pointer:coarse){.ds-filmnode{--ds-dock-scale:1!important;--ds-dock-lift:0px!important}.ds-filmthread-tooltip{display:none}}
+@media (hover:none),(pointer:coarse){.ds-filmnode{--ds-dock-scale:1!important;--ds-dock-lift:0px!important}.ds-filmthread-tooltip{display:none}.ds-beatdock-actions button{width:42px;height:42px;border-radius:11px}}
 .ds-filmthread-allfiles{flex:none;align-self:center;height:34px;padding:0 13px;border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--fill-1);color:var(--text-2);font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .ds-filmthread-allfiles:hover{background:var(--fill-2);color:var(--text)}
 .ds-badge-concept{border-color:color-mix(in srgb,var(--accent-blue) 34%,var(--line));background:var(--accent-soft);color:var(--accent-blue)}
@@ -760,6 +846,12 @@ body:not([data-read-view="files"]){gap:4px}
 .ds-concept-eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--accent-blue);font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}.ds-concept-eyebrow span{font-size:14px;line-height:1}
 .ds-concept-title{max-width:22ch;margin:0;color:var(--text);font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.12}
 .ds-concept-body{max-width:72ch;margin-top:22px;color:var(--muted);font-size:15px;line-height:1.67}.ds-concept-body p{margin:0 0 14px}.ds-concept-body h2,.ds-concept-body h3,.ds-concept-body h4{margin:24px 0 9px;color:var(--text);font-size:15px;font-weight:700;letter-spacing:-.005em}.ds-concept-body h2:first-child,.ds-concept-body h3:first-child{margin-top:0}.ds-concept-body ul,.ds-concept-body ol{display:grid;gap:8px;margin:10px 0 17px;padding-left:22px}.ds-concept-body li::marker{color:var(--accent-blue)}.ds-concept-body blockquote{margin:18px 0;padding:1px 0 1px 15px;border-left:3px solid var(--accent-blue);color:var(--text)}.ds-concept-body code{padding:2px 5px;border:1px solid var(--line-soft);border-radius:5px;background:var(--fill-2);color:var(--text);font-family:var(--mono);font-size:.88em}.ds-concept-body .ds-md-code{overflow:auto;margin:16px 0;padding:13px 15px;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel3)}
+/* The concept document runs 15px/1.67, so the narrative blocks step up with it.
+   These sit in SESSION_REDESIGN_CSS, which is concatenated after PAGE_CSS_CORE —
+   that source order is the only reason they beat .ds-md at equal specificity.
+   The wrap still owns overflow-x, so a wide table scrolls inside the measure and
+   .ds-concept-scroll keeps its vertical-only axis. */
+.ds-concept-body .ds-md-tablewrap{margin:18px 0 20px}.ds-concept-body table{font-size:13.5px;line-height:1.55}.ds-concept-body caption{padding-bottom:9px;color:var(--muted);font-size:11.5px}.ds-concept-body th,.ds-concept-body td{padding:9px 14px}.ds-concept-body dl{margin:14px 0 18px}.ds-concept-body dt{margin-top:13px}.ds-concept-body dd{margin:4px 0 0 18px}.ds-concept-body hr{margin:24px 0;background:var(--line-soft)}.ds-concept-body kbd{font-size:.8em}.ds-concept-body pre{margin:16px 0;padding:13px 15px;border-radius:9px;background:var(--panel3);font-size:12px}
 .ds-concept-diagram{margin:26px 0 0;padding-top:22px;border-top:1px solid var(--line-soft)}
 .ds-concept-diagram-output{display:flex;align-items:center;justify-content:center;min-height:210px;overflow:auto;padding:20px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-concept-diagram-output svg{display:block;max-width:100%;height:auto}.ds-concept-diagram-loading{color:var(--dim);font-size:12px}.ds-concept-diagram.is-error .ds-concept-diagram-output{min-height:0;padding:14px;color:var(--amber-text);font-size:12px}
 .ds-concept-diagram figcaption{margin-top:9px;color:var(--muted);font-size:11.5px;line-height:1.45}.ds-concept-diagram-source{margin-top:8px;color:var(--muted);font-size:11px}.ds-concept-diagram-source>summary{cursor:pointer}.ds-concept-diagram-source pre{overflow:auto;margin:8px 0 0;padding:12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel3);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:1.5}
@@ -806,16 +898,19 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:1080px){
   .ds-step.is-code-step{display:flex;overflow:hidden}.ds-step.is-code-step>.ds-step-top{padding:16px 24px 0}
-  .ds-review-question{margin:8px 24px 2px}.ds-step.is-code-step>.ds-diffscroll{padding:8px 24px 10px;min-height:180px}.ds-beatdock{margin:0 24px 16px}
+  .ds-step.is-code-step>.ds-diffscroll{padding:8px 0 0;min-height:180px}
 }
 @media (max-width:820px){.ds-agent-target-prefix,.ds-agent-target-sep{display:none}.ds-agent-target{max-width:150px}.ds-review-menu-count-label{display:none}}
 @media (max-width:760px){.ds-symbols{display:none}}
-@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-review-question{margin:6px 16px 2px}.ds-step.is-code-step>.ds-diffscroll{padding:6px 16px 8px}.ds-beatdock{margin:0 16px 12px;padding-left:10px}#ds-view-tour>:not(.ds-filmthread):not([hidden]){width:calc(100% - 16px)}.ds-filmthread{width:calc(100% - 16px);max-width:calc(100% - 16px);gap:6px;margin:0 8px 8px;padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}}
-@media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step-meta>.ds-dot,.ds-step-meta>.ds-flowchip{display:none}.ds-step.is-code-step .ds-full-diff{display:none}.ds-beatdock{grid-template-columns:auto minmax(0,1fr);row-gap:7px}.ds-beatdock-actions{grid-column:1/-1;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--line-soft)}.ds-review-question .ds-reviewfocus{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal}.ds-review-question{align-items:flex-start;padding-top:7px}}
+@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){width:calc(100% - 16px)}.ds-dock{width:calc(100% - 16px);max-width:calc(100% - 16px);margin:0 8px 8px;border-radius:14px}.ds-dock-transport{gap:8px;min-height:48px;padding:7px 8px 7px 7px}.ds-filmthread{gap:6px;padding:2px 6px 4px}.ds-filmthread.is-storyless{width:calc(100% - 16px);max-width:calc(100% - 16px);margin:0 8px 8px;padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
+@media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step-meta>.ds-dot,.ds-step-meta>.ds-flowchip{display:none}.ds-step.is-code-step .ds-full-diff{display:none}/* The beat row stays one line even here. Wrapping the arrows underneath left the
+   play button centred against a two-row neighbour, which opened a dead square in
+   the middle of the island — worse than tighter gaps. */
+.ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}
 @media (max-width:720px){.ds-back{min-width:36px}.ds-help{display:none}}
 @media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-agent-target,.ds-review-menu,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-agent-target.is-busy .ds-agent-target-icon,.ds-readaloud.is-loading .ds-readaloud-ico,.ds-agent-task-spinner,.ds-composer{animation:none!important}}
-@media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-review-menu-pop,.ds-toast{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}}
-@media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}}
+@media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-review-menu-pop,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
+@media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}.ds-md caption{color:var(--text)}.ds-md thead th,.ds-md tbody{border-color:var(--text)}.ds-md tbody tr:nth-child(even){background:transparent}.ds-md tbody tr+tr{border-top:1px solid var(--line)}.ds-md hr{background:var(--text-3)}.ds-md kbd{border-color:var(--text-3)}}
 
 /* The review frame keeps only navigation, scope, theme, and the decision entry
    point visible. Detailed status belongs inside Review, next to its actions. */
@@ -829,14 +924,24 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 .ds-reviewchrome-main .ds-titlewrap{gap:3px}.ds-reviewchrome-main .ds-title{font-size:15px;font-weight:700;letter-spacing:-.01em}.ds-reviewchrome-subtitle{overflow:hidden;color:var(--dim);font-size:10.5px;text-overflow:ellipsis;white-space:nowrap}.ds-reviewchrome-subtitle span{margin:0 3px;color:var(--faint)}.ds-reviewchrome-subtitle b{color:var(--muted);font-family:var(--mono);font-size:10px;font-weight:600}
 .ds-reviewchrome-mobile-nav{display:none;align-items:center;gap:1px;flex:none;margin-right:6px}.ds-reviewchrome-mobile-nav .ds-sidebar-toggle,.ds-reviewchrome-mobile-nav .ds-back{width:44px;min-height:44px;padding:0;justify-content:center}
 .ds-reviewchrome-utilities{display:flex;align-items:center;gap:10px;flex:none;margin-left:14px}.ds-reviewchrome-utilities .ds-theme-toggle{width:36px;height:36px;min-height:36px}
+/* Story ⇄ Files rides in the chrome, not the rail: switching views is a
+   top-level move and the rail is collapsed for most of the review. The pill
+   here overrides the rail's light-theme underline tabs, which were drawn to
+   sit under a sidebar heading rather than inside a 56px bar. */
+:root .ds-reviewchrome-utilities .ds-viewtoggle{flex:none;align-items:center;height:36px;min-height:0;padding:3px;border:0;border-radius:10px;background:var(--fill-2);box-shadow:inset 0 0 0 1px var(--line-soft)}
+:root .ds-reviewchrome-utilities .ds-tab{flex:none;min-height:30px;padding:0 11px;border-radius:7px;font-size:11.5px;font-weight:650;white-space:nowrap;box-shadow:none}
+:root .ds-reviewchrome-utilities .ds-tab::after{display:none}
+:root .ds-reviewchrome-utilities .ds-tab:hover{background:var(--fill-1);color:var(--text)}
+:root .ds-reviewchrome-utilities .ds-tab.is-active{background:var(--panel4);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+:root[data-theme="light"] .ds-reviewchrome-utilities .ds-tab.is-active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.1)}
 .ds-narration{position:relative;display:flex;align-items:center}.ds-narration-actions{display:flex;align-items:center;gap:5px}
-.ds-reviewchrome-utilities .ds-readaloud-primary{display:flex;width:auto;height:36px;min-height:36px;gap:7px;padding:0 11px 0 8px;border:1px solid color-mix(in srgb,var(--md-primary) 28%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--md-primary) 10%,var(--panel3));color:var(--text);font-size:12px;font-weight:700;letter-spacing:-.01em}
-.ds-reviewchrome-utilities .ds-readaloud-primary:hover{border-color:color-mix(in srgb,var(--md-primary) 48%,var(--line));background:color-mix(in srgb,var(--md-primary) 16%,var(--panel3))}
-.ds-reviewchrome-utilities .ds-readaloud-primary:disabled{cursor:wait;opacity:.82}
-.ds-reviewchrome-utilities .ds-readaloud-primary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
-.ds-reviewchrome-utilities .ds-readaloud-primary .ds-readaloud-ico{width:20px;height:20px;flex:none;font-size:8px;box-shadow:0 1px 4px color-mix(in srgb,var(--md-primary) 34%,transparent)}
-.ds-reviewchrome-utilities .ds-readaloud-primary.is-active{border-color:color-mix(in srgb,var(--md-primary) 36%,var(--line));background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
-.ds-reviewchrome-utilities .ds-readaloud-primary.is-active .ds-readaloud-ico{background:var(--md-on-secondary-container);color:var(--on-accent)}
+.ds-dock .ds-readaloud-primary{display:flex;width:auto;height:38px;min-height:38px;gap:8px;padding:0 13px 0 9px;border:1px solid color-mix(in srgb,var(--md-primary) 30%,var(--line));border-radius:11px;background:color-mix(in srgb,var(--md-primary) 12%,var(--panel3));color:var(--text);font-size:12px;font-weight:700;letter-spacing:-.01em}
+.ds-dock .ds-readaloud-primary:hover{border-color:color-mix(in srgb,var(--md-primary) 50%,var(--line));background:color-mix(in srgb,var(--md-primary) 18%,var(--panel3))}
+.ds-dock .ds-readaloud-primary:disabled{cursor:wait;opacity:.82}
+.ds-dock .ds-readaloud-primary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-dock .ds-readaloud-primary .ds-readaloud-ico{width:21px;height:21px;flex:none;font-size:8px;box-shadow:0 1px 5px color-mix(in srgb,var(--md-primary) 38%,transparent)}
+.ds-dock .ds-readaloud-primary.is-active{border-color:color-mix(in srgb,var(--md-primary) 38%,var(--line));background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
+.ds-dock .ds-readaloud-primary.is-active .ds-readaloud-ico{background:var(--md-on-secondary-container);color:var(--on-accent)}
 .ds-readaloud-ico.is-play::before{content:"";width:0;height:0;margin-left:2px;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid currentColor}
 .ds-readaloud-ico.is-pause::before{content:"";width:8px;height:9px;border-left:3px solid currentColor;border-right:3px solid currentColor}
 .ds-narration-stop{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--md-error) 22%,var(--line));border-radius:9px;background:var(--fill-1);color:var(--md-error);cursor:pointer}.ds-narration-stop[hidden]{display:none}.ds-narration-stop:hover{background:color-mix(in srgb,var(--md-error) 10%,var(--fill-1));border-color:color-mix(in srgb,var(--md-error) 42%,var(--line))}.ds-narration-stop:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--md-error) 18%,transparent)}.ds-narration-stop span{width:9px;height:9px;border-radius:2px;background:currentColor}
@@ -856,13 +961,14 @@ body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}bo
 @media (max-width:720px){
   .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff,.ds-review-menu{min-width:44px;height:44px;justify-content:center;padding:0 10px}.ds-review-menu-caret{display:none!important}
   .ds-reviewchrome-utilities .ds-theme-toggle{width:44px;height:44px;min-height:44px}
-  .ds-reviewchrome-utilities .ds-readaloud-primary{display:flex;width:44px;height:44px;min-height:44px;padding:0;justify-content:center;border-radius:11px}.ds-reviewchrome-utilities .ds-readaloud-primary .ds-readaloud-label{display:none}.ds-narration-actions{gap:3px}.ds-narration-stop{position:absolute;z-index:13;top:calc(100% + 16px);right:-40px;width:62px;height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:color-mix(in srgb,var(--md-error) 10%,var(--panel3));box-shadow:none;font-size:10px;font-weight:800}.ds-narration-stop::after{content:"Stop"}.ds-narration-stop span{width:7px;height:7px}
+  .ds-reviewchrome-utilities .ds-viewtoggle{height:44px}.ds-reviewchrome-utilities .ds-tab{min-height:38px;padding:0 9px;font-size:11px}
+  .ds-dock .ds-readaloud-primary{display:flex;width:44px;height:44px;min-height:44px;padding:0;justify-content:center;border-radius:12px}.ds-dock .ds-readaloud-primary .ds-readaloud-label{display:none}.ds-narration-actions{gap:3px}.ds-narration-stop{position:absolute;z-index:13;bottom:calc(100% + 14px);left:0;width:62px;height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:color-mix(in srgb,var(--md-error) 10%,var(--panel3));box-shadow:none;font-size:10px;font-weight:800}.ds-narration-stop::after{content:"Stop"}.ds-narration-stop span{width:7px;height:7px}
   .ds-reviewchrome>.ds-reviewchrome-rail{display:none;position:fixed;top:0;left:0;z-index:11;width:min(var(--ds-rail-width,240px),calc(100vw - 48px));height:56px;grid-template-columns:1fr;grid-template-rows:56px;border-bottom:1px solid var(--line);box-shadow:var(--shadow)}.ds-reviewchrome-rail .ds-reviewchrome-nav{padding-left:7px}body:not(.ds-rail-collapsed) .ds-reviewchrome-rail{display:grid}
   .ds-live-banner,body.ds-rail-collapsed .ds-live-banner{top:64px;right:8px;width:calc(100vw - 16px)}
   body:not(.ds-rail-collapsed) .ds-reviewchrome-rail .ds-sidebar-toggle.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
   .ds-layout>.ds-rail{top:56px}.ds-rail-scrim,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:56px}
 }
-@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-main .ds-titlewrap{flex:1 1 0;max-width:none;box-shadow:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}.ds-review-menu-count{position:absolute;top:1px;right:0}}
+@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-utilities .ds-tab{padding:0 7px;font-size:10.5px}.ds-reviewchrome-main .ds-titlewrap{flex:1 1 0;max-width:none;box-shadow:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}.ds-review-menu-count{position:absolute;top:1px;right:0}}
 @media (prefers-reduced-motion:reduce){.ds-reload-diff.is-loading .ds-reload-icon{animation:none}.ds-live-banner{transition:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-reviewchrome,.ds-reviewchrome-rail{background:var(--panel3)}}
 @media (prefers-contrast:more){.ds-reviewchrome-main,.ds-reviewchrome-rail{border-color:var(--line)}}
@@ -1134,7 +1240,10 @@ const PAGE_JS_HEAD = `
     if(!filmTooltip||!node)return;
     var label=$('.ds-filmnode-label',node),thread=closest(node,'[data-filmthread]');if(!label||!thread)return;
     filmTooltipTarget=node;filmTooltip.textContent=label.textContent||'';filmTooltip.classList.add('is-visible');
-    var tr=thread.getBoundingClientRect(),nr=node.getBoundingClientRect(),half=filmTooltip.offsetWidth/2,x=nr.left+nr.width/2-tr.left;
+    // Measured against whatever actually positions the tooltip — inside the dock
+    // that is the island, not the thread row it lives in.
+    var anchor=filmTooltip.offsetParent||thread;
+    var tr=anchor.getBoundingClientRect(),nr=node.getBoundingClientRect(),half=filmTooltip.offsetWidth/2,x=nr.left+nr.width/2-tr.left;
     x=Math.max(half+10,Math.min(tr.width-half-10,x));filmTooltip.style.setProperty('--ds-film-tooltip-x',x+'px');
   }
   function hideFilmTooltip(node){if(!filmTooltip||filmTooltipTarget!==node)return;filmTooltipTarget=null;filmTooltip.classList.remove('is-visible');}
@@ -1425,8 +1534,9 @@ const PAGE_JS_HEAD = `
   function focusStoryViewEntry(){
     var panel=stepPanels&&stepPanels[active],target=null;
     if(panel){
-      target=active===0?$('.ds-intro-start',panel):$('[data-story-beat][aria-pressed="true"]',panel);
-      if(!target)target=$('[data-story-beat]',panel)||$('.ds-concept-next',panel);
+      var host=beatHost(panel);
+      target=active===0?$('.ds-intro-start',panel):$('[data-story-beat][aria-pressed="true"]',host);
+      if(!target)target=$('[data-story-beat]',host)||$('.ds-concept-next',panel);
     }
     if(!target)target=$('[data-thread-node="'+active+'"]')||tourView;
     focusElementWithoutScroll(target);
@@ -1449,6 +1559,7 @@ const PAGE_JS_HEAD = `
     };
     if(reviewPositionReady&&previous!==v)runWorkspaceTransition('view',v==='files'?1:-1,update);else update();
     if(v==='files'&&selectedFile<0)selectFile(0);
+    watchStickyMetrics();
     if(v!=='tour'){cancelFocusScroll();setAloudIntent('off');cancelSpeech();}
     saveReviewPositionSoon();
   }
@@ -1465,7 +1576,7 @@ const PAGE_JS_HEAD = `
         var template=document.createElement('template');template.innerHTML=html.trim();var fresh=template.content.firstElementChild;
         if(!fresh||!fresh.classList||!fresh.classList.contains('ds-step'))throw new Error('Invalid story step');
         var callbacks=panel._dsStepCallbacks||[];panel.replaceWith(fresh);stepPanels=$all('.ds-step');
-        mountThreads(fresh);renderConceptDiagrams(fresh);$all('.ds-filepanel,.ds-diff',fresh).forEach(updateChangeNav);
+        mountThreads(fresh);adoptStepDocks();renderConceptDiagrams(fresh);$all('.ds-filepanel,.ds-diff',fresh).forEach(updateChangeNav);
         try{var split=localStorage.getItem('ds-split');if(split)$all('.ds-filepanel,.ds-diff',fresh).forEach(function(holder){holder.style.setProperty('--ds-split',split);});}catch(e){}
         callbacks.forEach(function(callback){callback(true);});
       })
@@ -1491,6 +1602,7 @@ const PAGE_JS_HEAD = `
       $all('[data-story-step-node]').forEach(function(node){node.classList.toggle('is-active',parseInt(node.getAttribute('data-story-step-node')||'-1',10)===i);});
       var activeCard=stepCards[i],chapter=activeCard?closest(activeCard,'[data-story-chapter]'):null;if(chapter)chapter.open=true;
       $all('[data-thread-node]').forEach(function(n){var k=parseInt(n.getAttribute('data-thread-node')||'-1',10);n.classList.toggle('is-active',k===i);n.classList.toggle('is-visited',!!visited[k]&&k!==i);});
+      syncDockStage();
       var thread=$('[data-filmthread]');
       document.body.classList.toggle('ds-overview-active',i===0);
       if(thread){
@@ -1512,6 +1624,9 @@ const PAGE_JS_HEAD = `
     var ap=stepPanels[i];if(ap)ap.scrollTop=0;
     if(ap)renderConceptDiagrams(ap);
     applyResponsiveStoryMode(ap);
+    // A hidden step has no box to measure, and a lazy one brings its own dock and
+    // toolbar, so the metrics are taken (and re-observed) as the step comes up.
+    watchStickyMetrics();
     prepareStepNarration(i===0?1:i);
     if(i===0)clearStoryFocus();
     var storyFocused=ap&&i>0?selectStoryFocus(i,0,true):false;
@@ -1556,6 +1671,46 @@ const PAGE_JS_HEAD = `
   function clearActiveBeats(){
     $all('.ds-beat.is-active,.ds-railbeat.is-active').forEach(function(b){b.classList.remove('is-active');});
   }
+  // ---- The bottom island owns the beats ----
+  // A step still renders its own dock (that is what the lazy step endpoint hands
+  // back), but the dock is adopted into the island's stage so the reviewer reads
+  // one bar instead of two. Everything that used to scope a beat query to the step
+  // panel now goes through beatHost, and everything that walked back up to the
+  // panel from a beat goes through beatPanel — the two are no longer the same tree.
+  function beatHost(panel){
+    if(!panel||!panel.getAttribute)return panel||null;
+    var index=panel.getAttribute('data-step-panel');
+    if(index==null)return panel;
+    return $('[data-beat-dock][data-dock-step="'+index+'"]')||panel;
+  }
+  function beatPanel(node){
+    var dock=closest(node,'[data-beat-dock]');
+    if(dock){
+      var owner=$('.ds-step[data-step-panel="'+dock.getAttribute('data-dock-step')+'"]');
+      if(owner)return owner;
+    }
+    return closest(node,'.ds-step');
+  }
+  function adoptStepDocks(){
+    var stage=$('[data-dock-slot]');if(!stage)return;
+    $all('.ds-step [data-beat-dock]').forEach(function(dock){stage.appendChild(dock);});
+    syncDockStage();
+  }
+  // With no dock for this step — the Overview, a concept step — the stage names the
+  // step instead of collapsing, so the island keeps one steady height as you walk.
+  function syncDockStage(){
+    var stage=$('[data-dock-slot]');if(!stage)return;
+    var mounted=null;
+    $all('[data-beat-dock]',stage).forEach(function(dock){
+      var on=parseInt(dock.getAttribute('data-dock-step')||'-1',10)===active;
+      dock.hidden=!on;if(on)mounted=dock;
+    });
+    var idle=$('[data-dock-idle]',stage);if(!idle)return;
+    idle.hidden=!!mounted;
+    if(mounted)return;
+    var label=$('[data-thread-node="'+active+'"] .ds-filmnode-label');
+    idle.textContent=label?(label.textContent||'').trim():'Overview';
+  }
   function focusGroupsForPanel(panel){
     var seen={};
     $all('[data-step-focus]',panel).forEach(function(r){
@@ -1571,7 +1726,8 @@ const PAGE_JS_HEAD = `
     return $all('[data-step-focus="'+g+'"]',panel);
   }
   function updateBeatNav(panel,selected){
-    var beats=$all('[data-story-beat]',panel),current=$('[data-beat-current]',panel),prev=$('[data-beat-move="-1"]',panel),next=$('[data-beat-move="1"]',panel);
+    var host=beatHost(panel);
+    var beats=$all('[data-story-beat]',host),current=$('[data-beat-current]',host),prev=$('[data-beat-move="-1"]',host),next=$('[data-beat-move="1"]',host);
     var index=beats.findIndex(function(beat){return parseInt(beat.getAttribute('data-focus-group')||'-1',10)===selected;});if(index<0)index=0;
     var panelIndex=parseInt(panel.getAttribute('data-step-panel')||'-1',10);
     if(current)current.textContent=String(index+1).padStart(2,'0');if(prev)prev.disabled=index<=0&&panelIndex<=1;if(next)next.disabled=index>=beats.length-1&&panelIndex>=total-1;
@@ -1611,13 +1767,15 @@ const PAGE_JS_HEAD = `
   }
   function announceStoryFocus(panel,beat){
     if(!panel||!beat)return;
-    var status=$('[data-story-focus-status]',panel);if(!status)return;
+    var status=$('[data-story-focus-status]',beatHost(panel));if(!status)return;
     var destination=beat.getAttribute('data-focus-destination')||'';
     var label=beat.getAttribute('data-focus-group')||'0';
     status.textContent='';
     setTimeout(function(){status.textContent='Story beat '+(parseInt(label,10)+1)+' focused at '+destination;},0);
   }
-  function selectStoryFocus(stepIndex,group,shouldScroll){
+  // fromVoice suppresses the live-region announcement only: the narration is
+  // already saying this beat out loud, so announcing it again talks over itself.
+  function selectStoryFocus(stepIndex,group,shouldScroll,fromVoice){
     var panel=stepPanels&&stepPanels[stepIndex];
     if(!panel||!panel.hasAttribute('data-story-focus'))return false;
     var groups=focusGroupsForPanel(panel);if(!groups.length)return false;
@@ -1625,8 +1783,8 @@ const PAGE_JS_HEAD = `
     clearStoryFocus();
     storyFocusIndex=stepIndex;storyFocusGroup=selected;panel.classList.add('is-story-active');
     rows.forEach(function(r){r.classList.add('is-story-focus');});
-    var beat=$('[data-story-beat][data-focus-group="'+selected+'"]',panel);
-    if(beat){beat.classList.add('is-selected');beat.setAttribute('aria-pressed','true');announceStoryFocus(panel,beat);}
+    var beat=$('[data-story-beat][data-focus-group="'+selected+'"]',beatHost(panel));
+    if(beat){beat.classList.add('is-selected');beat.setAttribute('aria-pressed','true');if(!fromVoice)announceStoryFocus(panel,beat);}
     var railBeat=$('[data-rail-beat][data-rail-step-index="'+stepIndex+'"][data-focus-group="'+selected+'"]');
     if(railBeat){railBeat.classList.add('is-selected');railBeat.setAttribute('aria-pressed','true');}
     updateBeatNav(panel,selected);
@@ -1637,7 +1795,7 @@ const PAGE_JS_HEAD = `
     var initial=stepPanels&&stepPanels[stepIndex],wasLazy=initial&&initial.hasAttribute('data-step-lazy');
     var finish=function(ok){
       if(!ok||active!==stepIndex)return;
-      var panel=stepPanels&&stepPanels[stepIndex],beats=panel?$all('[data-story-beat]',panel):[];
+      var panel=stepPanels&&stepPanels[stepIndex],beats=panel?$all('[data-story-beat]',beatHost(panel)):[];
       if(!beats.length){
         var boundaryTarget=panel&&atEnd?$('.ds-concept-next',panel):null;
         if(!boundaryTarget&&panel)boundaryTarget=$('.ds-intro-start',panel)||$('[data-goto-step]',panel);
@@ -1659,8 +1817,8 @@ const PAGE_JS_HEAD = `
     if(wasLazy)loadStoryStep(stepIndex,finishAfterActivation);else finishAfterActivation(true);
   }
   function moveStoryBeat(button,delta){
-    var panel=closest(button,'.ds-step');if(!panel)return false;
-    var beats=$all('[data-story-beat]',panel),index=beats.indexOf(button);if(index<0||!beats.length)return false;
+    var panel=beatPanel(button);if(!panel)return false;
+    var beats=$all('[data-story-beat]',beatHost(panel)),index=beats.indexOf(button);if(index<0||!beats.length)return false;
     var stepIndex=parseInt(panel.getAttribute('data-step-panel')||'0',10);
     if(delta>0&&index===beats.length-1&&stepIndex<total-1){focusStoryStepBoundary(stepIndex+1,false);return true;}
     if(delta<0&&index===0&&stepIndex>1){focusStoryStepBoundary(stepIndex-1,true);return true;}
@@ -1669,7 +1827,7 @@ const PAGE_JS_HEAD = `
     selectStoryFocus(stepIndex,group,true);target.focus();return true;
   }
   function movePanelBeat(panel,delta){
-    if(!panel)return false;var selected=$('[data-story-beat].is-selected',panel)||$('[data-story-beat]',panel);if(!selected)return false;
+    if(!panel)return false;var host=beatHost(panel),selected=$('[data-story-beat].is-selected',host)||$('[data-story-beat]',host);if(!selected)return false;
     return moveStoryBeat(selected,delta);
   }
   function moveRailBeat(button,delta){
@@ -1704,6 +1862,11 @@ const PAGE_JS_HEAD = `
     voiceFocusIndex=stepIndex;
     voiceFocusGroup=group;
     panel.classList.add('is-voice-active');
+    // The dock is the reviewer's "which beat is this" readout, so the voice has
+    // to carry it along: marking the beat active only recolored it, which left
+    // the counter and the shown note parked on beat one for the whole step.
+    // Ahead of centerFocusRows because selectStoryFocus cancels pending scrolls.
+    selectStoryFocus(stepIndex,group,false,true);
     var focusRows=activeVoiceFocusRows(panel,group);
     focusRows.forEach(function(r){r.classList.add('is-voice-focus');});
     centerFocusRows(focusRows,false);
@@ -1715,7 +1878,7 @@ const PAGE_JS_HEAD = `
   function setActiveBeat(stepIndex,group){
     setVoiceFocus(stepIndex,group==null?0:group);
     var panel=stepPanels&&stepPanels[stepIndex];if(!panel)return;
-    var beat=group==null?null:$('[data-focus-group="'+group+'"]',panel);
+    var beat=group==null?null:$('[data-story-beat][data-focus-group="'+group+'"]',beatHost(panel));
     if(beat)beat.classList.add('is-active');
     var railBeat=group==null?null:$('[data-rail-beat][data-rail-step-index="'+stepIndex+'"][data-focus-group="'+group+'"]');
     if(railBeat)railBeat.classList.add('is-active');
@@ -1826,16 +1989,24 @@ const PAGE_JS_HEAD = `
       .replace(/ +([,;:.!?])/g,'$1')
       .trim();
   }
+  function speechFrom(node){
+    // The speech projection rides in data-speech-text; textContent stays the
+    // fallback so a node rendered without the attribute is still narrated.
+    return speechClean(node.getAttribute('data-speech-text')||node.textContent||'');
+  }
   function fallbackStepText(panel){
-    var w=$('.ds-why-text',panel);
-    return speechClean(w?w.textContent:'');
+    var w=$('.ds-why-text',panel)||$('.ds-why-text',beatHost(panel));
+    return w?speechFrom(w):'';
   }
   function stepSpeechUnits(panel){
     var overview=$all('[data-speech-overview],[data-speech-concept]',panel);
     if(overview.length){
-      return overview.map(function(node){return {text:speechClean(node.textContent||''),group:null};}).filter(function(unit){return !!unit.text;});
+      return overview.map(function(node){return {text:speechFrom(node),group:null};}).filter(function(unit){return !!unit.text;});
     }
+    // A loaded step keeps its beats in the island; a lazy one still carries its own
+    // sr-only speech cache, so both scopes are searched before giving up.
     var beats=$all('[data-speech-beat]',panel);
+    if(!beats.length)beats=$all('[data-speech-beat]',beatHost(panel));
     if(beats.length){
       return beats.map(function(b){
         var group=parseInt(b.getAttribute('data-focus-group')||'',10);
@@ -3745,10 +3916,10 @@ const PAGE_JS_TAIL = `
     b=closest(t,'[data-reload-diff]');if(b){b.disabled=true;b.classList.add('is-loading');b.setAttribute('aria-busy','true');b.setAttribute('aria-label','Reloading diff');var reloadLabel=$('[data-reload-label]',b);if(reloadLabel)reloadLabel.textContent='Reloading';requestAnimationFrame(function(){location.reload();});return;}
     b=closest(t,'[data-review-menu]');if(b){if(rp)setReviewMenu(rp.hidden);return;}
     b=closest(t,'[data-rail-beat]');if(b){var rbi=parseInt(b.getAttribute('data-rail-step-index')||'-1',10),rbg=parseInt(b.getAttribute('data-focus-group')||'0',10);if(rbi===active)selectStoryFocus(rbi,rbg,true);collapseCompactSidebar();return;}
-    b=closest(t,'[data-beat-move]');if(b){var bmp=closest(b,'.ds-step');movePanelBeat(bmp,parseInt(b.getAttribute('data-beat-move')||'0',10));return;}
+    b=closest(t,'[data-beat-move]');if(b){var bmp=beatPanel(b);movePanelBeat(bmp,parseInt(b.getAttribute('data-beat-move')||'0',10));return;}
     b=closest(t,'[data-open-full-diff]');if(b){var file=b.getAttribute('data-open-full-diff')||'',item=fileItems.find(function(candidate){return candidate.getAttribute('data-file-path')===file;});setView('files');if(item)selectFile(Number(item.getAttribute('data-file-index')));collapseCompactSidebar();return;}
     b=closest(t,'[data-open-all-files]');if(b){setView('files');collapseCompactSidebar();return;}
-    b=closest(t,'[data-story-beat]');if(b){var bp=closest(b,'.ds-step');if(bp){var bpi=parseInt(bp.getAttribute('data-step-panel')||'0',10),bpg=parseInt(b.getAttribute('data-focus-group')||'0',10);selectStoryFocus(bpi,bpg,true);}return;}
+    b=closest(t,'[data-story-beat]');if(b){var bp=beatPanel(b);if(bp){var bpi=parseInt(bp.getAttribute('data-step-panel')||'0',10),bpg=parseInt(b.getAttribute('data-focus-group')||'0',10);selectStoryFocus(bpi,bpg,true);}return;}
     b=closest(t,'[data-aloud-stop]');if(b){stopReadAloud();return;}
     b=closest(t,'[data-readaloud]');if(b){toggleReadAloud();return;}
     b=closest(t,'[data-viewed-toggle]');if(b){var viewedPanel=closest(b,'.ds-filepanel');if(viewedPanel)toggleViewed(viewedPanel.getAttribute('data-file'));return;}
@@ -3930,9 +4101,34 @@ const PAGE_JS_TAIL = `
     try{localStorage.setItem('ds-split',(splitHolder&&splitHolder.style.getPropertyValue('--ds-split')||'').trim());}catch(err){}
     splitResizeClientX=null;splitBody=null;splitHolder=null;document.body.classList.remove('ds-resizing');
   }
+  // The sticky file head parks below whatever chrome sits above it, and that
+  // chrome's height is real layout, not a constant worth guessing. It lands as a
+  // CSS var on the holder so the CSS above stays declarative. (The beat dock used
+  // to need the same treatment when it floated over the diff; it stands in the
+  // bottom island now, so the scroller has nothing to reserve room for.)
+  var stickyObserver=null;
+  function measureChrome(holder,sel,prop){
+    var kid=holder?$(sel,holder):null;
+    var h=kid?Math.round(kid.getBoundingClientRect().height):0;
+    if(h)holder.style.setProperty(prop,h+'px');else if(holder)holder.style.removeProperty(prop);
+  }
+  function updateStickyMetrics(){
+    $all('.ds-diff').forEach(function(card){measureChrome(card,'.ds-difftoolbar','--ds-stickytop');});
+    $all('.ds-filepanel').forEach(function(panel){measureChrome(panel,'.ds-filepanel-head','--ds-stickytop');});
+  }
+  function watchStickyMetrics(){
+    updateStickyMetrics();
+    if(typeof ResizeObserver!=='function')return;
+    // Observe only — the callback never re-observes, or each measurement would
+    // schedule the next one and the loop would never settle.
+    if(!stickyObserver)stickyObserver=new ResizeObserver(updateStickyMetrics);
+    stickyObserver.disconnect();
+    $all('.ds-difftoolbar,.ds-filepanel-head').forEach(function(el){stickyObserver.observe(el);});
+  }
   function init(){
     tourView=$('#ds-view-tour');filesView=$('#ds-view-files');drawer=$('#ds-trust-drawer');feedbackDrawer=$('#ds-feedback-drawer');driftDrawer=$('#ds-drift-drawer');commandRoot=$('[data-command-root]');toastEl=$('#ds-toast');selectionMenu=$('[data-selection-menu]');filmThread=$('[data-filmthread]');filmTooltip=$('[data-filmthread-tooltip]');
     stepPanels=$all('.ds-step');stepCards=$all('.ds-stepcard');total=stepPanels.length||1;
+    adoptStepDocks();
     filePanels=$all('.ds-filepanel');fileItems=$all('.ds-fileitem');
     if(document.body.getAttribute('data-storyless')||document.body.getAttribute('data-initial-view')==='files')setView('files');
     document.addEventListener('click',onClick);
@@ -3960,7 +4156,7 @@ const PAGE_JS_TAIL = `
     document.addEventListener('mouseup',endSplit);
     var liveReload=$('[data-live-reload]');if(liveReload)liveReload.addEventListener('click',function(){location.reload();});
     var liveDismiss=$('[data-live-dismiss]');if(liveDismiss)liveDismiss.addEventListener('click',function(){var kind=livePriority();if(kind){liveDismissed[kind]=liveGenerations[kind];renderLiveBanner();}});
-    window.addEventListener('resize',function(){setSidebarWidth(currentSidebarWidth(),false);syncSidebarOverlay(document.body.classList.contains('ds-rail-collapsed'));applyResponsiveStoryMode(stepPanels&&stepPanels[active]);syncDriftLayout();$all('.ds-filepanel,.ds-diff').forEach(updateChangeNav);if(filmTooltipTarget)showFilmTooltip(filmTooltipTarget);});
+    window.addEventListener('resize',function(){setSidebarWidth(currentSidebarWidth(),false);syncSidebarOverlay(document.body.classList.contains('ds-rail-collapsed'));applyResponsiveStoryMode(stepPanels&&stepPanels[active]);syncDriftLayout();$all('.ds-filepanel,.ds-diff').forEach(updateChangeNav);updateStickyMetrics();if(filmTooltipTarget)showFilmTooltip(filmTooltipTarget);});
     try{var rw=parseFloat(localStorage.getItem('ds-sidebar-width')||'');if(rw)setSidebarWidth(rw,false);else updateSidebarHandle(currentSidebarWidth());}catch(e){updateSidebarHandle(currentSidebarWidth());}
     try{var sv=localStorage.getItem('ds-split');if(sv)$all('.ds-filepanel,.ds-diff').forEach(function(holder){holder.style.setProperty('--ds-split',sv);});}catch(e){}
     try{
@@ -3971,6 +4167,7 @@ const PAGE_JS_TAIL = `
     initStoryGenerator();
     refreshAgentTargetLabel();
     $all('.ds-filepanel,.ds-diff').forEach(updateChangeNav);
+    watchStickyMetrics();
     refreshCount();
     loadViewed();invalidateChangedViewed();syncViewed();applyFileFilters();syncExclusionAcknowledgement();loadChallengeChecks();
     var fileSearch=$('[data-file-search]');if(fileSearch)fileSearch.addEventListener('input',searchFilesLazily);

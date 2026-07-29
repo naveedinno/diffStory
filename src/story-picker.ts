@@ -2,6 +2,7 @@ import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
 import { BRAND_HEAD_LINKS, brandStoryMarkSvg } from './brand.js';
 import { sharedTokens, themeBootstrapScript } from './theme.js';
+import { narrativeText } from './narrative.js';
 import type { StorySummary } from './stories.js';
 
 function esc(s: string): string {
@@ -47,7 +48,12 @@ function storyRow(s: StorySummary, now: number, routeBase: string, index: number
     ? `${plural(s.addressedComments, 'reply')} ready to verify`
     : state.detail;
 
-  const summary = esc(s.valid ? s.summary || 'No summary yet.' : s.error || 'This story file could not be read.');
+  // This page is plain text end to end — no story markup renders here, so both
+  // authored fields take the text projection and the local esc() as before.
+  const title = narrativeText(s.title) || s.id;
+  const summary = esc(
+    s.valid ? narrativeText(s.summary) || 'No summary yet.' : s.error || 'This story file could not be read.',
+  );
 
   return (
     `<article class="story-row state-${state.cls}${s.valid ? '' : ' row-bad'}">` +
@@ -55,7 +61,7 @@ function storyRow(s: StorySummary, now: number, routeBase: string, index: number
     `<span class="state-rail" aria-hidden="true"></span>` +
     `<span class="row-num" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>` +
     `<span class="row-body">` +
-    `<span class="row-head"><span class="row-title">${esc(s.title || s.id)}</span><span class="badge">${state.label}</span></span>` +
+    `<span class="row-head"><span class="row-title">${esc(title)}</span><span class="badge">${state.label}</span></span>` +
     `<span class="row-sum">${summary}</span>` +
     `<span class="session-facts">` +
       `<span><b>${s.liveFiles || s.files}</b> files</span>` +
@@ -67,7 +73,7 @@ function storyRow(s: StorySummary, now: number, routeBase: string, index: number
     `</span>` +
     `<span class="resume">Resume review ${CHEV}</span>` +
     `</a>` +
-    `<button class="row-del" data-delete-story="${esc(s.id)}" data-story-title="${esc(s.title || s.id)}" type="button" title="Remove story" aria-label="Remove ${esc(s.title || s.id)}">${TRASH}</button>` +
+    `<button class="row-del" data-delete-story="${esc(s.id)}" data-story-title="${esc(title)}" type="button" title="Remove story" aria-label="Remove ${esc(title)}">${TRASH}</button>` +
     `</article>`
   );
 }
