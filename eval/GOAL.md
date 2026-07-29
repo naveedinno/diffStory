@@ -13,7 +13,12 @@ the loop can never end, so it is defined as measurable exit criteria, not taste.
 3. **Covered.** At least 90% of the diff's changed ranges are fully claimed per
    case (`fullyClaimedChangedRanges / totalChangedRanges >= 0.9`). Coverage is
    the trust floor — the reviewer sees "N unexplained changes" otherwise.
-4. **Genuinely useful.** Judge mean ≥ 4.0 for every case, and no single dimension
+4. **In the right format.** Zero Markdown residue in every case (the `md residue`
+   column). This is a hard gate and a separate one from validation: narrative
+   fields are HTML, and Markdown in them is the failure `validateTour` cannot
+   see — there is no illegal tag to reject, so the story validates clean and then
+   shows `**bold**` to the reviewer. See `docs/story-schema.md`.
+5. **Genuinely useful.** Judge mean ≥ 4.0 for every case, and no single dimension
    below 3 in any case.
 
 ## Current status (2026-07-22)
@@ -27,14 +32,28 @@ at 2; both judges preferred that case's baseline. The three cases that actually
 had mechanical tails all improved, so the `ranges` experiment itself succeeded
 without making the global exit criteria easier.
 
+### Baselines before 2026-07-29 are not comparable
+
+Narrative became HTML, and the rubric changed with it: `question_falsifiability`
+graded a `question` field that had already been removed, so it is now
+`claim_falsifiability`, and `markup_judgment` was added. Six dimensions became
+seven, so every stored mean under `eval/results/` is an average over a different
+denominator and a partly phantom dimension.
+
+Re-baseline before reading any comparison: run one label on the current skill and
+treat that as the new zero. Comparing a pre-2026-07-29 mean against a new one
+measures the rubric change, not the generator.
+
 ## Non-goals for this loop
 
 - Chasing a 5.0 mean. The judge is calibrated so 5 is rare; 4.0 across four
   diverse cases is a strong story.
-- Requiring `question_falsifiability` from skim, sweep, or mechanical steps.
-  Those steps are already exempt from the generated-story question requirement;
-  judge question quality on substantive review stops instead of manufacturing
-  rhetorical questions for coverage-only work.
+- Requiring `claim_falsifiability` from skim, sweep, or mechanical steps. Those
+  steps exist to claim coverage honestly; judge claim quality on substantive
+  review stops instead of manufacturing sharp-sounding claims for mechanical work.
+- Requiring a table. `markup_judgment` rewards markup that earns its place, not
+  markup that is present. A story of plain paragraphs with an accurate voice
+  scores 5 if a table would not have helped.
 
 ## Rules the loop follows
 

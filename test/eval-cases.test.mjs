@@ -68,3 +68,32 @@ test('retriesExhausted separates infrastructure failures from story failures', a
   // Truncated/partial stream lines must not throw.
   assert.equal(retriesExhausted('{"type":"system","subtype":"api_retry",'), 0);
 });
+
+test('the eval rubric grades fields that exist, and grades markup', () => {
+  const harness = readFileSync(new URL('../scripts/eval-stories.mjs', import.meta.url), 'utf8');
+  const rubric = harness.slice(harness.indexOf('const RUBRIC = ['), harness.indexOf('function judgePrompt'));
+  // Only the graded keys — a comment mentioning the old name is not a dimension.
+  const keys = [...rubric.matchAll(/^\s*\['([a-z_]+)',/gm)].map((m) => m[1]);
+
+  // `question_falsifiability` graded a `question` field that had already been
+  // removed, so the judge spent a whole dimension on a phantom. A rubric key must
+  // name something a story actually carries.
+  assert.ok(!keys.includes('question_falsifiability'), `rubric grades a removed field: ${keys.join(', ')}`);
+  assert.ok(keys.includes('claim_falsifiability'), keys.join(', '));
+  // Narrative is HTML now; without this the judge scores broken markup as fine.
+  assert.ok(keys.includes('markup_judgment'), keys.join(', '));
+  assert.match(rubric, /<caption>/, 'the caption/TTS contract is the part authors get wrong');
+});
+
+test('the eval harness detects Markdown left in HTML narrative fields', () => {
+  const harness = readFileSync(new URL('../scripts/eval-stories.mjs', import.meta.url), 'utf8');
+  // This is the one narrative failure validateTour cannot see: no illegal tag to
+  // reject, so the story validates clean and renders its asterisks literally.
+  assert.match(harness, /function markdownResidue/);
+  assert.match(harness, /markdownResidue: markdownResidue\(tour\)/, 'residue must reach the scored result');
+  assert.match(harness, /'md residue'/, 'residue must reach the report table');
+
+  const goal = readFileSync(new URL('../eval/GOAL.md', import.meta.url), 'utf8');
+  assert.match(goal, /Zero Markdown residue/, 'the exit criteria must gate on it');
+  assert.match(goal, /not comparable/, 'pre-change baselines must be flagged as incomparable');
+});

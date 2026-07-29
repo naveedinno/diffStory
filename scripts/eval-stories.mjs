@@ -333,6 +333,68 @@ async function generate(c, { worktree, quiet = false } = {}) {
   console.log(`  ✓ ${c.id} captured in ${took} (${events} agent events) -> eval/results/${label}/${c.id}/story.json`);
 }
 
+/**
+ * Every authored prose field, as [path, text] pairs. Mirrors what validateTour
+ * checks, so the two cannot drift about what counts as narrative.
+ */
+function narrativeFields(tour) {
+  const out = [];
+  const add = (path, value) => { if (typeof value === 'string' && value.trim()) out.push([path, value]); };
+  add('title', tour.title);
+  add('summary', tour.summary);
+  add('intent.goal', tour.intent?.goal);
+  add('intent.design', tour.intent?.design);
+  (tour.intent?.nonGoals ?? []).forEach((g, i) => add(`intent.nonGoals[${i}]`, g));
+  (tour.hotspots ?? []).forEach((h, i) => add(`hotspots[${i}].reason`, h.reason));
+  (tour.steps ?? []).forEach((s, i) => {
+    add(`steps[${i}].title`, s.title);
+    add(`steps[${i}].why`, s.why);
+    add(`steps[${i}].body`, s.body);
+    add(`steps[${i}].diagram.caption`, s.diagram?.caption);
+    (s.beats ?? []).forEach((b, j) => add(`steps[${i}].beats[${j}].text`, b.text));
+  });
+  return out;
+}
+
+/**
+ * Markdown written into a field that is now HTML. This is the one narrative
+ * failure `validateTour` cannot catch: there is no illegal tag to reject, so the
+ * story validates clean and then renders `**bold**` as four literal characters
+ * in front of the reviewer. Without this the eval scores a format regression as
+ * a perfect run.
+ */
+const MARKDOWN_RESIDUE = [
+  [/\*\*[^*\n]+\*\*|__[^_\n]+__/, 'bold'],
+  [/(^|[^`])`[^`\n]+`/, 'code span'],
+  [/^#{1,4}\s+\S/m, 'heading'],
+  [/^\s*[-*]\s+\S/m, 'bullet'],
+  [/^\s*\d+[.)]\s+\S/m, 'ordered item'],
+  [/```/, 'fence'],
+  [/^>\s+\S/m, 'blockquote'],
+];
+
+function markdownResidue(tour) {
+  const hits = [];
+  for (const [path, text] of narrativeFields(tour)) {
+    for (const [pattern, label] of MARKDOWN_RESIDUE) {
+      if (pattern.test(text)) { hits.push(`${path}: ${label}`); break; }
+    }
+  }
+  return hits;
+}
+
+/** Which of the new affordances the story actually reached for. Informative, not a gate. */
+function markupUse(tour) {
+  const all = narrativeFields(tour).map(([, text]) => text).join('\n');
+  const count = (re) => (all.match(re) ?? []).length;
+  return {
+    tables: count(/<table[\s>]/g),
+    definitionLists: count(/<dl[\s>]/g),
+    inlineCode: count(/<code[\s>]/g),
+    signalSpans: count(/class=["'](?:ds-bit|ds-slot|ds-flag|ds-val|ds-warn)["']/g),
+  };
+}
+
 // Mechanical scores are free and objective: the app's own gates.
 function mechanicalScores(c, tour) {
   const files = parseUnifiedDiff(caseDiff(c));
@@ -348,6 +410,10 @@ function mechanicalScores(c, tour) {
       ? ['(skipped: story failed basic validation)']
       : validateGeneratedTour(tour),
     uncoveredHunks: uncovered.length,
+    // A story written in the old format validates clean and then renders its
+    // asterisks literally, so this is tracked separately from validationErrors.
+    markdownResidue: markdownResidue(tour),
+    markupUse: markupUse(tour),
     steps: tour.steps.length,
     conceptSteps: tour.steps.length - codeSteps.length,
     hotspots: tour.hotspots?.length ?? 0,
@@ -363,10 +429,14 @@ function mechanicalScores(c, tour) {
 const RUBRIC = [
   ['narrative_order', 'Would reordering the steps by filename read the same? 5 = the order teaches the runtime/causal path and file order would wreck it; 1 = it is a file list.'],
   ['thread_continuity', 'Read only titles, concept bodies, and beats, in order, with no code. 5 = one continuous story with no unexplained jump or term; 1 = disconnected captions.'],
-  ['question_falsifiability', 'Could a careful reviewer answer any step question wrong? 5 = every question names a failure the highlighted evidence must rule out; 1 = rhetorical yes-questions.'],
+  // Was `question_falsifiability`, which graded a `question` field that no longer
+  // exists — the judge was scoring a phantom. The property it was reaching for is
+  // real, so it moved to the fields that actually carry it.
+  ['claim_falsifiability', 'Read each step title and its `why`. 5 = every stop makes a claim the highlighted evidence could contradict, so a reviewer knows what would falsify it; 1 = restatements of what changed, which nothing could disprove.'],
   ['beat_pointing', '5 = each beat says why its lines matter and what they unlock next; 1 = beats restate what the diff already shows ("adds a helper").'],
   ['intent_grounding', '5 = goal/design/nonGoals are specific, cited to real sources, and match the diff; 1 = invented or generic intent.'],
   ['hotspot_honesty', '5 = hotspots name specific unverified doubts a reviewer should chase; 3 = plausible but vague; 1 = missing on a risky change, or decorative ("this is complex").'],
+  ['markup_judgment', 'Narrative is restricted HTML. 5 = markup earns its place — a table only where a grid genuinely beats a sentence, and its <caption> reads as the one line a listener needs, because that caption is what the read-aloud voice speaks instead of the table; 3 = correct but plain, or a table that would have been better as prose; 1 = literal Markdown left in the prose, a decorative table, or a caption that just names the table ("the fields") instead of saying what it shows.'],
 ];
 
 function judgePrompt(c, storyJson, diff) {
@@ -410,11 +480,20 @@ async function judge(c) {
   const mechanical = mechanicalScores(c, tour);
   const gateErrors = mechanical.validationErrors.length + mechanical.generatedProfileErrors.length;
   // Mechanical scores are instant, so show them before the slow judge call.
+  const { tables, signalSpans } = mechanical.markupUse;
   console.log(
     `  ${mechanical.steps} steps · ${mechanical.hotspots} hotspots · ` +
     `${mechanical.uncoveredHunks} uncovered ${mechanical.uncoveredHunks === 1 ? 'hunk' : 'hunks'} · ` +
-    `${gateErrors} validation ${gateErrors === 1 ? 'error' : 'errors'}`,
+    `${gateErrors} validation ${gateErrors === 1 ? 'error' : 'errors'}` +
+    (tables || signalSpans ? ` · ${tables} ${tables === 1 ? 'table' : 'tables'}, ${signalSpans} signal spans` : ''),
   );
+  // Loud, because it is invisible everywhere else: this story validates clean and
+  // then shows its asterisks to the reviewer.
+  if (mechanical.markdownResidue.length) {
+    console.log(`  ⚠ Markdown left in ${mechanical.markdownResidue.length} narrative field(s) — renders literally:`);
+    for (const hit of mechanical.markdownResidue.slice(0, 5)) console.log(`      ${hit}`);
+    if (mechanical.markdownResidue.length > 5) console.log(`      … and ${mechanical.markdownResidue.length - 5} more`);
+  }
   const { out, took } = await runClaude({
     cliArgs: ['-p', judgePrompt(c, storyJson, caseDiff(c)), '--model', judgeModel],
     logPath: join(caseDir, 'judge.log'),
@@ -431,12 +510,18 @@ async function judge(c) {
 function report(results) {
   const done = results.filter(Boolean);
   if (!done.length) return;
-  const header = ['case', 'mode', 'mean', ...RUBRIC.map(([k]) => k), 'val errors', 'uncovered', 'steps', 'hotspots'];
+  const header = [
+    'case', 'mode', 'mean', ...RUBRIC.map(([k]) => k),
+    'val errors', 'md residue', 'uncovered', 'steps', 'hotspots', 'tables',
+  ];
   const rows = done.map((r) => [
     r.case, r.mode, r.mean,
     ...RUBRIC.map(([k]) => r.llm.scores[k]),
     r.mechanical.validationErrors.length + r.mechanical.generatedProfileErrors.length,
+    // Non-zero means the generator is still writing Markdown into HTML fields.
+    r.mechanical.markdownResidue?.length ?? 0,
     r.mechanical.uncoveredHunks, r.mechanical.steps, r.mechanical.hotspots,
+    r.mechanical.markupUse?.tables ?? 0,
   ]);
   const md = [
     `# Story eval — ${label}`,
