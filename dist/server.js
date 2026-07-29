@@ -8,7 +8,7 @@ import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGenerate
 import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
 import { computeCoverage } from './coverage.js';
-import { renderPage, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, renderTrustDrawer, } from './render.js';
+import { renderPage, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, renderTrustEvidence, } from './render.js';
 import { esc } from './diff-render.js';
 import { renderPicker } from './picker.js';
 import { renderChangePage } from './change-page.js';
@@ -514,6 +514,20 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
             return sendLeasedHtml(res, session, page, renderTrustResponse(page));
+        }
+        if (method === 'GET' && url.pathname === '/api/review/coverage') {
+            const page = validateReviewPageLease(session, url.searchParams.get('page'));
+            if (!page.ok)
+                return sendReviewPageConflict(res, page.error);
+            // Coverage reads the whole diff, which takes long enough that the working
+            // tree can move underneath it. sendLeasedHtml re-checks the race after
+            // rendering for exactly this reason; a verdict is a trust claim, so it
+            // gets the same treatment rather than reporting a tree that no longer is.
+            const verdict = reviewCoverageVerdict(page);
+            if (reviewPageRaceSignature(page.lease) !== page.raceSignature) {
+                return sendReviewPageConflict(res, 'The change moved while coverage was being calculated.');
+            }
+            return sendJson(res, 200, verdict);
         }
         if (method === 'GET' && url.pathname === '/api/review/excluded-file') {
             const page = validateReviewPageLease(session, url.searchParams.get('page'));
@@ -1381,7 +1395,27 @@ function renderTrustResponse(page) {
         includeTrustRows: true,
     });
     const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
-    return renderTrustDrawer(model.trust, stepIndexById, excludedReviewFiles(page.repo, page.base, page.head), stagedWorktreeDivergentFiles(page.repo, page.base, page.head), page.storyless);
+    return renderTrustEvidence(model.trust, stepIndexById, excludedReviewFiles(page.repo, page.base, page.head), stagedWorktreeDivergentFiles(page.repo, page.base, page.head), page.storyless);
+}
+/**
+ * The pill-sized answer to "does the story explain every rendered change?".
+ *
+ * The review page renders from a lazy file index, so coverage cannot be known
+ * at first paint and the pill starts in an explicit unknown state. This is the
+ * cheap resolution of that unknown: same coverage math as the trust drawer, but
+ * with `includeTrustRows` off so no diff rows are built for a verdict that only
+ * needs counts. Range counts match `model.trust.uncovered.length`, which is the
+ * number the pill and the review chip are computed from at render time.
+ */
+function reviewCoverageVerdict(page) {
+    const files = parseUnifiedDiff(getDiff(page.repo, page.base, page.head));
+    const model = buildReviewModel(page.repo, page.tour, files, page.head, {
+        storyless: page.storyless,
+        detailedStepIndexes: new Set(),
+        detailedFilePaths: new Set(),
+        includeTrustRows: false,
+    });
+    return { storyless: page.storyless, uncovered: model.trust.uncovered.length };
 }
 function renderExcludedFileResponse(page, file) {
     if (!file)

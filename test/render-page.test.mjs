@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
-import { renderFullFile, renderPage, renderSplitHunks } from '../dist/render.js';
+import { renderFullFile, renderPage, renderSplitHunks, renderTrustEvidence } from '../dist/render.js';
 import { PAGE_JS } from '../dist/page-assets.js';
 
 const tour = {
@@ -376,7 +376,8 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /\.ds-reviewchrome\{height:56px[^}]*overflow:visible/, 'header overlays must not be clipped or focus-scroll the chrome');
   assert.match(html, /data-review-menu/);
-  assert.match(html, /data-review-menu-pop/);
+  assert.match(html, /data-review-menu[^>]*data-goto-review="status"/);
+  assert.doesNotMatch(html, /data-review-menu-pop|aria-haspopup="dialog"/);
   assert.match(html, />Review</);
   assert.match(html, /aria-label="Review, 0 unresolved notes(?:, [^"]+)?"/);
   assert.match(html, /data-unexplained-count="\d+"/);
@@ -384,13 +385,13 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.match(html, /data-agent-target-control/);
   assert.match(html, /data-agent-target-select/);
   assert.match(html, /data-agent-target-name>Choose task</);
-  assert.match(html, /<details class="ds-review-more">[\s\S]*data-agent-target-control/);
+  assert.match(html, /data-review-section="actions"[\s\S]*data-agent-target-control/);
   assert.match(html, /data-repo="/);
   assert.doesNotMatch(html, /data-send-all/);
   assert.match(html, />Resend open comments</);
-  assert.match(html, />More review actions/);
+  assert.match(html, />Review actions</);
   assert.doesNotMatch(html, /data-verdict/);
-  assert.match(html, /class="ds-review-menu-title"><span>Review<\/span><\/div>/);
+  assert.match(html, /id="ds-reviewpage-status-h">Status</);
   assert.doesNotMatch(html, /class="ds-reviewstatusbar[^>]*data-roundbar/);
   assert.doesNotMatch(html, /class="ds-review-menu-coverage"/);
   assert.doesNotMatch(html, /class="ds-reviewstatus-scope"/);
@@ -503,7 +504,7 @@ test('review page renders notes, filters, resume, and story repair affordances',
     createdAt: new Date().toISOString(), selectedText: 'return 1', turns: [{ role: 'ai', text: 'Fixed it', at: new Date().toISOString() }],
   }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /data-feedback-open="feedback"/);
+  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-tools/);
   assert.doesNotMatch(html, /data-feedback-view="timeline"/);
   assert.match(html, /Needs verification/);
   assert.match(html, /data-file-search/);
@@ -520,11 +521,14 @@ test('review interaction regressions keep hidden states, note actions, and resum
   }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
 
-  assert.match(html, /\.ds-feedback-drawer \[hidden\]\{display:none!important\}/);
+  assert.match(html, /\.ds-view\[hidden\]\{display:none\}/);
   assert.doesNotMatch(html, /data-ghost-prev|data-ghost-next|ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
-  assert.match(html, /width:calc\(100% - 24px\);max-width:none/);
+  // The stage and the dock are stacked islands that answer to body's single
+  // gutter — neither may reintroduce an inset of its own, or they stop lining
+  // up with the chrome above them.
+  assert.match(html, /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:100%;max-width:none;margin:0/);
   assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
-  assert.match(html, /\.ds-dock\{[^}]*margin:0 12px 12px[^}]*border-radius:16px/);
+  assert.match(html, /\.ds-dock\{[^}]*width:100%;min-width:0;max-width:100%;margin:0[^}]*border-radius:16px/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
   assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
 });
@@ -622,7 +626,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /\.ds-reviewchrome,body\.ds-rail-collapsed \.ds-reviewchrome\{height:56px;grid-template-columns:minmax\(0,1fr\);grid-template-rows:56px\}/);
   assert.match(html, /\.ds-reload-diff,\.ds-review-menu\{min-width:44px;height:44px/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
-  assert.match(html, /if\(compactScreen\(\)&&v==='tour'\)setSidebarCollapsed\(true,false\)/);
+  assert.match(html, /if\(compactScreen\(\)&&v!=='files'\)setSidebarCollapsed\(true,false\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
   assert.match(html, /\.ds-filetree-dir>summary,\.ds-fileitem\{min-height:44px\}/);
   assert.match(html, /\.ds-fileitem\{padding-right:5px;padding-left:calc\(5px \+ var\(--tree-indent,0px\)\)\}/);
@@ -648,7 +652,7 @@ test('review view switcher exposes complete keyboard tab semantics', () => {
   assert.match(html, /function focusViewEntry\(v\)/);
   assert.match(html, /if\(v==='tour'\)\{focusStoryViewEntry\(\);return;\}/);
   assert.match(html, /setView\(nextView,true\)/);
-  assert.match(html, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\)/);
+  assert.match(html, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\|\|e\.key==='Home'\|\|e\.key==='End'\)/);
 });
 
 test('sidebar file warnings avoid the awkward amber rail', () => {
@@ -1933,7 +1937,7 @@ test('storyless exclusions remain inspectable and acknowledgeable from review st
       addedLines: 12, removedLines: 0, changedLines: 12,
     }],
   });
-  assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-trust-open/);
+  assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-goto-review="evidence"/);
   assert.match(html, /<b>1<\/b> excluded file · inspect before deciding/);
   assert.match(html, /data-exclusions-ack/);
   assert.match(html, /No story-coverage claim is applied in this view/);
@@ -1963,7 +1967,7 @@ test('an excluded-only 100 MB scope stays truthful without mounting or offering 
   assert.match(html, /Large file kept lazy/);
   assert.match(html, /Inspect bounded preview/);
   assert.match(html, /class="ds-excluded-only-path">hundred-megabytes\.txt<\/code>/);
-  assert.match(html, /class="ds-excluded-rail-file" data-trust-open aria-label="hundred-megabytes\.txt, inspect bounded preview"/);
+  assert.match(html, /class="ds-excluded-rail-file" data-goto-review="exclusions" data-goto-excluded="hundred-megabytes\.txt" aria-label="hundred-megabytes\.txt, inspect bounded preview"/);
   assert.doesNotMatch(html, /Review file/);
   assert.match(html, /1 excluded file/);
   assert.match(html, /data-viewed-progress data-excluded-count="1">1 file<\/span>/);
@@ -2555,4 +2559,156 @@ test('narration chunks break at sentence ends, never mid-sentence or into stubs'
   const longChunks = splitSpeechUnit(long);
   assert.ok(longChunks.length > 1, 'an over-long sentence must still be split');
   for (const chunk of longChunks) assert.ok(chunk.length <= 520, 'chunks stay within the synthesis budget');
+});
+
+test('a lazily indexed page reports coverage as unknown, not as a finding', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files: [],
+    fileIndex: [{ path: 'a.ts', reviewHash: 'h1', addedLines: 1, removedLines: 0, changedLines: 1 }],
+    baseLabel: 'main',
+    comments: [],
+  });
+
+  // Amber is the vocabulary for findings. An unresolved check is an absence of
+  // information, so it must not borrow that vocabulary.
+  assert.match(html, /class="ds-trustpill is-unknown"/);
+  assert.doesNotMatch(html, /Coverage loads on demand/);
+  assert.match(html, /data-trust-pill-text>Checking coverage…</);
+  // The client needs these to rebuild the resolved label without a reload.
+  assert.match(html, /data-goto-review="evidence" data-trust-excluded="0"/);
+});
+
+// The client script is inlined into every page, so a whole-document assertion
+// about pill copy would also match this file's own source comments. Scope to the
+// pill element itself.
+const trustPillOf = (html) => {
+  const at = html.indexOf('<button class="ds-trustpill');
+  return at === -1 ? '' : html.slice(at, html.indexOf('</button>', at));
+};
+
+test('an unknown coverage check never masks a fact the page already knows', () => {
+  const stale = renderPage({
+    repo: process.cwd(),
+    tour,
+    files: [],
+    fileIndex: [{ path: 'a.ts', reviewHash: 'h1', addedLines: 1, removedLines: 0, changedLines: 1 }],
+    baseLabel: 'main',
+    comments: [],
+    storyFreshness: 'stale',
+  });
+  assert.match(trustPillOf(stale), /<b>Out of date<\/b> story · regenerate it/);
+  assert.doesNotMatch(trustPillOf(stale), /Checking coverage…/, 'a pending check must not outrank a story known to be stale');
+
+  const divergent = renderPage({
+    repo: process.cwd(),
+    tour,
+    files: [],
+    fileIndex: [{ path: 'a.ts', reviewHash: 'h1', addedLines: 1, removedLines: 0, changedLines: 1 }],
+    baseLabel: 'main',
+    comments: [],
+    stagedWorktreeDivergentFiles: ['a.ts'],
+  });
+  assert.match(trustPillOf(divergent), /staged\/working-tree mismatch/);
+  assert.doesNotMatch(trustPillOf(divergent), /Checking coverage…/, 'a pending check must not outrank a staged mismatch');
+});
+
+test('the trust evidence carries a machine-readable verdict once coverage resolves', () => {
+  const resolved = renderTrustEvidence(
+    { coveredLines: 4, uncoveredLines: 0, uncovered: [] },
+    new Map(),
+    [],
+    [],
+    false,
+  );
+  assert.match(resolved, /data-trust-pending="0" data-trust-uncovered="0" data-trust-storyless="0"/);
+
+  const pending = renderTrustEvidence(
+    { coveredLines: 0, uncoveredLines: 0, uncovered: [], pending: true },
+    new Map(),
+    [],
+    [],
+    false,
+  );
+  // A pending drawer must publish no verdict at all — an empty attribute is the
+  // signal to leave the pill alone rather than settle it as clean.
+  assert.match(pending, /data-trust-uncovered=""/);
+});
+
+test('review is a third top-level tab with a full page behind it', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files,
+    baseLabel: 'main',
+    comments: [],
+  });
+
+  assert.match(html, /id="ds-tab-review" data-view="review" role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1"/);
+  assert.match(html, /id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" tabindex="0" hidden/);
+  for (const section of ['status', 'notes', 'challenge', 'actions']) {
+    assert.match(html, new RegExp(`data-review-section="${section}" aria-labelledby="ds-reviewpage-${section}-h" tabindex="-1"`));
+  }
+  // The server must paint the view now that CSS keys on it; a missing attribute
+  // used to be harmless because there were only two views.
+  assert.match(html, /<body[^>]*data-read-view="tour"/);
+});
+
+test('the review chip switches tabs instead of opening a popover', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files,
+    baseLabel: 'main',
+    comments: [],
+  });
+
+  assert.match(html, /data-review-menu data-goto-review="status"/);
+  assert.doesNotMatch(html, /aria-haspopup="dialog"/);
+  assert.doesNotMatch(html, /data-review-menu-pop|ds-review-menu-wrap|ds-review-menu-caret/);
+  // The chip is the entrance to the tab, so it must not be hidden on the
+  // Overview the way the popover trigger deliberately was.
+  assert.doesNotMatch(html, /\.ds-overview-active \.ds-review-menu-wrap/);
+  // refreshCount derives the chip's clean state from these; dropping one freezes it.
+  for (const attribute of ['data-unexplained-count', 'data-excluded-count', 'data-index-divergence-count', 'data-story-freshness']) {
+    assert.match(html, new RegExp(`data-review-menu[^>]*${attribute}=`));
+  }
+});
+
+test('every retired drawer entry point still reaches the evidence it named', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { version: 1, title: '', summary: '', steps: [], base: 'HEAD' },
+    files: [],
+    baseLabel: 'main',
+    comments: [],
+    storyless: true,
+    excludedFiles: [{
+      path: 'hundred-megabytes.txt', reason: 'large-diff',
+      addedLines: 1, removedLines: 0, changedLines: 1,
+    }],
+  });
+
+  assert.doesNotMatch(html, /data-trust-open|id="ds-trust-drawer"|id="ds-feedback-drawer"/);
+  assert.match(html, /data-goto-review="exclusions" data-goto-excluded="hundred-megabytes\.txt"/);
+  assert.match(html, /data-trust-evidence data-trust-pending=/);
+});
+
+test('the review page carries the notes list, filters, challenge, and actions', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour,
+    files,
+    baseLabel: 'main',
+    comments: [
+      { id: 'c1', file: 'a.ts', line: 1, side: 'new', body: 'Why this way?', status: 'open', severity: 'question' },
+    ],
+  });
+
+  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-tools[\s\S]*data-feedback-view="feedback"/);
+  assert.match(html, /data-review-section="challenge"[\s\S]*data-feedback-view="challenge"/);
+  assert.match(html, /data-review-section="actions"[\s\S]*data-address-all[\s\S]*data-copy-comments="all"/);
+  // The nested drawer tablist is exactly the cramping this change removes.
+  assert.doesNotMatch(html, /data-feedback-open|data-feedback-panel|ds-drawer-tabs/);
 });

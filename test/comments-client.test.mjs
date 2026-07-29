@@ -303,7 +303,7 @@ test('multiple comments on one anchor show one conversation and one composer at 
 });
 
 test('the compact Review menu runs the batch and tracks the open count', () => {
-  assert.match(PAGE_JS, /\[data-address-all\]'\);if\(b\)\{if\(b\.disabled\)return;setReviewMenu\(false\);sendToAgent\('all'\)/);
+  assert.match(PAGE_JS, /\[data-address-all\]'\);if\(b\)\{if\(b\.disabled\)return;sendToAgent\('all'\)/);
   assert.match(PAGE_JS, /ds-review-summary-label/);
   assert.doesNotMatch(PAGE_JS, /ds-send-all/);
 });
@@ -327,8 +327,7 @@ test('agent and review controls stay distinct at compact widths', () => {
 });
 
 test('nested dialogs preserve the underlying modal and only trap focus in the top layer', () => {
-  assert.match(PAGE_JS, /reviewMenuReturnFocus/);
-  assert.match(PAGE_JS, /pop\.contains\(activeElement\)/);
+  assert.doesNotMatch(PAGE_JS, /reviewMenuReturnFocus/);
   assert.match(PAGE_JS, /agentChooserReturnFocus/);
   assert.match(PAGE_JS, /modalStack=\[\],modalBackgroundSnapshots=\[\]/);
   assert.match(PAGE_JS, /modalStack\.push\(\{root:root,returnFocus:/);
@@ -359,8 +358,8 @@ test('ordinary selection stays quiet while right click and keyboard actions rema
   assert.doesNotMatch(PAGE_CSS, /\.ds-selection-quick/);
 });
 
-test('the notes drawer verifies replies and resolves without a timeline', () => {
-  assert.match(PAGE_JS, /function openFeedbackDrawer\(/);
+test('the notes page verifies replies and resolves without a timeline', () => {
+  assert.match(PAGE_JS, /data-review-section="notes"|reviewView/);
   assert.match(PAGE_JS, /function updateCommentStatus\(/);
   assert.match(PAGE_JS, /data-accept-fix/);
   assert.match(PAGE_JS, /data-reopen-comment/);
@@ -429,4 +428,71 @@ test('live events survive bfcache restores and outlast the reconnect interval', 
   // A dead lease (409) surfacing through a live refresh is a disconnect, not a
   // comment-store error toast.
   assert.match(PAGE_JS, /status===409/);
+});
+
+test('the coverage verdict resolves the pill and unblocks the review chip', () => {
+  // Without the auto-resolve the pill stays in its unknown state forever, and
+  // because refreshCount() derives the chip's clean state from the pill's class,
+  // the review chip could never legitimately go green.
+  assert.match(PAGE_JS, /function resolveCoverage\(\)/);
+  assert.match(PAGE_JS, /reviewPageUrl\('\/api\/review\/coverage'\)/);
+  assert.match(PAGE_JS, /scheduleCoverageResolve\(\)/);
+  assert.match(PAGE_JS, /requestIdleCallback\(resolveCoverage/, 'coverage must not compete with first paint');
+
+  // The verdict has to reach both the pill and the chip's input attribute.
+  assert.match(PAGE_JS, /function applyCoverageVerdict\(uncovered,storyless\)/);
+  assert.match(PAGE_JS, /reviewBtn\.setAttribute\('data-unexplained-count',String\(uncovered\)\)/);
+  assert.match(PAGE_JS, /pill\.classList\.remove\('is-unknown'\)/);
+  assert.match(PAGE_JS, /pill\.classList\.add\('is-clean'\)/);
+
+  // Numeric coercion is what keeps the innerHTML rebuild injection-free.
+  assert.match(PAGE_JS, /Number\(\(verdict&&verdict\.uncovered\)\|\|0\)/);
+  assert.match(PAGE_JS, /Number\(pill\.getAttribute\('data-trust-excluded'\)\|\|0\)/);
+});
+
+test('a coverage check that cannot run stays unknown rather than clean', () => {
+  assert.match(PAGE_JS, /function markCoverageUnavailable\(\)/);
+  assert.match(PAGE_JS, /Coverage unchecked · open to retry/);
+  // The failure path must never reach the branch that adds is-clean.
+  const applied = PAGE_JS.slice(PAGE_JS.indexOf('function markCoverageUnavailable'), PAGE_JS.indexOf('function resolveCoverage'));
+  assert.doesNotMatch(applied, /is-clean/);
+});
+
+test('the inline evidence load settles a pill that is still checking', () => {
+  assert.match(PAGE_JS, /next=parsed\.querySelector\('\[data-trust-evidence\]'\)/);
+  assert.match(PAGE_JS, /if\(verdict\)applyCoverageVerdict\(Number\(verdict\|\|0\)/);
+  // An empty data-trust-uncovered means the server had no verdict; the falsy
+  // check keeps that from being read as zero uncovered ranges.
+  assert.match(PAGE_JS, /var verdict=next\.getAttribute\('data-trust-uncovered'\)/);
+  // gotoReview chains a scroll on this, so it must hand back the in-flight promise.
+  assert.match(PAGE_JS, /if\(trustLoadPromise\)return trustLoadPromise/);
+  assert.match(PAGE_JS, /return trustLoadPromise;/);
+});
+
+test('the view machine knows three views and one spatial order', () => {
+  assert.match(PAGE_JS, /var DS_VIEWS=\['tour','files','review'\]/);
+  assert.match(PAGE_JS, /if\(reviewView\)reviewView\.hidden=v!=='review'/);
+  // Direction must come from tab order, not a two-way flip.
+  assert.match(PAGE_JS, /runWorkspaceTransition\('view',viewIndex\(v\)>viewIndex\(previous\)\?1:-1,update\)/);
+  // Reading `previous` from panel visibility is ambiguous mid-transition with
+  // three panels; the attribute is the single source of truth.
+  assert.match(PAGE_JS, /var previous=currentView\(\)/);
+  assert.match(PAGE_JS, /if\(v==='review'\)loadTrustEvidence\(\)/);
+  assert.doesNotMatch(PAGE_JS, /function setReviewMenu|data-review-menu-pop|openFeedbackDrawer|function setFeedbackPanel/);
+});
+
+test('review sections are reachable and scroll without dragging the diff sideways', () => {
+  assert.match(PAGE_JS, /function gotoReview\(section,path\)/);
+  assert.match(PAGE_JS, /\[data-review-section="'\+section\+'"\]/);
+  assert.match(PAGE_JS, /\[data-excluded-file="'\+path\+'"\]/);
+  // The blanket no-scrollIntoView rule exists so navigation never scrolls a
+  // horizontal ancestor; the review page scrolls its own panel instead.
+  assert.match(PAGE_JS, /reviewView\.scrollTo\(\{top:Math\.max\(0,top\)/);
+  assert.doesNotMatch(PAGE_JS, /scrollIntoView/);
+});
+
+test('three tabs roving-select with wrap and Home/End', () => {
+  assert.match(PAGE_JS, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\|\|e\.key==='Home'\|\|e\.key==='End'\)/);
+  assert.match(PAGE_JS, /tabs\[\(ti\+\(e\.key==='ArrowRight'\?1:-1\)\+tabs\.length\)%tabs\.length\]/);
+  assert.match(PAGE_JS, /setView\(nextView,true\)/);
 });

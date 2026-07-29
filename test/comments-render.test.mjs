@@ -141,6 +141,6 @@ test('review header separates the agent task from compact review status', () => 
   assert.match(html, /ds-review-menu-count/);
   assert.match(html, /<b>1<\/b>/);
   assert.match(html, />Resend open comments</);
-  assert.match(html, />More review actions/);
+  assert.match(html, />Review actions</);
   assert.doesNotMatch(html, /data-send-all/);
 });

@@ -38,7 +38,7 @@ import {
   renderContextRows,
   renderFilePanelContent,
   renderStoryStepPanel,
-  renderTrustDrawer,
+  renderTrustEvidence,
   type StoryDriftView,
 } from './render.js';
 import { esc } from './diff-render.js';
@@ -613,6 +613,19 @@ function handle(
       const page = validateReviewPageLease(session, url.searchParams.get('page'));
       if (!page.ok) return sendReviewPageConflict(res, page.error);
       return sendLeasedHtml(res, session, page, renderTrustResponse(page));
+    }
+    if (method === 'GET' && url.pathname === '/api/review/coverage') {
+      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+      if (!page.ok) return sendReviewPageConflict(res, page.error);
+      // Coverage reads the whole diff, which takes long enough that the working
+      // tree can move underneath it. sendLeasedHtml re-checks the race after
+      // rendering for exactly this reason; a verdict is a trust claim, so it
+      // gets the same treatment rather than reporting a tree that no longer is.
+      const verdict = reviewCoverageVerdict(page);
+      if (reviewPageRaceSignature(page.lease) !== page.raceSignature) {
+        return sendReviewPageConflict(res, 'The change moved while coverage was being calculated.');
+      }
+      return sendJson(res, 200, verdict);
     }
     if (method === 'GET' && url.pathname === '/api/review/excluded-file') {
       const page = validateReviewPageLease(session, url.searchParams.get('page'));
@@ -1582,13 +1595,37 @@ function renderTrustResponse(page: LeasedReviewPage): string {
     includeTrustRows: true,
   });
   const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
-  return renderTrustDrawer(
+  return renderTrustEvidence(
     model.trust,
     stepIndexById,
     excludedReviewFiles(page.repo, page.base, page.head),
     stagedWorktreeDivergentFiles(page.repo, page.base, page.head),
     page.storyless,
   );
+}
+
+/**
+ * The pill-sized answer to "does the story explain every rendered change?".
+ *
+ * The review page renders from a lazy file index, so coverage cannot be known
+ * at first paint and the pill starts in an explicit unknown state. This is the
+ * cheap resolution of that unknown: same coverage math as the trust drawer, but
+ * with `includeTrustRows` off so no diff rows are built for a verdict that only
+ * needs counts. Range counts match `model.trust.uncovered.length`, which is the
+ * number the pill and the review chip are computed from at render time.
+ */
+function reviewCoverageVerdict(page: LeasedReviewPage): {
+  storyless: boolean;
+  uncovered: number;
+} {
+  const files = parseUnifiedDiff(getDiff(page.repo, page.base, page.head));
+  const model = buildReviewModel(page.repo, page.tour, files, page.head, {
+    storyless: page.storyless,
+    detailedStepIndexes: new Set(),
+    detailedFilePaths: new Set(),
+    includeTrustRows: false,
+  });
+  return { storyless: page.storyless, uncovered: model.trust.uncovered.length };
 }
 
 function renderExcludedFileResponse(page: LeasedReviewPage, file: string): string {

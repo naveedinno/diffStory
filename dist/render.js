@@ -119,16 +119,33 @@ export function renderPage(input) {
     const trustPillClean = !model.trust.pending &&
         !indexDivergentFiles.length &&
         (storyless || (storyFreshness === 'current' && !uncoveredCount));
+    // The pill reports the most decision-blocking fact it has. Every fact except
+    // coverage is already known here; coverage needs the whole diff, which this
+    // page deliberately has not loaded yet. So `pending` ranks *below* everything
+    // known — an unknown must never mask a stale story or a staged mismatch — and
+    // above the two verdicts only a resolved coverage check can justify. The
+    // client resolves it in place after first paint; see resolveCoverage().
+    const pillState = indexDivergentFiles.length
+        ? 'divergent'
+        : storyless && excludedFiles.length
+            ? 'excluded'
+            : storyFreshness !== 'current'
+                ? 'stale'
+                : model.trust.pending
+                    ? 'pending'
+                    : uncoveredCount
+                        ? 'uncovered'
+                        : 'clean';
     const trustPill = showTrustPill
-        ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-trust-open title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${indexDivergentFiles.length
+        ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${pillState === 'pending' ? ' is-unknown' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-goto-review="evidence" data-trust-excluded="${excludedFiles.length}"${focusedStory ? ' data-trust-focused="1"' : ''} title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${pillState === 'divergent'
             ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before deciding</span><span class="ds-review-row-arrow">›</span>`
-            : model.trust.pending
-                ? `<span class="ds-tri">◌</span><span><b>Coverage loads on demand</b> · unloaded evidence is never treated as clean</span><span class="ds-review-row-arrow">›</span>`
-                : storyless && excludedFiles.length
-                    ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
-                    : storyFreshness !== 'current'
-                        ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate it</span><span class="ds-review-row-arrow">›</span>`
-                        : uncoveredCount
+            : pillState === 'excluded'
+                ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
+                : pillState === 'stale'
+                    ? `<span class="ds-tri">▲</span><span><b>${storyFreshness === 'stale' ? 'Out of date' : 'Unverified'}</b> story · regenerate it</span><span class="ds-review-row-arrow">›</span>`
+                    : pillState === 'pending'
+                        ? `<span class="ds-tri ds-tri-spin">◌</span><span data-trust-pill-text>Checking coverage…</span><span class="ds-review-row-arrow">›</span>`
+                        : pillState === 'uncovered'
                             ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
                             : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
         : '';
@@ -155,7 +172,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body class="ds-map-bg${storyless ? '' : ' ds-overview-active'}"${storyless ? ' data-storyless="1"' : ''} data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
+<body class="ds-map-bg${storyless ? '' : ' ds-overview-active'}"${storyless ? ' data-storyless="1"' : ''} data-read-view="tour" data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
 <header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>
   <div class="ds-reviewchrome-rail">
     <div class="ds-reviewchrome-nav">
@@ -184,6 +201,7 @@ ${BRAND_HEAD_LINKS}
       <div class="ds-viewtoggle" role="tablist" aria-label="Review view">
         <button class="ds-tab is-active" id="ds-tab-tour" data-view="tour" role="tab" aria-controls="ds-view-tour" aria-selected="true" tabindex="0">Story</button>
         <button class="ds-tab" id="ds-tab-files" data-view="files" role="tab" aria-controls="ds-view-files" aria-selected="false" tabindex="-1">Files</button>
+        <button class="ds-tab" id="ds-tab-review" data-view="review" role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1">Review${openCount ? `<span class="ds-tab-badge">${openCount}</span>` : ''}</button>
       </div>
       ${themeControl()}
   <div class="ds-actions">
@@ -193,55 +211,11 @@ ${BRAND_HEAD_LINKS}
         <span data-reload-label>Reload</span>
       </button>`
         : ''}
-    <div class="ds-review-menu-wrap">
-      <button class="ds-review-menu${reviewClean ? ' is-clean' : ''}" data-review-menu data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-haspopup="dialog" aria-expanded="false" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}" title="Open review status">
-        <span class="ds-ui-icon ds-review-menu-icon" aria-hidden="true">${reviewChromeIcon('review')}</span>
-        <span class="ds-review-menu-label">Review</span>
-        <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"${openCount ? '' : ' hidden'}><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
-        <span class="ds-ui-icon ds-review-menu-caret" aria-hidden="true">${reviewChromeIcon('chevron')}</span>
-      </button>
-      <div class="ds-review-menu-pop" data-review-menu-pop role="dialog" aria-label="Review status and actions" tabindex="-1" hidden>
-        <div class="ds-review-menu-title"><span>Review</span></div>
-        <div class="ds-review-summary">
-          <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
-          ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
-          ${trustPill}
-        </div>
-        <div class="ds-review-section">
-        <button class="ds-review-option" data-feedback-open="feedback"${comments.length ? '' : ' disabled'}>
-          <span class="ds-review-option-title">Notes <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span></span>
-          <span class="ds-review-option-desc">Verify replies and resolve notes.</span>
-        </button>
-        <button class="ds-review-option" data-feedback-open="challenge">
-          <span class="ds-review-option-title">Challenge pass</span>
-          <span class="ds-review-option-desc">Re-read failure paths, boundaries, and missing tests before deciding.</span>
-        </button>
-        </div>
-        <details class="ds-review-more">
-          <summary>More review actions <span aria-hidden="true">⌄</span></summary>
-          <div class="ds-review-more-list">
-            <a class="ds-review-option" href="${esc(routeBase)}/stories">
-              <span class="ds-review-option-title">Saved reviews</span>
-              <span class="ds-review-option-desc">Open older review sessions for this repository.</span>
-            </a>
-            <button class="ds-review-option ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions">
-              <span class="ds-review-option-title"><span class="ds-agent-target-icon" aria-hidden="true">◈</span> Agent task · <span data-agent-target-name>Choose task</span></span>
-              <span class="ds-review-option-desc">Used only when you send feedback or ask for another pass.</span>
-            </button>
-            <button class="ds-review-option" data-address-all${sendableCount ? '' : ' disabled'} title="Resend every open comment to your agent">
-              <span class="ds-review-option-title">Resend open comments</span>
-              <span class="ds-review-option-desc" data-agent-target-batch>Choose an agent task first.</span>
-            </button>
-            <button class="ds-review-option" data-copy-comments="open"${sendableCount ? '' : ' disabled'} title="Copy open comments as text">
-              <span class="ds-review-option-title">Copy open comments</span>
-            </button>
-            <button class="ds-review-option" data-copy-comments="all"${comments.length ? '' : ' disabled'} title="Copy every comment, including resolved ones and replies">
-              <span class="ds-review-option-title">Copy full review</span>
-            </button>
-          </div>
-        </details>
-      </div>
-    </div>
+    <button class="ds-review-menu${reviewClean ? ' is-clean' : ''}" data-review-menu data-goto-review="status" data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-controls="ds-view-review" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}" title="Open the review page">
+      <span class="ds-ui-icon ds-review-menu-icon" aria-hidden="true">${reviewChromeIcon('review')}</span>
+      <span class="ds-review-menu-label">Review</span>
+      <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"${openCount ? '' : ' hidden'}><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
+    </button>
   </div>
   </div>
   </div>
@@ -318,11 +292,27 @@ ${BRAND_HEAD_LINKS}
         ${filePanels || (excludedOnly ? excludedScopeNotice(excludedFiles, false) : '<div class="ds-empty">No files in this change.</div>')}
       </div>
     </div>
+    <div class="ds-view" id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" tabindex="0" hidden>
+      ${reviewPanel({
+        repo,
+        headRef,
+        comments,
+        model,
+        routeBase,
+        openCount,
+        sendableCount,
+        feedbackHealthy,
+        feedbackRecovery,
+        trustPill,
+        stepIndexById,
+        excludedFiles,
+        indexDivergentFiles,
+        storyless,
+    })}
+    </div>
   </main>
 </div>
 
-${renderTrustDrawer(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
-${feedbackDrawer(repo, headRef, comments, model)}
 ${driftDrawer(storyDrift)}
 ${commandPalette()}
 <div class="ds-selection-menu" data-selection-menu role="menu" hidden>
@@ -520,7 +510,7 @@ function storylessThread(excludedOnly = false) {
         return '';
     return `<nav class="ds-filmthread is-storyless" data-filmthread aria-label="Review navigation">
     <div class="ds-filmthread-scroll"></div>
-    <button type="button" class="ds-filmthread-allfiles" data-trust-open>Review excluded file <span aria-hidden="true">→</span></button>
+    <button type="button" class="ds-filmthread-allfiles" data-goto-review="exclusions">Review excluded file <span aria-hidden="true">→</span></button>
   </nav>`;
 }
 // The Overview panel: the change's title and summary up front (this is the only
@@ -680,7 +670,7 @@ function storyScopeControls(files) {
 }
 function excludedScopeNotice(excludedFiles, compact) {
     if (compact) {
-        return `<div class="ds-excluded-rail-list">${excludedFiles.map((file) => `<button type="button" class="ds-excluded-rail-file" data-trust-open aria-label="${esc(file.path)}, inspect bounded preview">
+        return `<div class="ds-excluded-rail-list">${excludedFiles.map((file) => `<button type="button" class="ds-excluded-rail-file" data-goto-review="exclusions" data-goto-excluded="${esc(file.path)}" aria-label="${esc(file.path)}, inspect bounded preview">
         <span class="ds-excluded-rail-file-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.75 1.75h5.1l3.4 3.4v9.1h-8.5z"/><path d="M8.75 1.75v3.5h3.5"/></svg></span>
         <code>${esc(file.path)}</code>
         <span aria-hidden="true">›</span>
@@ -697,7 +687,7 @@ function excludedScopeNotice(excludedFiles, compact) {
       <strong>${title}</strong>
       <p>${singlePath ? `<code class="ds-excluded-only-path">${esc(singlePath)}</code> remains` : 'Still'} part of this exact scope, but kept outside the diff DOM so the page stays fast.</p>
     </div>
-    <button type="button" class="ds-btn ds-btn-ghost" data-trust-open>Inspect bounded preview</button>
+    <button type="button" class="ds-btn ds-btn-ghost" data-goto-review="exclusions">Inspect bounded preview</button>
   </div>`;
 }
 function generateCta(model, routeBase, baseRef, headRef, excludedFiles = []) {
@@ -1368,34 +1358,69 @@ function feedbackCurrentExcerpt(repo, headRef, comment, state) {
     const start = Math.max(0, comment.line - 1);
     return lines.slice(start, Math.min(lines.length, start + count)).join('\n') || undefined;
 }
-function feedbackDrawer(repo, headRef, comments, model) {
+/**
+ * The Review view: a full page rather than a popover stacked on two drawers.
+ *
+ * Everything a reviewer needs to decide now sits on one scrollable surface —
+ * status and coverage evidence, every note with its filters, the challenge pass,
+ * and the actions — because a cramped modal was hiding the one signal that says
+ * whether the change is safe to accept.
+ */
+function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sendableCount, feedbackHealthy, feedbackRecovery, trustPill, stepIndexById, excludedFiles, indexDivergentFiles, storyless, }) {
     const addressed = comments.filter((comment) => comment.status === 'addressed').length;
     const cards = comments.length
         ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
         : '<div class="ds-drawer-empty">No notes yet.</div>';
-    return `<div class="ds-drawer-root" id="ds-feedback-drawer" hidden>
-    <div class="ds-drawer-scrim" data-feedback-close></div>
-    <div class="ds-drawer ds-feedback-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-feedback-title" tabindex="-1">
-      <div class="ds-drawer-head">
-        <div><div class="ds-drawer-title" id="ds-feedback-title">Notes</div><div class="ds-drawer-sub">Send notes to the agent, verify replies, and resolve what is done.</div></div>
-        <button class="ds-drawer-x" data-feedback-close title="Close" aria-label="Close notes">×</button>
-      </div>
-      <div class="ds-drawer-tabs" role="tablist">
-        <button class="is-active" id="ds-feedback-tab" data-feedback-panel="feedback" role="tab" aria-selected="true" aria-controls="ds-feedback-panel" tabindex="0">Notes${addressed ? ` <span>${addressed}</span>` : ''}</button>
-        <button id="ds-challenge-tab" data-feedback-panel="challenge" role="tab" aria-selected="false" aria-controls="ds-challenge-panel" tabindex="-1">Challenge</button>
-      </div>
-      <div class="ds-feedback-filters" data-feedback-tools role="group" aria-label="Filter notes">
-        <button class="is-active" data-feedback-filter="all" aria-pressed="true">All</button>
-        <button data-feedback-filter="blocking" aria-pressed="false">Blocking</button>
-        <button data-feedback-filter="addressed" aria-pressed="false">Needs verification</button>
-        <button data-feedback-filter="open" aria-pressed="false">Open</button>
-        <button data-feedback-filter="changed" aria-pressed="false">Code changed</button>
-        <button data-feedback-filter="resolved" aria-pressed="false">Resolved</button>
-      </div>
-      <div class="ds-drawer-body ds-feedback-list" id="ds-feedback-panel" role="tabpanel" aria-labelledby="ds-feedback-tab" data-feedback-view="feedback">${cards}</div>
-      <div class="ds-drawer-body ds-challenge-panel" id="ds-challenge-panel" role="tabpanel" aria-labelledby="ds-challenge-tab" data-feedback-view="challenge" hidden>${challengeChecklist(model)}</div>
+    return `<div class="ds-reviewpage">
+  <section class="ds-reviewpage-section" data-review-section="status" aria-labelledby="ds-reviewpage-status-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-status-h">Status</h2>
+    <div class="ds-review-summary">
+      <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
+      ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
+      ${trustPill}
     </div>
-  </div>`;
+    <div data-review-section="evidence" tabindex="-1">${renderTrustEvidence(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}</div>
+  </section>
+  <section class="ds-reviewpage-section" data-review-section="notes" aria-labelledby="ds-reviewpage-notes-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-notes-h">Notes <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span>${addressed ? `<span class="ds-reviewpage-sub">${addressed} to verify</span>` : ''}</h2>
+    <div class="ds-feedback-filters" data-feedback-tools role="group" aria-label="Filter notes">
+      <button class="is-active" data-feedback-filter="all" aria-pressed="true">All</button>
+      <button data-feedback-filter="blocking" aria-pressed="false">Blocking</button>
+      <button data-feedback-filter="addressed" aria-pressed="false">Needs verification</button>
+      <button data-feedback-filter="open" aria-pressed="false">Open</button>
+      <button data-feedback-filter="changed" aria-pressed="false">Code changed</button>
+      <button data-feedback-filter="resolved" aria-pressed="false">Resolved</button>
+    </div>
+    <div class="ds-feedback-list" data-feedback-view="feedback">${cards}</div>
+  </section>
+  <section class="ds-reviewpage-section" data-review-section="challenge" aria-labelledby="ds-reviewpage-challenge-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-challenge-h">Challenge pass</h2>
+    <div class="ds-challenge-panel" data-feedback-view="challenge">${challengeChecklist(model)}</div>
+  </section>
+  <section class="ds-reviewpage-section" data-review-section="actions" aria-labelledby="ds-reviewpage-actions-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-actions-h">Review actions</h2>
+    <div class="ds-review-section">
+      <a class="ds-review-option" href="${esc(routeBase)}/stories">
+        <span class="ds-review-option-title">Saved reviews</span>
+        <span class="ds-review-option-desc">Open older review sessions for this repository.</span>
+      </a>
+      <button class="ds-review-option ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions">
+        <span class="ds-review-option-title"><span class="ds-agent-target-icon" aria-hidden="true">◈</span> Agent task · <span data-agent-target-name>Choose task</span></span>
+        <span class="ds-review-option-desc">Used only when you send feedback or ask for another pass.</span>
+      </button>
+      <button class="ds-review-option" data-address-all${sendableCount ? '' : ' disabled'} title="Resend every open comment to your agent">
+        <span class="ds-review-option-title">Resend open comments</span>
+        <span class="ds-review-option-desc" data-agent-target-batch>Choose an agent task first.</span>
+      </button>
+      <button class="ds-review-option" data-copy-comments="open"${sendableCount ? '' : ' disabled'} title="Copy open comments as text">
+        <span class="ds-review-option-title">Copy open comments</span>
+      </button>
+      <button class="ds-review-option" data-copy-comments="all"${comments.length ? '' : ' disabled'} title="Copy every comment, including resolved ones and replies">
+        <span class="ds-review-option-title">Copy full review</span>
+      </button>
+    </div>
+  </section>
+</div>`;
 }
 function driftDrawer(report) {
     if (!report || report.state === 'unverified' || !report.files.length)
@@ -1451,7 +1476,7 @@ function commandPalette() {
     const commands = [
         ['story', 'Open Story', 'J / K', 'Move through the guided walkthrough'],
         ['files', 'Open All files', '/', 'Search and filter the changed files'],
-        ['feedback', 'Review notes', '', 'Verify agent replies and reopen notes'],
+        ['review', 'Open Review', '', 'Unresolved notes, coverage evidence, and the challenge pass'],
         ['next-unviewed', 'Next unreviewed file', '', 'Keep the review moving'],
         ['toggle-viewed', 'Toggle current file reviewed', 'V', 'Bind completion to this exact file diff'],
         ['read-aloud', 'Toggle read aloud', 'Space', 'Pause or resume narration'],
@@ -1467,8 +1492,8 @@ function commandPalette() {
     </div>
   </div>`;
 }
-// ---- trust drawer ----
-export function renderTrustDrawer(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
+// ---- trust evidence ----
+export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
     const clean = !trust.uncovered.length;
     const cards = trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('');
     const body = trust.pending
@@ -1493,27 +1518,19 @@ export function renderTrustDrawer(trust, stepIndexById, excludedFiles, indexDive
         ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join('')}
       </section>`
         : '';
-    return `<div class="ds-drawer-root" id="ds-trust-drawer" data-trust-pending="${trust.pending ? '1' : '0'}" hidden>
-    <div class="ds-drawer-scrim" data-trust-close></div>
-    <div class="ds-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-trust-title" tabindex="-1">
-      <div class="ds-drawer-head">
-        <div>
-          <div class="ds-drawer-title" id="ds-trust-title">Trust check</div>
-          <div class="ds-drawer-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
-        </div>
-        <button class="ds-drawer-x" data-trust-close title="Close" aria-label="Close trust check">×</button>
-      </div>
-      <div class="ds-drawer-body">
-        ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
-          <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
-          <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
-        </div>`}
-        ${body}
-        ${stagedState}
-        ${exclusions}
-        <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
-      </div>
-    </div>
+    // data-trust-uncovered is how the lazily fetched replacement settles the pill.
+    // An empty value means "no verdict" — the client must leave the pill alone
+    // rather than read a missing answer as zero uncovered ranges.
+    return `<div class="ds-trust-evidence" data-trust-evidence data-trust-pending="${trust.pending ? '1' : '0'}" data-trust-uncovered="${trust.pending ? '' : trust.uncovered.length}" data-trust-storyless="${storyless ? '1' : '0'}">
+    <div class="ds-trust-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
+    ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
+      <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
+      <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
+    </div>`}
+    ${body}
+    ${stagedState}
+    ${exclusions}
+    <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
   </div>`;
 }
 function excludedFileCard(file) {

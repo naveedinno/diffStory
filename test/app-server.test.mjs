@@ -248,6 +248,21 @@ test('lazy file evidence remains available when only another file changes', asyn
     assert.equal(trust.status, 200);
     assert.match(await trust.text(), /data-trust-pending="0"/);
 
+    // The page paints before coverage is known, so the pill resolves from here.
+    // Without this the pill stays unknown forever and the review chip can never
+    // reach its clean state.
+    const coverage = await fetch(leased(`${base}/api/review/coverage`, token));
+    assert.equal(coverage.status, 200);
+    const verdictBody = await coverage.json();
+    assert.equal(typeof verdictBody.uncovered, 'number');
+    assert.equal(typeof verdictBody.storyless, 'boolean');
+
+    // A verdict is a trust claim, so it is lease-gated like every other piece of
+    // evidence rather than answerable from a stale page.
+    const staleCoverage = await fetch(leased(`${base}/api/review/coverage`, 'not-a-real-token'));
+    assert.equal(staleCoverage.status, 409);
+    assert.equal((await staleCoverage.json()).reloadRequired, true);
+
     writeFileSync(join(repo, 'other.txt'), 'other changed again\n');
 
     const unchangedFileEndpoints = [

@@ -79,7 +79,9 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 test('desktop story stages reclaim redundant side-navigation gutters', () => {
   assert.match(
     source,
-    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:calc\(100% - 24px\)/,
+    // The stage fills the frame it sits in; body's padding is the only gutter,
+    // so an inset here would just misalign it against the chrome above.
+    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:100%;max-width:none;margin:0/,
   );
   assert.doesNotMatch(source, /ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
 });
@@ -116,16 +118,17 @@ test('compact review surfaces are width-contained while code and film navigation
   );
   // The thread is a row inside the dock island now, so the island is what has to
   // stay inside the viewport; the thread only has to refuse to push it wider.
-  assert.match(source, /\.ds-dock\{[^}]*width:calc\(100% - 24px\);min-width:0;max-width:calc\(100% - 24px\)/);
+  assert.match(source, /\.ds-dock\{[^}]*width:100%;min-width:0;max-width:100%/);
   assert.match(source, /\.ds-filmthread\{[^}]*min-width:0/);
+  // Phone drops body's gutter, so the islands go edge to edge. They have to give
+  // up their radius with it — a 16px corner riding the screen edge reads as a
+  // rendering fault — and none of them may re-add a width inset of its own.
+  assert.match(source, /body\{padding:0;gap:0\}/);
   assert.match(
     source,
-    /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{width:calc\(100% - 16px\)\}/,
+    /body :is\(#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\),\.ds-dock,\.ds-filmthread\.is-storyless\)\{border-radius:0\}/,
   );
-  assert.match(
-    source,
-    /\.ds-dock\{width:calc\(100% - 16px\);max-width:calc\(100% - 16px\);margin:0 8px 8px/,
-  );
+  assert.doesNotMatch(source, /calc\(100% - 16px\)/);
   assert.match(source, /\.ds-filmthread-allfiles\{height:44px;padding:0 9px\}/);
   assert.match(source, /\.ds-filmthread\.is-overview\{display:none\}/);
   assert.doesNotMatch(source, /\.ds-stage-num|\.ds-step-pos/);
@@ -133,7 +136,7 @@ test('compact review surfaces are width-contained while code and film navigation
 
 test('notes filters wrap into a stable grid and keep pressed state synchronized', () => {
   assert.match(source, /\.ds-feedback-filters\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(source, /@media\(max-width:560px\)\{\.ds-feedback-drawer\{width:100%;max-width:100vw[^}]*\}\.ds-feedback-filters\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(source, /@media\(max-width:560px\)\{\.ds-feedback-filters\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.doesNotMatch(source, /\.ds-feedback-filters\{[^}]*overflow-x:auto/);
   assert.match(
     source,

@@ -82,8 +82,19 @@ test('read aloud focus is static and routine playback state stays in the control
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /animation|filter/);
   assert.doesNotMatch(ruleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /animation|filter/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-speaking \.ds-readaloud-ico\{animation:none;box-shadow:0 0 0 3px var\(--accent-soft\)\}/);
-  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-play::before\{content:"";width:0;height:0/);
-  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-pause::before\{content:"";width:8px;height:9px;border-left:3px solid currentColor;border-right:3px solid currentColor/);
+  // Both transport glyphs are static masked SVG tinted by currentColor — shapes,
+  // never animation. Pause is pinned by the two properties that made the old
+  // border-drawn version read as a single blob at 21px: square ends, and a gap
+  // narrower than the bars themselves.
+  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-play::before,\.ds-readaloud-ico\.is-pause::before\{content:"";display:block;width:10px;height:10px;background:currentColor/);
+  const pauseGlyph = /\.ds-readaloud-ico\.is-pause::before\{(--ds-transport-glyph[^}]*)\}/.exec(PAGE_CSS);
+  assert.ok(pauseGlyph, 'missing .ds-readaloud-ico.is-pause::before glyph rule');
+  assert.doesNotMatch(pauseGlyph[1], /animation/);
+  const bars = [...pauseGlyph[1].matchAll(/<rect x='([\d.]+)'[^>]*width='([\d.]+)'[^>]*rx='([\d.]+)'/g)]
+    .map((m) => ({ x: Number(m[1]), width: Number(m[2]), rx: Number(m[3]) }));
+  assert.equal(bars.length, 2, 'pause draws exactly two bars');
+  assert.ok(bars.every((bar) => bar.rx > 0), 'pause bars have rounded ends');
+  assert.ok(bars[1].x - (bars[0].x + bars[0].width) > bars[0].width, 'gap between pause bars is wider than a bar');
   assert.match(PAGE_CSS, /\.ds-narration-stop span\{width:9px;height:9px;border-radius:2px;background:currentColor/);
   assert.doesNotMatch(PAGE_CSS, /ds-narration-status|ds-narration-track|ds-narration-dot/);
   assert.doesNotMatch(PAGE_CSS, /ds-aloud-active \.ds-live-banner/);

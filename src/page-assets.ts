@@ -46,8 +46,11 @@ const PAGE_CSS_CORE = `
 html,body{margin:0;padding:0;width:100%;max-width:100%;height:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased;
   display:flex;flex-direction:column;height:100vh;overflow:hidden;
-  /* Signal 3b: ink page frame — shell regions float as islands with 12px gutters */
-  padding:12px;gap:12px}
+  /* Signal 3b: ink page frame — shell regions float as islands on a 12px gutter.
+     The gutter is the padding; the seam between stacked regions is tighter, so the
+     chrome reads as sitting on the content rather than drifting above it. Story and
+     Files share both numbers — switching views must not move the frame. */
+  padding:12px;gap:4px}
 body.ds-noscroll{overflow:hidden}
 button{font-family:inherit}
 a{color:inherit;text-decoration:none}
@@ -94,6 +97,13 @@ a{color:inherit;text-decoration:none}
 .ds-trustpill .ds-tri{font-size:10px}
 .ds-trustpill.is-clean{color:var(--add);background:var(--add-bg)}
 .ds-trustpill.is-clean:hover{background:color-mix(in srgb,var(--add) 18%,transparent)}
+/* Amber is reserved for findings. A coverage check that has not resolved yet is
+   an absence of information, not a problem, so it reads neutral until it lands. */
+.ds-trustpill.is-unknown{color:var(--muted);background:var(--fill-1)}
+.ds-trustpill.is-unknown:hover{background:var(--fill-2)}
+.ds-trustpill .ds-tri-spin{display:inline-block;animation:ds-tri-spin 1.1s linear infinite}
+@keyframes ds-tri-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ds-trustpill .ds-tri-spin{animation:none}}
 .ds-check{font-size:12px}
 .ds-actions{position:relative;display:flex;align-items:center;gap:9px;flex:none}
 .ds-btn{font-size:13px;font-weight:600;border-radius:var(--radius);cursor:pointer;border:1px solid transparent;white-space:nowrap}
@@ -111,20 +121,13 @@ a{color:inherit;text-decoration:none}
 .ds-agent-target-name{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-agent-target.is-empty .ds-agent-target-name{color:var(--accent-text)}
 .ds-agent-target.is-busy .ds-agent-target-icon{animation:dsPulse 1s ease-in-out infinite;background:var(--md-primary);color:var(--md-on-primary)}
-.ds-review-menu-wrap{position:relative}
 .ds-review-menu{height:var(--control-h);display:flex;align-items:center;gap:8px;padding:0 13px;border-radius:var(--radius);border:1px solid var(--line);
   background:var(--md-surface-container-high);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
 .ds-review-menu:hover,.ds-review-menu.is-open{background:var(--md-surface-container-highest);border-color:var(--md-outline)}
 .ds-reload-diff:disabled{opacity:.55;cursor:default}
 .ds-review-menu-dot{width:7px;height:7px;border-radius:999px;background:var(--amber);box-shadow:0 0 0 4px var(--amber-soft)}
 .ds-review-menu.is-clean .ds-review-menu-dot{background:var(--add);box-shadow:0 0 0 4px var(--add-bg)}
-.ds-review-menu-caret{color:var(--muted);font-size:12px;transform:translateY(-1px)}
 .ds-review-menu-coverage{padding:3px 7px;border-radius:var(--radius-sm);background:var(--amber-soft);color:var(--amber-text);font-size:10px;font-weight:600}
-.ds-review-menu-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:32;width:320px;max-width:calc(100vw - 24px);padding:8px;
-  border:1px solid var(--line-soft);border-radius:16px;background:var(--md-surface-container-high);box-shadow:var(--shadow)}
-.ds-review-menu-pop:focus{outline:none}
-.ds-review-menu-pop[hidden]{display:none}
-.ds-review-menu-title{padding:7px 9px 6px;font-family:var(--mono);font-size:10px;letter-spacing:var(--tracking-kicker);text-transform:uppercase;color:var(--dim2);font-weight:500}
 .ds-review-menu-count{min-width:20px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--fill-2);font-size:11px;font-variant-numeric:tabular-nums}
 .ds-review-menu-count-label{margin-left:2px;color:var(--muted);font-size:10px;font-weight:600}
 .ds-review-summary{display:flex;flex-direction:column;gap:6px;padding:0 4px 9px;margin-bottom:4px;border-bottom:1px solid var(--line-soft)}
@@ -145,8 +148,6 @@ a{color:inherit;text-decoration:none}
 .ds-option-count{min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--fill-3);font-size:10px}
 .ds-review-decision{padding:6px 0;border-top:1px solid var(--line-soft)}
 .ds-review-section-label{padding:3px 10px 1px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-weight:700}
-.ds-review-more{border-top:1px solid var(--line-soft)}.ds-review-more>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border-radius:9px;color:var(--muted);font-size:11.5px;font-weight:700;cursor:pointer}.ds-review-more>summary::-webkit-details-marker{display:none}.ds-review-more>summary:hover{background:var(--fill-2);color:var(--text)}.ds-review-more[open]>summary span{transform:rotate(180deg)}
-.ds-review-more-list{display:grid;gap:1px;padding:0 0 3px 12px}.ds-review-more-list .ds-review-option{padding-top:8px;padding-bottom:8px}.ds-review-more-list .ds-review-option-title{font-size:12px}
 .ds-keycap,.ds-command kbd{font-family:var(--mono);font-size:10px;line-height:1;border:1px solid var(--line);border-bottom-color:var(--md-outline);border-radius:5px;background:var(--fill-2);padding:3px 5px;color:var(--muted)}
 .ds-readaloud{width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:var(--md-on-secondary-container);padding:0;border-radius:9px;border:none;
   background:transparent;cursor:pointer;white-space:nowrap}
@@ -178,6 +179,9 @@ a{color:inherit;text-decoration:none}
   .ds-layout>.ds-rail{position:fixed;top:56px;bottom:0;left:0;z-index:8;max-width:calc(100vw - 48px);box-shadow:var(--shadow)}
   body:not(.ds-rail-collapsed) .ds-rail-scrim{display:block;position:fixed;top:56px;right:0;bottom:0;left:min(var(--ds-rail-width,240px),calc(100vw - 48px));z-index:7;border:0;padding:0;background:var(--scrim);cursor:pointer}
   body{padding:0;gap:0}body .ds-layout{gap:0}body .ds-reviewchrome,body .ds-rail,body .ds-main{border-radius:0}
+  /* Phone drops the gutter entirely, so the story islands square off with the rest
+     of the frame — a 16px radius riding the screen edge reads as a rendering fault. */
+  body :is(#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]),.ds-dock,.ds-filmthread.is-storyless){border-radius:0}
   .ds-main{width:100%}
   .ds-rail-resizer{display:none}
 }
@@ -373,6 +377,23 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island);overflow:hidden}
 .ds-view{flex:1;min-height:0;display:flex;flex-direction:column}
 .ds-view[hidden]{display:none}
+/* The review page: one scrollable surface instead of a popover over two drawers. */
+#ds-view-review{overflow-y:auto}
+.ds-reviewpage{display:grid;align-content:start;gap:18px;width:min(920px,100%);margin:0 auto;padding:22px}
+.ds-reviewpage-section{display:grid;gap:12px;padding:18px 20px;border:1px solid var(--line-soft);border-radius:var(--radius-island);background:var(--panel3)}
+.ds-reviewpage-section:focus{outline:none}
+.ds-reviewpage-section:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-reviewpage-h{display:flex;align-items:center;gap:7px;margin:0;font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--text)}
+.ds-reviewpage-sub{color:var(--dim);font-size:11px;font-weight:600}
+.ds-reviewpage-section .ds-review-summary{border-bottom:0;padding:0;margin:0}
+.ds-reviewpage-section .ds-feedback-filters{border-bottom:0;padding:0}
+.ds-reviewpage-section .ds-review-section{gap:4px;padding:0}
+/* The pill was sized for a 320px popover; on a 920px page it must stay a pill. */
+.ds-reviewpage-section .ds-trustpill{width:auto;justify-self:start;justify-content:flex-start}
+.ds-trust-evidence{display:grid;gap:10px}
+.ds-trust-sub{color:var(--dim);font-size:11.5px}
+.ds-tab-badge{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--fill-3);font-size:9.5px;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.ds-reviewpage{gap:12px;padding:12px}.ds-reviewpage-section{padding:14px}}
 .ds-step{flex:1;min-height:0;display:flex;flex-direction:column}
 .ds-step[hidden]{display:none}
 .ds-step-top{padding:20px 30px 0;flex:none}
@@ -648,7 +669,6 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 /* ---- trust drawer ---- */
 .ds-drawer-root{position:fixed;inset:0;z-index:50}
 .ds-drawer-root[hidden]{display:none}
-.ds-feedback-drawer [hidden]{display:none!important}
 .ds-drawer-scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity var(--motion-duration-ui) var(--motion-ease-out)}
 .ds-drawer{position:absolute;top:0;right:0;width:440px;max-width:92vw;height:100%;background:var(--material);border-left:1px solid var(--line);
   display:flex;flex-direction:column;box-shadow:-30px 0 60px rgba(0,0,0,0.4);transform:translateX(100%);transition:transform var(--motion-duration-progress) var(--motion-ease-drawer)}
@@ -694,12 +714,11 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-trust-foot{margin-top:18px;font-size:12px;color:var(--dim2);line-height:1.5;text-wrap:pretty}
 
 /* ---- feedback verification + timeline ---- */
-.ds-drawer-tabs{display:flex;padding:10px 14px 0;gap:4px}.ds-drawer-tabs button{flex:1;height:44px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer}.ds-drawer-tabs button:hover{background:var(--fill-2);color:var(--text)}.ds-drawer-tabs button.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}.ds-drawer-tabs button span{margin-left:4px}
 .ds-feedback-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px 14px;border-bottom:1px solid var(--line-soft)}.ds-feedback-filters button{width:100%;min-width:44px;height:44px;border:1px solid var(--line-soft);border-radius:var(--radius-sm);background:transparent;color:var(--muted);font:inherit;font-size:10.5px;font-weight:600;line-height:1.25;padding:6px 8px;cursor:pointer;white-space:normal}.ds-feedback-filters button.is-active{border-color:transparent;background:var(--accent-soft);color:var(--accent-text)}
 .ds-feedback-list{display:grid;align-content:start;gap:11px}.ds-feedback-card{display:grid;gap:9px;padding:13px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-feedback-head{display:flex;align-items:center;gap:8px}.ds-feedback-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--text)}
 .ds-anchorbadge{flex:none;font-size:9.5px;font-weight:600;padding:3px 6px;border-radius:var(--radius-sm);color:var(--muted);background:var(--fill-2)}.ds-anchorbadge.is-changed,.ds-anchorbadge.is-moved{color:var(--amber-text);background:var(--amber-soft)}.ds-feedback-selection{display:block;max-height:82px;overflow:auto;white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;line-height:1.4;padding:8px 9px;border-radius:7px;background:var(--gutter);color:var(--muted)}
 .ds-feedback-message{font-size:12.5px;line-height:1.45}.ds-feedback-reply{padding:10px;border-left:2px solid var(--accent-blue);background:var(--accent-soft);border-radius:0 8px 8px 0;font-size:12px;line-height:1.45}.ds-feedback-reply>span{display:block;margin-bottom:4px;color:var(--accent-text);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}.ds-feedback-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}.ds-drawer-empty{padding:30px 12px;text-align:center;color:var(--muted);font-size:12.5px}
-.ds-feedback-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.ds-feedback-compare>div{display:grid;gap:4px;min-width:0}.ds-feedback-compare>div>span{color:var(--dim);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.ds-feedback-selection.is-current{border:1px solid var(--line-soft);background:var(--panel2);color:var(--text)}@media(max-width:560px){.ds-feedback-drawer{width:100%;max-width:100vw;border-left:0}.ds-feedback-filters{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 12px}.ds-feedback-compare{grid-template-columns:1fr}}
+.ds-feedback-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.ds-feedback-compare>div{display:grid;gap:4px;min-width:0}.ds-feedback-compare>div>span{color:var(--dim);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.ds-feedback-selection.is-current{border:1px solid var(--line-soft);background:var(--panel2);color:var(--text)}@media(max-width:560px){.ds-feedback-filters{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 12px}.ds-feedback-compare{grid-template-columns:1fr}}
 .ds-challenge-panel{display:grid;align-content:start;gap:16px}.ds-challenge-head strong{font-size:15px}.ds-challenge-head p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.ds-challenge-list{display:grid;gap:7px}.ds-challenge-item{display:flex;align-items:flex-start;gap:9px;padding:11px;border:1px solid var(--line-soft);border-radius:10px;background:var(--fill-1);cursor:pointer}.ds-challenge-item input{margin-top:2px}.ds-challenge-item span{display:grid;gap:3px}.ds-challenge-item strong{font-size:12px}.ds-challenge-item small{color:var(--muted);font-size:11px;line-height:1.4}.ds-challenge-targets{display:grid;gap:6px;padding-top:4px}.ds-challenge-targets>span{color:var(--dim);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.ds-challenge-target{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:9px 10px;text-align:left;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--text);cursor:pointer}.ds-challenge-target:hover{background:var(--fill-2)}.ds-challenge-target span{grid-column:1;color:var(--amber-text);font-size:9px;font-weight:700}.ds-challenge-target strong{grid-column:1;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;white-space:nowrap}.ds-challenge-target i{grid-column:2;grid-row:1/span 2;align-self:center;color:var(--accent-text);font-style:normal}
 
 /* ---- misc ---- */
@@ -784,11 +803,17 @@ const SESSION_REDESIGN_CSS = `
    centered stage with an oversized numeral; the bottom numeral thread is the whole nav. ---- */
 body:not([data-read-view="files"]) .ds-rail{display:none}
 body:not([data-read-view="files"]) .ds-sidebar-toggle{display:none}
-/* Story view floats the stage as its own island on the ink page. */
-body:not([data-read-view="files"]) .ds-main{background:transparent;border-color:transparent;overflow:visible}
-body:not([data-read-view="files"]){gap:4px}
+/* Story view floats the stage as its own island on the ink page. The frame drops
+   its border outright rather than only its colour: a transparent 1px edge still
+   shrinks the content box, and that stray pixel is what pushed the islands inside
+   it out of line with the chrome above. */
+body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:visible}
 #ds-view-tour:not([hidden]){flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;position:relative}
-#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){flex:1;min-height:0;width:calc(100% - 24px);max-width:none;margin:0 auto;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island)}
+/* One gutter, set once on the page frame: the chrome, the stage and the dock are
+   three stacked islands, so they answer to body's 12px padding and nothing else.
+   The inner inset this rule used to add made the stage 13px narrower per side than
+   the chrome directly above it — three blocks, three edges, no line to read down. */
+#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){flex:1;min-height:0;width:100%;max-width:none;margin:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island)}
 /* Story focus / reading-here used to ring the .ds-diff card. The card no longer
    draws a frame of its own, so the accent rides the island — the one frame left.
    The island rule above scores (1,3,0) — an id plus three :not() arguments — so
@@ -801,7 +826,7 @@ body:not([data-read-view="files"]){gap:4px}
    answering the same question. Stacked in one island they read as one instrument:
    press play on the left, the current beat speaks in the middle, the thread below
    shows where that beat sits in the whole story. */
-.ds-dock{position:relative;z-index:3;flex:none;display:flex;flex-direction:column;width:calc(100% - 24px);min-width:0;max-width:calc(100% - 24px);margin:0 12px 12px;border:1px solid color-mix(in srgb,var(--line-soft) 78%,transparent);border-radius:16px;background:color-mix(in srgb,var(--surface-2) 86%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent),0 1px 2px rgba(0,0,0,.05),0 16px 40px rgba(0,0,0,.17);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
+.ds-dock{position:relative;z-index:3;flex:none;display:flex;flex-direction:column;width:100%;min-width:0;max-width:100%;margin:0;border:1px solid color-mix(in srgb,var(--line-soft) 78%,transparent);border-radius:16px;background:color-mix(in srgb,var(--surface-2) 86%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent),0 1px 2px rgba(0,0,0,.05),0 16px 40px rgba(0,0,0,.17);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
 /* Ink casts a heavier shadow than paper: the dark theme needs the lift to read as
    floating, the light one only needs a hint or the island looks bruised. */
 :root[data-theme="light"] .ds-dock{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 1px 2px rgba(15,23,42,.05),0 12px 30px rgba(15,23,42,.09)}
@@ -818,7 +843,7 @@ body:not([data-read-view="files"]){gap:4px}
 .ds-dock>.ds-filmthread{position:static}
 .ds-filmthread.is-overview{display:none}
 /* Storyless review has no island to sit in, so that thread keeps its own glass. */
-.ds-filmthread.is-storyless{width:calc(100% - 24px);max-width:calc(100% - 24px);margin:0 12px 12px;padding:7px 12px 8px;border:1px solid color-mix(in srgb,var(--line-soft) 76%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface-2) 84%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 7px 24px rgba(0,0,0,.07);backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
+.ds-filmthread.is-storyless{width:100%;max-width:100%;margin:0;padding:7px 12px 8px;border:1px solid color-mix(in srgb,var(--line-soft) 76%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface-2) 84%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 4%,transparent),0 7px 24px rgba(0,0,0,.07);backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
 .ds-filmthread-scroll{position:relative;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;padding:4px;scrollbar-width:none}.ds-filmthread-scroll::-webkit-scrollbar{display:none}
 .ds-filmthread-line{position:absolute;left:0;right:0;top:40px;height:1px;opacity:.82;background:linear-gradient(90deg,var(--thread) 0 var(--thread-pct,0%),var(--thread-dim) var(--thread-pct,0%) 100%)}
 .ds-filmthread-nodes{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:4px;width:max-content;min-width:100%;padding:0 4px}
@@ -865,7 +890,6 @@ body:not([data-read-view="files"]){gap:4px}
 .ds-intro-utility{display:flex;align-items:center;flex-wrap:wrap;gap:7px 18px;max-width:820px;margin-top:15px;color:var(--dim);font-size:11.5px}.ds-intro-scope{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em}.ds-intro-notes{min-width:0}.ds-intro-notes>summary{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 0;list-style:none;color:var(--muted);font-weight:600;cursor:pointer}.ds-intro-notes>summary::-webkit-details-marker{display:none}.ds-intro-notes>summary:hover{color:var(--text)}.ds-intro-notes-caret{color:var(--dim);font-size:13px;transition:transform var(--motion-duration-fast) var(--motion-ease-in-out)}.ds-intro-notes[open]{flex-basis:100%;width:100%}.ds-intro-notes[open] .ds-intro-notes-caret{transform:rotate(180deg)}.ds-intro-notes-body{margin-top:8px;padding:14px 16px 16px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel2)}
 .ds-intro-notes .ds-intro-hotspots{margin:0}.ds-intro-notes .ds-intro-hotspots ul{margin:9px 0 0;gap:0}.ds-intro-notes .ds-intro-hotspots li+li{border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-hotspots button{padding:10px 8px;border:0;border-radius:7px;background:transparent}.ds-intro-notes .ds-intro-hotspots button:hover{border-color:transparent;background:var(--fill-1)}.ds-intro-notes .ds-intro-context{max-width:none;margin:0;padding:0;border:0}.ds-intro-notes .ds-intro-hotspots+.ds-intro-context{margin-top:16px;padding-top:15px;border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-nongoals{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft)}.ds-intro-notes .ds-intro-nongoals:first-child{margin-top:0;padding-top:0;border-top:0}
 .ds-intro-allfiles{min-height:28px;padding:2px 0;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;cursor:pointer}.ds-intro-allfiles:hover{color:var(--text)}
-.ds-overview-active .ds-review-menu-wrap{display:none}
 .ds-symbols{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden}.ds-symbols code{max-width:130px;overflow:hidden;text-overflow:ellipsis;padding:3px 6px;border:1px solid var(--line-soft);border-radius:6px;background:var(--fill-1);color:var(--muted);font-family:var(--mono);font-size:9.5px;white-space:nowrap}.ds-fileitem-symbol{min-width:0;max-width:82px;overflow:hidden;text-overflow:ellipsis;color:var(--dim);font-family:var(--mono);font-size:9px;white-space:nowrap}
 .ds-filefilter-menu{position:relative}.ds-filefilter-menu>summary{display:flex;align-items:center;justify-content:space-between;gap:6px;height:28px;padding:0 9px;list-style:none;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font-size:10.5px;cursor:pointer}.ds-filefilter-menu>summary::-webkit-details-marker{display:none}.ds-filefilter-menu>summary strong{margin-right:auto;color:var(--text)}.ds-filefilter-menu[open] .ds-filefilters{display:flex}.ds-filefilter-menu .ds-filefilters{display:none;padding:7px;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel3);box-shadow:var(--shadow)}
 .ds-filepanel-loading,.ds-filepanel-loaderror,.ds-step-loading,.ds-step-loaderror{display:flex;min-height:180px;align-items:center;justify-content:center;gap:10px;padding:24px;color:var(--muted);font-size:12px}.ds-filepanel-loaderror,.ds-step-loaderror{flex-direction:column;color:var(--del-text)}.ds-step-lazy{align-items:center;justify-content:center}
@@ -876,7 +900,7 @@ body:not([data-read-view="files"]){gap:4px}
 @keyframes dsShimmer{0%,100%{opacity:.45}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.ds-sk{animation:none}}
 .ds-severity{display:inline-flex;align-items:center;padding:2px 6px;border-radius:var(--radius-sm);font-size:8.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.ds-severity-blocking{background:var(--del-bg);color:var(--del-text)}.ds-severity-concern{background:var(--amber-soft);color:var(--amber-text)}.ds-severity-nit{background:var(--fill-2);color:var(--muted)}.ds-composer-severity{display:flex;gap:5px;margin:-2px 0 10px}.ds-severity-choice{padding:5px 8px;border:1px solid var(--line-soft);border-radius:var(--radius-sm);background:transparent;color:var(--muted);font:inherit;font-size:10.5px;font-weight:600;cursor:pointer}.ds-severity-choice.is-active{border-color:var(--accent-blue);background:var(--accent-soft);color:var(--accent-text)}
-.ds-review-more-list .ds-agent-target{height:auto;max-width:none;align-items:flex-start;border:0;border-radius:10px;white-space:normal}.ds-review-more-list .ds-agent-target-icon{display:inline-flex}
+.ds-reviewpage-section .ds-agent-target{height:auto;max-width:none;align-items:flex-start;border:0;border-radius:10px;white-space:normal}.ds-reviewpage-section .ds-agent-target-icon{display:inline-flex}
 .ds-exclusions{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}.ds-exclusions-note{margin:0 0 12px;color:var(--muted);font-size:12px;line-height:1.5}.ds-exclusion-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:11px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--fill-1)}.ds-exclusion-card+.ds-exclusion-card{margin-top:8px}.ds-exclusion-card>div:first-child{display:grid;gap:4px;min-width:0}.ds-exclusion-card code{overflow:hidden;text-overflow:ellipsis;color:var(--text);font-family:var(--mono);font-size:11px;white-space:nowrap}.ds-exclusion-card span{color:var(--muted);font-size:10.5px}.ds-exclusion-preview{grid-column:1/-1;max-height:360px;overflow:auto;border:1px solid var(--line-soft);border-radius:8px;background:var(--gutter)}.ds-excluded-file-head{display:grid;gap:3px;padding:9px 11px;border-bottom:1px solid var(--line-soft)}.ds-excluded-file-head strong{font-size:11px}.ds-excluded-file-head span{font-size:10px}.ds-excluded-code{display:grid;margin:0;padding:8px 0;white-space:pre}.ds-excluded-code>span{display:grid;grid-template-columns:45px minmax(max-content,1fr);font-family:var(--mono);font-size:10px;line-height:1.5}.ds-excluded-code i{padding-right:10px;text-align:right;color:var(--dim);font-style:normal;user-select:none}.ds-excluded-code code{padding-right:14px;color:var(--muted)}.ds-exclusion-ack{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--amber) 35%,var(--line));border-radius:10px;background:var(--amber-soft);cursor:pointer}.ds-exclusion-ack input{margin-top:2px}.ds-exclusion-ack span{display:grid;gap:2px}.ds-exclusion-ack strong{font-size:12px}.ds-exclusion-ack small{color:var(--amber-text);font-size:10.5px}
 body{height:100vh;height:100dvh}.ds-thread,.ds-composer{max-height:calc(100dvh - 72px)}
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
@@ -902,14 +926,14 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:820px){.ds-agent-target-prefix,.ds-agent-target-sep{display:none}.ds-agent-target{max-width:150px}.ds-review-menu-count-label{display:none}}
 @media (max-width:760px){.ds-symbols{display:none}}
-@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}#ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){width:calc(100% - 16px)}.ds-dock{width:calc(100% - 16px);max-width:calc(100% - 16px);margin:0 8px 8px;border-radius:14px}.ds-dock-transport{gap:8px;min-height:48px;padding:7px 8px 7px 7px}.ds-filmthread{gap:6px;padding:2px 6px 4px}.ds-filmthread.is-storyless{width:calc(100% - 16px);max-width:calc(100% - 16px);margin:0 8px 8px;padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
+@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}.ds-dock-transport{gap:8px;min-height:48px;padding:7px 8px 7px 7px}.ds-filmthread{gap:6px;padding:2px 6px 4px}.ds-filmthread.is-storyless{padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
 @media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step-meta>.ds-dot,.ds-step-meta>.ds-flowchip{display:none}.ds-step.is-code-step .ds-full-diff{display:none}/* The beat row stays one line even here. Wrapping the arrows underneath left the
    play button centred against a two-row neighbour, which opened a dead square in
    the middle of the island — worse than tighter gaps. */
 .ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}
 @media (max-width:720px){.ds-back{min-width:36px}.ds-help{display:none}}
 @media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-agent-target,.ds-review-menu,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-agent-target.is-busy .ds-agent-target-icon,.ds-readaloud.is-loading .ds-readaloud-ico,.ds-agent-task-spinner,.ds-composer{animation:none!important}}
-@media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-review-menu-pop,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
+@media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
 @media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}.ds-md caption{color:var(--text)}.ds-md thead th,.ds-md tbody{border-color:var(--text)}.ds-md tbody tr:nth-child(even){background:transparent}.ds-md tbody tr+tr{border-top:1px solid var(--line)}.ds-md hr{background:var(--text-3)}.ds-md kbd{border-color:var(--text-3)}}
 
 /* The review frame keeps only navigation, scope, theme, and the decision entry
@@ -942,24 +966,28 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 .ds-dock .ds-readaloud-primary .ds-readaloud-ico{width:21px;height:21px;flex:none;font-size:8px;box-shadow:0 1px 5px color-mix(in srgb,var(--md-primary) 38%,transparent)}
 .ds-dock .ds-readaloud-primary.is-active{border-color:color-mix(in srgb,var(--md-primary) 38%,var(--line));background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
 .ds-dock .ds-readaloud-primary.is-active .ds-readaloud-ico{background:var(--md-on-secondary-container);color:var(--on-accent)}
-.ds-readaloud-ico.is-play::before{content:"";width:0;height:0;margin-left:2px;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid currentColor}
-.ds-readaloud-ico.is-pause::before{content:"";width:8px;height:9px;border-left:3px solid currentColor;border-right:3px solid currentColor}
+/* Transport glyphs are masked SVG, not border tricks. The old pause was two 3px
+   square bars separated by 2px, so at this size the gap closed up optically and
+   the icon read as one dark blob; these are drawn to size with rounded ends and
+   a gap wider than the bars. */
+.ds-readaloud-ico.is-play::before,.ds-readaloud-ico.is-pause::before{content:"";display:block;width:10px;height:10px;background:currentColor;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain}
+.ds-readaloud-ico.is-play::before{margin-left:2px;--ds-transport-glyph:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2.6 1.8 L8.2 5 L2.6 8.2 Z' fill='black' stroke='black' stroke-width='1.6' stroke-linejoin='round'/></svg>");-webkit-mask-image:var(--ds-transport-glyph);mask-image:var(--ds-transport-glyph)}
+.ds-readaloud-ico.is-pause::before{--ds-transport-glyph:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><g fill='black'><rect x='0.85' y='0.85' width='2.5' height='8.3' rx='0.9'/><rect x='6.65' y='0.85' width='2.5' height='8.3' rx='0.9'/></g></svg>");-webkit-mask-image:var(--ds-transport-glyph);mask-image:var(--ds-transport-glyph)}
 .ds-narration-stop{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--md-error) 22%,var(--line));border-radius:9px;background:var(--fill-1);color:var(--md-error);cursor:pointer}.ds-narration-stop[hidden]{display:none}.ds-narration-stop:hover{background:color-mix(in srgb,var(--md-error) 10%,var(--fill-1));border-color:color-mix(in srgb,var(--md-error) 42%,var(--line))}.ds-narration-stop:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--md-error) 18%,transparent)}.ds-narration-stop span{width:9px;height:9px;border-radius:2px;background:currentColor}
 .ds-readaloud-label{white-space:nowrap}
 .ds-reviewchrome .ds-actions{gap:7px}
 .ds-reload-diff{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 9px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.ds-reload-diff:hover{background:var(--fill-2);color:var(--text)}.ds-reload-diff:disabled{opacity:.7}.ds-reload-diff.is-loading .ds-reload-icon{animation:dsReloadSpin .7s linear infinite}@keyframes dsReloadSpin{to{transform:rotate(360deg)}}
 .ds-review-menu{height:36px;gap:7px;padding:0 10px;border-radius:9px;background:var(--fill-1);font-size:12px;font-weight:700}.ds-review-menu:hover,.ds-review-menu.is-open{background:var(--fill-2)}.ds-review-menu.is-clean{border-color:color-mix(in srgb,var(--green) 34%,var(--line));background:color-mix(in srgb,var(--add-bg) 42%,var(--fill-1));color:var(--add-text)}
-.ds-review-menu-icon{width:17px;height:17px;color:var(--muted)}.ds-review-menu.is-clean .ds-review-menu-icon{color:var(--green)}.ds-review-menu-caret{width:15px;height:15px;transform:none;color:var(--dim)}
+.ds-review-menu-icon{width:17px;height:17px;color:var(--muted)}.ds-review-menu.is-clean .ds-review-menu-icon{color:var(--green)}
 .ds-review-menu-count{height:19px;min-width:19px;padding:0 5px;background:var(--fill-3);font-size:10px}.ds-review-menu-count[hidden]{display:none}.ds-review-menu-count-label{display:none}
-.ds-review-menu-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .ds-live-banner{position:fixed;z-index:20;top:72px;right:16px;width:min(420px,calc(100vw - 32px));min-height:52px;display:grid;grid-template-columns:28px minmax(0,1fr) auto 36px;align-items:center;gap:8px;padding:4px 4px 4px 8px;border:1px solid color-mix(in srgb,var(--md-primary) 24%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--panel3) 94%,var(--md-primary));box-shadow:0 14px 34px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.18);color:var(--text);font-size:12px}.ds-live-banner[hidden]{display:none}.ds-live-banner-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--md-secondary-container);color:var(--md-on-secondary-container)}.ds-live-banner-icon svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-live-banner [data-live-message]{min-width:0;line-height:1.35;font-weight:600;text-wrap:pretty}.ds-live-banner button{height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer}.ds-live-banner button:hover{background:var(--fill-2);color:var(--text)}.ds-live-banner button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}.ds-live-banner-reload{padding:0 10px;color:var(--md-primary)!important}.ds-live-banner-dismiss{width:36px;padding:0}.ds-live-banner-dismiss svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}.ds-live-banner[data-live-kind="disconnected"]{border-color:color-mix(in srgb,var(--amber) 34%,var(--line))}.ds-live-banner[data-live-kind="disconnected"] .ds-live-banner-icon{background:var(--amber-soft);color:var(--amber-text)}
 body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}body.ds-rail-collapsed .ds-reviewchrome-rail{display:none}body.ds-rail-collapsed .ds-reviewchrome-mobile-nav{display:flex}
 
 @media (max-width:900px){
-  .ds-review-menu{width:auto;padding:0 9px}.ds-review-menu>span.ds-review-menu-label{display:none}.ds-review-menu-icon{display:inline-flex!important}.ds-review-menu-caret{display:inline-flex!important}.ds-reload-diff>span[data-reload-label]{display:none}
+  .ds-review-menu{width:auto;padding:0 9px}.ds-review-menu>span.ds-review-menu-label{display:none}.ds-review-menu-icon{display:inline-flex!important}.ds-reload-diff>span[data-reload-label]{display:none}
 }
 @media (max-width:720px){
-  .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff,.ds-review-menu{min-width:44px;height:44px;justify-content:center;padding:0 10px}.ds-review-menu-caret{display:none!important}
+  .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff,.ds-review-menu{min-width:44px;height:44px;justify-content:center;padding:0 10px}
   .ds-reviewchrome-utilities .ds-theme-toggle{width:44px;height:44px;min-height:44px}
   .ds-reviewchrome-utilities .ds-viewtoggle{height:44px}.ds-reviewchrome-utilities .ds-tab{min-height:38px;padding:0 9px;font-size:11px}
   .ds-dock .ds-readaloud-primary{display:flex;width:44px;height:44px;min-height:44px;padding:0;justify-content:center;border-radius:12px}.ds-dock .ds-readaloud-primary .ds-readaloud-label{display:none}.ds-narration-actions{gap:3px}.ds-narration-stop{position:absolute;z-index:13;bottom:calc(100% + 14px);left:0;width:62px;height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:color-mix(in srgb,var(--md-error) 10%,var(--panel3));box-shadow:none;font-size:10px;font-weight:800}.ds-narration-stop::after{content:"Stop"}.ds-narration-stop span{width:7px;height:7px}
@@ -988,7 +1016,7 @@ const PAGE_JS_HEAD = `
   var FLAVOR={change:{label:'Change request',ico:'◆'},question:{label:'Question',ico:'?'},nit:{label:'Nit',ico:'○'}};
   var SEVERITY={blocking:'Blocking',concern:'Concern',nit:'Minor'};
   var STATUS={open:'Open',addressed:'Needs verification',resolved:'Resolved'};
-  var tourView,filesView,drawer,feedbackDrawer,driftDrawer,commandRoot,toastEl,selectionMenu,filmThread,filmTooltip,filmTooltipTarget=null,filmMagnifyFrame=0,filmPointerX=null,selectionContext=null,selectionRects=[],selectionContextMenuPending=false,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,toastSequence=0,storyFocusIndex=-1,storyFocusGroup=-1,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[],voiceSequenceToken=0,currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false,sidebarReturnFocus=null,reviewMenuReturnFocus=null,commandReturnFocus=null,agentChooserReturnFocus=null,agentChooserRequest=0,activeCommentSurface=null,commentSurfaceReturnFocus=null,commentSurfaceSeq=0,commentSurfaceCollapsedSidebar=false,composerReturnFocus=null,composerCollapsedSidebar=false,modalStack=[],modalBackgroundSnapshots=[];
+  var tourView,filesView,reviewView,driftDrawer,commandRoot,toastEl,selectionMenu,filmThread,filmTooltip,filmTooltipTarget=null,filmMagnifyFrame=0,filmPointerX=null,selectionContext=null,selectionRects=[],selectionContextMenuPending=false,stepPanels,stepCards,total=1,active=0,visited={0:true},toastTimer,toastSequence=0,storyFocusIndex=-1,storyFocusGroup=-1,voiceFocusIndex=-1,voiceFocusGroup=-1,voiceFocusTimers=[],voiceSequenceToken=0,currentSpeechStep=-1,currentSpeechUnit=-1,currentSpeechManual=false,sidebarReturnFocus=null,commandReturnFocus=null,agentChooserReturnFocus=null,agentChooserRequest=0,activeCommentSurface=null,commentSurfaceReturnFocus=null,commentSurfaceSeq=0,commentSurfaceCollapsedSidebar=false,composerReturnFocus=null,composerCollapsedSidebar=false,modalStack=[],modalBackgroundSnapshots=[];
   var filePanels=[],fileItems=[],selectedFile=-1,fileSearchQuery='',fileSearchMatches=null,fileSearchRequest=0,fileSearchTimer=null,sidebarResizing=false,sidebarResizeFrame=0,sidebarResizeClientX=null,splitBody=null,splitHolder=null,splitResizeFrame=0,splitResizeClientX=null,focusScrollTimer=0,focusScrollFrame=0,aloudIntent='off',aloudResumeDirty=false,aloudControlTimer=0,aloudActive=false,aloudPaused=false,aloudJobId='',aloudPollTimer=0,aloudPrepareTimer=0,aloudPrepareRequest=0,aloudPreparedText='',aloudRequestAbort=null,aloudRequestToken=0,aloudControlToken=0,aloudControlPending=false,aloudPhase='idle',aloudRate=1,aloudSequence=[],aloudSequenceIndex=-1,speechLoadingLabel='',aloudPollFails=0,aloudStateMessage='',aloudStartedAt=0,aloudSlowNotice=false;
   var activeFileFilter='all',activeFeedbackFilter='all',restoringReviewPosition=false,reviewSaveTimer=null,reviewPositionReady=false,driftRequestAbort=null,driftRequestToken=0,driftLayoutMode=compactScreen()?'unified':'split';
   var mermaidModulePromise=null,mermaidRenderId=0;
@@ -1316,21 +1344,10 @@ const PAGE_JS_HEAD = `
     if(restore&&target&&target.focus)target.focus();
   }
   function focusActiveReview(){
-    var target=filesView&&!filesView.hidden?filesView:tourView;
+    var target=viewElement(currentView())||tourView;
     if(target&&target.focus){try{target.focus({preventScroll:true});}catch(e){target.focus();}}
   }
   function collapseCompactSidebar(){if(compactScreen()){closeCompactSidebar(false);focusActiveReview();}}
-  function setReviewMenu(open){
-    var pop=$('[data-review-menu-pop]'),btn=$('[data-review-menu]');
-    if(!pop||!btn)return;
-    var wasOpen=!pop.hidden,activeElement=document.activeElement,restore=!open&&wasOpen&&pop.contains(activeElement);
-    if(open)reviewMenuReturnFocus=btn;
-    pop.hidden=!open;
-    btn.classList.toggle('is-open',open);
-    btn.setAttribute('aria-expanded',open?'true':'false');
-    if(open)setTimeout(function(){pop.focus();},0);
-    else if(restore&&reviewMenuReturnFocus&&reviewMenuReturnFocus.focus)reviewMenuReturnFocus.focus();
-  }
   function nodeElement(n){return n&&n.nodeType===1?n:(n&&n.parentElement?n.parentElement:null);}
   function codeForNode(n){var e=nodeElement(n);return e?closest(e,'[data-comment-code]'):null;}
   function clearSelectionSide(){
@@ -1541,24 +1558,45 @@ const PAGE_JS_HEAD = `
     if(!target)target=$('[data-thread-node="'+active+'"]')||tourView;
     focusElementWithoutScroll(target);
   }
+  var DS_VIEWS=['tour','files','review'];
+  function viewIndex(v){var i=DS_VIEWS.indexOf(v);return i<0?0:i;}
+  function currentView(){var v=document.body.getAttribute('data-read-view');return DS_VIEWS.indexOf(v)<0?'tour':v;}
+  function viewElement(v){return v==='files'?filesView:v==='review'?reviewView:tourView;}
+  var pendingReviewSection=false;
   function focusViewEntry(v){
     if(v==='tour'){focusStoryViewEntry();return;}
+    if(v==='review'){
+      // gotoReview is about to focus a specific section; do not outrun it.
+      if(pendingReviewSection)return;
+      if(!focusElementWithoutScroll(reviewView))focusElementWithoutScroll($('[data-view="review"]'));return;
+    }
     var tab=$('[data-view="files"]');if(!focusElementWithoutScroll(tab)){var search=$('[data-file-search]');focusElementWithoutScroll(search);}
   }
   function setView(v,focusAfter){
-    var previous=filesView&&!filesView.hidden?'files':'tour';
-    if(compactScreen()&&v==='tour')setSidebarCollapsed(true,false);
+    if(DS_VIEWS.indexOf(v)<0)v='tour';
+    // Read the previous view from the attribute the last commit wrote rather than
+    // from panel visibility: with three panels a mid-transition DOM read is
+    // ambiguous, and the server now paints data-read-view so the first read is
+    // honest too.
+    var previous=currentView();
+    if(compactScreen()&&v!=='files')setSidebarCollapsed(true,false);
     var update=function(){
       document.body.setAttribute('data-read-view',v);
       if(tourView)tourView.hidden=v!=='tour';
       if(filesView)filesView.hidden=v!=='files';
+      if(reviewView)reviewView.hidden=v!=='review';
       $all('.ds-tab').forEach(function(t){var on=t.getAttribute('data-view')===v;t.classList.toggle('is-active',on);t.setAttribute('aria-selected',on?'true':'false');t.tabIndex=on?0:-1;});
       $all('[data-rail]').forEach(function(r){r.hidden=r.getAttribute('data-rail')!==v;});
       revealResumeReview();
-      if(focusAfter||(v==='tour'&&previous!==v))setTimeout(function(){focusViewEntry(v);},0);
+      // Files parks focus on its own tab, so entering it from a click would steal
+      // focus back off whatever was clicked. Story and Review both have a real
+      // entry point worth landing on.
+      if(focusAfter||(v!=='files'&&previous!==v))setTimeout(function(){focusViewEntry(v);},0);
     };
-    if(reviewPositionReady&&previous!==v)runWorkspaceTransition('view',v==='files'?1:-1,update);else update();
+    // Left-to-right tab order is the spatial model: tour(0) < files(1) < review(2).
+    if(reviewPositionReady&&previous!==v)runWorkspaceTransition('view',viewIndex(v)>viewIndex(previous)?1:-1,update);else update();
     if(v==='files'&&selectedFile<0)selectFile(0);
+    if(v==='review')loadTrustEvidence();
     watchStickyMetrics();
     if(v!=='tour'){cancelFocusScroll();setAloudIntent('off');cancelSpeech();}
     saveReviewPositionSoon();
@@ -2575,7 +2613,7 @@ const PAGE_JS_HEAD = `
   }
   function reviewUiKey(){return 'ds-review-ui:'+(document.body.getAttribute('data-review-scope')||document.body.getAttribute('data-viewed-scope')||'');}
   function currentReviewPosition(){
-    var view=filesView&&!filesView.hidden?'files':'tour';
+    var view=currentView();
     var panel=view==='files'?filePanels[selectedFile]:stepPanels[active];
     var scroll=0;
     if(view==='files'){var detail=$('#ds-file-detail');scroll=detail?detail.scrollTop:0;}
@@ -2599,7 +2637,7 @@ const PAGE_JS_HEAD = `
   }
   function revealResumeReview(){
     var state=storedReviewPosition(),btn=$('[data-resume-review]'),label=$('[data-resume-review-label]');
-    var text=describeReviewPosition(state),inFiles=filesView&&!filesView.hidden;if(!btn)return;
+    var text=describeReviewPosition(state),inFiles=currentView()==='files';if(!btn)return;
     btn.hidden=!text||!inFiles;
     if(text){if(label)label.textContent=text;btn.title=text;btn.setAttribute('aria-label',text);}
     else{btn.removeAttribute('title');btn.removeAttribute('aria-label');}
@@ -2607,14 +2645,15 @@ const PAGE_JS_HEAD = `
   function restoreReviewPosition(){
     var state=storedReviewPosition();if(!state)return;
     restoringReviewPosition=true;
-    if(state.view==='files'){
+    if(state.view==='review'){
+      setView('review');restoringReviewPosition=false;
+    }else if(state.view==='files'){
       setView('files');if(state.file)selectFileByPath(state.file);
       setTimeout(function(){var d=$('#ds-file-detail');if(d)d.scrollTop=Number(state.scroll)||0;restoringReviewPosition=false;},0);
     }else{
       setView('tour');setActive(Number(state.step)||0,false);
       setTimeout(function(){var p=stepPanels[active],d=p&&$('.ds-diffscroll',p);if(d)d.scrollTop=Number(state.scroll)||0;restoringReviewPosition=false;},0);
     }
-    setReviewMenu(false);
   }
 `;
 
@@ -2682,21 +2721,99 @@ const PAGE_JS_TAIL = `
   }
   var trustLoadPromise=null;
   function loadTrustEvidence(){
-    if(!drawer||drawer.getAttribute('data-trust-pending')!=='1'||trustLoadPromise)return;
-    var currentBody=$('.ds-drawer-body',drawer),pending=currentBody&&$('.ds-trust-clean',currentBody);
+    var host=$('[data-trust-evidence]');
+    if(!host||host.getAttribute('data-trust-pending')!=='1')return Promise.resolve();
+    // Return the in-flight promise rather than bailing: gotoReview chains a
+    // scroll on this, and the fetch replaces innerHTML — scrolling to a card
+    // that is about to be swapped out lands the reviewer nowhere.
+    if(trustLoadPromise)return trustLoadPromise;
+    var pending=$('.ds-trust-clean',host);
     if(pending){pending.textContent='Calculating story coverage from the bounded diff…';pending.setAttribute('aria-busy','true');}
     trustLoadPromise=fetch(reviewPageUrl('/api/review/trust')).then(reviewLazyText).then(function(html){
-      var parsed=new DOMParser().parseFromString(html,'text/html'),nextBody=parsed.querySelector('.ds-drawer-body');
-      if(!nextBody||!currentBody)throw new Error('Trust evidence response was incomplete.');
-      currentBody.innerHTML=nextBody.innerHTML;
-      drawer.setAttribute('data-trust-pending','0');
+      var parsed=new DOMParser().parseFromString(html,'text/html'),next=parsed.querySelector('[data-trust-evidence]');
+      if(!next)throw new Error('Trust evidence response was incomplete.');
+      host.innerHTML=next.innerHTML;
+      host.setAttribute('data-trust-pending','0');
+      // This response carries the same verdict the pill is waiting on. Settle the
+      // pill from it rather than leaving it spinning next to its own answer.
+      var verdict=next.getAttribute('data-trust-uncovered');
+      if(verdict)applyCoverageVerdict(Number(verdict||0),next.getAttribute('data-trust-storyless')==='1');
       syncExclusionAcknowledgement();
     }).catch(function(err){
-      if(currentBody)currentBody.innerHTML='<div class="ds-diffnote" role="alert">'+reviewLazyMessage(err,'Could not calculate coverage.')+(err&&err.reloadRequired?' <button type="button" class="ds-btn ds-btn-ghost" data-review-reload>Reload review</button>':'')+'</div>';
+      host.innerHTML='<div class="ds-diffnote" role="alert">'+reviewLazyMessage(err,'Could not calculate coverage.')+(err&&err.reloadRequired?' <button type="button" class="ds-btn ds-btn-ghost" data-review-reload>Reload review</button>':'')+'</div>';
+      markCoverageUnavailable();
     }).finally(function(){trustLoadPromise=null;});
+    return trustLoadPromise;
   }
-  function openDrawer(){showDrawerRoot(drawer);loadTrustEvidence();}
-  function closeDrawer(){hideDrawerRoot(drawer);}
+  // ---- coverage verdict ----
+  // The page renders from a lazy file index, so at first paint it cannot know
+  // whether the story explains every changed range. The pill says so honestly in
+  // a neutral unknown state, and this resolves it in the background, then writes
+  // the answer back into the pill AND the review chip's clean state — without
+  // which the chip could never legitimately go green.
+  var coverageResolved=false,coveragePromise=null;
+  function applyCoverageVerdict(uncovered,storyless){
+    var pill=$('.ds-trustpill');
+    if(!pill||!pill.classList.contains('is-unknown'))return;
+    coverageResolved=true;
+    var reviewBtn=$('[data-review-menu]');
+    if(reviewBtn)reviewBtn.setAttribute('data-unexplained-count',String(uncovered));
+    var excluded=Number(pill.getAttribute('data-trust-excluded')||0),focused=pill.getAttribute('data-trust-focused')==='1';
+    pill.classList.remove('is-unknown');
+    if(uncovered>0&&!storyless){
+      pill.classList.remove('is-clean');
+      pill.innerHTML='<span class="ds-tri">▲</span><span><b>'+uncovered+'</b> '+(uncovered===1?'change':'changes')+' not explained by the story</span><span class="ds-review-row-arrow">›</span>';
+    }else{
+      pill.classList.add('is-clean');
+      pill.innerHTML='<span class="ds-check">✓</span><span>'+(focused?'Story covers its selected scope':'Story covers the rendered diff')+(excluded?' · <b>'+excluded+'</b> excluded '+(excluded===1?'file':'files')+' to inspect':'')+'</span><span class="ds-review-row-arrow">›</span>';
+    }
+    refreshCount();
+  }
+  // A check that could not run stays unknown — never silently clean.
+  function markCoverageUnavailable(){
+    var pill=$('.ds-trustpill');
+    if(!pill||!pill.classList.contains('is-unknown'))return;
+    var spin=$('.ds-tri-spin',pill);if(spin)spin.classList.remove('ds-tri-spin');
+    var text=$('[data-trust-pill-text]',pill);if(text)text.textContent='Coverage unchecked · open to retry';
+  }
+  function resolveCoverage(){
+    if(coverageResolved||coveragePromise)return;
+    var pill=$('.ds-trustpill');
+    if(!pill||!pill.classList.contains('is-unknown'))return;
+    coveragePromise=fetch(reviewPageUrl('/api/review/coverage')).then(function(res){
+      if(!res.ok)throw new Error('Coverage check failed.');
+      return res.json();
+    }).then(function(verdict){
+      applyCoverageVerdict(Number((verdict&&verdict.uncovered)||0),!!(verdict&&verdict.storyless));
+    }).catch(function(){
+      markCoverageUnavailable();
+    }).finally(function(){coveragePromise=null;});
+  }
+  // Coverage costs a full diff read on the server, so it waits for first paint
+  // rather than competing with it.
+  function scheduleCoverageResolve(){
+    if(typeof requestIdleCallback==='function')requestIdleCallback(resolveCoverage,{timeout:2000});
+    else setTimeout(resolveCoverage,400);
+  }
+  // Every affordance that used to open the trust drawer now points at a section
+  // of the review page instead, so nothing that had an entrance loses one.
+  function gotoReview(section,path){
+    pendingReviewSection=true;
+    setView('review');
+    loadTrustEvidence().then(function(){
+      pendingReviewSection=false;
+      var dest=section?$('[data-review-section="'+section+'"]'):null;
+      if(path){var card=$('[data-excluded-file="'+path+'"]');if(card)dest=card;}
+      if(!dest){focusElementWithoutScroll(reviewView);return;}
+      // Scroll the review panel itself. The blunt DOM helper this replaces also
+      // scrolls horizontal ancestors, which would shove the diff sideways.
+      if(reviewView){
+        var top=reviewView.scrollTop+dest.getBoundingClientRect().top-reviewView.getBoundingClientRect().top-12;
+        reviewView.scrollTo({top:Math.max(0,top),behavior:prefersReducedMotion()?'auto':'smooth'});
+      }
+      focusElementWithoutScroll(dest.hasAttribute('tabindex')?dest:(closest(dest,'[data-review-section]')||dest));
+    });
+  }
   function setDriftExpanded(on){$all('[data-drift-open]').forEach(function(button){button.setAttribute('aria-expanded',on?'true':'false');});}
   function invalidateDriftRequest(){
     driftRequestToken++;
@@ -2799,24 +2916,14 @@ const PAGE_JS_TAIL = `
     var after=visible.find(function(item){return Number(item.getAttribute('data-file-index'))>selectedFile;})||visible[0];
     setView('files');selectFile(Number(after.getAttribute('data-file-index')));collapseCompactSidebar();
   }
-  function setFeedbackPanel(panel){
-    if(!feedbackDrawer)return;
-    $all('[data-feedback-panel]',feedbackDrawer).forEach(function(btn){var active=btn.getAttribute('data-feedback-panel')===panel;btn.classList.toggle('is-active',active);btn.setAttribute('aria-selected',active?'true':'false');btn.tabIndex=active?0:-1;});
-    $all('[data-feedback-view]',feedbackDrawer).forEach(function(view){view.hidden=view.getAttribute('data-feedback-view')!==panel;});
-    var tools=$('[data-feedback-tools]',feedbackDrawer);if(tools)tools.hidden=panel!=='feedback';
-  }
   function challengeKey(){return 'ds-challenge:'+(document.body.getAttribute('data-review-scope')||'')+':'+(document.body.getAttribute('data-current-diff-hash')||'');}
   function loadChallengeChecks(){var saved={};try{saved=JSON.parse(localStorage.getItem(challengeKey())||'{}')||{};}catch(e){}$all('[data-challenge-check]').forEach(function(input){input.checked=!!saved[input.getAttribute('data-challenge-check')];});}
   function saveChallengeChecks(){var saved={};$all('[data-challenge-check]').forEach(function(input){if(input.checked)saved[input.getAttribute('data-challenge-check')]=1;});try{localStorage.setItem(challengeKey(),JSON.stringify(saved));}catch(e){}}
-  function openFeedbackDrawer(panel){
-    setReviewMenu(false);if(!feedbackDrawer)return;showDrawerRoot(feedbackDrawer);setFeedbackPanel(panel||'feedback');
-  }
-  function closeFeedbackDrawer(){hideDrawerRoot(feedbackDrawer);}
   function filterFeedback(filter){
-    if(!feedbackDrawer)return;
+    if(!reviewView)return;
     activeFeedbackFilter=filter||'all';
-    $all('[data-feedback-filter]',feedbackDrawer).forEach(function(btn){var active=btn.getAttribute('data-feedback-filter')===activeFeedbackFilter;btn.classList.toggle('is-active',active);btn.setAttribute('aria-pressed',active?'true':'false');});
-    $all('[data-feedback-card]',feedbackDrawer).forEach(function(card){
+    $all('[data-feedback-filter]',reviewView).forEach(function(btn){var active=btn.getAttribute('data-feedback-filter')===activeFeedbackFilter;btn.classList.toggle('is-active',active);btn.setAttribute('aria-pressed',active?'true':'false');});
+    $all('[data-feedback-card]',reviewView).forEach(function(card){
       var show=activeFeedbackFilter==='all'||card.getAttribute('data-feedback-status')===activeFeedbackFilter||card.getAttribute('data-feedback-severity')===activeFeedbackFilter||(activeFeedbackFilter==='changed'&&(card.getAttribute('data-feedback-anchor')==='changed'||card.getAttribute('data-feedback-anchor')==='moved'));
       card.hidden=!show;
     });
@@ -2856,7 +2963,7 @@ const PAGE_JS_TAIL = `
     if(reply){var rendered=markdownBlock('ds-feedback-reply ds-md',reply.text);rendered.insertBefore(el('span','',BRAND),rendered.firstChild);var actions=$('.ds-feedback-actions',card);card.insertBefore(rendered,actions||null);}
   }
   function syncFeedbackCards(){
-    if(!feedbackDrawer)return;var list=$('[data-feedback-view="feedback"]',feedbackDrawer);if(!list)return;
+    if(!reviewView)return;var list=$('[data-feedback-view="feedback"]',reviewView);if(!list)return;
     var old={};$all('[data-feedback-card]',list).forEach(function(card){old[card.getAttribute('data-comment-id')]={node:card,anchor:card.getAttribute('data-feedback-anchor')||'current'};});
     list.textContent='';
     if(!allComments.length){list.appendChild(el('div','ds-drawer-empty','No review feedback yet.'));filterFeedback(activeFeedbackFilter);return;}
@@ -2873,7 +2980,7 @@ const PAGE_JS_TAIL = `
   }
   function gotoComment(id){
     var card=$('[data-feedback-card][data-comment-id="'+id+'"]');if(!card)return;
-    var file=card.getAttribute('data-comment-file'),step=card.getAttribute('data-comment-step');closeFeedbackDrawer();
+    var file=card.getAttribute('data-comment-file'),step=card.getAttribute('data-comment-step');
     if(step){setView('tour');var stepCard=$('.ds-stepcard[data-step-id="'+step+'"]');if(stepCard)setActive(Number(stepCard.getAttribute('data-step-index')));}
     else{setView('files');selectFileByPath(file);}
     var attempt=0;
@@ -2890,7 +2997,7 @@ const PAGE_JS_TAIL = `
     setTimeout(openWhenMounted,80);
   }
   function openCommands(){
-    setReviewMenu(false);if(!commandRoot||!commandRoot.hidden)return;
+    if(!commandRoot||!commandRoot.hidden)return;
     commandReturnFocus=document.activeElement;commandRoot.hidden=false;activateModal(commandRoot,commandReturnFocus);setTimeout(function(){if(topModalRoot()!==commandRoot)return;var firstCommand=$('[data-command]',commandRoot),dialog=$('[role="dialog"]',commandRoot);if(firstCommand)firstCommand.focus();else if(dialog&&dialog.focus)dialog.focus();},0);
   }
   function closeCommands(){
@@ -2900,7 +3007,7 @@ const PAGE_JS_TAIL = `
   function runCommand(id){
     closeCommands();
     if(id==='story'){setView('tour');return;}if(id==='files'){setView('files');var q=$('[data-file-search]');if(q)q.focus();return;}
-    if(id==='feedback'){openFeedbackDrawer('feedback');return;}
+    if(id==='review'){gotoReview('notes');return;}
     if(id==='next-unviewed'){nextUnviewedFile();return;}
     if(id==='toggle-viewed'){var panel=filePanels[selectedFile];if(panel)toggleViewed(panel.getAttribute('data-file'));return;}
     if(id==='read-aloud'){toggleReadAloud();return;}
@@ -3429,7 +3536,7 @@ const PAGE_JS_TAIL = `
     fetch('/api/agents').then(function(r){return r.json();}).then(function(d){
       var agents=addressAgentChoices(d.agents||[]);if(!agents.length){toast('No Claude or Codex CLI found on PATH.','error');return;}
       var root=acRoot();if(!root)return;
-      closeDrawer();setBusy(true);agentBusy=true;
+      setBusy(true);agentBusy=true;
       root.setAttribute('data-variant','floating');root.hidden=false;
       var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;acAbort=ctrl;
       var panel=new ProgressPanel(root,{
@@ -3779,7 +3886,6 @@ const PAGE_JS_TAIL = `
     var sendableN=collectOpenIds().length,aa=$('[data-address-all]');if(aa&&!agentBusy)aa.disabled=sendableN===0;
     var co=$('[data-copy-comments="open"]');if(co)co.disabled=sendableN===0;
     var totalN=commentIds().length,ca=$('[data-copy-comments="all"]');if(ca)ca.disabled=totalN===0;
-    var fb=$('[data-feedback-open="feedback"]');if(fb)fb.disabled=totalN===0;
     var fc=$('[data-feedback-count]');if(fc){fc.textContent=totalN;fc.hidden=totalN===0;}
     if(fileItems&&fileItems.length)syncFileCommentFlags();
   }
@@ -3854,7 +3960,6 @@ const PAGE_JS_TAIL = `
   function onClick(e){
     var t=e.target,b;
     if(!closest(t,'.ds-story-tune'))closeStoryTuneMenus();
-    var rp=$('[data-review-menu-pop]');if(rp&&!rp.hidden&&!closest(t,'.ds-review-menu-wrap'))setReviewMenu(false);
     b=closest(t,'[data-vscode-symbol]');if(b&&(e.metaKey||e.ctrlKey)){e.preventDefault();openSymbolInVSCode(b);return;}
     b=closest(t,'[data-review-reload]');if(b){location.reload();return;}
     b=closest(t,'[data-selection-action]');if(b){var ctx=selectionContext;closeSelectionMenu();if(ctx)openComposer(ctx.anchorRow,b.getAttribute('data-selection-action'),ctx);return;}
@@ -3867,18 +3972,16 @@ const PAGE_JS_TAIL = `
     }
     b=closest(t,'[data-sidebar-scrim]');if(b){closeCompactSidebar(true);return;}
     b=closest(t,'[data-view]');if(b){setView(b.getAttribute('data-view'));return;}
+    b=closest(t,'[data-goto-review]');if(b){gotoReview(b.getAttribute('data-goto-review'),b.getAttribute('data-goto-excluded'));return;}
     b=closest(t,'[data-file-filter]');if(b){setFileFilter(b.getAttribute('data-file-filter'));return;}
     b=closest(t,'[data-next-unviewed]');if(b){nextUnviewedFile();return;}
     b=closest(t,'[data-retry-file-panel]');if(b){var lazyPanel=closest(b,'.ds-filepanel');if(lazyPanel){lazyPanel.innerHTML='<div class="ds-filepanel-loading" data-file-panel-lazy role="status">Loading file review…</div>';loadFilePanel(lazyPanel);}return;}
     b=closest(t,'[data-retry-story-step]');if(b){var lazyStep=closest(b,'.ds-step'),stepIndex=Number(b.getAttribute('data-retry-story-step'));if(lazyStep){lazyStep.setAttribute('data-step-lazy','1');loadStoryStep(stepIndex,function(ok){if(ok&&active===stepIndex)activateStep(stepIndex,true);});}return;}
-    b=closest(t,'[data-feedback-open]');if(b){openFeedbackDrawer(b.getAttribute('data-feedback-open'));return;}
     b=closest(t,'[data-drift-open]');if(b){openDriftDrawer();return;}
     b=closest(t,'[data-drift-close]');if(b){closeDriftDrawer();return;}
     b=closest(t,'[data-drift-back]');if(b&&driftDrawer){showDriftList();return;}
     b=closest(t,'[data-drift-file]');if(b){loadDriftFile(b);return;}
     b=closest(t,'[data-drift-retry]');if(b&&driftDrawer){var activeDrift=$('.ds-drift-file.is-active',driftDrawer);if(activeDrift){activeDrift.removeAttribute('data-drift-loaded');loadDriftFile(activeDrift);}return;}
-    b=closest(t,'[data-feedback-close]');if(b){closeFeedbackDrawer();return;}
-    b=closest(t,'[data-feedback-panel]');if(b){setFeedbackPanel(b.getAttribute('data-feedback-panel'));return;}
     b=closest(t,'[data-feedback-filter]');if(b){filterFeedback(b.getAttribute('data-feedback-filter'));return;}
     b=closest(t,'[data-challenge-check]');if(b){saveChallengeChecks();return;}
     b=closest(t,'[data-accept-fix]');if(b){updateCommentStatus(b.getAttribute('data-accept-fix'),'resolved');return;}
@@ -3914,7 +4017,6 @@ const PAGE_JS_TAIL = `
     b=closest(t,'input[data-story-file]');if(b){updateStoryScopeCount();return;}
     b=closest(t,'[data-generate-story]');if(b){generateStory(b);return;}
     b=closest(t,'[data-reload-diff]');if(b){b.disabled=true;b.classList.add('is-loading');b.setAttribute('aria-busy','true');b.setAttribute('aria-label','Reloading diff');var reloadLabel=$('[data-reload-label]',b);if(reloadLabel)reloadLabel.textContent='Reloading';requestAnimationFrame(function(){location.reload();});return;}
-    b=closest(t,'[data-review-menu]');if(b){if(rp)setReviewMenu(rp.hidden);return;}
     b=closest(t,'[data-rail-beat]');if(b){var rbi=parseInt(b.getAttribute('data-rail-step-index')||'-1',10),rbg=parseInt(b.getAttribute('data-focus-group')||'0',10);if(rbi===active)selectStoryFocus(rbi,rbg,true);collapseCompactSidebar();return;}
     b=closest(t,'[data-beat-move]');if(b){var bmp=beatPanel(b);movePanelBeat(bmp,parseInt(b.getAttribute('data-beat-move')||'0',10));return;}
     b=closest(t,'[data-open-full-diff]');if(b){var file=b.getAttribute('data-open-full-diff')||'',item=fileItems.find(function(candidate){return candidate.getAttribute('data-file-path')===file;});setView('files');if(item)selectFile(Number(item.getAttribute('data-file-index')));collapseCompactSidebar();return;}
@@ -3928,15 +4030,13 @@ const PAGE_JS_TAIL = `
     b=closest(t,'[data-delete]');if(b){deleteComment(closest(b,'.ds-comment'));return;}
     b=closest(t,'[data-thread-add]');if(b){sendThreadMessage(closest(b,'.ds-comment'),false);return;}
     b=closest(t,'[data-thread-send]');if(b){sendThreadMessage(closest(b,'.ds-comment'),true);return;}
-    b=closest(t,'[data-agent-target-select]');if(b){setReviewMenu(false);chooseAddressAgent(null,null,null,false);return;}
-    b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;setReviewMenu(false);sendToAgent('all');return;}
-    b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;setReviewMenu(false);copyComments(b.getAttribute('data-copy-comments'));return;}
+    b=closest(t,'[data-agent-target-select]');if(b){chooseAddressAgent(null,null,null,false);return;}
+    b=closest(t,'[data-address-all]');if(b){if(b.disabled)return;sendToAgent('all');return;}
+    b=closest(t,'[data-copy-comments]');if(b){if(b.disabled)return;copyComments(b.getAttribute('data-copy-comments'));return;}
     b=closest(t,'[data-change-prev]');if(b){jumpRelativeChange(closest(b,'.ds-filepanel')||closest(b,'.ds-diff'),-1);return;}
     b=closest(t,'[data-change-next]');if(b){jumpRelativeChange(closest(b,'.ds-filepanel')||closest(b,'.ds-diff'),1);return;}
     b=closest(t,'[data-expand]');if(b){expandGap(b);return;}
     b=closest(t,'[data-mode]');if(b){var modeHolder=closest(b,'[data-story-diff]');if(modeHolder)modeHolder.setAttribute('data-mode-user-set','1');setMode(b);return;}
-    b=closest(t,'[data-trust-open]');if(b){openDrawer();return;}
-    b=closest(t,'[data-trust-close]');if(b){closeDrawer();return;}
     b=closest(t,'[data-exclusions-ack]');if(b){setExclusionsAcknowledged(!!b.checked);return;}
     b=closest(t,'[data-inspect-excluded]');if(b){
       var excludedCard=closest(b,'[data-excluded-file]'),preview=excludedCard&&$('[data-excluded-preview]',excludedCard),excludedFile=b.getAttribute('data-inspect-excluded')||'';if(!preview)return;
@@ -3944,8 +4044,8 @@ const PAGE_JS_TAIL = `
       b.disabled=true;preview.hidden=false;preview.innerHTML='<div class="ds-diffnote">Loading excluded file preview…</div>';
       fetch(reviewPageUrl('/api/review/excluded-file?file='+encodeURIComponent(excludedFile))).then(reviewLazyText).then(function(html){preview.innerHTML=html;preview.setAttribute('data-loaded','1');b.disabled=false;b.textContent='Hide preview';}).catch(function(err){preview.innerHTML='<div class="ds-diffnote" role="alert">'+reviewLazyMessage(err,'Could not load this excluded file.')+(err&&err.reloadRequired?' <button type="button" class="ds-btn ds-btn-ghost" data-review-reload>Reload review</button>':'')+'</div>';b.disabled=false;b.textContent=err&&err.reloadRequired?'Reload required':'Retry preview';});return;
     }
-    b=closest(t,'[data-goto-step]');if(b){closeDrawer();closeFeedbackDrawer();closeDriftDrawer();setView('tour');setActive(Number(b.getAttribute('data-goto-step')));collapseCompactSidebar();return;}
-    b=closest(t,'[data-goto-file]');if(b){closeDrawer();closeFeedbackDrawer();closeDriftDrawer();setView('files');selectFileByPath(b.getAttribute('data-goto-file'));collapseCompactSidebar();return;}
+    b=closest(t,'[data-goto-step]');if(b){closeDriftDrawer();setView('tour');setActive(Number(b.getAttribute('data-goto-step')));collapseCompactSidebar();return;}
+    b=closest(t,'[data-goto-file]');if(b){closeDriftDrawer();setView('files');selectFileByPath(b.getAttribute('data-goto-file'));collapseCompactSidebar();return;}
     b=closest(t,'[data-explain]');if(b){repairStory('explain',{file:b.getAttribute('data-story-file'),line:Number(b.getAttribute('data-story-line')||0)});return;}
     b=closest(t,'[data-story-repair]');if(b){repairStory(b.getAttribute('data-story-repair'),{file:b.getAttribute('data-story-file'),stepId:b.getAttribute('data-story-step')});var det=closest(b,'details');if(det)det.open=false;return;}
     b=closest(t,'.ds-stepcard');if(b){setActive(Number(b.getAttribute('data-step-index')));collapseCompactSidebar();return;}
@@ -3956,9 +4056,9 @@ const PAGE_JS_TAIL = `
         e.preventDefault();openTune.open=false;var tuneSummary=$('summary',openTune);if(tuneSummary)tuneSummary.focus();return;
       }
       var escapeModal=topModalRoot();if(escapeModal){
-        e.preventDefault();if(escapeModal===$('.ds-agent-chooser'))removeAddressAgentChooser();else if(escapeModal===$('.ds-composer'))removeComposer(escapeModal,true);else if(escapeModal===commandRoot)closeCommands();else if(escapeModal===feedbackDrawer)closeFeedbackDrawer();else if(escapeModal===driftDrawer)closeDriftDrawer();else if(escapeModal===drawer)closeDrawer();return;
+        e.preventDefault();if(escapeModal===$('.ds-agent-chooser'))removeAddressAgentChooser();else if(escapeModal===$('.ds-composer'))removeComposer(escapeModal,true);else if(escapeModal===commandRoot)closeCommands();else if(escapeModal===driftDrawer)closeDriftDrawer();return;
       }
-      setReviewMenu(false);closeSelectionMenu();closeCommentSurface(true);
+      closeSelectionMenu();closeCommentSurface(true);
       if(compactScreen()&&!document.body.classList.contains('ds-rail-collapsed'))closeCompactSidebar(true);
       return;
     }
@@ -3987,16 +4087,14 @@ const PAGE_JS_TAIL = `
       }
     }
     var viewTab=closest(e.target,'[data-view]');
-    if(viewTab&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
-      var nextView=viewTab.getAttribute('data-view')==='tour'?'files':'tour';
+    if(viewTab&&(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='Home'||e.key==='End')){
+      // Wrapping N-way walk: a two-way flip stopped being correct at three tabs.
+      var tabs=$all('.ds-tab'),ti=tabs.indexOf(viewTab);
+      var nextTab=e.key==='Home'?tabs[0]:e.key==='End'?tabs[tabs.length-1]:tabs[(ti+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];
+      if(nextTab){var nextView=nextTab.getAttribute('data-view');
       setView(nextView,true);
-      var nextTab=$('[data-view="'+nextView+'"]');if(nextTab)nextTab.focus();
-      e.preventDefault();return;
-    }
-    var feedbackTab=closest(e.target,'[data-feedback-panel]');
-    if(feedbackTab&&(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='Home'||e.key==='End')){
-      var feedbackTabs=$all('[data-feedback-panel]',feedbackDrawer),fi=feedbackTabs.indexOf(feedbackTab),nextFeedback=e.key==='Home'?feedbackTabs[0]:e.key==='End'?feedbackTabs[feedbackTabs.length-1]:feedbackTabs[(fi+(e.key==='ArrowRight'?1:-1)+feedbackTabs.length)%feedbackTabs.length];
-      if(nextFeedback){e.preventDefault();setFeedbackPanel(nextFeedback.getAttribute('data-feedback-panel'));nextFeedback.focus();return;}
+      nextTab.focus();
+      e.preventDefault();}return;
     }
     var railHandle=closest(e.target,'[data-sidebar-resizer]');
     if(railHandle&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
@@ -4020,14 +4118,13 @@ const PAGE_JS_TAIL = `
     var next=e.key==='j',prev=e.key==='k';
     if(next||prev){
       if(isTextEntryTarget(e.target))return;
-      if(drawer&&!drawer.hidden)return;
+      if(currentView()==='review')return;
       e.preventDefault();
       if(filesView&&!filesView.hidden)selectFile(selectedFile+(next?1:-1));
       else if(tourView&&!tourView.hidden)setActive(active+(next?1:-1));
       return;
     }
     if((e.key==='v'||e.key==='V')&&!isTextEntryTarget(e.target)&&filesView&&!filesView.hidden){
-      if(drawer&&!drawer.hidden)return;
       var vp=filePanels[selectedFile];
       if(vp){toggleViewed(vp.getAttribute('data-file'));e.preventDefault();return;}
     }
@@ -4126,7 +4223,7 @@ const PAGE_JS_TAIL = `
     $all('.ds-difftoolbar,.ds-filepanel-head').forEach(function(el){stickyObserver.observe(el);});
   }
   function init(){
-    tourView=$('#ds-view-tour');filesView=$('#ds-view-files');drawer=$('#ds-trust-drawer');feedbackDrawer=$('#ds-feedback-drawer');driftDrawer=$('#ds-drift-drawer');commandRoot=$('[data-command-root]');toastEl=$('#ds-toast');selectionMenu=$('[data-selection-menu]');filmThread=$('[data-filmthread]');filmTooltip=$('[data-filmthread-tooltip]');
+    tourView=$('#ds-view-tour');filesView=$('#ds-view-files');reviewView=$('#ds-view-review');driftDrawer=$('#ds-drift-drawer');commandRoot=$('[data-command-root]');toastEl=$('#ds-toast');selectionMenu=$('[data-selection-menu]');filmThread=$('[data-filmthread]');filmTooltip=$('[data-filmthread-tooltip]');
     stepPanels=$all('.ds-step');stepCards=$all('.ds-stepcard');total=stepPanels.length||1;
     adoptStepDocks();
     filePanels=$all('.ds-filepanel');fileItems=$all('.ds-fileitem');
@@ -4169,6 +4266,7 @@ const PAGE_JS_TAIL = `
     $all('.ds-filepanel,.ds-diff').forEach(updateChangeNav);
     watchStickyMetrics();
     refreshCount();
+    scheduleCoverageResolve();
     loadViewed();invalidateChangedViewed();syncViewed();applyFileFilters();syncExclusionAcknowledgement();loadChallengeChecks();
     var fileSearch=$('[data-file-search]');if(fileSearch)fileSearch.addEventListener('input',searchFilesLazily);
     reviewPositionReady=true;restoreReviewPosition();

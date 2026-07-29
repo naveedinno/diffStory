@@ -28,8 +28,8 @@ const definitions = [
   ['review','Concept primer','Rendered mental model between code-review stops.','concept-step','light','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — unified','Complete file inventory in the primary unified-diff mode.','files-unified','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — split','Side-by-side review with the resizable before/after divider.','files-split','light','desktop','/repo/diffstory-atlas-fixture/review'],
-  ['review','Review status menu','Coverage, notes, challenge checks, and agent destination.','review-menu','dark','desktop','/repo/diffstory-atlas-fixture/review'],
-  ['review','Notes drawer','All review notes, anchors, severity, and verification filters.','notes-drawer','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Review page','Coverage, notes, challenge checks, and agent destination — as a page.','review-menu','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Review notes','All review notes, anchors, severity, and verification filters.','notes-drawer','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Anchored conversation','A comment thread placed back beside the code it discusses.','conversation','light','desktop','/repo/diffstory-atlas-fixture/review'],
   ['communication','Choose agent task','New and recent Codex tasks with repository context.','task-picker','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['communication','Agent working','Live plan, current activity, destination, and stop control.','agent-running','dark','desktop','/repo/diffstory-atlas-fixture/review'],
@@ -62,15 +62,15 @@ function setStory(visible){if(visible){if(existsSync(STORY_HOLD))copyFileSync(ST
 function themeInit(theme){return `(function(){try{localStorage.clear();localStorage.setItem('ds-theme','${theme}');localStorage.setItem('ds-sidebar-collapsed','0')}catch(e){}})()`;}
 async function settled(page){await page.waitForLoadState('domcontentloaded');await page.waitForFunction(()=>document.fonts?document.fonts.status==='loaded':true);await page.waitForTimeout(280);}
 async function click(page,selector){const target=page.locator(selector).first();await target.waitFor({state:'attached'});await target.evaluate((element)=>element.click());await page.waitForTimeout(240);}
-async function assertReviewMenuVisible(page){
+async function assertReviewPageVisible(page){
   const result=await page.evaluate(()=>{
-    const pop=document.querySelector('[data-review-menu-pop]');
-    if(!pop||pop.hidden)return {visible:false,reason:'popover is missing or hidden'};
-    const rect=pop.getBoundingClientRect(),wrap=pop.parentElement?.getBoundingClientRect(),button=document.querySelector('[data-review-menu]')?.getBoundingClientRect(),x=rect.left+rect.width/2,y=rect.top+Math.min(96,rect.height/2);
-    const hit=document.elementFromPoint(x,y);
-    return {visible:!!hit&&(hit===pop||pop.contains(hit)),reason:`popover ${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.left)},${Math.round(rect.top)}; wrap ${Math.round(wrap?.width||0)}x${Math.round(wrap?.height||0)} at ${Math.round(wrap?.left||0)},${Math.round(wrap?.top||0)}; button at ${Math.round(button?.left||0)},${Math.round(button?.top||0)}; computed top ${getComputedStyle(pop).top}; offset parent ${pop.offsetParent?.className||'none'}; hit ${hit?.className||hit?.tagName||'nothing'} at ${Math.round(x)},${Math.round(y)}`};
+    const view=document.querySelector('#ds-view-review');
+    if(!view||view.hidden)return {visible:false,reason:'review view is missing or hidden'};
+    const evidence=document.querySelector('[data-trust-evidence]');
+    const rect=view.getBoundingClientRect();
+    return {visible:rect.width>0&&rect.height>0&&!!evidence,reason:`review view ${Math.round(rect.width)}x${Math.round(rect.height)}; evidence ${evidence?'present':'missing'}`};
   });
-  if(!result.visible)throw new Error(`Review menu is clipped or covered: ${result.reason}`);
+  if(!result.visible)throw new Error(`Review page did not render: ${result.reason}`);
 }
 async function assertReviewStageGeometry(page,expectSideControls=false){
   const result=await page.evaluate((checkControls)=>{
@@ -122,13 +122,13 @@ async function main(){
       }else if(def.state==='files-unified'||def.state==='files-split'){
         await click(page,'#ds-tab-files');if(def.state==='files-split'){await click(page,'.ds-filepanel:not([hidden]) [data-mode="split"]');await page.waitForFunction(()=>document.querySelector('.ds-filepanel:not([hidden]) [data-split-inner]')?.getAttribute('aria-busy')==='false');}
       }else if(def.state==='review-menu'){
-        await click(page,'[data-review-menu]');await assertReviewMenuVisible(page);
+        await click(page,'#ds-tab-review');await assertReviewPageVisible(page);
       }else if(def.state==='notes-drawer'||def.state==='mobile-notes'){
-        await click(page,'[data-review-menu]');await click(page,'[data-feedback-open="feedback"]');
+        await click(page,'#ds-tab-review');
       }else if(def.state==='conversation'){
-        await click(page,'[data-review-menu]');await click(page,'[data-feedback-open="feedback"]');await click(page,'[data-goto-comment]');await page.waitForFunction(()=>!!document.querySelector('.ds-thread.is-open .ds-comment-card'));
+        await click(page,'#ds-tab-review');await click(page,'[data-goto-comment]');await page.waitForFunction(()=>!!document.querySelector('.ds-thread.is-open .ds-comment-card'));
       }else if(def.state==='task-picker'){
-        await click(page,'[data-review-menu]');await click(page,'[data-agent-target-select]');await page.waitForSelector('.ds-agent-task-option');
+        await click(page,'#ds-tab-review');await click(page,'[data-agent-target-select]');await page.waitForSelector('.ds-agent-task-option');
       }else if(def.state.startsWith('agent-')){
         await progressState(page,def.state.slice('agent-'.length));
       }
