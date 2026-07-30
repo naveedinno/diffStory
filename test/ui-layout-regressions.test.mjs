@@ -95,12 +95,11 @@ test('a code step draws exactly one frame around the diff', () => {
     /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*border:1px solid var\(--line-soft\)/,
   );
   assert.match(diffSource, /\.ds-step\.is-code-step \.ds-diff\{border:0;border-radius:0;box-shadow:none\}/);
-  // Nothing may reintroduce a ring on the card: the accent states moved to the island.
+  // Nothing may reintroduce a ring on the card either — the one frame is the island's.
   assert.doesNotMatch(diffSource, /\.ds-step\.is-(story|voice)-active[^{]*\.ds-diff\{/);
-  // Both accent rules must carry :not([hidden]) — without it they under-score the
-  // island rule's (1,3,0) and the border color silently stays --line-soft.
-  assert.match(source, /#ds-view-tour>\.ds-step\.is-story-active:not\(\.is-voice-active\):not\(\[hidden\]\)\{border-color:/);
-  assert.match(source, /#ds-view-tour>\.ds-step\.is-voice-active:not\(\[hidden\]\)\{border-color:/);
+  // The one frame stays neutral in every state. Reading-here and speaking-now tint
+  // the focus rows and the dock; a coloured edge on a window-wide island is noise.
+  assert.doesNotMatch(source, /#ds-view-tour>\.ds-step\.is-(story|voice)-active[^{]*\{[^}]*(border-color|box-shadow):/);
   // Full-bleed: no side gutter between the island edge and the code.
   assert.match(source, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:8px 0 0/);
   assert.doesNotMatch(source, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:\d+px [1-9]/);

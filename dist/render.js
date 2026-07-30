@@ -136,8 +136,17 @@ export function renderPage(input) {
                     : uncoveredCount
                         ? 'uncovered'
                         : 'clean';
+    // The pill's arrow lands on the section that owns the fact it reports, not on
+    // a generic "evidence" anchor the reviewer then has to scan.
+    const pillSection = pillState === 'divergent'
+        ? 'staged'
+        : pillState === 'excluded'
+            ? 'exclusions'
+            : pillState === 'uncovered'
+                ? 'unexplained'
+                : 'evidence';
     const trustPill = showTrustPill
-        ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${pillState === 'pending' ? ' is-unknown' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-goto-review="evidence" data-trust-excluded="${excludedFiles.length}"${focusedStory ? ' data-trust-focused="1"' : ''} title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${pillState === 'divergent'
+        ? `<button class="ds-trustpill${trustPillClean ? ' is-clean' : ''}${pillState === 'pending' ? ' is-unknown' : ''}${excludedFiles.length || indexDivergentFiles.length ? ' has-exclusions' : ''}" data-goto-review="${pillSection}" data-trust-excluded="${excludedFiles.length}"${focusedStory ? ' data-trust-focused="1"' : ''} title="Trust check — story freshness, coverage, staged state, and files outside the bounded renderer">${pillState === 'divergent'
             ? `<span class="ds-tri">▲</span><span><b>${indexDivergentFiles.length}</b> staged/working-tree ${plural(indexDivergentFiles.length, 'mismatch')} · reconcile before deciding</span><span class="ds-review-row-arrow">›</span>`
             : pillState === 'excluded'
                 ? `<span class="ds-tri">▲</span><span><b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} · inspect before deciding</span><span class="ds-review-row-arrow">›</span>`
@@ -149,6 +158,21 @@ export function renderPage(input) {
                             ? `<span class="ds-tri">▲</span><span><b>${uncoveredCount}</b> ${plural(uncoveredCount, 'change')} not explained by the story</span><span class="ds-review-row-arrow">›</span>`
                             : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
         : '';
+    // The Review tab is the only entrance to the review page, so it carries the
+    // signal the retired chip used to: the open-note count and one flag that says
+    // something on that page needs a decision. refreshCount() rebuilds this label
+    // client-side from the same facts, so the two must stay in step.
+    const reviewTabLabel = `Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy
+        ? ', feedback file needs repair'
+        : indexDivergentFiles.length
+            ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ`
+            : storyFreshness !== 'current'
+                ? ', story requires regeneration'
+                : uncoveredCount
+                    ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story`
+                    : excludedFiles.length
+                        ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} to inspect`
+                        : ''}`;
     const railCards = storyRail(model.steps);
     const railFiles = railFileTree(model.files, comments, []);
     const stepPanels = model.steps
@@ -201,7 +225,7 @@ ${BRAND_HEAD_LINKS}
       <div class="ds-viewtoggle" role="tablist" aria-label="Review view">
         <button class="ds-tab is-active" id="ds-tab-tour" data-view="tour" role="tab" aria-controls="ds-view-tour" aria-selected="true" tabindex="0">Story</button>
         <button class="ds-tab" id="ds-tab-files" data-view="files" role="tab" aria-controls="ds-view-files" aria-selected="false" tabindex="-1">Files</button>
-        <button class="ds-tab" id="ds-tab-review" data-view="review" role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1">Review${openCount ? `<span class="ds-tab-badge">${openCount}</span>` : ''}</button>
+        <button class="ds-tab" id="ds-tab-review" data-view="review" data-review-status data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1" aria-label="${esc(reviewTabLabel)}" title="Review — notes, coverage, and anything the story leaves unexplained">Review<span class="ds-tab-flag" data-review-flag aria-hidden="true"${reviewClean ? ' hidden' : ''}>▲</span><span class="ds-tab-badge" id="ds-open-count" title="Unresolved notes"${openCount ? '' : ' hidden'}><b>${openCount}</b></span></button>
       </div>
       ${themeControl()}
   <div class="ds-actions">
@@ -211,11 +235,6 @@ ${BRAND_HEAD_LINKS}
         <span data-reload-label>Reload</span>
       </button>`
         : ''}
-    <button class="ds-review-menu${reviewClean ? ' is-clean' : ''}" data-review-menu data-goto-review="status" data-unexplained-count="${uncoveredCount}" data-excluded-count="${excludedFiles.length}" data-index-divergence-count="${indexDivergentFiles.length}" data-story-freshness="${storyFreshness}" aria-controls="ds-view-review" aria-label="Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy ? ', feedback file needs repair' : indexDivergentFiles.length ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ` : storyFreshness !== 'current' ? ', story requires regeneration' : uncoveredCount ? `, ${uncoveredCount} ${plural(uncoveredCount, 'change')} not explained by the story` : excludedFiles.length ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}" title="Open the review page">
-      <span class="ds-ui-icon ds-review-menu-icon" aria-hidden="true">${reviewChromeIcon('review')}</span>
-      <span class="ds-review-menu-label">Review</span>
-      <span class="ds-review-menu-count" id="ds-open-count" title="Unresolved comments"${openCount ? '' : ' hidden'}><b>${openCount}</b><span class="ds-review-menu-count-label"> ${plural(openCount, 'comment')}</span></span>
-    </button>
   </div>
   </div>
   </div>
@@ -1358,29 +1377,60 @@ function feedbackCurrentExcerpt(repo, headRef, comment, state) {
     const start = Math.max(0, comment.line - 1);
     return lines.slice(start, Math.min(lines.length, start + count)).join('\n') || undefined;
 }
+/** The review page's tabs, in the order a reviewer meets them. */
+const REVIEW_TABS = [
+    { id: 'coverage', label: 'Coverage' },
+    { id: 'notes', label: 'Notes' },
+    { id: 'challenge', label: 'Challenge' },
+    { id: 'actions', label: 'Actions' },
+];
 /**
  * The Review view: a full page rather than a popover stacked on two drawers.
  *
- * Everything a reviewer needs to decide now sits on one scrollable surface —
- * status and coverage evidence, every note with its filters, the challenge pass,
- * and the actions — because a cramped modal was hiding the one signal that says
- * whether the change is safe to accept.
+ * Everything a reviewer needs to decide lives here — status, coverage evidence,
+ * every note with its filters, the challenge pass, and the actions — because a
+ * cramped modal was hiding the one signal that says whether the change is safe
+ * to accept. Stacking all of it cost the other extreme: a single column so tall
+ * that reaching the actions meant scrolling past every unexplained range.
+ *
+ * So the page is tabbed, and the verdict is not one of the tabs. The unresolved
+ * count and the trust pill stay pinned above the tab bar, visible from every
+ * panel, because a reviewer reading their notes should not have to scroll back
+ * to remember whether the story still covers the diff.
  */
 function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sendableCount, feedbackHealthy, feedbackRecovery, trustPill, stepIndexById, excludedFiles, indexDivergentFiles, storyless, }) {
     const addressed = comments.filter((comment) => comment.status === 'addressed').length;
     const cards = comments.length
         ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
         : '<div class="ds-drawer-empty">No notes yet.</div>';
-    return `<div class="ds-reviewpage">
-  <section class="ds-reviewpage-section" data-review-section="status" aria-labelledby="ds-reviewpage-status-h" tabindex="-1">
-    <h2 class="ds-reviewpage-h" id="ds-reviewpage-status-h">Status</h2>
-    <div class="ds-review-summary">
-      <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
-      ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
-      ${trustPill}
-    </div>
-    <div data-review-section="evidence" tabindex="-1">${renderTrustEvidence(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}</div>
-  </section>
+    // The coverage tab's flag has no honest value until the lazy coverage check
+    // answers, so a pending page ships it empty and the client fills it in. The
+    // mark is decorative; the tab's own label is what a screen reader reads, so
+    // the two are written together and must be updated together.
+    const coverage = model.trust.pending
+        ? { flag: '', label: '' }
+        : coverageFlag(model.trust.uncovered.length, excludedFiles.length + indexDivergentFiles.length);
+    const tabs = REVIEW_TABS.map((tab) => {
+        const active = tab.id === 'coverage';
+        const badge = tab.id === 'coverage'
+            ? `<span class="ds-reviewtab-flag" data-coverage-flag aria-hidden="true"${coverage.flag ? '' : ' hidden'}>${coverage.flag}</span>`
+            : tab.id === 'notes'
+                ? `<span class="ds-reviewtab-count" data-review-open-notes${openCount ? '' : ' hidden'}>${openCount}</span>`
+                : '';
+        const label = tab.id === 'coverage' && coverage.label ? ` aria-label="Coverage, ${esc(coverage.label)}"` : '';
+        return `<button class="ds-reviewtab${active ? ' is-active' : ''}" type="button" role="tab" id="ds-reviewtab-${tab.id}" data-review-tab-select="${tab.id}" aria-controls="ds-reviewpanel-${tab.id}" aria-selected="${active}" tabindex="${active ? '0' : '-1'}"${label}>${tab.label}${badge}</button>`;
+    }).join('');
+    return `<div class="ds-reviewpage" data-review-tab="coverage">
+  <div class="ds-reviewsummary" data-review-section="status" tabindex="-1">
+    <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
+    ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
+    ${trustPill}
+  </div>
+  <div class="ds-reviewtabs" role="tablist" aria-label="Review sections">${tabs}</div>
+  <div class="ds-reviewpanel" id="ds-reviewpanel-coverage" role="tabpanel" aria-labelledby="ds-reviewtab-coverage" data-review-panel="coverage" tabindex="0">
+    ${renderTrustEvidence(model.trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless)}
+  </div>
+  <div class="ds-reviewpanel" id="ds-reviewpanel-notes" role="tabpanel" aria-labelledby="ds-reviewtab-notes" data-review-panel="notes" tabindex="0" hidden>
   <section class="ds-reviewpage-section" data-review-section="notes" aria-labelledby="ds-reviewpage-notes-h" tabindex="-1">
     <h2 class="ds-reviewpage-h" id="ds-reviewpage-notes-h">Notes <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span>${addressed ? `<span class="ds-reviewpage-sub">${addressed} to verify</span>` : ''}</h2>
     <div class="ds-feedback-filters" data-feedback-tools role="group" aria-label="Filter notes">
@@ -1393,10 +1443,14 @@ function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sen
     </div>
     <div class="ds-feedback-list" data-feedback-view="feedback">${cards}</div>
   </section>
+  </div>
+  <div class="ds-reviewpanel" id="ds-reviewpanel-challenge" role="tabpanel" aria-labelledby="ds-reviewtab-challenge" data-review-panel="challenge" tabindex="0" hidden>
   <section class="ds-reviewpage-section" data-review-section="challenge" aria-labelledby="ds-reviewpage-challenge-h" tabindex="-1">
     <h2 class="ds-reviewpage-h" id="ds-reviewpage-challenge-h">Challenge pass</h2>
     <div class="ds-challenge-panel" data-feedback-view="challenge">${challengeChecklist(model)}</div>
   </section>
+  </div>
+  <div class="ds-reviewpanel" id="ds-reviewpanel-actions" role="tabpanel" aria-labelledby="ds-reviewtab-actions" data-review-panel="actions" tabindex="0" hidden>
   <section class="ds-reviewpage-section" data-review-section="actions" aria-labelledby="ds-reviewpage-actions-h" tabindex="-1">
     <h2 class="ds-reviewpage-h" id="ds-reviewpage-actions-h">Review actions</h2>
     <div class="ds-review-section">
@@ -1420,7 +1474,22 @@ function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sen
       </button>
     </div>
   </section>
+  </div>
 </div>`;
+}
+/**
+ * What the Coverage tab's flag says. Ranges the story never explains get a
+ * count; files merely kept outside the renderer get a bare mark, because the
+ * two are different kinds of debt and adding them together would invent a
+ * number that means nothing.
+ */
+function coverageFlag(uncovered, outside) {
+    if (uncovered) {
+        return { flag: `▲${uncovered}`, label: `${uncovered} ${plural(uncovered, 'change')} not explained by the story` };
+    }
+    if (outside)
+        return { flag: '▲', label: 'files to inspect outside the story' };
+    return { flag: '', label: '' };
 }
 function driftDrawer(report) {
     if (!report || report.state === 'unverified' || !report.files.length)
@@ -1495,43 +1564,84 @@ function commandPalette() {
 // ---- trust evidence ----
 export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
     const clean = !trust.uncovered.length;
-    const cards = trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('');
-    const body = trust.pending
+    const verdict = trust.pending
         ? `<div class="ds-trust-clean">Coverage is calculated from lazy file evidence as it is requested. This page does not call an unloaded change “covered.”</div>`
         : storyless
             ? `<div class="ds-trust-clean">The full bounded diff is available file by file. No story-coverage claim is applied in this view.</div>`
             : clean
                 ? `<div class="ds-trust-clean">✓ Every changed range in the bounded renderer is fully explained by a step.</div>`
-                : `<div class="ds-trust-section">Unexplained ${plural(trust.uncovered.length, 'change')}</div>${cards}`;
+                : '';
+    const coverage = `<section class="ds-reviewpage-section" data-review-section="evidence" aria-labelledby="ds-reviewpage-evidence-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-evidence-h">Coverage</h2>
+    <div class="ds-trust-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
+    ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
+      <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
+      <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
+    </div>`}
+    ${verdict}
+    <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
+  </section>`;
+    const unexplained = trust.pending || storyless || clean ? '' : unexplainedSection(trust, stepIndexById);
     const exclusions = excludedFiles.length
-        ? `<section class="ds-exclusions" aria-labelledby="ds-exclusions-title">
-        <div class="ds-trust-section" id="ds-exclusions-title">Outside the bounded renderer · ${excludedFiles.length}</div>
+        ? `<section class="ds-reviewpage-section ds-exclusions" data-review-section="exclusions" aria-labelledby="ds-exclusions-title" tabindex="-1">
+        <h2 class="ds-reviewpage-h" id="ds-exclusions-title">Outside the bounded renderer <span class="ds-option-count">${excludedFiles.length}</span></h2>
         <p class="ds-exclusions-note">These files are part of the git change but are not included in story coverage or the default diff DOM. Inspect them deliberately before deciding.</p>
         ${excludedFiles.map(excludedFileCard).join('')}
         <label class="ds-exclusion-ack"><input type="checkbox" data-exclusions-ack><span><strong>I inspected these exclusions</strong><small>Bound to this exact diff; a code change clears the acknowledgement.</small></span></label>
       </section>`
         : '';
     const stagedState = indexDivergentFiles.length
-        ? `<section class="ds-exclusions" aria-labelledby="ds-index-state-title">
-        <div class="ds-trust-section" id="ds-index-state-title">Staged state differs · ${indexDivergentFiles.length}</div>
+        ? `<section class="ds-reviewpage-section ds-exclusions" data-review-section="staged" aria-labelledby="ds-index-state-title" tabindex="-1">
+        <h2 class="ds-reviewpage-h" id="ds-index-state-title">Staged state differs <span class="ds-option-count">${indexDivergentFiles.length}</span></h2>
         <p class="ds-exclusions-note">These paths contain one version in Git's index and another in the working tree. A single combined diff cannot prove which version you intend to commit, so approval stays blocked until they match.</p>
         ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join('')}
       </section>`
         : '';
-    // data-trust-uncovered is how the lazily fetched replacement settles the pill.
-    // An empty value means "no verdict" — the client must leave the pill alone
-    // rather than read a missing answer as zero uncovered ranges.
+    // Every block below is its own review-page section, so the wrapper only exists
+    // to give the lazy fetch one node to swap. data-trust-uncovered is how that
+    // replacement settles the pill: an empty value means "no verdict" — the client
+    // must leave the pill alone rather than read a missing answer as zero.
     return `<div class="ds-trust-evidence" data-trust-evidence data-trust-pending="${trust.pending ? '1' : '0'}" data-trust-uncovered="${trust.pending ? '' : trust.uncovered.length}" data-trust-storyless="${storyless ? '1' : '0'}">
-    <div class="ds-trust-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
-    ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
-      <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
-      <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
-    </div>`}
-    ${body}
+    ${coverage}
+    ${unexplained}
     ${stagedState}
     ${exclusions}
-    <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
   </div>`;
+}
+/**
+ * The unexplained changes, on their own.
+ *
+ * These used to render inline under Status, which turned a routine "19 ranges no
+ * step claims" into a page-long wall of amber the moment the review page opened.
+ * They are evidence a reviewer should choose to read, not an alarm: the section
+ * states the size of the gap and which files hold it, and keeps the diff cards
+ * behind a disclosure that stays shut until asked.
+ */
+function unexplainedSection(trust, stepIndexById) {
+    const ranges = trust.uncovered.length;
+    const byFile = new Map();
+    for (const u of trust.uncovered) {
+        const entry = byFile.get(u.file) ?? { ranges: 0, lines: 0 };
+        entry.ranges += 1;
+        entry.lines += u.rows.filter((r) => r.type === 'add').length;
+        byFile.set(u.file, entry);
+    }
+    const files = [...byFile.entries()].sort((a, b) => b[1].ranges - a[1].ranges || a[0].localeCompare(b[0]));
+    const fileRows = files
+        .map(([file, count]) => `<button type="button" class="ds-unexplained-file" data-goto-file="${esc(file)}" title="Open ${esc(file)} in Files">
+          <code>${esc(file)}</code>
+          <span class="ds-unexplained-file-count">${count.ranges} ${plural(count.ranges, 'range')}${count.lines ? ` · ${count.lines} ${plural(count.lines, 'line')}` : ''}</span>
+        </button>`)
+        .join('');
+    return `<section class="ds-reviewpage-section ds-unexplained" data-review-section="unexplained" aria-labelledby="ds-reviewpage-unexplained-h" tabindex="-1">
+    <h2 class="ds-reviewpage-h" id="ds-reviewpage-unexplained-h"><span class="ds-tri" aria-hidden="true">▲</span>Unexplained changes <span class="ds-option-count">${ranges}</span></h2>
+    <p class="ds-unexplained-note">${ranges} changed ${plural(ranges, 'range')} across ${files.length} ${plural(files.length, 'file')} ${ranges === 1 ? 'is' : 'are'} in the diff with no story step walking through ${ranges === 1 ? 'it' : 'them'}. That is a gap in the story, not a verdict on the code — read ${ranges === 1 ? 'it' : 'them'} yourself, or ask ${esc(APP_BRAND)} to explain.</p>
+    <div class="ds-unexplained-files">${fileRows}</div>
+    <details class="ds-unexplained-detail" data-unexplained-disclosure>
+      <summary><span class="ds-unexplained-summary-label">Show ${ranges === 1 ? 'the change' : `all ${ranges} changes`}</span><span class="ds-unexplained-summary-hint">diff, with jump and explain actions</span></summary>
+      <div class="ds-unexplained-cards">${trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('')}</div>
+    </details>
+  </section>`;
 }
 function excludedFileCard(file) {
     const reason = file.reason === 'generated-path'
@@ -1563,7 +1673,6 @@ function trustCard(u, stepIndexById) {
       <span class="ds-untoured-tag">UNEXPLAINED</span>
     </div>
     <div class="ds-diffbody ds-diffbody-unified">${rows}</div>
-    <div class="ds-trust-card-note">This change is in the diff but no story step walks through it — surfaced here so nothing slips in unexplained.</div>
     <div class="ds-trust-card-actions">
       ${jump}
       <button class="ds-btn ds-btn-ghost" data-explain data-story-file="${esc(u.file)}" data-story-line="${u.line}">Ask ${esc(APP_BRAND)} to explain</button>

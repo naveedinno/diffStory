@@ -119,17 +119,9 @@ a{color:inherit;text-decoration:none}
 .ds-agent-target-name{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-agent-target.is-empty .ds-agent-target-name{color:var(--accent-text)}
 .ds-agent-target.is-busy .ds-agent-target-icon{animation:dsPulse 1s ease-in-out infinite;background:var(--md-primary);color:var(--md-on-primary)}
-.ds-review-menu{height:var(--control-h);display:flex;align-items:center;gap:8px;padding:0 13px;border-radius:var(--radius);border:1px solid var(--line);
-  background:var(--md-surface-container-high);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
-.ds-review-menu:hover,.ds-review-menu.is-open{background:var(--md-surface-container-highest);border-color:var(--md-outline)}
 .ds-reload-diff:disabled{opacity:.55;cursor:default}
-.ds-review-menu-dot{width:7px;height:7px;border-radius:999px;background:var(--amber);box-shadow:0 0 0 4px var(--amber-soft)}
-.ds-review-menu.is-clean .ds-review-menu-dot{background:var(--add);box-shadow:0 0 0 4px var(--add-bg)}
-.ds-review-menu-coverage{padding:3px 7px;border-radius:var(--radius-sm);background:var(--amber-soft);color:var(--amber-text);font-size:10px;font-weight:600}
-.ds-review-menu-count{min-width:20px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--fill-2);font-size:11px;font-variant-numeric:tabular-nums}
-.ds-review-menu-count-label{margin-left:2px;color:var(--muted);font-size:10px;font-weight:600}
-.ds-review-summary{display:flex;flex-direction:column;gap:6px;padding:0 4px 9px;margin-bottom:4px;border-bottom:1px solid var(--line-soft)}
-.ds-review-summary-label{display:flex;align-items:center;gap:8px;padding:7px 6px 3px;color:var(--muted);font-size:12px}
+.ds-actions:empty{display:none}
+.ds-review-summary-label{display:flex;align-items:center;gap:8px;padding:0 2px;color:var(--muted);font-size:12px}
 .ds-review-summary-label b{color:var(--text);font-variant-numeric:tabular-nums}
 .ds-feedback-health-alert{display:grid;gap:3px;margin:0 4px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--amber) 38%,var(--line));border-radius:10px;background:var(--amber-soft);color:var(--amber-text);font-size:11.5px;line-height:1.4}
 .ds-feedback-health-alert strong{font-size:12px}.ds-feedback-health-alert span{color:var(--text)}
@@ -169,7 +161,6 @@ a{color:inherit;text-decoration:none}
 @media (max-width:900px){
   .ds-kicker{display:none}
   .ds-agent-target{width:36px;padding:0;justify-content:center}.ds-agent-target-prefix,.ds-agent-target-sep,.ds-agent-target-name,.ds-agent-target-caret{display:none}.ds-agent-target-icon{width:20px;height:20px}
-  .ds-review-menu{width:36px;padding:0;justify-content:center}.ds-review-menu>span:not(.ds-review-menu-dot):not(.ds-review-menu-count){display:none}.ds-review-menu-dot{width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:transparent;box-shadow:none}.ds-review-menu.is-clean .ds-review-menu-dot{background:transparent;box-shadow:none}.ds-review-menu-dot::before{content:'!';color:var(--amber);font-size:14px;font-weight:900;line-height:1}.ds-review-menu.is-clean .ds-review-menu-dot::before{content:'✓';color:var(--add)}.ds-reload-diff .ds-review-menu-dot::before{content:'↻';color:var(--text)}.ds-review-menu-count{position:absolute;top:-4px;right:-5px;min-width:17px;height:17px;padding:0 4px;font-size:9px}.ds-review-menu-count-label{display:none}
 }
 @media (max-width:720px){
   :root{--ds-rail-width:240px}
@@ -377,21 +368,64 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-view[hidden]{display:none}
 /* The review page: one scrollable surface instead of a popover over two drawers. */
 #ds-view-review{overflow-y:auto}
-.ds-reviewpage{display:grid;align-content:start;gap:18px;width:min(920px,100%);margin:0 auto;padding:22px}
-.ds-reviewpage-section{display:grid;gap:12px;padding:18px 20px;border:1px solid var(--line-soft);border-radius:var(--radius-island);background:var(--panel3)}
+/* minmax(0,1fr): the tab strip is a scroller whose natural width is the sum of
+   its tabs, and an auto-sized track grows to that width — pushing the whole page
+   past a narrow viewport instead of letting the strip scroll inside it. */
+.ds-reviewpage{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:18px;width:min(920px,100%);margin:0 auto;padding:22px}
+/* min-width:0 so a card shrinks to its track instead of being sized by its
+   widest nowrap descendant, which pushed the page sideways on a phone. */
+.ds-reviewpage-section{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:18px 20px;border:1px solid var(--line-soft);border-radius:var(--radius-island);background:var(--panel3)}
 .ds-reviewpage-section:focus{outline:none}
 .ds-reviewpage-section:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-reviewpage-h{display:flex;align-items:center;gap:7px;margin:0;font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--text)}
 .ds-reviewpage-sub{color:var(--dim);font-size:11px;font-weight:600}
-.ds-reviewpage-section .ds-review-summary{border-bottom:0;padding:0;margin:0}
 .ds-reviewpage-section .ds-feedback-filters{border-bottom:0;padding:0}
 .ds-reviewpage-section .ds-review-section{gap:4px;padding:0}
+/* The verdict is pinned above the tabs, so it reads from every panel. It is a
+   summary, not a card: no panel chrome competing with the ones below it. */
+.ds-reviewsummary{display:grid;gap:8px;padding:2px 2px 0}
+.ds-reviewsummary:focus{outline:none}
+.ds-reviewsummary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-radius:10px}
 /* The pill was sized for a 320px popover; on a 920px page it must stay a pill. */
-.ds-reviewpage-section .ds-trustpill{width:auto;justify-self:start;justify-content:flex-start}
-.ds-trust-evidence{display:grid;gap:10px}
+.ds-reviewsummary .ds-trustpill{width:auto;justify-self:stretch;justify-content:flex-start}
+.ds-reviewtabs{position:sticky;z-index:3;top:0;min-width:0;display:flex;gap:2px;margin:0 -2px;padding:4px 2px 8px;background:linear-gradient(var(--surface) 72%,transparent);overflow-x:auto;scrollbar-width:none}
+.ds-reviewtabs::-webkit-scrollbar{display:none}
+.ds-reviewtab{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 13px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
+.ds-reviewtab:hover{background:var(--fill-1);color:var(--text)}
+.ds-reviewtab.is-active{border-color:var(--line-soft);background:var(--panel3);color:var(--text)}
+.ds-reviewtab:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-reviewtab-flag{color:var(--amber);font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}
+.ds-reviewtab-flag[hidden],.ds-reviewtab-count[hidden]{display:none}
+.ds-reviewtab-count{min-width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;border-radius:999px;background:var(--fill-3);color:var(--muted);font-size:9.5px;font-variant-numeric:tabular-nums}
+.ds-reviewtab.is-active .ds-reviewtab-count{color:var(--text)}
+.ds-reviewpanel{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:18px}
+.ds-reviewpanel[hidden]{display:none}
+.ds-reviewpanel:focus{outline:none}
+.ds-reviewpanel:focus-visible{outline:none}
+/* The evidence wrapper only exists so the lazy coverage fetch has one node to
+   swap. Its children are the Coverage panel's sections, so it contributes no box
+   of its own — otherwise a nested grid double-counts the gap. */
+.ds-trust-evidence{display:contents}
 .ds-trust-sub{color:var(--dim);font-size:11.5px}
 .ds-tab-badge{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--fill-3);font-size:9.5px;font-variant-numeric:tabular-nums}
-@media(max-width:720px){.ds-reviewpage{gap:12px;padding:12px}.ds-reviewpage-section{padding:14px}}
+/* Unexplained changes: a section a reviewer opens, not a wall that opens itself. */
+.ds-unexplained .ds-tri{color:var(--amber);font-size:10px}
+.ds-unexplained-note{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5;text-wrap:pretty}
+.ds-unexplained-files{display:grid;gap:4px}
+.ds-unexplained-file{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px;padding:6px 10px;border:1px solid color-mix(in srgb,var(--amber) 20%,transparent);border-radius:9px;background:color-mix(in srgb,var(--amber) 5%,transparent);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.ds-unexplained-file:hover{border-color:color-mix(in srgb,var(--amber) 38%,transparent);background:color-mix(in srgb,var(--amber) 9%,transparent)}
+.ds-unexplained-file code{min-width:0;font-family:var(--mono);font-size:11.5px;color:var(--amber-text);overflow-wrap:anywhere}
+.ds-unexplained-file-count{flex:none;color:var(--dim2);font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ds-unexplained-detail>summary{list-style:none;display:flex;align-items:baseline;gap:8px;min-height:34px;padding:7px 10px;border:1px solid var(--line-soft);border-radius:9px;background:var(--fill-1);color:var(--text);font-size:12px;font-weight:700;cursor:pointer}
+.ds-unexplained-detail>summary::-webkit-details-marker{display:none}
+.ds-unexplained-detail>summary::before{content:'›';margin-right:1px;color:var(--dim);font-size:14px;font-weight:500;transition:transform var(--motion-duration-fast) var(--motion-ease-out)}
+.ds-unexplained-detail[open]>summary::before{transform:rotate(90deg)}
+.ds-unexplained-detail>summary:hover{background:var(--fill-2)}
+.ds-unexplained-summary-hint{color:var(--dim2);font-size:10.5px;font-weight:600}
+.ds-unexplained-cards{display:grid;gap:14px;margin-top:12px}
+.ds-unexplained-cards .ds-trust-card{margin-bottom:0}
+@media(prefers-reduced-motion:reduce){.ds-unexplained-detail>summary::before{transition:none}}
+@media(max-width:720px){.ds-reviewpage{gap:12px;padding:12px}.ds-reviewpage-section{padding:14px}.ds-reviewpanel{gap:12px}.ds-reviewtab{padding:0 10px;font-size:11.5px}.ds-unexplained-summary-hint{display:none}}
 .ds-step{flex:1;min-height:0;display:flex;flex-direction:column}
 .ds-step[hidden]{display:none}
 .ds-step-top{padding:20px 30px 0;flex:none}
@@ -690,7 +724,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-drift-detail{display:flex;min-width:0;min-height:0;flex-direction:column}.ds-drift-detail-head{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-bottom:1px solid var(--line)}.ds-drift-detail-head code{overflow:hidden;color:var(--muted);font:11px var(--font-mono);text-overflow:ellipsis;white-space:nowrap}
 .ds-drift-preview{overflow:auto;min-height:0;flex:1;padding:14px;--ds-scrollpad-t:14px}.ds-drift-preview .ds-diff{margin:0}.ds-drift-back{display:none;border:0;background:transparent;color:var(--accent-text);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
 @media(max-width:720px){.ds-drift-drawer{width:100%;max-width:100vw;border-left:0}.ds-drift-body{display:block;min-height:0}.ds-drift-list,.ds-drift-detail{height:100%;border:0}.ds-drift-detail{display:none}.ds-drawer-root.is-detail .ds-drift-list{display:none}.ds-drawer-root.is-detail .ds-drift-detail{display:flex}.ds-drift-back{display:inline-flex;flex:none}}
-.ds-trust-stats{display:flex;gap:10px;margin-bottom:20px}
+.ds-trust-stats{display:flex;gap:10px}
 .ds-trust-stat{flex:1;padding:13px;border-radius:11px}
 .ds-trust-stat.ok{background:rgba(48,209,88,0.08);border:1px solid rgba(48,209,88,0.22)}
 .ds-trust-stat.warn{background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 26%,transparent)}
@@ -700,20 +734,18 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-trust-lbl{font-size:11.5px;margin-top:2px;line-height:1.35}
 .ds-trust-stat.ok .ds-trust-lbl{color:var(--add-text)}
 .ds-trust-stat.warn .ds-trust-lbl{color:var(--amber-text)}
-.ds-trust-section{font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--dim2);font-weight:600;margin-bottom:11px}
 .ds-trust-card{border:1px solid color-mix(in srgb,var(--amber) 30%,transparent);border-radius:12px;overflow:hidden;margin-bottom:14px}
 .ds-trust-card-head{padding:12px 14px;background:color-mix(in srgb,var(--amber) 6%,transparent);display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid color-mix(in srgb,var(--amber) 18%,transparent)}
 .ds-trust-card-path{min-width:0;font-family:var(--mono);font-size:12px;color:var(--amber-text);overflow-wrap:anywhere}
 .ds-trust-card .ds-diffbody-unified{background:transparent}
-.ds-trust-card-note{padding:12px 14px;font-size:12.5px;color:var(--muted);line-height:1.5;text-wrap:pretty;border-top:1px solid var(--line-soft)}
-.ds-trust-card-actions{padding:0 14px 14px;display:flex;gap:9px;flex-wrap:wrap}
+.ds-trust-card-actions{padding:12px 14px;display:flex;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line-soft)}
 .ds-trust-card-actions .ds-btn{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:center}
 .ds-trust-clean{padding:16px;border-radius:12px;background:rgba(48,209,88,0.08);border:1px solid rgba(48,209,88,0.22);color:var(--add-text);font-size:13px;line-height:1.5}
-.ds-trust-foot{margin-top:18px;font-size:12px;color:var(--dim2);line-height:1.5;text-wrap:pretty}
+.ds-trust-foot{margin-top:4px;font-size:12px;color:var(--dim2);line-height:1.5;text-wrap:pretty}
 
 /* ---- feedback verification + timeline ---- */
 .ds-feedback-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px 14px;border-bottom:1px solid var(--line-soft)}.ds-feedback-filters button{width:100%;min-width:44px;height:44px;border:1px solid var(--line-soft);border-radius:var(--radius-sm);background:transparent;color:var(--muted);font:inherit;font-size:10.5px;font-weight:600;line-height:1.25;padding:6px 8px;cursor:pointer;white-space:normal}.ds-feedback-filters button.is-active{border-color:transparent;background:var(--accent-soft);color:var(--accent-text)}
-.ds-feedback-list{display:grid;align-content:start;gap:11px}.ds-feedback-card{display:grid;gap:9px;padding:13px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-feedback-head{display:flex;align-items:center;gap:8px}.ds-feedback-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--text)}
+.ds-feedback-list{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:11px}.ds-feedback-card{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:13px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-feedback-head{display:flex;align-items:center;gap:8px}.ds-feedback-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--text)}
 .ds-anchorbadge{flex:none;font-size:9.5px;font-weight:600;padding:3px 6px;border-radius:var(--radius-sm);color:var(--muted);background:var(--fill-2)}.ds-anchorbadge.is-changed,.ds-anchorbadge.is-moved{color:var(--amber-text);background:var(--amber-soft)}.ds-feedback-selection{display:block;max-height:82px;overflow:auto;white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;line-height:1.4;padding:8px 9px;border-radius:7px;background:var(--gutter);color:var(--muted)}
 .ds-feedback-message{font-size:12.5px;line-height:1.45}.ds-feedback-reply{padding:10px;border-left:2px solid var(--accent-blue);background:var(--accent-soft);border-radius:0 8px 8px 0;font-size:12px;line-height:1.45}.ds-feedback-reply>span{display:block;margin-bottom:4px;color:var(--accent-text);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}.ds-feedback-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}.ds-drawer-empty{padding:30px 12px;text-align:center;color:var(--muted);font-size:12.5px}
 .ds-feedback-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.ds-feedback-compare>div{display:grid;gap:4px;min-width:0}.ds-feedback-compare>div>span{color:var(--dim);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.ds-feedback-selection.is-current{border:1px solid var(--line-soft);background:var(--panel2);color:var(--text)}@media(max-width:560px){.ds-feedback-filters{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 12px}.ds-feedback-compare{grid-template-columns:1fr}}
@@ -748,8 +780,7 @@ const SESSION_REDESIGN_CSS = `
 .ds-top{height:56px;padding:0 14px;gap:10px;background:var(--panel3);border-bottom-color:var(--line)}
 .ds-titlewrap{gap:3px}.ds-title{font-size:14px;font-weight:700}.ds-kicker{font-size:9.5px}.ds-crumb-repo{font-size:11.5px}
 .ds-sidebar-toggle,.ds-back,.ds-readaloud{min-height:36px}
-.ds-agent-target,.ds-review-menu{height:36px;border-radius:10px;background:var(--fill-1)}
-.ds-agent-target{border-color:var(--line-soft)}.ds-review-menu{background:var(--panel2)}
+.ds-agent-target{height:36px;border-radius:10px;background:var(--fill-1);border-color:var(--line-soft)}
 .ds-layout{background:transparent}
 .ds-rail{background:var(--surface)}
 .ds-railpad{padding:10px 10px 0}.ds-viewtoggle{padding:3px;border:0;border-radius:10px;background:var(--fill-2);box-shadow:inset 0 0 0 1px var(--line-soft)}
@@ -811,13 +842,13 @@ body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:vi
    The inner inset this rule used to add made the stage 13px narrower per side than
    the chrome directly above it — three blocks, three edges, no line to read down. */
 #ds-view-tour>:not(.ds-dock):not(.ds-filmthread):not([hidden]){flex:1;min-height:0;width:100%;max-width:none;margin:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-island)}
-/* Story focus / reading-here used to ring the .ds-diff card. The card no longer
-   draws a frame of its own, so the accent rides the island — the one frame left.
-   The island rule above scores (1,3,0) — an id plus three :not() arguments — so
-   both of these carry :not([hidden]) to reach it and win on source order. Drop
-   that and border-color silently falls back to --line-soft while the ring lands. */
-#ds-view-tour>.ds-step.is-story-active:not(.is-voice-active):not([hidden]){border-color:color-mix(in srgb,var(--accent) 52%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
-#ds-view-tour>.ds-step.is-voice-active:not([hidden]){border-color:var(--accent-line);box-shadow:0 0 0 1px var(--accent-line),0 12px 34px var(--accent-glow)}
+/* The stage keeps the same quiet edge as the chrome and the dock. "Reading here"
+   and "speaking now" used to tint this border, which made sense when the stage was
+   a card among siblings; once it grew to fill the frame, that accent was a saturated
+   rectangle the width of the window, outlining the one region nothing competes with.
+   Both states are already legible where the reader is looking: the focus rows carry
+   the accent inside the diff, and the dock carries the beat, the transport and the
+   lit numeral. Nothing may put a coloured ring back on this island. */
 /* ---- The dock: one floating island at the foot of the story ----
    Transport, the beat you are on, and the numeral thread were three separate bars
    answering the same question. Stacked in one island they read as one instrument:
@@ -898,7 +929,7 @@ body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:vi
 @media (prefers-reduced-motion:reduce){.ds-sk{animation:none}}
 .ds-severity{display:inline-flex;align-items:center;padding:2px 6px;border-radius:var(--radius-sm);font-size:8.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.ds-severity-blocking{background:var(--del-bg);color:var(--del-text)}.ds-severity-concern{background:var(--amber-soft);color:var(--amber-text)}.ds-severity-nit{background:var(--fill-2);color:var(--muted)}.ds-composer-severity{display:flex;gap:5px;margin:-2px 0 10px}.ds-severity-choice{padding:5px 8px;border:1px solid var(--line-soft);border-radius:var(--radius-sm);background:transparent;color:var(--muted);font:inherit;font-size:10.5px;font-weight:600;cursor:pointer}.ds-severity-choice.is-active{border-color:var(--accent-blue);background:var(--accent-soft);color:var(--accent-text)}
 .ds-reviewpage-section .ds-agent-target{height:auto;max-width:none;align-items:flex-start;border:0;border-radius:10px;white-space:normal}.ds-reviewpage-section .ds-agent-target-icon{display:inline-flex}
-.ds-exclusions{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}.ds-exclusions-note{margin:0 0 12px;color:var(--muted);font-size:12px;line-height:1.5}.ds-exclusion-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:11px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--fill-1)}.ds-exclusion-card+.ds-exclusion-card{margin-top:8px}.ds-exclusion-card>div:first-child{display:grid;gap:4px;min-width:0}.ds-exclusion-card code{overflow:hidden;text-overflow:ellipsis;color:var(--text);font-family:var(--mono);font-size:11px;white-space:nowrap}.ds-exclusion-card span{color:var(--muted);font-size:10.5px}.ds-exclusion-preview{grid-column:1/-1;max-height:360px;overflow:auto;border:1px solid var(--line-soft);border-radius:8px;background:var(--gutter)}.ds-excluded-file-head{display:grid;gap:3px;padding:9px 11px;border-bottom:1px solid var(--line-soft)}.ds-excluded-file-head strong{font-size:11px}.ds-excluded-file-head span{font-size:10px}.ds-excluded-code{display:grid;margin:0;padding:8px 0;white-space:pre}.ds-excluded-code>span{display:grid;grid-template-columns:45px minmax(max-content,1fr);font-family:var(--mono);font-size:10px;line-height:1.5}.ds-excluded-code i{padding-right:10px;text-align:right;color:var(--dim);font-style:normal;user-select:none}.ds-excluded-code code{padding-right:14px;color:var(--muted)}.ds-exclusion-ack{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--amber) 35%,var(--line));border-radius:10px;background:var(--amber-soft);cursor:pointer}.ds-exclusion-ack input{margin-top:2px}.ds-exclusion-ack span{display:grid;gap:2px}.ds-exclusion-ack strong{font-size:12px}.ds-exclusion-ack small{color:var(--amber-text);font-size:10.5px}
+.ds-exclusions-note{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.ds-exclusion-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:11px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--fill-1)}.ds-exclusion-card>div:first-child{display:grid;gap:4px;min-width:0}.ds-exclusion-card code{overflow:hidden;text-overflow:ellipsis;color:var(--text);font-family:var(--mono);font-size:11px;white-space:nowrap}.ds-exclusion-card span{color:var(--muted);font-size:10.5px}.ds-exclusion-preview{grid-column:1/-1;max-height:360px;overflow:auto;border:1px solid var(--line-soft);border-radius:8px;background:var(--gutter)}.ds-excluded-file-head{display:grid;gap:3px;padding:9px 11px;border-bottom:1px solid var(--line-soft)}.ds-excluded-file-head strong{font-size:11px}.ds-excluded-file-head span{font-size:10px}.ds-excluded-code{display:grid;margin:0;padding:8px 0;white-space:pre}.ds-excluded-code>span{display:grid;grid-template-columns:45px minmax(max-content,1fr);font-family:var(--mono);font-size:10px;line-height:1.5}.ds-excluded-code i{padding-right:10px;text-align:right;color:var(--dim);font-style:normal;user-select:none}.ds-excluded-code code{padding-right:14px;color:var(--muted)}.ds-exclusion-ack{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--amber) 35%,var(--line));border-radius:10px;background:var(--amber-soft);cursor:pointer}.ds-exclusion-ack input{margin-top:2px}.ds-exclusion-ack span{display:grid;gap:2px}.ds-exclusion-ack strong{font-size:12px}.ds-exclusion-ack small{color:var(--amber-text);font-size:10.5px}
 body{height:100vh;height:100dvh}.ds-thread,.ds-composer{max-height:calc(100dvh - 72px)}
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 @media (prefers-reduced-motion:no-preference){
@@ -921,7 +952,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
   .ds-step.is-code-step{display:flex;overflow:hidden}.ds-step.is-code-step>.ds-step-top{padding:16px 24px 0}
   .ds-step.is-code-step>.ds-diffscroll{padding:8px 0 0;min-height:180px}
 }
-@media (max-width:820px){.ds-agent-target-prefix,.ds-agent-target-sep{display:none}.ds-agent-target{max-width:150px}.ds-review-menu-count-label{display:none}}
+@media (max-width:820px){.ds-agent-target-prefix,.ds-agent-target-sep{display:none}.ds-agent-target{max-width:150px}}
 @media (max-width:760px){.ds-symbols{display:none}}
 @media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}.ds-dock-transport{gap:8px;min-height:48px;padding:7px 8px 7px 7px}.ds-filmthread{gap:6px;padding:2px 6px 4px}.ds-filmthread.is-storyless{padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
 @media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step-meta>.ds-dot,.ds-step-meta>.ds-flowchip{display:none}.ds-step.is-code-step .ds-full-diff{display:none}/* The beat row stays one line even here. Wrapping the arrows underneath left the
@@ -929,7 +960,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
    the middle of the island — worse than tighter gaps. */
 .ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}
 @media (max-width:720px){.ds-back{min-width:36px}.ds-help{display:none}}
-@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-agent-target,.ds-review-menu,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-agent-target.is-busy .ds-agent-target-icon,.ds-readaloud.is-loading .ds-readaloud-ico,.ds-agent-task-spinner,.ds-composer{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-agent-target,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-agent-target.is-busy .ds-agent-target-icon,.ds-readaloud.is-loading .ds-readaloud-ico,.ds-agent-task-spinner,.ds-composer{animation:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
 @media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}.ds-md caption{color:var(--text)}.ds-md thead th,.ds-md tbody{border-color:var(--text)}.ds-md tbody tr:nth-child(even){background:transparent}.ds-md tbody tr+tr{border-top:1px solid var(--line)}.ds-md hr{background:var(--text-3)}.ds-md kbd{border-color:var(--text-3)}}
 
@@ -970,21 +1001,27 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 .ds-readaloud-ico.is-play::before,.ds-readaloud-ico.is-pause::before{content:"";display:block;width:10px;height:10px;background:currentColor;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain}
 .ds-readaloud-ico.is-play::before{margin-left:2px;--ds-transport-glyph:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2.6 1.8 L8.2 5 L2.6 8.2 Z' fill='black' stroke='black' stroke-width='1.6' stroke-linejoin='round'/></svg>");-webkit-mask-image:var(--ds-transport-glyph);mask-image:var(--ds-transport-glyph)}
 .ds-readaloud-ico.is-pause::before{--ds-transport-glyph:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><g fill='black'><rect x='0.85' y='0.85' width='2.5' height='8.3' rx='0.9'/><rect x='6.65' y='0.85' width='2.5' height='8.3' rx='0.9'/></g></svg>");-webkit-mask-image:var(--ds-transport-glyph);mask-image:var(--ds-transport-glyph)}
-.ds-narration-stop{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--md-error) 22%,var(--line));border-radius:9px;background:var(--fill-1);color:var(--md-error);cursor:pointer}.ds-narration-stop[hidden]{display:none}.ds-narration-stop:hover{background:color-mix(in srgb,var(--md-error) 10%,var(--fill-1));border-color:color-mix(in srgb,var(--md-error) 42%,var(--line))}.ds-narration-stop:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--md-error) 18%,transparent)}.ds-narration-stop span{width:9px;height:9px;border-radius:2px;background:currentColor}
+/* Stop is a square sibling of the transport pill, so it takes the pill's 38px
+   box and corner radius. At 30px it sat visibly short next to Pause and the
+   pair read as two unrelated controls rather than one transport cluster. */
+.ds-narration-stop{width:38px;height:38px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--md-error) 22%,var(--line));border-radius:11px;background:var(--fill-1);color:var(--md-error);cursor:pointer}.ds-narration-stop[hidden]{display:none}.ds-narration-stop:hover{background:color-mix(in srgb,var(--md-error) 10%,var(--fill-1));border-color:color-mix(in srgb,var(--md-error) 42%,var(--line))}.ds-narration-stop:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--md-error) 18%,transparent)}.ds-narration-stop span{width:9px;height:9px;border-radius:2px;background:currentColor}
 .ds-readaloud-label{white-space:nowrap}
 .ds-reviewchrome .ds-actions{gap:7px}
 .ds-reload-diff{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 9px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.ds-reload-diff:hover{background:var(--fill-2);color:var(--text)}.ds-reload-diff:disabled{opacity:.7}.ds-reload-diff.is-loading .ds-reload-icon{animation:dsReloadSpin .7s linear infinite}@keyframes dsReloadSpin{to{transform:rotate(360deg)}}
-.ds-review-menu{height:36px;gap:7px;padding:0 10px;border-radius:9px;background:var(--fill-1);font-size:12px;font-weight:700}.ds-review-menu:hover,.ds-review-menu.is-open{background:var(--fill-2)}.ds-review-menu.is-clean{border-color:color-mix(in srgb,var(--green) 34%,var(--line));background:color-mix(in srgb,var(--add-bg) 42%,var(--fill-1));color:var(--add-text)}
-.ds-review-menu-icon{width:17px;height:17px;color:var(--muted)}.ds-review-menu.is-clean .ds-review-menu-icon{color:var(--green)}
-.ds-review-menu-count{height:19px;min-width:19px;padding:0 5px;background:var(--fill-3);font-size:10px}.ds-review-menu-count[hidden]{display:none}.ds-review-menu-count-label{display:none}
+/* The Review tab is the only door to the review page, so it carries that page's
+   two facts inline: how many notes are open, and whether anything there is
+   waiting on a decision. The flag is a marker, not a badge — it disappears the
+   moment the page is clean rather than turning into a green reassurance. */
+.ds-tab-flag{margin-left:5px;color:var(--amber);font-size:9px;line-height:1;vertical-align:1px}.ds-tab-flag[hidden]{display:none}
+.ds-tab-badge[hidden]{display:none}.ds-tab-badge b{font-weight:700}
 .ds-live-banner{position:fixed;z-index:20;top:72px;right:16px;width:min(420px,calc(100vw - 32px));min-height:52px;display:grid;grid-template-columns:28px minmax(0,1fr) auto 36px;align-items:center;gap:8px;padding:4px 4px 4px 8px;border:1px solid color-mix(in srgb,var(--md-primary) 24%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--panel3) 94%,var(--md-primary));box-shadow:0 14px 34px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.18);color:var(--text);font-size:12px}.ds-live-banner[hidden]{display:none}.ds-live-banner-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--md-secondary-container);color:var(--md-on-secondary-container)}.ds-live-banner-icon svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-live-banner [data-live-message]{min-width:0;line-height:1.35;font-weight:600;text-wrap:pretty}.ds-live-banner button{height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer}.ds-live-banner button:hover{background:var(--fill-2);color:var(--text)}.ds-live-banner button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}.ds-live-banner-reload{padding:0 10px;color:var(--md-primary)!important}.ds-live-banner-dismiss{width:36px;padding:0}.ds-live-banner-dismiss svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}.ds-live-banner[data-live-kind="disconnected"]{border-color:color-mix(in srgb,var(--amber) 34%,var(--line))}.ds-live-banner[data-live-kind="disconnected"] .ds-live-banner-icon{background:var(--amber-soft);color:var(--amber-text)}
 body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}body.ds-rail-collapsed .ds-reviewchrome-rail{display:none}body.ds-rail-collapsed .ds-reviewchrome-mobile-nav{display:flex}
 
 @media (max-width:900px){
-  .ds-review-menu{width:auto;padding:0 9px}.ds-review-menu>span.ds-review-menu-label{display:none}.ds-review-menu-icon{display:inline-flex!important}.ds-reload-diff>span[data-reload-label]{display:none}
+  .ds-reload-diff>span[data-reload-label]{display:none}
 }
 @media (max-width:720px){
-  .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff,.ds-review-menu{min-width:44px;height:44px;justify-content:center;padding:0 10px}
+  .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff{min-width:44px;height:44px;justify-content:center;padding:0 10px}
   .ds-reviewchrome-utilities .ds-theme-toggle{width:44px;height:44px;min-height:44px}
   .ds-reviewchrome-utilities .ds-viewtoggle{height:44px}.ds-reviewchrome-utilities .ds-tab{min-height:38px;padding:0 9px;font-size:11px}
   .ds-dock .ds-readaloud-primary{display:flex;width:44px;height:44px;min-height:44px;padding:0;justify-content:center;border-radius:12px}.ds-dock .ds-readaloud-primary .ds-readaloud-label{display:none}.ds-narration-actions{gap:3px}.ds-narration-stop{position:absolute;z-index:13;bottom:calc(100% + 14px);left:0;width:62px;height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:color-mix(in srgb,var(--md-error) 10%,var(--panel3));box-shadow:none;font-size:10px;font-weight:800}.ds-narration-stop::after{content:"Stop"}.ds-narration-stop span{width:7px;height:7px}
@@ -993,7 +1030,7 @@ body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}bo
   body:not(.ds-rail-collapsed) .ds-reviewchrome-rail .ds-sidebar-toggle.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
   .ds-layout>.ds-rail{top:56px}.ds-rail-scrim,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:56px}
 }
-@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-utilities .ds-tab{padding:0 7px;font-size:10.5px}.ds-reviewchrome-main .ds-titlewrap{flex:1 1 0;max-width:none;box-shadow:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}.ds-review-menu-count{position:absolute;top:1px;right:0}}
+@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-utilities .ds-tab{padding:0 7px;font-size:10.5px}.ds-reviewchrome-main .ds-titlewrap{flex:1 1 0;max-width:none;box-shadow:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}}
 @media (prefers-reduced-motion:reduce){.ds-reload-diff.is-loading .ds-reload-icon{animation:none}.ds-live-banner{transition:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-reviewchrome,.ds-reviewchrome-rail{background:var(--panel3)}}
 @media (prefers-contrast:more){.ds-reviewchrome-main,.ds-reviewchrome-rail{border-color:var(--line)}}
@@ -1063,7 +1100,7 @@ const PAGE_JS_HEAD = `
     if(kind==='story'&&!document.body.hasAttribute('data-storyless')){
       var freshness=on?'stale':liveOriginalStoryFreshness||'unverified';
       document.body.setAttribute('data-story-freshness',freshness);
-      var reviewButton=$('[data-review-menu]');if(reviewButton)reviewButton.setAttribute('data-story-freshness',freshness);
+      var reviewButton=$('[data-review-status]');if(reviewButton)reviewButton.setAttribute('data-story-freshness',freshness);
       refreshCount();
     }
     renderLiveBanner();
@@ -2613,7 +2650,7 @@ const PAGE_JS_HEAD = `
     var scroll=0;
     if(view==='files'){var detail=$('#ds-file-detail');scroll=detail?detail.scrollTop:0;}
     else if(panel){var diff=$('.ds-diffscroll',panel);scroll=diff?diff.scrollTop:panel.scrollTop;}
-    return {view:view,step:active,file:filePanels[selectedFile]?filePanels[selectedFile].getAttribute('data-file'):'',scroll:Math.round(scroll||0)};
+    return {view:view,step:active,file:filePanels[selectedFile]?filePanels[selectedFile].getAttribute('data-file'):'',scroll:Math.round(scroll||0),reviewTab:activeReviewTab()};
   }
   function saveReviewPosition(){
     if(restoringReviewPosition||!reviewPositionReady)return;
@@ -2641,7 +2678,7 @@ const PAGE_JS_HEAD = `
     var state=storedReviewPosition();if(!state)return;
     restoringReviewPosition=true;
     if(state.view==='review'){
-      setView('review');restoringReviewPosition=false;
+      setView('review');if(state.reviewTab)setReviewTab(state.reviewTab,false);restoringReviewPosition=false;
     }else if(state.view==='files'){
       setView('files');if(state.file)selectFileByPath(state.file);
       setTimeout(function(){var d=$('#ds-file-detail');if(d)d.scrollTop=Number(state.scroll)||0;restoringReviewPosition=false;},0);
@@ -2750,10 +2787,14 @@ const PAGE_JS_TAIL = `
     var pill=$('.ds-trustpill');
     if(!pill||!pill.classList.contains('is-unknown'))return;
     coverageResolved=true;
-    var reviewBtn=$('[data-review-menu]');
+    var reviewBtn=$('[data-review-status]');
     if(reviewBtn)reviewBtn.setAttribute('data-unexplained-count',String(uncovered));
     var excluded=Number(pill.getAttribute('data-trust-excluded')||0),focused=pill.getAttribute('data-trust-focused')==='1';
     pill.classList.remove('is-unknown');
+    // The pill's arrow follows its verdict: a coverage gap sends the reviewer to
+    // the unexplained section that holds it, not to a generic evidence anchor.
+    pill.setAttribute('data-goto-review',uncovered>0&&!storyless?'unexplained':excluded?'exclusions':'evidence');
+    applyCoverageFlag(uncovered>0&&!storyless?uncovered:0,excluded+$all('[data-review-section="staged"] .ds-exclusion-card').length);
     if(uncovered>0&&!storyless){
       pill.classList.remove('is-clean');
       pill.innerHTML='<span class="ds-tri">▲</span><span><b>'+uncovered+'</b> '+(uncovered===1?'change':'changes')+' not explained by the story</span><span class="ds-review-row-arrow">›</span>';
@@ -2762,6 +2803,16 @@ const PAGE_JS_TAIL = `
       pill.innerHTML='<span class="ds-check">✓</span><span>'+(focused?'Story covers its selected scope':'Story covers the rendered diff')+(excluded?' · <b>'+excluded+'</b> excluded '+(excluded===1?'file':'files')+' to inspect':'')+'</span><span class="ds-review-row-arrow">›</span>';
     }
     refreshCount();
+  }
+  // The Coverage tab's mark is decorative and its label is what a screen reader
+  // reads, so both are written here, together, from the same numbers.
+  function applyCoverageFlag(uncovered,outside){
+    var flag=$('[data-coverage-flag]'),tab=$('[data-review-tab-select="coverage"]');
+    if(!flag||!tab)return;
+    var text=uncovered?'\u25b2'+uncovered:outside?'\u25b2':'';
+    var label=uncovered?uncovered+' '+(uncovered===1?'change':'changes')+' not explained by the story':outside?'files to inspect outside the story':'';
+    flag.textContent=text;flag.hidden=!text;
+    if(label)tab.setAttribute('aria-label','Coverage, '+label);else tab.removeAttribute('aria-label');
   }
   // A check that could not run stays unknown — never silently clean.
   function markCoverageUnavailable(){
@@ -2789,6 +2840,32 @@ const PAGE_JS_TAIL = `
     if(typeof requestIdleCallback==='function')requestIdleCallback(resolveCoverage,{timeout:2000});
     else setTimeout(resolveCoverage,400);
   }
+  // ---- review page tabs ----
+  // The page is tabbed, so reaching a section means selecting the tab that owns
+  // it first. Sections carry their own names; the panel they sit in is the tab.
+  function activeReviewTab(){var page=$('.ds-reviewpage');return page?page.getAttribute('data-review-tab')||'coverage':'';}
+  function setReviewTab(tab,focusTab){
+    var page=$('.ds-reviewpage');if(!page||!tab)return;
+    var button=$('[data-review-tab-select="'+tab+'"]',page);if(!button)return;
+    page.setAttribute('data-review-tab',tab);
+    $all('[data-review-tab-select]',page).forEach(function(node){
+      var on=node===button;
+      node.classList.toggle('is-active',on);
+      node.setAttribute('aria-selected',on?'true':'false');
+      node.tabIndex=on?0:-1;
+    });
+    $all('[data-review-panel]',page).forEach(function(panel){panel.hidden=panel.getAttribute('data-review-panel')!==tab;});
+    if(focusTab)button.focus();
+    saveReviewPositionSoon();
+  }
+  // Switching tabs returns to the top of the page: the panel below the tab bar
+  // changes completely, so a scroll offset carried over from the last one points
+  // at nothing, and it would hide the pinned verdict for no reason.
+  function selectReviewTab(tab,focusTab){
+    if(tab===activeReviewTab()){if(focusTab){var same=$('[data-review-tab-select="'+tab+'"]');if(same)same.focus();}return;}
+    setReviewTab(tab,focusTab);
+    if(reviewView)reviewView.scrollTo({top:0,behavior:prefersReducedMotion()?'auto':'smooth'});
+  }
   // Every affordance that used to open the trust drawer now points at a section
   // of the review page instead, so nothing that had an entrance loses one.
   function gotoReview(section,path){
@@ -2799,6 +2876,11 @@ const PAGE_JS_TAIL = `
       var dest=section?$('[data-review-section="'+section+'"]'):null;
       if(path){var card=$('[data-excluded-file="'+path+'"]');if(card)dest=card;}
       if(!dest){focusElementWithoutScroll(reviewView);return;}
+      var panel=closest(dest,'[data-review-panel]');
+      if(panel)setReviewTab(panel.getAttribute('data-review-panel'),false);
+      // Asking for the unexplained changes is asking to read them: the section
+      // stays shut on arrival, but not when the reviewer aimed at it.
+      if(section==='unexplained'){var disclosure=$('[data-unexplained-disclosure]',dest);if(disclosure)disclosure.open=true;}
       // Scroll the review panel itself. The blunt DOM helper this replaces also
       // scrolls horizontal ancestors, which would shove the diff sideways.
       if(reviewView){
@@ -3868,15 +3950,17 @@ const PAGE_JS_TAIL = `
     var blockingN=commentIds(function(c){return c.status!=='resolved'&&commentSeverity(c)==='blocking';}).length,nonblockingN=Math.max(0,openN-blockingN);
     var b=$('#ds-open-count b');if(b)b.textContent=openN;
     var count=$('#ds-open-count');if(count)count.hidden=openN===0;
-    var countLabel=$('.ds-review-menu-count-label');if(countLabel)countLabel.textContent=' '+(openN===1?'note':'notes');
-    var reviewBtn=$('[data-review-menu]'),unexplained=reviewBtn?Number(reviewBtn.getAttribute('data-unexplained-count')||0):0,excluded=reviewBtn?Number(reviewBtn.getAttribute('data-excluded-count')||0):0,indexDivergent=reviewBtn?Number(reviewBtn.getAttribute('data-index-divergence-count')||0):0;
+    var reviewBtn=$('[data-review-status]'),unexplained=reviewBtn?Number(reviewBtn.getAttribute('data-unexplained-count')||0):0,excluded=reviewBtn?Number(reviewBtn.getAttribute('data-excluded-count')||0):0,indexDivergent=reviewBtn?Number(reviewBtn.getAttribute('data-index-divergence-count')||0):0;
     var storyFreshness=reviewBtn?reviewBtn.getAttribute('data-story-freshness')||'unverified':'current';
     var feedbackHealthy=document.body.getAttribute('data-feedback-health')!=='invalid';
     if(reviewBtn)reviewBtn.setAttribute('aria-label','Review, '+openN+' unresolved '+(openN===1?'note':'notes')+(blockingN?', '+blockingN+' blocking':'')+(!feedbackHealthy?', feedback file needs repair':indexDivergent?', '+indexDivergent+' staged and working-tree '+(indexDivergent===1?'version differs':'versions differ'):storyFreshness!=='current'?', story requires regeneration':unexplained?', '+unexplained+' '+(unexplained===1?'change':'changes')+' not explained by the story':excluded?', '+excluded+' excluded '+(excluded===1?'file':'files')+' to inspect':''));
     var summary=$('.ds-review-summary-label b');if(summary){summary.textContent=openN;if(summary.nextSibling)summary.nextSibling.nodeValue=' unresolved '+(openN===1?'note':'notes');}
+    var notesTabCount=$('[data-review-open-notes]');if(notesTabCount){notesTabCount.textContent=openN;notesTabCount.hidden=openN===0;}
     var pill=$('.ds-trustpill'),fresh=document.body.getAttribute('data-story-freshness')||'unverified',focused=document.body.getAttribute('data-story-scope')==='focused',liveDiffCurrent=document.body.getAttribute('data-live-diff-stale')!=='1',coverageClean=(!pill||pill.classList.contains('is-clean'))&&fresh==='current',exclusionsClear=excluded===0||exclusionsAcknowledged(),clean=feedbackHealthy&&coverageClean&&exclusionsClear&&indexDivergent===0&&!focused&&liveDiffCurrent;
     void nonblockingN;
-    if(reviewBtn)reviewBtn.classList.toggle('is-clean',blockingN===0&&!!clean);
+    // One flag on the Review tab, shown only while the page behind it still
+    // wants a decision. Clean means the flag goes away, not that it turns green.
+    var flag=$('[data-review-flag]');if(flag)flag.hidden=blockingN===0&&!!clean;
     var sendableN=collectOpenIds().length,aa=$('[data-address-all]');if(aa&&!agentBusy)aa.disabled=sendableN===0;
     var co=$('[data-copy-comments="open"]');if(co)co.disabled=sendableN===0;
     var totalN=commentIds().length,ca=$('[data-copy-comments="all"]');if(ca)ca.disabled=totalN===0;
@@ -3966,6 +4050,7 @@ const PAGE_JS_TAIL = `
     }
     b=closest(t,'[data-sidebar-scrim]');if(b){closeCompactSidebar(true);return;}
     b=closest(t,'[data-view]');if(b){setView(b.getAttribute('data-view'));return;}
+    b=closest(t,'[data-review-tab-select]');if(b){selectReviewTab(b.getAttribute('data-review-tab-select'),false);return;}
     b=closest(t,'[data-goto-review]');if(b){gotoReview(b.getAttribute('data-goto-review'),b.getAttribute('data-goto-excluded'));return;}
     b=closest(t,'[data-file-filter]');if(b){setFileFilter(b.getAttribute('data-file-filter'));return;}
     b=closest(t,'[data-next-unviewed]');if(b){nextUnviewedFile();return;}
@@ -4079,6 +4164,15 @@ const PAGE_JS_TAIL = `
         else nextChoice=choices[(ci+((e.key==='ArrowRight'||e.key==='ArrowDown')?1:-1)+choices.length)%choices.length];
         if(nextChoice){e.preventDefault();nextChoice.focus();nextChoice.click();return;}
       }
+    }
+    // The review page's own tablist walks the same way the view tabs do — a
+    // tablist a keyboard cannot cross is a tablist in name only.
+    var reviewTab=closest(e.target,'[data-review-tab-select]');
+    if(reviewTab&&(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='Home'||e.key==='End')){
+      var reviewTabs=$all('[data-review-tab-select]'),rti=reviewTabs.indexOf(reviewTab);
+      var nextReviewTab=e.key==='Home'?reviewTabs[0]:e.key==='End'?reviewTabs[reviewTabs.length-1]:reviewTabs[(rti+(e.key==='ArrowRight'?1:-1)+reviewTabs.length)%reviewTabs.length];
+      if(nextReviewTab){selectReviewTab(nextReviewTab.getAttribute('data-review-tab-select'),true);e.preventDefault();}
+      return;
     }
     var viewTab=closest(e.target,'[data-view]');
     if(viewTab&&(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='Home'||e.key==='End')){

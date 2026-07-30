@@ -375,11 +375,12 @@ test('narrated stories use one quiet review row and keep secondary controls out 
 test('toolbar keeps the decision signal primary and demotes agent routing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /\.ds-reviewchrome\{height:56px[^}]*overflow:visible/, 'header overlays must not be clipped or focus-scroll the chrome');
-  assert.match(html, /data-review-menu/);
-  assert.match(html, /data-review-menu[^>]*data-goto-review="status"/);
+  // One Review entrance, not two: the tab carries the status the chip used to.
+  assert.doesNotMatch(html, /ds-review-menu|data-review-menu/);
   assert.doesNotMatch(html, /data-review-menu-pop|aria-haspopup="dialog"/);
+  assert.match(html, /id="ds-tab-review"[^>]*data-review-status/);
   assert.match(html, />Review</);
-  assert.match(html, /aria-label="Review, 0 unresolved notes(?:, [^"]+)?"/);
+  assert.match(html, /id="ds-tab-review"[^>]*aria-label="Review, 0 unresolved notes(?:, [^"]+)?"/);
   assert.match(html, /data-unexplained-count="\d+"/);
   assert.match(html, /ds-review-summary/);
   assert.match(html, /data-agent-target-control/);
@@ -391,9 +392,10 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.match(html, />Resend open comments</);
   assert.match(html, />Review actions</);
   assert.doesNotMatch(html, /data-verdict/);
-  assert.match(html, /id="ds-reviewpage-status-h">Status</);
+  // The verdict is pinned above the tab bar rather than being a tab of its own.
+  assert.match(html, /class="ds-reviewsummary" data-review-section="status"[\s\S]*?ds-trustpill[\s\S]*?<div class="ds-reviewtabs" role="tablist"/);
+  assert.doesNotMatch(html, /ds-reviewpage-status-h/);
   assert.doesNotMatch(html, /class="ds-reviewstatusbar[^>]*data-roundbar/);
-  assert.doesNotMatch(html, /class="ds-review-menu-coverage"/);
   assert.doesNotMatch(html, /class="ds-reviewstatus-scope"/);
   assert.doesNotMatch(html, />Feedback clear<\/span>/);
   assert.doesNotMatch(html, /class="ds-sessionstage/);
@@ -624,7 +626,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /data-sidebar-scrim/);
   assert.match(html, /body:not\(\.ds-rail-collapsed\) \.ds-rail-scrim\{display:block;position:fixed;top:56px;right:0;bottom:0;left:min\(var\(--ds-rail-width,240px\),calc\(100vw - 48px\)\)/);
   assert.match(html, /\.ds-reviewchrome,body\.ds-rail-collapsed \.ds-reviewchrome\{height:56px;grid-template-columns:minmax\(0,1fr\);grid-template-rows:56px\}/);
-  assert.match(html, /\.ds-reload-diff,\.ds-review-menu\{min-width:44px;height:44px/);
+  assert.match(html, /\.ds-reload-diff\{min-width:44px;height:44px/);
   assert.match(html, /if\(open\)main\.setAttribute\('inert',''\);else main\.removeAttribute\('inert'\)/);
   assert.match(html, /if\(compactScreen\(\)&&v!=='files'\)setSidebarCollapsed\(true,false\)/);
   assert.match(html, /if\(compactScreen\(\)&&!document\.body\.classList\.contains\('ds-rail-collapsed'\)\)closeCompactSidebar\(true\)/);
@@ -1046,9 +1048,9 @@ test('read aloud submits future narration beats together so Aloud can prefetch t
 
 test('read aloud visually focuses the code rows for the step being spoken', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  // The reading-here accent rings the island, not the diff card — the card is
-  // full-bleed inside it and draws no frame of its own.
-  assert.match(html, /#ds-view-tour>\.ds-step\.is-voice-active:not\(\[hidden\]\)\{border-color:var\(--accent-line\)/);
+  // Speaking-now is shown on the rows being read, never as a tint on the island
+  // edge — that edge is window-wide and stays as quiet as the chrome above it.
+  assert.doesNotMatch(html, /#ds-view-tour>\.ds-step\.is-voice-active:not\(\[hidden\]\)\{border-color:/);
   assert.match(html, /\.ds-row\.is-voice-focus/);
   assert.match(html, /voiceFocusIndex=-1/);
   assert.match(html, /function clearVoiceFocus\(\)/);
@@ -1602,8 +1604,8 @@ test('storyless review page puts story generation controls in the Story tab', ()
   assert.match(html, /class="ds-title" title="Reviewing the diff">Diff review<\/div>/);
   assert.match(html, /class="ds-reviewchrome-subtitle">Working tree <span>vs<\/span> <b>main<\/b><\/div>/);
   assert.match(html, /class="ds-reload-diff" data-reload-diff[^>]*aria-label="Reload diff"/);
-  assert.match(html, /class="ds-ui-icon ds-review-menu-icon"/);
-  assert.doesNotMatch(html, /class="ds-review-menu-dot"/);
+  assert.match(html, /id="ds-tab-review"[^>]*data-review-status/);
+  assert.doesNotMatch(html, /class="ds-review-menu/);
   assert.doesNotMatch(html, /class="ds-readaloud"/);
   assert.doesNotMatch(html, /id="ds-settings"/);
   assert.match(html, /id="storyAgentSel"/);
@@ -1920,7 +1922,10 @@ test('review status stays honest without a verdict: blocking notes and divergenc
     stagedWorktreeDivergentFiles: ['a.ts'],
   });
   assert.match(divergentHtml, /staged\/working-tree mismatch · reconcile before deciding/);
-  assert.match(divergentHtml, /Staged state differs · 1/);
+  assert.match(divergentHtml, /Staged state differs <span class="ds-option-count">1<\/span>/);
+  // Its own section, reachable from the pill that reports it.
+  assert.match(divergentHtml, /data-review-section="staged"/);
+  assert.match(divergentHtml, /class="ds-trustpill[^"]*" data-goto-review="staged"/);
   assert.match(divergentHtml, /<code>a\.ts<\/code>/);
 });
 
@@ -1937,7 +1942,8 @@ test('storyless exclusions remain inspectable and acknowledgeable from review st
       addedLines: 12, removedLines: 0, changedLines: 12,
     }],
   });
-  assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-goto-review="evidence"/);
+  assert.match(html, /class="ds-trustpill is-clean has-exclusions" data-goto-review="exclusions"/);
+  assert.match(html, /data-review-section="exclusions"/);
   assert.match(html, /<b>1<\/b> excluded file · inspect before deciding/);
   assert.match(html, /data-exclusions-ack/);
   assert.match(html, /No story-coverage claim is applied in this view/);
@@ -2636,6 +2642,104 @@ test('the trust evidence carries a machine-readable verdict once coverage resolv
   assert.match(pending, /data-trust-uncovered=""/);
 });
 
+test('unexplained changes get their own section, summarised and collapsed', () => {
+  const uncovered = [0, 1, 2].map((index) => ({
+    file: index === 2 ? 'b.ts' : 'a.ts',
+    line: 10 + index * 10,
+    rows: [
+      { type: 'add', content: `added ${index}`, newNo: 10 + index * 10 },
+      { type: 'add', content: `also ${index}`, newNo: 11 + index * 10 },
+    ],
+  }));
+  const html = renderTrustEvidence(
+    { coveredLines: 40, uncoveredLines: 6, uncovered },
+    new Map(),
+    [],
+    [],
+    false,
+  );
+
+  // Its own section — not a wall of cards inside Status.
+  assert.match(html, /<section class="ds-reviewpage-section ds-unexplained" data-review-section="unexplained"/);
+  assert.match(html, /id="ds-reviewpage-unexplained-h">.*Unexplained changes <span class="ds-option-count">3<\/span>/);
+  assert.match(html, /3 changed ranges across 2 files are in the diff with no story step walking through them/);
+  // A compact per-file summary is the part that reads at a glance.
+  assert.match(html, /data-goto-file="a\.ts"[\s\S]*?2 ranges · 4 lines/);
+  assert.match(html, /data-goto-file="b\.ts"[\s\S]*?1 range · 2 lines/);
+  // The diff cards exist but stay behind a shut disclosure.
+  assert.match(html, /<details class="ds-unexplained-detail" data-unexplained-disclosure>/);
+  assert.doesNotMatch(html, /data-unexplained-disclosure open/);
+  assert.match(html, />Show all 3 changes</);
+  assert.equal(html.match(/class="ds-trust-card"/g).length, 3);
+  // The per-card note is gone: the section says it once instead of 3 times.
+  assert.doesNotMatch(html, /ds-trust-card-note/);
+
+  const clean = renderTrustEvidence({ coveredLines: 4, uncoveredLines: 0, uncovered: [] }, new Map(), [], [], false);
+  assert.doesNotMatch(clean, /data-review-section="unexplained"/);
+  assert.match(clean, /Every changed range in the bounded renderer is fully explained by a step/);
+});
+
+test('the review page is tabbed, with the verdict pinned above the tabs', () => {
+  const html = renderPage({
+    repo: process.cwd(),
+    tour: { ...tour, steps: [] },
+    files,
+    baseLabel: 'main',
+    comments: [
+      { id: 'c1', file: 'a.ts', line: 1, side: 'new', body: 'Why this way?', status: 'open', severity: 'question' },
+    ],
+    stagedWorktreeDivergentFiles: ['a.ts'],
+    excludedFiles: [{ path: 'dist/bundle.js', reason: 'generated-path', addedLines: 3, removedLines: 0, changedLines: 3 }],
+  });
+
+  // The pinned strip is the summary only — no evidence, no cards, no panel chrome.
+  const summary = html.match(/<div class="ds-reviewsummary"[\s\S]*?<div class="ds-reviewtabs"/)[0];
+  assert.match(summary, /unresolved note/);
+  assert.match(summary, /ds-trustpill/);
+  assert.doesNotMatch(summary, /ds-trust-stats|ds-trust-card|ds-unexplained|ds-exclusion-card|ds-feedback-list/);
+
+  // Four tabs, coverage selected, and exactly one panel visible.
+  for (const [tab, index] of [['coverage', 0], ['notes', 1], ['challenge', 2], ['actions', 3]]) {
+    assert.match(html, new RegExp(`role="tab" id="ds-reviewtab-${tab}" data-review-tab-select="${tab}" aria-controls="ds-reviewpanel-${tab}"`), `tab ${index}`);
+    assert.match(html, new RegExp(`id="ds-reviewpanel-${tab}" role="tabpanel" aria-labelledby="ds-reviewtab-${tab}" data-review-panel="${tab}"`));
+  }
+  assert.match(html, /data-review-tab-select="coverage" aria-controls="ds-reviewpanel-coverage" aria-selected="true" tabindex="0"/);
+  assert.match(html, /data-review-tab-select="notes"[^>]*aria-selected="false" tabindex="-1"/);
+  assert.equal(html.match(/data-review-panel="[a-z]+" tabindex="0"(?! hidden)/g).length, 1, 'only the selected panel may be visible');
+
+  // Coverage owns the evidence; the other panels own what their tab promises.
+  const coveragePanel = html.match(/id="ds-reviewpanel-coverage"[\s\S]*?id="ds-reviewpanel-notes"/)[0];
+  for (const section of ['evidence', 'unexplained', 'staged', 'exclusions']) {
+    assert.match(coveragePanel, new RegExp(`data-review-section="${section}"`));
+  }
+  assert.match(html.match(/id="ds-reviewpanel-notes"[\s\S]*?id="ds-reviewpanel-challenge"/)[0], /data-review-section="notes"/);
+  assert.match(html.match(/id="ds-reviewpanel-actions"[\s\S]*$/)[0], /data-review-section="actions"/);
+
+  // Both tab badges: a counted coverage gap and the open-note count.
+  assert.match(html, /data-review-tab-select="coverage"[^>]*aria-label="Coverage, 1 change not explained by the story"/);
+  assert.match(html, /data-coverage-flag aria-hidden="true">▲1</);
+  assert.match(html, /data-review-open-notes>1</);
+});
+
+test('a clean review page carries no flag and a pending one carries no verdict yet', () => {
+  const clean = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
+  assert.match(clean, /data-coverage-flag aria-hidden="true" hidden></);
+  assert.doesNotMatch(clean, /aria-label="Coverage, /);
+  assert.match(clean, /data-review-open-notes hidden>0</);
+
+  // Coverage is unknown until the lazy check answers: no flag may be invented.
+  const pending = renderPage({
+    repo: process.cwd(),
+    tour,
+    files: [],
+    fileIndex: [{ path: 'a.ts', reviewHash: 'h1', addedLines: 1, removedLines: 0, changedLines: 1 }],
+    baseLabel: 'main',
+    comments: [],
+  });
+  assert.match(pending, /data-coverage-flag aria-hidden="true" hidden></);
+  assert.doesNotMatch(pending, /aria-label="Coverage, /);
+});
+
 test('review is a third top-level tab with a full page behind it', () => {
   const html = renderPage({
     repo: process.cwd(),
@@ -2645,11 +2749,13 @@ test('review is a third top-level tab with a full page behind it', () => {
     comments: [],
   });
 
-  assert.match(html, /id="ds-tab-review" data-view="review" role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1"/);
+  assert.match(html, /id="ds-tab-review" data-view="review"[^>]* role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1"/);
   assert.match(html, /id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" tabindex="0" hidden/);
-  for (const section of ['status', 'notes', 'challenge', 'actions']) {
+  for (const section of ['evidence', 'notes', 'challenge', 'actions']) {
     assert.match(html, new RegExp(`data-review-section="${section}" aria-labelledby="ds-reviewpage-${section}-h" tabindex="-1"`));
   }
+  // Status is the pinned strip, so it keeps its section name but not the card.
+  assert.match(html, /class="ds-reviewsummary" data-review-section="status" tabindex="-1"/);
   // The server must paint the view now that CSS keys on it; a missing attribute
   // used to be harmless because there were only two views.
   assert.match(html, /<body[^>]*data-read-view="tour"/);
@@ -2664,7 +2770,7 @@ test('the review chip switches tabs instead of opening a popover', () => {
     comments: [],
   });
 
-  assert.match(html, /data-review-menu data-goto-review="status"/);
+  assert.match(html, /id="ds-tab-review"[^>]*data-review-status/);
   assert.doesNotMatch(html, /aria-haspopup="dialog"/);
   assert.doesNotMatch(html, /data-review-menu-pop|ds-review-menu-wrap|ds-review-menu-caret/);
   // The chip is the entrance to the tab, so it must not be hidden on the
@@ -2672,7 +2778,7 @@ test('the review chip switches tabs instead of opening a popover', () => {
   assert.doesNotMatch(html, /\.ds-overview-active \.ds-review-menu-wrap/);
   // refreshCount derives the chip's clean state from these; dropping one freezes it.
   for (const attribute of ['data-unexplained-count', 'data-excluded-count', 'data-index-divergence-count', 'data-story-freshness']) {
-    assert.match(html, new RegExp(`data-review-menu[^>]*${attribute}=`));
+    assert.match(html, new RegExp(`data-review-status[^>]*${attribute}=`));
   }
 });
 

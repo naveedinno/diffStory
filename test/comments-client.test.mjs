@@ -319,9 +319,11 @@ test('agent target labels update every sending surface and mark the current task
 
 test('agent and review controls stay distinct at compact widths', () => {
   assert.match(PAGE_CSS, /@media \(max-width:900px\)[\s\S]*?\.ds-agent-target\{width:36px/);
-  assert.match(PAGE_CSS, /\.ds-review-menu-dot::before\{content:'!'/);
-  assert.match(PAGE_CSS, /\.ds-review-menu\.is-clean \.ds-review-menu-dot::before\{content:'✓'/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-review-menu-dot::before\{content:'…'/);
+  // The review status is a flag on the tab now — amber while the review page
+  // still wants a decision, and simply absent once it does not.
+  assert.match(PAGE_CSS, /\.ds-tab-flag\{[^}]*color:var\(--amber\)/);
+  assert.match(PAGE_CSS, /\.ds-tab-flag\[hidden\]\{display:none\}/);
+  assert.doesNotMatch(PAGE_CSS, /\.ds-review-menu/);
   assert.match(PAGE_CSS, /@media \(max-width:620px\)[\s\S]*?\.ds-agent-chooser\{align-items:flex-end/);
   assert.match(PAGE_CSS, /@media \(max-width:620px\)\{\.ds-thread-composer-foot\{align-items:stretch\}\}/);
 });
@@ -489,6 +491,42 @@ test('review sections are reachable and scroll without dragging the diff sideway
   // horizontal ancestor; the review page scrolls its own panel instead.
   assert.match(PAGE_JS, /reviewView\.scrollTo\(\{top:Math\.max\(0,top\)/);
   assert.doesNotMatch(PAGE_JS, /scrollIntoView/);
+  // Aiming at the unexplained changes opens them; arriving at the page does not.
+  assert.match(PAGE_JS, /section==='unexplained'.*disclosure\.open=true/);
+  // The pill's arrow follows its own verdict once coverage resolves.
+  assert.match(PAGE_JS, /pill\.setAttribute\('data-goto-review',uncovered>0&&!storyless\?'unexplained':excluded\?'exclusions':'evidence'\)/);
+});
+
+test('the review page tabs select panels, walk by keyboard, and are remembered', () => {
+  // Selecting a tab is one state change: attribute, buttons, panels, saved spot.
+  assert.match(PAGE_JS, /page\.setAttribute\('data-review-tab',tab\)/);
+  assert.match(PAGE_JS, /panel\.hidden=panel\.getAttribute\('data-review-panel'\)!==tab/);
+  assert.match(PAGE_JS, /node\.setAttribute\('aria-selected',on\?'true':'false'\);\s*node\.tabIndex=on\?0:-1/);
+  // A new panel starts at the top; a carried-over offset points at nothing.
+  assert.match(PAGE_JS, /setReviewTab\(tab,focusTab\);\s*if\(reviewView\)reviewView\.scrollTo\(\{top:0/);
+  // Deep links still land: the section's own panel becomes the selected tab.
+  assert.match(PAGE_JS, /var panel=closest\(dest,'\[data-review-panel\]'\);\s*if\(panel\)setReviewTab\(panel\.getAttribute\('data-review-panel'\),false\)/);
+  // Keyboard: the review tablist walks like the view tablist, wrapping.
+  assert.match(PAGE_JS, /reviewTabs\[\(rti\+\(e\.key==='ArrowRight'\?1:-1\)\+reviewTabs\.length\)%reviewTabs\.length\]/);
+  // The tab you left is the tab you come back to.
+  assert.match(PAGE_JS, /reviewTab:activeReviewTab\(\)/);
+  assert.match(PAGE_JS, /if\(state\.reviewTab\)setReviewTab\(state\.reviewTab,false\)/);
+});
+
+test('the coverage tab flag and note count stay tied to the facts', () => {
+  // The flag is written from the resolved verdict, never guessed at paint time.
+  assert.match(PAGE_JS, /function applyCoverageFlag\(uncovered,outside\)/);
+  assert.match(PAGE_JS, /applyCoverageFlag\(uncovered>0&&!storyless\?uncovered:0,/);
+  // Decorative mark, spoken label — written together so they cannot disagree.
+  assert.match(PAGE_JS, /flag\.textContent=text;flag\.hidden=!text/);
+  assert.match(PAGE_JS, /tab\.setAttribute\('aria-label','Coverage, '\+label\);else tab\.removeAttribute\('aria-label'\)/);
+  assert.match(PAGE_JS, /notesTabCount\.textContent=openN;notesTabCount\.hidden=openN===0/);
+});
+
+test('the review tab is the only review entrance and carries its status', () => {
+  assert.match(PAGE_JS, /\$\('\[data-review-status\]'\)/);
+  assert.match(PAGE_JS, /var flag=\$\('\[data-review-flag\]'\);if\(flag\)flag\.hidden=blockingN===0&&!!clean/);
+  assert.doesNotMatch(PAGE_JS, /data-review-menu/);
 });
 
 test('three tabs roving-select with wrap and Home/End', () => {

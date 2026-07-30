@@ -138,7 +138,8 @@ test('review header separates the agent task from compact review status', () => 
     body: 'x', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
   assert.match(html, /data-agent-target-control/);
-  assert.match(html, /ds-review-menu-count/);
+  // The open-note count rides the Review tab now that the chip is gone.
+  assert.match(html, /id="ds-tab-review"[\s\S]*?class="ds-tab-badge" id="ds-open-count"/);
   assert.match(html, /<b>1<\/b>/);
   assert.match(html, />Resend open comments</);
   assert.match(html, />Review actions</);
