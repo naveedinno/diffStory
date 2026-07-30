@@ -30,9 +30,10 @@ struct ZoomState(Mutex<f64>);
 #[serde(default)]
 struct Preferences {
     zoom: f64,
+    // The restore size the window returns to when it is un-maximized. diffStory
+    // always opens maximized, so this is never the size we launch at.
     window_width: f64,
     window_height: f64,
-    maximized: bool,
     last_path: String,
 }
 
@@ -42,7 +43,6 @@ impl Default for Preferences {
             zoom: 1.0,
             window_width: 1380.0,
             window_height: 880.0,
-            maximized: false,
             last_path: "/".into(),
         }
     }
@@ -125,8 +125,9 @@ fn save_preferences(app: &AppHandle) {
         .clamp(0.5, 3.0);
 
     if let Some(window) = app.get_webview_window("main") {
-        preferences.maximized = window.is_maximized().unwrap_or(false);
-        if !preferences.maximized {
+        // A maximized window's size is the screen's, not a size worth restoring
+        // to. Only record the size the user actually chose.
+        if !window.is_maximized().unwrap_or(false) {
             if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
                 preferences.window_width = (size.width as f64 / scale).clamp(920.0, 3840.0);
                 preferences.window_height = (size.height as f64 / scale).clamp(620.0, 2160.0);
@@ -589,7 +590,10 @@ fn main() {
                     .title("diffStory")
                     .inner_size(window_width, window_height)
                     .min_inner_size(920.0, 620.0)
-                    .maximized(initial_window.maximized)
+                    // Review wants every pixel it can get, so diffStory always
+                    // opens filling the screen. `inner_size` above stays the
+                    // size the window returns to once the user un-maximizes it.
+                    .maximized(true)
                     .build()?;
             let _ = window.set_zoom(initial_zoom);
             start_or_connect(app.handle().clone());
