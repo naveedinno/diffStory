@@ -415,17 +415,17 @@ ${BRAND_HEAD_LINKS}
   <button class="ds-rail-scrim" data-sidebar-scrim type="button" aria-label="Close review navigation" aria-hidden="true" tabindex="-1"></button>
 
   <main class="ds-main">
-    <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0">
+    <div class="ds-view" id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour">
       ${storyless ? generateCta(model, routeBase, tour.base, headRef, excludedFiles) : introPanel(model, tour, storyFreshness, routeBase, storyDrift)}
       ${storyless ? '' : stepPanels}
       ${storyless ? storylessThread(excludedOnly) : filmstripThread(model.steps)}
     </div>
-    <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0" hidden>
+    <div class="ds-view" id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" hidden>
       <div class="ds-filedetail" id="ds-file-detail">
         ${filePanels || (excludedOnly ? excludedScopeNotice(excludedFiles, false) : '<div class="ds-empty">No files in this change.</div>')}
       </div>
     </div>
-    <div class="ds-view" id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" tabindex="0" hidden>
+    <div class="ds-view" id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" hidden>
       ${reviewPanel({
         repo,
         headRef,

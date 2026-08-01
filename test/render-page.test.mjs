@@ -648,11 +648,14 @@ test('review view switcher exposes complete keyboard tab semantics', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /id="ds-tab-tour"[^>]*role="tab"[^>]*aria-controls="ds-view-tour"[^>]*aria-selected="true"/);
   assert.match(html, /id="ds-tab-files"[^>]*role="tab"[^>]*aria-controls="ds-view-files"[^>]*aria-selected="false"[^>]*tabindex="-1"/);
-  assert.match(html, /id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour" tabindex="0"/);
-  assert.match(html, /id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" tabindex="0"/);
+  assert.match(html, /id="ds-view-tour" role="tabpanel" aria-labelledby="ds-tab-tour">/);
+  assert.match(html, /id="ds-view-files" role="tabpanel" aria-labelledby="ds-tab-files" hidden>/);
+  assert.doesNotMatch(html, /id="ds-view-(?:tour|files|review)"[^>]*tabindex=/, 'page-sized views are not focus stops');
   assert.match(html, /t\.setAttribute\('aria-selected',on\?'true':'false'\);t\.tabIndex=on\?0:-1/);
   assert.match(html, /function focusViewEntry\(v\)/);
   assert.match(html, /if\(v==='tour'\)\{focusStoryViewEntry\(\);return;\}/);
+  assert.match(html, /var selectedReviewTab=\$\('\.ds-reviewtab\[aria-selected="true"\]'\);/);
+  assert.match(html, /focusElementWithoutScroll\(selectedReviewTab\|\|\$\('\[data-view="review"\]'\)\)/);
   assert.match(html, /setView\(nextView,true\)/);
   assert.match(html, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\|\|e\.key==='Home'\|\|e\.key==='End'\)/);
 });
@@ -2750,7 +2753,7 @@ test('review is a third top-level tab with a full page behind it', () => {
   });
 
   assert.match(html, /id="ds-tab-review" data-view="review"[^>]* role="tab" aria-controls="ds-view-review" aria-selected="false" tabindex="-1"/);
-  assert.match(html, /id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" tabindex="0" hidden/);
+  assert.match(html, /id="ds-view-review" role="tabpanel" aria-labelledby="ds-tab-review" hidden/);
   for (const section of ['evidence', 'notes', 'challenge', 'actions']) {
     assert.match(html, new RegExp(`data-review-section="${section}" aria-labelledby="ds-reviewpage-${section}-h" tabindex="-1"`));
   }

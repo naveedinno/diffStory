@@ -1376,8 +1376,7 @@ const PAGE_JS_HEAD = `
     if(restore&&target&&target.focus)target.focus();
   }
   function focusActiveReview(){
-    var target=viewElement(currentView())||tourView;
-    if(target&&target.focus){try{target.focus({preventScroll:true});}catch(e){target.focus();}}
+    focusViewEntry(currentView());
   }
   function collapseCompactSidebar(){if(compactScreen()){closeCompactSidebar(false);focusActiveReview();}}
   function nodeElement(n){return n&&n.nodeType===1?n:(n&&n.parentElement?n.parentElement:null);}
@@ -1587,7 +1586,7 @@ const PAGE_JS_HEAD = `
       target=active===0?$('.ds-intro-start',panel):$('[data-story-beat][aria-pressed="true"]',host);
       if(!target)target=$('[data-story-beat]',host)||$('.ds-concept-next',panel);
     }
-    if(!target)target=$('[data-thread-node="'+active+'"]')||tourView;
+    if(!target)target=$('[data-thread-node="'+active+'"]')||$('.ds-tab[aria-selected="true"]');
     focusElementWithoutScroll(target);
   }
   var DS_VIEWS=['tour','files','review'];
@@ -1600,7 +1599,8 @@ const PAGE_JS_HEAD = `
     if(v==='review'){
       // gotoReview is about to focus a specific section; do not outrun it.
       if(pendingReviewSection)return;
-      if(!focusElementWithoutScroll(reviewView))focusElementWithoutScroll($('[data-view="review"]'));return;
+      var selectedReviewTab=$('.ds-reviewtab[aria-selected="true"]');
+      focusElementWithoutScroll(selectedReviewTab||$('[data-view="review"]'));return;
     }
     var tab=$('[data-view="files"]');if(!focusElementWithoutScroll(tab)){var search=$('[data-file-search]');focusElementWithoutScroll(search);}
   }
