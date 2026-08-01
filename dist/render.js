@@ -251,6 +251,11 @@ ${BRAND_HEAD_LINKS}
   </button>
 </div>
 
+<div class="ds-toast ds-story-reload-toast" data-story-reload-toast role="status" aria-live="polite" aria-atomic="true" hidden>
+  <span>Story updated. Reloading in 10 seconds.</span>
+  <button type="button" data-story-reload-cancel aria-label="Cancel automatic story reload">Cancel</button>
+</div>
+
 <div id="ds-agentpanel">${progressPanelMarkup('floating')}</div>
 
 <div class="ds-layout">

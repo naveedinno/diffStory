@@ -404,6 +404,12 @@ test('live review reconnects through the page lease and recovers durable state',
   assert.match(PAGE_JS, /var LIVE_BANNER_KINDS=\[/);
   assert.match(PAGE_JS, /\{kind:'diff',message:/);
   assert.match(PAGE_JS, /\{kind:'disconnected',message:/);
+  assert.doesNotMatch(PAGE_JS, /\{kind:'story',message:/);
+  assert.match(PAGE_JS, /function scheduleStoryReload\(\)/);
+  assert.match(PAGE_JS, /storyReloadTimer=setTimeout\(function\(\)\{[^}]*location\.reload\(\);\},10000\)/);
+  assert.match(PAGE_JS, /function cancelStoryReload\(\)\{hideStoryReloadToast\(\);toast\('Automatic reload cancelled\.'\);\}/);
+  assert.match(PAGE_JS, /if\(on\)scheduleStoryReload\(\);else hideStoryReloadToast\(\);/);
+  assert.match(PAGE_JS, /data-story-reload-cancel/);
   assert.match(PAGE_JS, /data-live-diff-stale/);
   assert.match(PAGE_JS, /fetch\(reviewPageUrl\('\/api\/review-state'\)\)/);
   assert.match(PAGE_JS, /function aiTurnKeys\(/);

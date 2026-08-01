@@ -2315,6 +2315,11 @@ test('live review banner is stable, polite, dismissible, and does not move docum
   assert.match(html, /class="ds-live-banner-reload" type="button" data-live-reload>Reload</);
   assert.match(html, /class="ds-live-banner-dismiss" type="button" data-live-dismiss aria-label="Dismiss live review status"/);
   assert.match(html, /\{kind:'diff',message:'Diff changed\.'\}/);
+  assert.doesNotMatch(html, /\{kind:'story',message:/);
+  assert.match(html, /class="ds-toast ds-story-reload-toast" data-story-reload-toast role="status" aria-live="polite" aria-atomic="true" hidden/);
+  assert.match(html, /Story updated\. Reloading in 10 seconds\./);
+  assert.match(html, /type="button" data-story-reload-cancel aria-label="Cancel automatic story reload">Cancel</);
+  assert.match(html, /\.ds-story-reload-toast\{bottom:84px;/);
   assert.ok(html.indexOf('data-live-banner') < html.indexOf('class="ds-layout"'));
 });
 
