@@ -39,6 +39,9 @@ export interface StorySummary {
   deletions: number;
   openComments: number;
   addressedComments: number;
+  /** False for the navigation-first history projection, which intentionally
+   * avoids rebuilding the repository diff before the page can render. */
+  liveEvidence: boolean;
 }
 
 export interface StoryScope {
@@ -51,19 +54,29 @@ const NAMED_STORIES_DIR = 'stories';
 
 /** Stories saved for a repo, in the order the app should present them. */
 export function listStories(repo: string): StorySummary[] {
-  const ids = [
-    STORY_FILENAME,
-    LEGACY_STORY_FILENAME,
-    ...namedStoryIds(repo).sort((a, b) => a.localeCompare(b)),
-  ];
-  return ids
-    .map((id) => storySummary(repo, id))
+  return storyIds(repo)
+    .map((id) => storySummary(repo, id, true))
+    .filter((s): s is StorySummary => s !== null);
+}
+
+/** Story cards for navigation. Authored metadata remains exact, while live
+ * diff/drift evidence waits until the story itself is opened. */
+export function listStoryMetadata(repo: string): StorySummary[] {
+  return storyIds(repo)
+    .map((id) => storySummary(repo, id, false))
     .filter((s): s is StorySummary => s !== null);
 }
 
 /** Resolve a story id from listStories() back to a real path, or null if it is not known. */
 export function storyPathForId(repo: string, id: string): string | null {
-  return listStories(repo).find((s) => s.id === id)?.path ?? null;
+  const primary = id === STORY_FILENAME || id === LEGACY_STORY_FILENAME;
+  const named = id.startsWith(`${NAMED_STORIES_DIR}/`) && id.endsWith('.json');
+  if (!primary && !named) return null;
+  if (id.includes('\\')) return null;
+  const path = join(dataDir(repo), id);
+  const rel = relative(dataDir(repo), path).split(sep).join('/');
+  if (rel !== id || !existsSync(path)) return null;
+  return path;
 }
 
 /**
@@ -88,7 +101,18 @@ export function deleteStory(repo: string, id: string): boolean {
 
 /** True when the repo has at least one primary, legacy, or named story file. */
 export function hasStories(repo: string): boolean {
-  return listStories(repo).length > 0;
+  const dir = dataDir(repo);
+  return existsSync(join(dir, STORY_FILENAME))
+    || existsSync(join(dir, LEGACY_STORY_FILENAME))
+    || namedStoryIds(repo).length > 0;
+}
+
+function storyIds(repo: string): string[] {
+  return [
+    STORY_FILENAME,
+    LEGACY_STORY_FILENAME,
+    ...namedStoryIds(repo).sort((a, b) => a.localeCompare(b)),
+  ];
 }
 
 function namedStoryIds(repo: string): string[] {
@@ -109,20 +133,31 @@ function namedStoryIds(repo: string): string[] {
   return ids;
 }
 
-function storySummary(repo: string, id: string): StorySummary | null {
+function storySummary(repo: string, id: string, liveEvidence: boolean): StorySummary | null {
   const path = join(repo, DATA_DIR, id);
   if (!existsSync(path)) return null;
   const updatedAt = statSync(path).mtimeMs;
   try {
     const story = loadTour(path);
-    const session = storySession(
-      repo,
-      story.base,
-      story.head,
-      story.diffFingerprint,
-      story.storySnapshot,
-      snapshotBindingForStory(repo, story),
-    );
+    const session = liveEvidence
+      ? storySession(
+          repo,
+          story.base,
+          story.head,
+          story.diffFingerprint,
+          story.storySnapshot,
+          snapshotBindingForStory(repo, story),
+        )
+      : {
+          freshness: 'unverified' as const,
+          inStoryDrift: 0,
+          outsideStoryDrift: 0,
+          liveFiles: new Set(story.steps.filter(isCodeStep).map((step) => step.file)).size,
+          additions: 0,
+          deletions: 0,
+          openComments: 0,
+          addressedComments: 0,
+        };
     return {
       id,
       path,
@@ -138,6 +173,7 @@ function storySummary(repo: string, id: string): StorySummary | null {
       primers: story.steps.filter((step) => step.kind === 'concept').length,
       files: new Set(story.steps.filter(isCodeStep).map((step) => step.file)).size,
       current: session.freshness === 'current',
+      liveEvidence,
       ...session,
     };
   } catch (e) {
@@ -167,6 +203,7 @@ function storySummary(repo: string, id: string): StorySummary | null {
       deletions: 0,
       openComments: 0,
       addressedComments: 0,
+      liveEvidence,
     };
   }
 }

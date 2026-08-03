@@ -168,8 +168,13 @@ test('starting with a repo lands on history and lists the primary story', async 
     const html = await entry.text();
     assert.ok(html.includes('Review history'), 'starts with the saved review overview');
     assert.ok(html.includes('Saved story'), 'lists the primary saved story');
+    assert.ok(html.includes('>Saved</span>'), 'history renders authored metadata without blocking on live Git evidence');
+    assert.ok(html.includes(`${route}/stories?evidence=refresh`), 'live evidence remains available as an explicit refresh');
     assert.ok(html.includes(`href="${route}/review?story=story.json"`), 'primary story has its own repo-named review route');
     assert.ok(html.includes('href="/repos"'), 'offers a way back to the repo picker');
+
+    const refreshed = await (await fetch(`${base}${route}/stories?evidence=refresh`)).text();
+    assert.ok(!refreshed.includes('>Saved</span>'), 'explicit refresh replaces metadata-only state with live evidence');
 
     const picker = await (await fetch(`${base}/repos`)).text();
     assert.ok(picker.includes('Add repository'), 'switch repo returns to the app picker');

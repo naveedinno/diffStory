@@ -145,24 +145,38 @@ export function getDiff(repo, base, head) {
  * ids, but Node only receives bounded metadata regardless of changed-byte size.
  */
 export function reviewFileIndex(repo, base, head) {
+    return reviewFileIndexSnapshot(repo, base, head).fileIndex;
+}
+/** Build the initial file index and its trust/exclusion companions from one
+ * shared set of Git boundaries. The old callers independently recomputed the
+ * same staged, worktree, untracked, and numstat sets several times. */
+export function reviewFileIndexSnapshot(repo, base, head) {
     const entries = new Map();
     for (const file of nameStatus(repo, base, head))
         entries.set(file.path, file);
+    let stagedOnly = [];
+    let indexDivergent = new Set();
+    let untracked = [];
     if (!head) {
-        for (const path of stagedOnlyReviewPaths(repo, base)) {
+        const staged = stagedChangedPaths(repo, base);
+        stagedOnly = staged.filter((path) => !entries.has(path));
+        for (const path of stagedOnly) {
             for (const file of nameStatus(repo, base, undefined, [path], true)) {
                 if (!entries.has(file.path))
                     entries.set(file.path, file);
             }
         }
-        const indexDivergent = new Set(stagedWorktreeDivergentFiles(repo, base));
-        for (const path of untrackedFiles(repo)) {
+        untracked = untrackedFiles(repo);
+        const worktree = new Set([...changedPaths(repo, []), ...untracked]);
+        indexDivergent = new Set(staged.filter((path) => worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path)));
+        for (const path of untracked) {
             if (!indexDivergent.has(path)) {
                 entries.set(path, { oldPath: '/dev/null', path, status: 'added' });
             }
         }
     }
-    const counts = new Map(numstat(repo, base, head).map((file) => [file.path, file]));
+    const counts = new Map(reviewIndexNumstat(repo, base, head, stagedOnly, indexDivergent, untracked)
+        .map((file) => [file.path, file]));
     const changedFiles = [...entries.values()];
     const paths = changedFiles.map((file) => file.path);
     const resolvedBase = tryGit(repo, ['rev-parse', '--verify', `${base}^{tree}`])?.trim() ?? base;
@@ -171,7 +185,7 @@ export function reviewFileIndex(repo, base, head) {
         : 'working-tree';
     const workingIdentities = head ? new Map() : workingPathIdentities(repo, paths);
     const indexOids = head ? new Map() : indexBlobOids(repo, paths);
-    return changedFiles
+    const fileIndex = changedFiles
         .map((file) => {
         const count = counts.get(file.path) ?? { added: null, removed: null };
         const changedLines = count.added == null || count.removed == null ? null : count.added + count.removed;
@@ -190,6 +204,39 @@ export function reviewFileIndex(repo, base, head) {
         };
     })
         .sort((a, b) => a.path.localeCompare(b.path));
+    const excludedFiles = fileIndex
+        .map((file) => reviewExclusionMetadata(file.path, file.added, file.removed, file.byteSize))
+        .filter((file) => file !== null)
+        .sort((a, b) => a.path.localeCompare(b.path));
+    return {
+        fileIndex,
+        stagedWorktreeDivergentFiles: [...indexDivergent].sort(),
+        excludedFiles,
+    };
+}
+function reviewIndexNumstat(repo, base, head, stagedOnly, indexDivergent, untracked) {
+    const args = ['diff', '--numstat', '--no-color', base];
+    if (head)
+        args.push(head);
+    args.push('--', APP_DATA_PATHSPEC);
+    const tracked = parseNumstat(tryGit(repo, args));
+    if (head)
+        return tracked;
+    const staged = stagedOnly.length
+        ? parseNumstat(tryGit(repo, [
+            'diff',
+            '--cached',
+            '--numstat',
+            '--no-color',
+            base,
+            '--',
+            ...stagedOnly.map(literalPathspec),
+        ]))
+        : [];
+    const untrackedCounts = untracked
+        .filter((path) => !indexDivergent.has(path))
+        .map((path) => ({ path, added: countFileLines(repo, path), removed: 0 }));
+    return [...tracked, ...staged, ...untrackedCounts];
 }
 /**
  * Generate the unified diff for exactly one path. This is the content boundary
@@ -433,13 +480,17 @@ export function reviewChangeFingerprint(repo, base, head) {
  */
 export function reviewSourceMetadataFingerprint(repo, base, head) {
     const hash = createHash('sha256');
-    hash.update(tryGit(repo, ['rev-parse', '--verify', base])?.trim() ?? base);
+    const refs = [base, head ?? 'HEAD'];
+    const resolved = tryGit(repo, ['rev-parse', '--end-of-options', ...refs])
+        ?.trim()
+        .split('\n');
+    hash.update(resolved?.[0] ?? base);
     hash.update('\0');
     if (head) {
-        hash.update(tryGit(repo, ['rev-parse', '--verify', head])?.trim() ?? head);
+        hash.update(resolved?.[1] ?? head);
     }
     else {
-        hash.update(tryGit(repo, ['rev-parse', '--verify', 'HEAD'])?.trim() ?? 'no-head');
+        hash.update(resolved?.[1] ?? 'no-head');
         hash.update('\0');
         hash.update(tryGit(repo, [
             'status',

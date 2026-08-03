@@ -29,17 +29,19 @@ function storyRow(s, now, routeBase, index) {
     const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
     const state = !s.valid
         ? { label: 'Needs repair', cls: 'bad', detail: 'Story file cannot be read' }
-        : s.openComments
-            ? { label: 'In review', cls: 'feedback', detail: `${plural(s.openComments, 'open note')} waiting` }
-            : s.freshness === 'stale'
-                ? { label: 'Story changed', cls: 'warn', detail: s.inStoryDrift
-                        ? `${plural(s.inStoryDrift, 'story file')} changed${s.outsideStoryDrift ? ` · ${plural(s.outsideStoryDrift, 'side file')} also changed` : ''}`
-                        : 'Regenerate the story for the current diff' }
-                : s.freshness === 'unverified'
-                    ? { label: 'Verify scope', cls: 'warn', detail: 'Regenerate to establish a scope-aware baseline' }
-                    : { label: 'Current', cls: 'ready', detail: s.outsideStoryDrift
-                            ? `Story current · ${plural(s.outsideStoryDrift, 'side file')} changed`
-                            : 'Story matches its captured scope' };
+        : !s.liveEvidence
+            ? { label: 'Saved', cls: 'saved', detail: 'Open to inspect current review evidence' }
+            : s.openComments
+                ? { label: 'In review', cls: 'feedback', detail: `${plural(s.openComments, 'open note')} waiting` }
+                : s.freshness === 'stale'
+                    ? { label: 'Story changed', cls: 'warn', detail: s.inStoryDrift
+                            ? `${plural(s.inStoryDrift, 'story file')} changed${s.outsideStoryDrift ? ` · ${plural(s.outsideStoryDrift, 'side file')} also changed` : ''}`
+                            : 'Regenerate the story for the current diff' }
+                    : s.freshness === 'unverified'
+                        ? { label: 'Verify scope', cls: 'warn', detail: 'Regenerate to establish a scope-aware baseline' }
+                        : { label: 'Current', cls: 'ready', detail: s.outsideStoryDrift
+                                ? `Story current · ${plural(s.outsideStoryDrift, 'side file')} changed`
+                                : 'Story matches its captured scope' };
     const activity = s.addressedComments
         ? `${plural(s.addressedComments, 'reply')} ready to verify`
         : state.detail;
@@ -56,7 +58,7 @@ function storyRow(s, now, routeBase, index) {
         `<span class="row-sum">${summary}</span>` +
         `<span class="session-facts">` +
         `<span><b>${s.liveFiles || s.files}</b> files</span>` +
-        `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` +
+        (s.liveEvidence ? `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` : '') +
         `<span><b>${Math.max(0, s.steps - s.primers)}</b> code stops${s.primers ? ` + ${plural(s.primers, 'primer')}` : ''}</span>` +
         (s.openComments ? `<span><b>${s.openComments}</b> open ${s.openComments === 1 ? 'note' : 'notes'}</span>` : '') +
         `</span>` +
@@ -77,7 +79,7 @@ export function renderStoryPicker(opts) {
     const nav = navBar({
         home: '/repos',
         crumbs: [{ label: opts.repoName, href: `${rb}/change` }, { label: 'Review history' }],
-        right: `<a class="nv-act" href="${esc(rb)}/stories" title="Reload after another agent saves a story">Refresh</a>`,
+        right: `<a class="nv-act" href="${esc(rb)}/stories?evidence=refresh" title="Recompute live diff and drift evidence for every saved review">Refresh evidence</a>`,
     });
     const body = `<header class="page-head">
       <div class="page-copy">

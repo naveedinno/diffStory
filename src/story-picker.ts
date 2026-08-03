@@ -32,6 +32,8 @@ function storyRow(s: StorySummary, now: number, routeBase: string, index: number
   const href = `${routeBase}/review?story=${encodeURIComponent(s.id)}`;
   const state = !s.valid
     ? { label: 'Needs repair', cls: 'bad', detail: 'Story file cannot be read' }
+    : !s.liveEvidence
+      ? { label: 'Saved', cls: 'saved', detail: 'Open to inspect current review evidence' }
     : s.openComments
       ? { label: 'In review', cls: 'feedback', detail: `${plural(s.openComments, 'open note')} waiting` }
       : s.freshness === 'stale'
@@ -65,7 +67,7 @@ function storyRow(s: StorySummary, now: number, routeBase: string, index: number
     `<span class="row-sum">${summary}</span>` +
     `<span class="session-facts">` +
       `<span><b>${s.liveFiles || s.files}</b> files</span>` +
-      `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` +
+      (s.liveEvidence ? `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` : '') +
       `<span><b>${Math.max(0, s.steps - s.primers)}</b> code stops${s.primers ? ` + ${plural(s.primers, 'primer')}` : ''}</span>` +
       (s.openComments ? `<span><b>${s.openComments}</b> open ${s.openComments === 1 ? 'note' : 'notes'}</span>` : '') +
     `</span>` +
@@ -89,7 +91,7 @@ export function renderStoryPicker(opts: { repoName: string; routeBase: string; s
   const nav = navBar({
     home: '/repos',
     crumbs: [{ label: opts.repoName, href: `${rb}/change` }, { label: 'Review history' }],
-    right: `<a class="nv-act" href="${esc(rb)}/stories" title="Reload after another agent saves a story">Refresh</a>`,
+    right: `<a class="nv-act" href="${esc(rb)}/stories?evidence=refresh" title="Recompute live diff and drift evidence for every saved review">Refresh evidence</a>`,
   });
 
   const body = `<header class="page-head">

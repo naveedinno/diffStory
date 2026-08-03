@@ -11,6 +11,7 @@ import {
   getDiff,
   getFileDiff,
   reviewFileIndex,
+  reviewFileIndexSnapshot,
   describeBase,
   readFileRange,
   readWholeFile,
@@ -29,6 +30,7 @@ import {
   numstat,
 } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
+import type { ReviewExclusionMetadata } from './noise.js';
 import { computeCoverage } from './coverage.js';
 import {
   renderPage,
@@ -107,7 +109,7 @@ import { inspectRepo } from './repo-state.js';
 import { forgetRecent, recordRecent, loadRecents } from './recents.js';
 import { recallStorySelection, recordStorySelection } from './story-selection.js';
 import { listDirs } from './fs-browse.js';
-import { deleteStory, diffFingerprint, listStories, storyIdForPath, storyPathForId } from './stories.js';
+import { deleteStory, diffFingerprint, hasStories, listStories, listStoryMetadata, storyIdForPath, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
 import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -191,7 +193,7 @@ export function serve(opts: ServeOptions): Server {
       console.log(`\n  ${APP_BRAND} app ready → ${url}`);
       console.log(`  pick a repo to review (or open one you've used before).\n`);
     } else {
-      const storyCount = listStories(session.repo).length;
+      const storyCount = listStoryMetadata(session.repo).length;
       const storyLabel = `${storyCount} ${storyCount === 1 ? 'story' : 'stories'}`;
       console.log(`\n  ${APP_BRAND} review ready → ${url}`);
       console.log(`  reviewing ${storyLabel} in ${join(session.repo, DATA_DIR)}`);
@@ -406,7 +408,7 @@ function handle(
     }
     const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
     if (repoScreen === 'stories') {
-      return sendHtml(res, storyChooser(session));
+      return sendHtml(res, storyChooser(session, url.searchParams.get('evidence') === 'refresh'));
     }
     if (repoScreen === 'change') {
       session.chooseStory = false;
@@ -452,7 +454,7 @@ function handle(
         if (!path) return sendJson(res, 400, { error: 'Missing repository path.' });
         const removed = loadRecents(home).some((e) => e.path === path);
         forgetRecent(home, path);
-        return sendJson(res, 200, { ok: true, removed, recents: listRecentRepos(home) });
+        return sendJson(res, 200, { ok: true, removed, recents: recentRowsForPicker(home) });
       });
     }
     if (method === 'GET' && url.pathname === '/api/agents') {
@@ -523,8 +525,19 @@ function handle(
         if (session.repo && session.repo !== path) liveHub.closeRepo(session.repo);
         openSession(session, path);
         restoreStorySelection(session, home);
-        recordRecent(home, path, nowMs());
-        sendJson(res, 200, { ...inspectRepo(path), route: repoRoute(path, sessionEntryScreen(session)) });
+        const previous = loadRecents(home).find((entry) => entry.path === path);
+        const repoState = {
+          path,
+          name: basename(path),
+          isGit: true,
+          hasTour: hasStories(path),
+          currentBranch: currentBranch(path),
+          // The exact count belongs to review loading, not repository
+          // navigation. Preserve the last observed value when one exists.
+          changedFiles: previous?.changedFiles ?? 0,
+        };
+        recordRecent(home, path, nowMs(), repoState);
+        sendJson(res, 200, { ...repoState, route: repoRoute(path, sessionEntryScreen(session)) });
       });
     }
     if (method === 'POST' && url.pathname === '/api/repo/close') {
@@ -787,15 +800,15 @@ function handle(
 }
 
 function pickerStub(home: string): string {
-  return renderPicker(listRecentRepos(home), home, Date.now());
+  return renderPicker(recentRowsForPicker(home), home, Date.now());
 }
 
-function storyChooser(session: Session): string {
+function storyChooser(session: Session, refreshEvidence = false): string {
   const repo = session.repo as string;
   return renderStoryPicker({
     repoName: basename(repo),
     routeBase: repoRouteBase(repo),
-    stories: listStories(repo),
+    stories: refreshEvidence ? listStories(repo) : listStoryMetadata(repo),
     now: Date.now(),
   });
 }
@@ -956,7 +969,7 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     pageLease.token,
     { tour, base, head, fileIndex },
     true,
-    reviewPageRaceSignature(pageLease),
+    reviewPageRaceSignature(pageLease, data.sourceFingerprint),
   );
   return renderPage({
     repo,
@@ -971,14 +984,32 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     storyless: true,
     reviewState,
     reviewPageToken: pageLease.token,
-    stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
-    excludedFiles: excludedReviewFiles(repo, base, head),
+    stagedWorktreeDivergentFiles: data.stagedWorktreeDivergentFiles,
+    excludedFiles: data.excludedFiles,
   });
 }
 
 /** The recents list, each entry enriched with its current repo state for the picker. */
 function listRecentRepos(home: string) {
   return loadRecents(home).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
+}
+
+/**
+ * Navigation home must not synchronously re-inspect every recent repository.
+ * Opening a repo already validates it and records a state snapshot; older
+ * recents without one get safe display defaults and are validated when opened.
+ * A missing path is the one cheap freshness check worth doing on this path.
+ */
+function recentRowsForPicker(home: string) {
+  return loadRecents(home).map((entry) => ({
+    path: entry.path,
+    name: entry.name ?? basename(entry.path),
+    isGit: existsSync(entry.path) && (entry.isGit ?? true),
+    hasTour: entry.hasTour ?? false,
+    currentBranch: entry.currentBranch ?? null,
+    changedFiles: entry.changedFiles ?? 0,
+    lastOpened: entry.lastOpened,
+  }));
 }
 
 interface ReviewData {
@@ -996,6 +1027,9 @@ interface ReviewIndexData {
   head?: string;
   fileIndex: ReviewFileIndexEntry[];
   changeFingerprint: string;
+  sourceFingerprint: string;
+  stagedWorktreeDivergentFiles: string[];
+  excludedFiles: ReviewExclusionMetadata[];
 }
 
 interface ReviewPageSnapshot {
@@ -1033,8 +1067,9 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
   let base = resolveBase(repo, session.base ?? tour.base);
   let head = session.head ?? tour.head;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const before = reviewChangeFingerprint(repo, base, head);
-    let fileIndex = reviewFileIndex(repo, base, head);
+    const before = reviewSourceMetadataFingerprint(repo, base, head);
+    const indexSnapshot = reviewFileIndexSnapshot(repo, base, head);
+    let fileIndex = indexSnapshot.fileIndex;
     if (
       !sessionHasScope &&
       tour.base === 'HEAD' &&
@@ -1046,9 +1081,24 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
       head = 'HEAD';
       continue;
     }
-    const confirmedFingerprint = reviewChangeFingerprint(repo, base, head);
+    const confirmedFingerprint = reviewSourceMetadataFingerprint(repo, base, head);
     if (confirmedFingerprint === before) {
-      return { tour, base, head, fileIndex, changeFingerprint: confirmedFingerprint };
+      const changeFingerprint = diffFingerprint(JSON.stringify({
+        base,
+        head: head ?? 'working-tree',
+        source: confirmedFingerprint,
+        files: fileIndex.map((file) => [file.path, file.reviewHash]),
+      }));
+      return {
+        tour,
+        base,
+        head,
+        fileIndex,
+        changeFingerprint,
+        sourceFingerprint: confirmedFingerprint,
+        stagedWorktreeDivergentFiles: indexSnapshot.stagedWorktreeDivergentFiles,
+        excludedFiles: indexSnapshot.excludedFiles,
+      };
     }
   }
   throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
@@ -1156,7 +1206,7 @@ function renderReview(session: Session): string {
     pageLease.token,
     { tour, base, head, fileIndex },
     false,
-    reviewPageRaceSignature(pageLease),
+    reviewPageRaceSignature(pageLease, data.sourceFingerprint),
   );
   return renderPage({
     repo,
@@ -1171,8 +1221,8 @@ function renderReview(session: Session): string {
     reviewState,
     reviewPageToken: pageLease.token,
     storyDrift,
-    stagedWorktreeDivergentFiles: stagedWorktreeDivergentFiles(repo, base, head),
-    excludedFiles: excludedReviewFiles(repo, base, head),
+    stagedWorktreeDivergentFiles: data.stagedWorktreeDivergentFiles,
+    excludedFiles: data.excludedFiles,
   });
 }
 
@@ -1261,11 +1311,11 @@ interface LeasedReviewPage {
 
 type ReviewPageLeaseResult = LeasedReviewPage | { ok: false; error: string };
 
-function reviewPageRaceSignature(lease: ReviewPageLease): string {
+function reviewPageRaceSignature(lease: ReviewPageLease, sourceFingerprint?: string): string {
   const paths = lease.head
     ? [lease.storyPath]
     : [lease.storyPath, ...Object.keys(lease.fileFingerprints).map((file) => join(lease.repo, file))];
-  return `${reviewSourceMetadataFingerprint(lease.repo, lease.base, lease.head)}\0${paths
+  return `${sourceFingerprint ?? reviewSourceMetadataFingerprint(lease.repo, lease.base, lease.head)}\0${paths
     .sort()
     .map((path) => {
       try {

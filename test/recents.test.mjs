@@ -26,6 +26,20 @@ test('addRecent caps the list length, newest first', () => {
   assert.equal(list[11].path, '/r4');
 });
 
+test('addRecent stores and preserves the last repository snapshot', () => {
+  const snapshot = {
+    path: '/a',
+    name: 'a',
+    isGit: true,
+    hasTour: true,
+    currentBranch: 'feature/home',
+    changedFiles: 4,
+  };
+  const recorded = addRecent([], '/a', 5, 12, snapshot);
+  assert.deepEqual(recorded, [{ ...snapshot, lastOpened: 5 }]);
+  assert.deepEqual(addRecent(recorded, '/a', 9), [{ ...snapshot, lastOpened: 9 }]);
+});
+
 test('loadRecents returns [] for a missing or corrupt file', () => {
   const home = mkdtempSync(join(tmpdir(), 'ds-rec-'));
   try {

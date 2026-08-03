@@ -10,9 +10,13 @@ export function recentsFile(home) {
     return join(home, DATA_DIR, 'recents.json');
 }
 /** Pure: put `path` at the front with `now`, drop any prior copy, cap the length. */
-export function addRecent(list, path, now, cap = DEFAULT_CAP) {
+export function addRecent(list, path, now, cap = DEFAULT_CAP, snapshot) {
+    const previous = list.find((e) => e.path === path);
     const rest = list.filter((e) => e.path !== path);
-    return [{ path, lastOpened: now }, ...rest].slice(0, cap);
+    const next = snapshot
+        ? { ...snapshot, lastOpened: now }
+        : { ...previous, path, lastOpened: now };
+    return [next, ...rest].slice(0, cap);
 }
 /** Pure: remove one path from the recent repositories list. */
 export function removeRecent(list, path) {
@@ -38,8 +42,8 @@ export function saveRecents(home, list) {
     writeFileSync(file, JSON.stringify(list, null, 2), 'utf8');
 }
 /** Load, push `path` to the front, persist, and return the new list. */
-export function recordRecent(home, path, now) {
-    const next = addRecent(loadRecents(home), path, now);
+export function recordRecent(home, path, now, snapshot) {
+    const next = addRecent(loadRecents(home), path, now, DEFAULT_CAP, snapshot);
     saveRecents(home, next);
     return next;
 }

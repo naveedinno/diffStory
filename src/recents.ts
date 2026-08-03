@@ -8,6 +8,22 @@ import { DATA_DIR } from './config.js';
 export interface RecentEntry {
   path: string;
   lastOpened: number;
+  /** Last state observed while opening the repository. Home renders from this
+   * snapshot so switching back never waits on a fresh chain of Git commands. */
+  name?: string;
+  isGit?: boolean;
+  hasTour?: boolean;
+  currentBranch?: string | null;
+  changedFiles?: number;
+}
+
+export interface RecentRepoSnapshot {
+  path: string;
+  name: string;
+  isGit: boolean;
+  hasTour: boolean;
+  currentBranch: string | null;
+  changedFiles: number;
 }
 
 const DEFAULT_CAP = 12;
@@ -23,9 +39,14 @@ export function addRecent(
   path: string,
   now: number,
   cap = DEFAULT_CAP,
+  snapshot?: RecentRepoSnapshot,
 ): RecentEntry[] {
+  const previous = list.find((e) => e.path === path);
   const rest = list.filter((e) => e.path !== path);
-  return [{ path, lastOpened: now }, ...rest].slice(0, cap);
+  const next = snapshot
+    ? { ...snapshot, lastOpened: now }
+    : { ...previous, path, lastOpened: now };
+  return [next, ...rest].slice(0, cap);
 }
 
 /** Pure: remove one path from the recent repositories list. */
@@ -53,8 +74,13 @@ export function saveRecents(home: string, list: RecentEntry[]): void {
 }
 
 /** Load, push `path` to the front, persist, and return the new list. */
-export function recordRecent(home: string, path: string, now: number): RecentEntry[] {
-  const next = addRecent(loadRecents(home), path, now);
+export function recordRecent(
+  home: string,
+  path: string,
+  now: number,
+  snapshot?: RecentRepoSnapshot,
+): RecentEntry[] {
+  const next = addRecent(loadRecents(home), path, now, DEFAULT_CAP, snapshot);
   saveRecents(home, next);
   return next;
 }
