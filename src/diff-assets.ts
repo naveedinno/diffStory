@@ -47,11 +47,51 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-diffhead-label{flex:none;font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
 .ds-diffhead-label.ds-dim{color:var(--dim2)}
 .ds-diffhead-label.ds-green{color:var(--diff-add-text)}
+.ds-diffhead-label.ds-blue{color:var(--accent-blue)}
 .ds-diffhead-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
 .ds-diffhead-divider{width:1px;background:var(--diff-rule)}
 .ds-diffhead-note{font-size:11px;color:var(--dim2)}
-.ds-diffbody{font-family:var(--mono);font-size:12.5px;line-height:1.48;background:var(--panel3)}
+.ds-diffbody{position:relative;font-family:var(--mono);font-size:12.5px;line-height:1.48;background:var(--panel3)}
 .ds-diffbody-unified{font-size:12px;line-height:1.5;background:var(--panel3)}
+/* Annotation graphics sit on the real panes. The SVG is decorative and never
+   owns interaction; hidden facts remain readable DOM bands in the row flow. */
+.ds-annot{position:absolute;inset:0;width:100%;height:100%;overflow:visible;z-index:6;pointer-events:none}
+.ds-annot-box{fill:none;stroke-width:2;rx:5;ry:5;vector-effect:non-scaling-stroke}
+.ds-annot-box-left,.ds-annot-arrow-left{stroke:var(--diff-del-text)}
+.ds-annot-box-right,.ds-annot-arrow-right{stroke:var(--accent-blue)}
+.ds-annot-box.is-dashed,.ds-annot-arrow.is-dashed{stroke-dasharray:5 4}
+.ds-annot-arrow{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.ds-annot-head{fill:none;stroke:var(--accent-blue);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.ds-annot-tag-bg-left{fill:var(--diff-del-text)}
+.ds-annot-tag-bg-right{fill:var(--accent-blue)}
+.ds-diffbody-paired-flow .ds-annot-box-left{stroke:var(--accent-blue)}
+.ds-diffbody-paired-flow .ds-annot-tag-bg-left{fill:var(--accent-blue)}
+.ds-annot-tag-text{fill:var(--panel3);font:700 9.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.ds-row[data-annot-tag-lanes] .ds-no{padding-top:calc(3px + var(--ds-annot-tag-space,0px))}
+.ds-row[data-annot-tag-lanes] .ds-sign{padding-top:calc(4px + var(--ds-annot-tag-space,0px))}
+.ds-row[data-annot-tag-lanes] .ds-code{padding-top:calc(3px + var(--ds-annot-tag-space,0px))}
+.ds-annot-callout{box-sizing:border-box;width:calc(var(--ds-split,50) * 1%);display:flex;align-items:baseline;gap:9px;min-height:32px;padding:7px 12px 8px 14px;border-top:1px dashed color-mix(in srgb,var(--md-warn) 60%,transparent);border-bottom:1px solid color-mix(in srgb,var(--md-warn) 22%,transparent);background:color-mix(in srgb,var(--md-warn) 8%,var(--panel3));font-family:var(--sans)}
+.ds-annot-callout-left{margin-right:auto}
+.ds-annot-callout-right{width:calc((100 - var(--ds-split,50)) * 1%);margin-left:auto}
+.ds-annot-callout-unified{width:100%;margin-left:0;margin-right:0}
+.ds-annot-callout-consequence{border-color:color-mix(in srgb,var(--diff-del-text) 48%,transparent);background:color-mix(in srgb,var(--diff-del-text) 8%,var(--panel3))}
+.ds-annot-tag{flex:none;color:var(--md-warn);font:700 9.5px/1.25 var(--mono);letter-spacing:.09em;text-transform:uppercase}
+.ds-annot-callout-consequence .ds-annot-tag{color:var(--diff-del-text)}
+.ds-annot-what{min-width:0;color:var(--text);font-size:12px;line-height:1.45}
+.ds-annot-what code{font-family:var(--mono);font-size:11.5px}
+.ds-annot-callout-cross{align-items:stretch;flex-direction:column;gap:6px;min-height:54px;padding-top:8px;padding-bottom:9px}
+.ds-annot-route{display:flex;align-items:center;gap:10px;min-width:0}
+.ds-annot-relation{flex:none;color:var(--md-warn);font:700 9.5px/1.2 var(--mono);letter-spacing:.09em;text-transform:uppercase}
+.ds-annot-endpoints{display:inline-flex;align-items:center;gap:7px;min-width:0}
+.ds-annot-route-arrow{flex:none;color:var(--md-warn);font:700 13px/1 var(--mono)}
+.ds-annot-here{flex:none;padding:3px 7px;border:1px solid;border-radius:4px;font:700 9.5px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.ds-annot-here-right{border-color:color-mix(in srgb,var(--accent-blue) 42%,transparent);background:color-mix(in srgb,var(--accent-blue) 8%,transparent);color:var(--accent-blue)}
+.ds-annot-here-left{border-color:color-mix(in srgb,var(--diff-del-text) 42%,transparent);background:color-mix(in srgb,var(--diff-del-text) 8%,transparent);color:var(--diff-del-text)}
+.ds-annot-detail{display:flex;align-items:baseline;gap:9px;min-width:0;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--md-warn) 18%,transparent)}
+.ds-annot-dest{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:28px;margin-left:auto;padding:3px 7px;border:1px solid color-mix(in srgb,var(--md-warn) 35%,transparent);border-radius:5px;background:transparent;color:var(--md-warn);font:600 10.5px/1.2 var(--mono);cursor:pointer}
+.ds-annot-callout-cross .ds-annot-dest{min-height:24px;margin-left:0}
+.ds-annot-dest:hover{background:color-mix(in srgb,var(--md-warn) 10%,transparent)}
+.ds-annot-dest:focus-visible{outline:2px solid var(--md-warn);outline-offset:1px}
 .ds-hunkgap{padding:2px 14px;background:var(--gutter);color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .ds-row{display:flex;position:relative;border-bottom:1px solid rgba(255,255,255,0.025);min-height:24px}
 .ds-row[data-review-row]:focus-visible,.ds-urow[data-review-row]:focus-visible{outline:none;box-shadow:inset 0 0 0 3px var(--accent-soft);z-index:3}
@@ -68,19 +108,18 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus){box-shadow:none;background-image:none}
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
 .ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary)}
-.ds-row.is-voice-focus::before{content:'▶';position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
 .ds-row.is-voice-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-urow.is-voice-focus{position:relative;box-shadow:inset 3px 0 0 var(--md-primary);background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
-.ds-urow.is-voice-focus::before{content:'▶';position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:4;color:var(--md-primary);font-size:9px;line-height:1;pointer-events:none;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 72%,transparent)}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:rgba(18,150,111,0.14);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-cell-del{background:rgba(224,68,94,0.14);box-shadow:inset 3px 0 0 var(--del-rail)}
+.ds-cell-paired{box-shadow:none}
+.ds-diffbody-paired-flow .ds-cell-l.ds-cell-paired{background:var(--panel3)}
 .ds-cell-untoured{background:var(--amber-soft);box-shadow:inset 3px 0 0 var(--amber)}
-.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background-color:var(--fill-1);
-  background-image:repeating-linear-gradient(135deg,var(--hairline) 0,var(--hairline) 1px,transparent 1px,transparent 7px)}
+.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:var(--fill-1)}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}
@@ -91,10 +130,8 @@ body.ds-resizing{cursor:col-resize}
 body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 body.ds-selecting-right .ds-code[data-comment-side="left"],
 body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:none;user-select:none}
-/* The 12px left pad is the marker lane: line numbers are right-aligned, so a
-   marker parked at a fixed offset lands on the digits of any wide number (1024
-   put the ▶ straight through the 0). The lane keeps that column clear and the
-   digit space unchanged — the extra width is the lane, not narrower numbers. */
+/* Line numbers stay right-aligned and tabular so focus can be shown by the
+   continuous row rail without adding a second icon lane to every code row. */
 .ds-no{width:54px;flex:none;display:flex;align-items:flex-start;justify-content:flex-end;text-align:right;padding:3px 8px 3px 12px;color:var(--dim2);background:var(--gutter);border-right:1px solid var(--diff-rule);user-select:none;font-variant-numeric:tabular-nums}
 .ds-sign{width:12px;flex:none;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
 .ds-sign-add{color:var(--diff-add-text)}
@@ -173,6 +210,10 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
 @keyframes ds-body-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
 @media (max-width:1050px){.ds-viewed-toggle{width:44px;padding:0;justify-content:center}.ds-viewed-toggle-label{display:none}}
 @media (max-width:720px){
+  .ds-annot-callout{width:100%;margin-left:0;margin-right:0;flex-wrap:wrap}
+  .ds-annot-callout-cross{flex-wrap:nowrap}
+  .ds-annot-route,.ds-annot-detail{flex-wrap:wrap}
+  .ds-annot-dest{min-height:44px}
   .ds-filepanel-head{flex-wrap:wrap;gap:7px;padding:10px 12px}
   .ds-filepanel-head>.ds-cardpath{order:1;flex:1 1 110px}
   .ds-filepanel-head>.ds-badge{order:2}
@@ -192,6 +233,117 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
 `;
 
 export const DIFF_JS = `
+  function annotationRound(n){return Math.round(n*10)/10;}
+  function annotationTagWidth(text){return annotationRound(18+String(text||'').length*6.4);}
+  function annotationBox(id,side,kind,run){
+    return {id:id,side:side,kind:kind,x:annotationRound(run.left+2),y:annotationRound(run.top+1),w:annotationRound(Math.max(0,run.right-run.left-4)),h:annotationRound(Math.max(0,run.bottom-run.top-2)),dashed:side==='left'};
+  }
+  function annotationArrow(id,kind,fromY,toY,geom,open,reverse){
+    var left=annotationRound(geom.gutterLeft),right=annotationRound(geom.gutterRight),span=right-left;
+    var start=reverse?right:left,end=reverse?left:right,c1=annotationRound(start+(reverse?-1:1)*span*.4),c2=annotationRound(end+(reverse?1:-1)*span*.4);
+    var y1=annotationRound(fromY),y2=annotationRound(toY),angle=reverse?180:0;
+    return {id:id,kind:kind,d:'M'+start+','+y1+' C'+c1+','+y1+' '+c2+','+y2+' '+end+','+y2,head:{x:end,y:y2,angle:angle,open:!!open},dashed:!!open};
+  }
+  function computeAnnotations(spec,regions,geom){
+    var boxes=[],arrows=[],tags=[],tagLanes=Object.create(null),moves=spec&&Array.isArray(spec.moves)?spec.moves:[];
+    moves.forEach(function(move){
+      var before=move.before&&move.before.local?(regions[move.id+':before']||[]):[];
+      var after=move.after&&move.after.local?(regions[move.id+':after']||[]):[];
+      before.forEach(function(run){boxes.push(annotationBox(move.id,'left',move.kind,run));});
+      after.forEach(function(run){boxes.push(annotationBox(move.id,'right',move.kind,run));});
+      if(move.tag){
+        var tw=annotationTagWidth(move.tag);
+        [['left',before],['right',after]].forEach(function(pair){
+          var side=pair[0],runs=pair[1],run=runs[0];if(!run)return;
+          var box=annotationBox(move.id,side,move.kind,run);if(box.w<tw+14)return;
+          var laneKey=side+':'+box.x+':'+box.y+':'+box.w,lane=tagLanes[laneKey]||0;tagLanes[laneKey]=lane+1;
+          tags.push({id:move.id,text:String(move.tag).toUpperCase(),x:annotationRound(box.x+box.w-tw-8),y:annotationRound(box.y+10+lane*18),w:tw,side:side,lane:lane});
+        });
+      }
+      if(!move.arrow||geom.gutterRight-geom.gutterLeft<24||geom.width<640)return;
+      if(move.kind==='reordered'&&before.length>1&&after.length>1){
+        arrows.push(annotationArrow(move.id,move.kind,(before[0].top+before[0].bottom)/2,(after[1].top+after[1].bottom)/2,geom,false,false));
+        arrows.push(annotationArrow(move.id,move.kind,(before[1].top+before[1].bottom)/2,(after[0].top+after[0].bottom)/2,geom,false,false));
+        return;
+      }
+      var beforeRun=before[0],afterRun=after[0];
+      if(beforeRun&&afterRun){arrows.push(annotationArrow(move.id,move.kind,(beforeRun.top+beforeRun.bottom)/2,(afterRun.top+afterRun.bottom)/2,geom,false,false));return;}
+      if(beforeRun){var beforeY=(beforeRun.top+beforeRun.bottom)/2;arrows.push(annotationArrow(move.id,move.kind,beforeY,beforeY,geom,true,false));return;}
+      if(afterRun){var afterY=(afterRun.top+afterRun.bottom)/2;arrows.push(annotationArrow(move.id,move.kind,afterY,afterY,geom,true,true));}
+    });
+    return {boxes:boxes,arrows:arrows,tags:tags};
+  }
+  function moveEndpointRows(panel,id,endpoint){
+    var token=id+':'+endpoint;
+    return $all('[data-move]',panel).filter(function(row){return (row.getAttribute('data-move')||'').split(/\\s+/).indexOf(token)>=0;});
+  }
+  function clearAnnotationTagLanes(root){
+    $all('.ds-row[data-annot-tag-lanes]',root||document).forEach(function(row){row.removeAttribute('data-annot-tag-lanes');row.style.removeProperty('--ds-annot-tag-space');});
+  }
+  function prepareAnnotationTagLanes(body,spec){
+    var desired=[];
+    function rowEntry(row){for(var i=0;i<desired.length;i++)if(desired[i].row===row)return desired[i];var entry={row:row,left:0,right:0};desired.push(entry);return entry;}
+    spec.moves.forEach(function(move){
+      if(!move.tag)return;
+      [['before','left'],['after','right']].forEach(function(pair){
+        var endpoint=pair[0],side=pair[1],anchor=move[endpoint];if(!anchor||!anchor.local)return;
+        var rows=moveEndpointRows(body,move.id,endpoint),selector=side==='left'?'.ds-cell-l .ds-code':'.ds-cell-r .ds-code',row=null,code=null;
+        for(var i=0;i<rows.length;i++){code=$(selector,rows[i]);if(code&&code.getClientRects().length){row=rows[i];break;}}
+        if(!row||!code||code.getBoundingClientRect().width-4<annotationTagWidth(move.tag)+14)return;
+        rowEntry(row)[side]++;
+      });
+    });
+    $all('.ds-row[data-annot-tag-lanes]',body).forEach(function(row){var keep=false;for(var i=0;i<desired.length;i++)if(desired[i].row===row){keep=true;break;}if(!keep){row.removeAttribute('data-annot-tag-lanes');row.style.removeProperty('--ds-annot-tag-space');}});
+    desired.forEach(function(entry){var lanes=Math.max(entry.left,entry.right);if(entry.row.getAttribute('data-annot-tag-lanes')!==String(lanes)){entry.row.setAttribute('data-annot-tag-lanes',String(lanes));entry.row.style.setProperty('--ds-annot-tag-space',String(lanes*18)+'px');}});
+  }
+  function annotationRuns(body,id,endpoint,side){
+    var bodyRect=body.getBoundingClientRect(),selector=side==='left'?'.ds-cell-l .ds-code':'.ds-cell-r .ds-code';
+    var rects=moveEndpointRows(body,id,endpoint).map(function(row){var code=$(selector,row);if(!code||!code.getClientRects().length)return null;var rect=code.getBoundingClientRect();return {top:annotationRound(rect.top-bodyRect.top),bottom:annotationRound(rect.bottom-bodyRect.top),left:annotationRound(rect.left-bodyRect.left),right:annotationRound(rect.right-bodyRect.left)};}).filter(Boolean).sort(function(a,b){return a.top-b.top;});
+    var runs=[];rects.forEach(function(rect){var last=runs[runs.length-1];if(last&&rect.top-last.bottom<=1&&Math.abs(rect.left-last.left)<=1&&Math.abs(rect.right-last.right)<=1){last.bottom=rect.bottom;}else runs.push({top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right});});return runs;
+  }
+  function measureAnnotations(body,spec){
+    var regions=Object.create(null);spec.moves.forEach(function(move){if(move.before&&move.before.local)regions[move.id+':before']=annotationRuns(body,move.id,'before','left');if(move.after&&move.after.local)regions[move.id+':after']=annotationRuns(body,move.id,'after','right');});
+    var bodyRect=body.getBoundingClientRect(),leftCode=$('.ds-cell-l .ds-code',body),rightCode=$('.ds-cell-r .ds-code',body),divider=$('.ds-celldiv',body),left=leftCode?leftCode.getBoundingClientRect().right-bodyRect.left:(divider?divider.getBoundingClientRect().left-bodyRect.left-32:bodyRect.width/2-32),right=rightCode?rightCode.getBoundingClientRect().left-bodyRect.left:(divider?divider.getBoundingClientRect().right-bodyRect.left+32:bodyRect.width/2+32);
+    return {regions:regions,geom:{gutterLeft:annotationRound(left),gutterRight:annotationRound(Math.max(left,right)),width:annotationRound(bodyRect.width),height:annotationRound(bodyRect.height)}};
+  }
+  function annotationSvgElement(name,attrs){var node=document.createElementNS('http://www.w3.org/2000/svg',name);Object.keys(attrs).forEach(function(key){node.setAttribute(key,String(attrs[key]));});return node;}
+  function paintAnnotations(body,shapes,geom){
+    var svg=annotationSvgElement('svg',{class:'ds-annot','aria-hidden':'true',width:geom.width,height:geom.height,viewBox:'0 0 '+geom.width+' '+geom.height});
+    shapes.boxes.forEach(function(box){svg.appendChild(annotationSvgElement('rect',{class:'ds-annot-box ds-annot-box-'+box.side+(box.dashed?' is-dashed':''),x:box.x,y:box.y,width:box.w,height:box.h,rx:5,ry:5}));});
+    shapes.arrows.forEach(function(arrow){svg.appendChild(annotationSvgElement('path',{class:'ds-annot-arrow ds-annot-arrow-right'+(arrow.dashed?' is-dashed':''),d:arrow.d}));var h=arrow.head,open=h.open?'M-7 -5 L0 0 L-7 5':'M-7 -5 L0 0 L-7 5 Z';svg.appendChild(annotationSvgElement('path',{class:'ds-annot-head',d:open,transform:'translate('+h.x+' '+h.y+') rotate('+h.angle+')'}));});
+    shapes.tags.forEach(function(tag){svg.appendChild(annotationSvgElement('rect',{class:'ds-annot-tag-bg-'+tag.side,x:tag.x,y:tag.y-8,width:tag.w,height:16,rx:3,ry:3}));var text=annotationSvgElement('text',{class:'ds-annot-tag-text',x:tag.x+9,y:tag.y+3.5});text.textContent=tag.text;svg.appendChild(text);});
+    body.appendChild(svg);
+  }
+  function clearAnnotations(){
+    if(annotationFrame){cancelAnimationFrame(annotationFrame);annotationFrame=0;}
+    if(annotationObserver){annotationObserver.disconnect();annotationObserver=null;}
+    $all('.ds-annot').forEach(function(svg){svg.remove();});
+    clearAnnotationTagLanes(document);
+  }
+  function renderAnnotations(panel){
+    if(!panel||panel.hidden)return;
+    var holder=$('[data-story-diff]',panel),split=holder&&$('[data-split-inner]',holder);if(!holder||!split||split.hidden)return;
+    var body=$('.ds-diffbody',split),data=$('[data-annotations]',split);if(!body||!data)return;
+    $('.ds-annot',body)?.remove();var spec;try{spec=JSON.parse(data.textContent||'{}');}catch(e){return;}
+    prepareAnnotationTagLanes(body,spec);
+    var measured=measureAnnotations(body,spec),shapes=computeAnnotations(spec,measured.regions,measured.geom);paintAnnotations(body,shapes,measured.geom);
+    if(typeof ResizeObserver==='function'){
+      if(annotationObserver)annotationObserver.disconnect();
+      annotationObserver=new ResizeObserver(function(){scheduleAnnotations(panel);});annotationObserver.observe(body);
+    }
+  }
+  function scheduleAnnotations(panel){
+    if(annotationFrame)cancelAnimationFrame(annotationFrame);
+    annotationFrame=requestAnimationFrame(function(){annotationFrame=0;renderAnnotations(panel);});
+  }
+  function syncActiveAnnotations(){var panel=stepPanels&&stepPanels[active];clearAnnotations();if(panel)scheduleAnnotations(panel);}
+  function openMoveTargetFile(file,line){
+    if(!file)return false;setView('files');
+    for(var i=0;i<filePanels.length;i++)if(filePanels[i].getAttribute('data-file')===file){
+      selectFile(i);var panel=filePanels[i];loadFilePanel(panel).then(function(){var row=$('[data-side="right"][data-line="'+line+'"]',panel)||$('[data-line="'+line+'"]',panel);if(row)scrollReviewRowVertically(row,{instant:true});});return true;
+    }
+    return false;
+  }
   function scrollReviewRowVertically(row,opts){
     if(!row)return false;
     var scroller=closest(row,'.ds-diffscroll')||closest(row,'.ds-filedetail');
@@ -242,7 +394,7 @@ export const DIFF_JS = `
     if(key==='Home')pct=22;else if(key==='End')pct=78;else pct+=key==='ArrowRight'?step:-step;
     pct=Math.max(22,Math.min(78,pct));holder.style.setProperty('--ds-split',String(pct));
     try{localStorage.setItem('ds-split',String(pct));}catch(err){}
-    setSplitDividerValue(divider,pct);e.preventDefault();e.stopPropagation();return true;
+    setSplitDividerValue(divider,pct);scheduleAnnotations(closest(holder,'.ds-step'));e.preventDefault();e.stopPropagation();return true;
   }
   function prepareSplitDivider(holder){
     if(!holder)return;
@@ -345,7 +497,7 @@ export const DIFF_JS = `
       }
     };
     var transition=null;if(opts&&opts.persist===false)update();else transition=runWorkspaceTransition('mode',0,update);
-    var finish=function(){updateChangeNav(holder);if(!needsLoad)jumpToFirstChange(holder);};
+    var finish=function(){updateChangeNav(holder);if(!needsLoad)jumpToFirstChange(holder);if(mode==='split')scheduleAnnotations(closest(holder,'.ds-step'));else clearAnnotations();};
     if(transition&&transition.updateCallbackDone)Promise.resolve(transition.updateCallbackDone).then(finish,finish);else finish();
     if(typeof saveReviewPositionSoon==='function')saveReviewPositionSoon();
   }
@@ -485,7 +637,7 @@ export const DIFF_JS = `
           else{gap.setAttribute('data-gap-to',String(nt));}
         }
         btns.forEach(function(b){b.disabled=false;});
-        if(holder)updateChangeNav(holder);
+        if(holder){updateChangeNav(holder);scheduleAnnotations(closest(holder,'.ds-step'));}
       })
       .catch(function(err){
         btns.forEach(function(b){b.disabled=false;});

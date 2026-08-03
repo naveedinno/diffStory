@@ -181,6 +181,7 @@ export function renderPage(input: RenderInput): string {
     detailedFilePaths: new Set(),
     fileIndex: input.fileIndex,
     trustPending: !!input.fileIndex,
+    baseRef: tour.base ?? baseLabel,
   });
   const exactFiles = model.files.length + excludedFiles.length;
   const excludedOnly = model.files.length === 0 && excludedFiles.length > 0;
@@ -1221,6 +1222,120 @@ function codeStepPanel(
   </section>`;
 }
 
+function moveRangeLabel(file: string, [start, end]: [number, number]): string {
+  return `${file}:${start}${start === end ? '' : `–${end}`}`;
+}
+
+type MoveView = CodeStepView['moves'][number];
+type MoveEndpointView = MoveView['before'];
+
+function calloutEndpoint(move: MoveView): { endpoint: MoveEndpointView; side: 'left' | 'right' } {
+  if (move.hidden?.as === 'destination') {
+    return move.before.local ? { endpoint: move.before, side: 'left' } : { endpoint: move.after, side: 'right' };
+  }
+  return move.after.local ? { endpoint: move.after, side: 'right' } : { endpoint: move.before, side: 'left' };
+}
+
+function rowMatchesEndpoint(row: SbsRow, endpoint: MoveEndpointView, side: 'left' | 'right'): boolean {
+  const line = side === 'left' ? row.oldNo : row.newNo;
+  return endpoint.local && line !== undefined && line >= endpoint.range[0] && line <= endpoint.range[1];
+}
+
+function calloutsByLastRow(s: CodeStepView): Map<SbsRow, MoveView[]> {
+  const rows = s.blocks.flat();
+  const result = new Map<SbsRow, MoveView[]>();
+  for (const move of s.moves) {
+    if (!move.hidden) continue;
+    const anchor = calloutEndpoint(move);
+    const row = rows.filter((candidate) => rowMatchesEndpoint(candidate, anchor.endpoint, anchor.side)).at(-1);
+    if (!row) continue;
+    result.set(row, [...(result.get(row) ?? []), move]);
+  }
+  return result;
+}
+
+function moveTargetAttributes(endpoint: MoveEndpointView): string {
+  return `${endpoint.targetStep ? ` data-move-target-step="${endpoint.targetStep}"` : ''} data-move-target-file="${esc(
+    endpoint.file,
+  )}" data-move-target-line="${endpoint.range[0]}"`;
+}
+
+function crossFileRouteHtml(move: MoveView, remote: MoveEndpointView): string {
+  const remoteIsSource = !move.before.local;
+  const role = remoteIsSource ? 'source' : 'destination';
+  const fileLabel = moveRangeLabel(remote.file, remote.range);
+  const file = `<button type="button" class="ds-annot-dest"${moveTargetAttributes(remote)} aria-label="${esc(
+    `Open cross-file ${role} ${fileLabel}`,
+  )}"><span>${esc(fileLabel)}</span></button>`;
+  const here = `<span class="ds-annot-here ds-annot-here-${remoteIsSource ? 'right' : 'left'}">this code</span>`;
+  const arrow = '<span class="ds-annot-route-arrow" aria-hidden="true">→</span>';
+  return `<div class="ds-annot-route" data-cross-file-role="${role}">
+    <span class="ds-annot-relation">Cross-file ${role}</span>
+    <span class="ds-annot-endpoints">${remoteIsSource ? `${file}${arrow}${here}` : `${here}${arrow}${file}`}</span>
+  </div>`;
+}
+
+function calloutHtml(move: MoveView, unified = false): string {
+  if (!move.hidden) return '';
+  const anchor = calloutEndpoint(move);
+  const remote = !move.before.local ? move.before : !move.after.local ? move.after : undefined;
+  const route = move.hidden.as === 'destination' && remote ? crossFileRouteHtml(move, remote) : '';
+  const detail = `<span class="ds-annot-tag">${esc(move.hidden.tag)}</span>
+    <span class="ds-annot-what">${move.hidden.what.html}</span>`;
+  return `<div class="ds-annot-callout ds-annot-callout-${move.hidden.as}${route ? ' ds-annot-callout-cross' : ''} ds-annot-callout-${
+    unified ? 'unified' : anchor.side
+  }" data-annot-callout="${esc(move.id)}" data-move-id="${esc(move.id)}" role="note">
+    ${route}${route ? `<div class="ds-annot-detail">${detail}</div>` : detail}
+  </div>`;
+}
+
+function rowCallouts(row: SbsRow, callouts: Map<SbsRow, MoveView[]>, unified = false): string {
+  return (callouts.get(row) ?? []).map((move) => calloutHtml(move, unified)).join('');
+}
+
+function annotationEndpoint(endpoint: MoveEndpointView): Record<string, unknown> {
+  if (endpoint.local) return { local: true };
+  return {
+    local: false,
+    file: endpoint.file,
+    range: endpoint.range,
+    ...(endpoint.targetStep ? { targetStep: endpoint.targetStep } : {}),
+  };
+}
+
+function annotationSummary(s: CodeStepView): string {
+  const relationships = s.moves
+    .filter((move) => Boolean(move.label))
+    .map(
+      (move) => {
+        const sourceLabel = move.kind === 'flow' ? 'Source' : 'Before';
+        const destinationLabel = move.kind === 'flow' ? 'destination' : 'after';
+        return `<span>Code relationship: ${esc(move.label ?? '')}. ${sourceLabel} ${esc(
+          moveRangeLabel(move.before.file, move.before.range),
+        )}; ${destinationLabel} ${esc(moveRangeLabel(move.after.file, move.after.range))}.</span>`;
+      },
+    );
+  return relationships.length
+    ? `<div class="ds-sr-only" data-annotation-summary>${relationships.join(' ')}</div>`
+    : '';
+}
+
+function annotationData(s: CodeStepView): string {
+  const moves = s.moves
+    .filter((move) => Boolean(move.label || move.hidden))
+    .map((move) => ({
+      id: move.id,
+      kind: move.kind,
+      ...(move.label ? { tag: move.label } : {}),
+      before: annotationEndpoint(move.before),
+      after: annotationEndpoint(move.after),
+      arrow: move.before.local && move.after.local,
+    }));
+  return moves.length
+    ? `<script type="application/json" data-annotations>${jsonForDataScript({ moves })}</script>`
+    : '';
+}
+
 function storyRepairMenu(step: CodeStepView, iconOnly = false): string {
   const healthTitle = step.health.broad ? ` Broad step: ${step.health.reasons.join(' · ')}.` : '';
   return `<details class="ds-story-tune${iconOnly ? ' is-icon' : ''}">
@@ -1352,12 +1467,13 @@ function storyUnifiedDiffInner(s: CodeStepView, comments: Comment[]): string {
   if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
     return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
   }
+  const callouts = calloutsByLastRow(s);
   const body = s.blocks
     .map((block, bi) => {
       const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
       return (
         (bi > 0 ? renderHunkGap() : '') +
-        block.map((row) => storyUnifiedRow(row, s, comments, bi, intra)).join('')
+        block.map((row) => storyUnifiedRow(row, s, comments, bi, intra) + rowCallouts(row, callouts, true)).join('')
       );
     })
     .join('');
@@ -1365,7 +1481,7 @@ function storyUnifiedDiffInner(s: CodeStepView, comments: Comment[]): string {
     s.note && s.blocks.some((b) => b.length)
       ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
       : '';
-  return `${storyUnifiedHead(s)}${note}<div class="ds-diffbody ds-diffbody-unified">${body}</div>`;
+  return `${storyUnifiedHead(s)}${note}${annotationSummary(s)}<div class="ds-diffbody ds-diffbody-unified">${body}</div>`;
 }
 
 function storyUnifiedHead(s: CodeStepView): string {
@@ -1406,12 +1522,13 @@ function diffInner(s: CodeStepView, comments: Comment[]): string {
   }
   const head = diffHead(s);
   const hunkGap = () => (s.context || s.newFile ? renderHunkGap() : renderHunkGap(undefined, { split: true }));
+  const callouts = calloutsByLastRow(s);
   const body = s.blocks
     .map((block, bi) => {
       const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
       return (
         (bi > 0 ? hunkGap() : '') +
-        block.map((row) => sbsRow(row, s, comments, bi, intra)).join('')
+        block.map((row) => sbsRow(row, s, comments, bi, intra) + rowCallouts(row, callouts)).join('')
       );
     })
     .join('');
@@ -1419,7 +1536,9 @@ function diffInner(s: CodeStepView, comments: Comment[]): string {
     s.note && s.blocks.some((b) => b.length)
       ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
       : '';
-  return `${head}${note}<div class="ds-diffbody">${body}</div>`;
+  const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
+  const bodyClass = paired?.kind === 'flow' ? ' ds-diffbody-paired-flow' : '';
+  return `${head}${note}${annotationSummary(s)}<div class="ds-diffbody${bodyClass}">${body}</div>${annotationData(s)}`;
 }
 
 function diffHead(s: CodeStepView): string {
@@ -1429,6 +1548,20 @@ function diffHead(s: CodeStepView): string {
         s.file,
       )}</span></span>
       <span class="ds-diffhead-note">unchanged — shown so the change makes sense</span>
+    </div>`;
+  }
+  const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
+  if (paired) {
+    const flow = paired.kind === 'flow';
+    const leftLabel = flow ? 'Source' : 'Before';
+    const rightLabel = flow ? 'Destination' : 'After';
+    return `<div class="ds-diffhead ds-diffhead-paired">
+      <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label">${leftLabel}</span><span class="ds-diffhead-path">${esc(
+        paired.before.file,
+      )}</span></span><span class="ds-diffhead-divider"></span>
+      <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label ${flow ? 'ds-blue' : 'ds-green'}">${rightLabel}</span><span class="ds-diffhead-path">${esc(
+        paired.after.file,
+      )}</span></span>
     </div>`;
   }
   if (s.newFile) {
@@ -1460,21 +1593,42 @@ function sbsRow(
   blockIndex: number,
   intra?: Map<SbsRow, IntraSides>,
 ): string {
+  const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
   const leftTarget =
-    !s.context && !s.newFile && row.oldNo !== undefined
-      ? { side: 'left' as const, file: s.oldFile, line: row.oldNo }
+    !s.context && (paired || !s.newFile) && row.oldNo !== undefined
+      ? { side: 'left' as const, file: paired?.before.file ?? s.oldFile, line: row.oldNo }
       : undefined;
   const rightTarget =
-    row.newNo !== undefined ? { side: 'right' as const, file: s.file, line: row.newNo } : undefined;
+    row.newNo !== undefined ? { side: 'right' as const, file: paired?.after.file ?? s.file, line: row.newNo } : undefined;
   const rowHtml = renderSplitRow(row, {
     leftTarget,
     rightTarget,
     stepId: s.id,
     focusIndex: rowVoiceFocusIndex(row, s, blockIndex),
-    single: s.context || s.newFile,
+    single: !paired && (s.context || s.newFile),
     sides: intra?.get(row),
+    moveTokens: rowMoveTokens(row, s),
   });
   return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
+}
+
+function rowMoveTokens(row: SbsRow, s: CodeStepView): string[] {
+  const tokens: string[] = [];
+  for (const move of s.moves) {
+    if (
+      move.before.local
+      && row.oldNo !== undefined
+      && row.oldNo >= move.before.range[0]
+      && row.oldNo <= move.before.range[1]
+    ) tokens.push(`${move.id}:before`);
+    if (
+      move.after.local
+      && row.newNo !== undefined
+      && row.newNo >= move.after.range[0]
+      && row.newNo <= move.after.range[1]
+    ) tokens.push(`${move.id}:after`);
+  }
+  return tokens;
 }
 
 function rowVoiceFocusIndex(row: SbsRow, s: CodeStepView, blockIndex: number): number | null {

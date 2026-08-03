@@ -21,8 +21,8 @@ change whose text contains Markdown renders that Markdown literally — `**bold*
 appears on screen as `**bold**`, not as bold text. The fix is to regenerate the
 story; there is no automatic conversion.
 
-`Tour.version` keeps its existing meaning and is unrelated to text format: `1`
-means code-only steps, `2` means concept primers are permitted.
+`Tour.version` is unrelated to text format: `1` means code-only steps, `2` permits
+concept primers, and `3` permits semantic logic moves.
 
 Reviewer comments (`comments.json` — `body`, `reply`, `turns[].text`) are **not**
 covered by this document. They are human-authored through the review UI and stay
@@ -55,6 +55,7 @@ title.
 | Field | Renders inside |
 | --- | --- |
 | `steps[].why` | `<p class="ds-why-text">` |
+| `steps[].moves[].hidden.what` | The one invisible fact shown by a callout. |
 | `steps[].beats[].text` | `<button class="ds-beat">` |
 | `summary` | `<p class="ds-intro-lede" data-speech-overview>` |
 | `intent.goal` | `<p class="ds-intro-lede" data-speech-overview>` |
@@ -82,6 +83,8 @@ the two-line clamp and the button's accessible name.
 | --- | --- |
 | `title` (story) | Feeds `<title>`, the page header, and a chrome tooltip. |
 | `steps[].title` | Feeds nine sites including `aria-label` and `title` attributes. |
+| `steps[].moves[].label` | A plain-text annotation tag of at most 24 characters. |
+| `steps[].moves[].hidden.tag` | A plain-text callout headline of at most 48 characters. |
 | `storyScope.reviewerNote` | Reviewer-authored, prompt-only, no render surface. |
 
 No markup at all. Tags are stripped to their text content. A `<table>` in a

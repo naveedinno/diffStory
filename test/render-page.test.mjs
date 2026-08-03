@@ -5,7 +5,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
+import { execFileSync } from 'node:child_process';
 import { renderFullFile, renderPage, renderSplitHunks, renderTrustEvidence } from '../dist/render.js';
+import { DIFF_CSS, DIFF_JS } from '../dist/diff-assets.js';
 import { PAGE_JS } from '../dist/page-assets.js';
 
 const tour = {
@@ -830,6 +832,421 @@ function clientFunction(signature) {
   }
   throw new Error(`unbalanced braces extracting ${signature}`);
 }
+
+test('semantic moves compile into row tokens, annotation data, and an in-flow callout', () => {
+  const moveTour = {
+    version: 3,
+    title: 'Logic moves',
+    summary: 'The branch now has a guard.',
+    steps: [{
+      id: 'guard', order: 1, title: 'Guard settlement', kind: 'changed', file: 'a.ts',
+      range: [1, 2], viewport: [1, 2], why: 'The settlement path now checks the account first.',
+      moves: [{
+        id: 'wrap-settle', kind: 'wrapped',
+        before: { file: 'a.ts', range: [1, 1] },
+        after: { file: 'a.ts', range: [1, 2] },
+        label: 'now gated',
+        hidden: { as: 'path', tag: 'no else branch exists', what: 'closed accounts now <code>skip</code> settlement' },
+      }],
+    }],
+  };
+  const moveFiles = [{
+    oldPath: 'a.ts', newPath: 'a.ts', status: 'modified', hunks: [{
+      oldStart: 1, oldLines: 1, newStart: 1, newLines: 2,
+      lines: [
+        { type: 'del', content: 'settle();', oldNo: 1 },
+        { type: 'add', content: 'if (isOpen) settle();', newNo: 1 },
+        { type: 'add', content: 'audit();', newNo: 2 },
+      ],
+    }],
+  }];
+  const html = renderPage({ repo: process.cwd(), tour: moveTour, files: moveFiles, baseLabel: 'main', comments: [] });
+  const splitHtml = html.match(/<div data-split-inner data-loaded="1">([\s\S]*?)<div data-full-inner hidden>/)?.[1] ?? '';
+  // Rows remain the only local anchor data the client receives.
+  assert.match(html, /data-move="wrap-settle:before"/);
+  assert.match(html, /data-move="wrap-settle:after"/);
+  assert.doesNotMatch(splitHtml, /ds-diffwrap|ds-has-logic|ds-logiclane|ds-lnote/);
+  const match = html.match(/<script type="application\/json" data-annotations>([^<]+)<\/script>/);
+  assert.ok(match, 'split view carries one annotation spec');
+  const annotations = JSON.parse(match[1]);
+  assert.deepEqual(annotations, { moves: [{
+    id: 'wrap-settle', kind: 'wrapped', tag: 'now gated',
+    before: { local: true }, after: { local: true }, arrow: true,
+  }] });
+  assert.doesNotMatch(match[1], /"range"|"file"/, 'local endpoints never leak line numbers or files');
+  assert.match(html, /data-annotation-summary><span>Code relationship: now gated\. Before a\.ts:1; after a\.ts:1–2\.<\/span>/);
+  assert.match(html, /class="ds-annot-callout ds-annot-callout-path ds-annot-callout-right"[^>]*data-annot-callout="wrap-settle"/);
+  assert.match(html, /class="ds-annot-tag">no else branch exists<\/span>/);
+  assert.match(html, /class="ds-annot-what">closed accounts now <code>skip<\/code> settlement<\/span>/);
+  assert.ok(splitHtml.indexOf('data-move="wrap-settle:after"') < splitHtml.indexOf('data-annot-callout="wrap-settle"'), 'callout follows its anchor rows');
+});
+
+test('a cross-file move pairs the panes without being asked; a same-file move does not', async () => {
+  const { pairedMoveFor } = await import('../dist/view-model.js');
+  const base = {
+    id: 'caller', order: 1, title: 'Call the helper', kind: 'changed', file: 'account.ts',
+    range: [10, 12], viewport: [10, 12], why: 'why',
+  };
+  const crossMove = {
+    id: 'extract-update', kind: 'extracted',
+    before: { file: 'settle.ts', range: [4, 4] },
+    after: { file: 'account.ts', range: [10, 12] },
+  };
+  // Landing on this step's file from another one is the whole relationship, so
+  // it pairs on its own — no pairedView, no chip to click first.
+  assert.equal(pairedMoveFor({ ...base, moves: [crossMove] })?.id, 'extract-update');
+  // A move that stays inside one file has no second pane to offer.
+  assert.equal(pairedMoveFor({ ...base, moves: [{
+    ...crossMove, id: 'local', before: { file: 'account.ts', range: [10, 10] },
+  }] }), undefined);
+  // A cross-file move landing somewhere else does not hijack this step's panes.
+  assert.equal(pairedMoveFor({ ...base, moves: [{
+    ...crossMove, id: 'away', after: { file: 'elsewhere.ts', range: [1, 2] },
+  }] }), undefined);
+  // With several cross-file moves, pairedView still picks which one wins.
+  const second = { ...crossMove, id: 'other', before: { file: 'other.ts', range: [1, 1] } };
+  assert.equal(pairedMoveFor({ ...base, moves: [crossMove, second] })?.id, 'extract-update');
+  assert.equal(pairedMoveFor({ ...base, moves: [crossMove, second], pairedView: 'other' })?.id, 'other');
+  // A step with no moves at all is untouched.
+  assert.equal(pairedMoveFor(base), undefined);
+});
+
+test('a destination callout whose far end is not on screen offers a keyboard control', () => {
+  // The step is the call site: the move leaves this file, so its far end is not
+  // one of the two panes and the note has to offer a way to reach it.
+  const crossTour = {
+    version: 3, title: 'Extraction', summary: 'The update moved into the account helper.',
+    steps: [
+      {
+        id: 'caller', order: 1, title: 'Call the helper', kind: 'changed', file: 'settle.ts',
+        range: [4, 4], viewport: [4, 4], why: 'The old calculation is replaced by the helper call.',
+        moves: [{
+          id: 'extract-update', kind: 'extracted',
+          before: { file: 'settle.ts', range: [4, 4] },
+          after: { file: 'account.ts', range: [10, 12] },
+          label: 'moved out',
+          hidden: { as: 'destination', tag: 'helper is off screen', what: 'inspect the new invariant owner' },
+        }],
+      },
+      {
+        id: 'helper', order: 2, title: 'Own the balance update', kind: 'changed', file: 'account.ts',
+        range: [10, 12], viewport: [10, 12], why: 'The account helper owns this invariant.',
+      },
+    ],
+  };
+  const crossFiles = [
+    { oldPath: 'settle.ts', newPath: 'settle.ts', status: 'modified', hunks: [{
+      oldStart: 4, oldLines: 1, newStart: 4, newLines: 1,
+      lines: [{ type: 'del', content: 'balance -= amount;', oldNo: 4 }, { type: 'add', content: 'updateBalance(amount);', newNo: 4 }],
+    }] },
+    { oldPath: 'account.ts', newPath: 'account.ts', status: 'modified', hunks: [{
+      oldStart: 10, oldLines: 0, newStart: 10, newLines: 3,
+      lines: [{ type: 'add', content: 'function updateBalance(amount) {', newNo: 10 }, { type: 'add', content: '  balance -= amount;', newNo: 11 }, { type: 'add', content: '}', newNo: 12 }],
+    }] },
+  ];
+  const html = renderPage({ repo: process.cwd(), tour: crossTour, files: crossFiles, baseLabel: 'main', comments: [] });
+  assert.match(html, /data-cross-file-role="destination"/);
+  assert.match(html, /<span class="ds-annot-here ds-annot-here-left">this code<\/span><span class="ds-annot-route-arrow" aria-hidden="true">→<\/span><button type="button" class="ds-annot-dest" data-move-target-step="2" data-move-target-file="account\.ts" data-move-target-line="10" aria-label="Open cross-file destination account\.ts:10–12"/);
+  assert.match(html, /data-annot-callout="extract-update"/);
+  assert.equal((html.match(/ds-annot-dest"/g) || []).length, 2, 'split and unified views both keep the accessible control');
+});
+
+test('a remote source names its cross-file direction before linking back to the source file', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-cross-file-source-'));
+  writeFileSync(join(repo, 'settle.ts'), ['one', 'two', 'three', 'balance -= amount;', 'five'].join('\n'));
+  writeFileSync(join(repo, 'account.ts'), [
+    'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'function updateBalance(amount) {', '  balance -= amount;', '}',
+  ].join('\n'));
+  const sourceTour = {
+    version: 3, title: 'Cross-file source', summary: 'The helper reads state owned by another file.',
+    steps: [{
+      id: 'helper', order: 1, title: 'Read stored state', kind: 'changed', file: 'account.ts',
+      range: [10, 12], viewport: [10, 12], why: 'The account helper derives its result from stored state.',
+      pairedView: 'extract-update',
+      moves: [{
+        id: 'extract-update', kind: 'extracted',
+        before: { file: 'settle.ts', range: [4, 4] },
+        after: { file: 'account.ts', range: [10, 12] },
+        label: 'moved out',
+      }, {
+        id: 'stored-source', kind: 'flow',
+        before: { file: 'db.ts', range: [2, 4] },
+        after: { file: 'account.ts', range: [10, 12] },
+        hidden: { as: 'destination', tag: 'state owner is elsewhere', what: 'review the stored value contract' },
+      }],
+    }],
+  };
+  const sourceFiles = [
+    { oldPath: 'settle.ts', newPath: 'settle.ts', status: 'modified', hunks: [{
+      oldStart: 4, oldLines: 1, newStart: 4, newLines: 0,
+      lines: [{ type: 'del', content: 'balance -= amount;', oldNo: 4 }],
+    }] },
+    { oldPath: 'account.ts', newPath: 'account.ts', status: 'modified', hunks: [{
+      oldStart: 10, oldLines: 0, newStart: 10, newLines: 3,
+      lines: [{ type: 'add', content: 'function updateBalance(amount) {', newNo: 10 }, { type: 'add', content: '  balance -= amount;', newNo: 11 }, { type: 'add', content: '}', newNo: 12 }],
+    }] },
+  ];
+  try {
+    const html = renderPage({ repo, tour: sourceTour, files: sourceFiles, baseLabel: '', comments: [] });
+    assert.match(html, /data-cross-file-role="source"/);
+    assert.match(html, /<button type="button" class="ds-annot-dest" data-move-target-file="db\.ts" data-move-target-line="2" aria-label="Open cross-file source db\.ts:2–4"[^>]*><span>db\.ts:2–4<\/span><\/button><span class="ds-annot-route-arrow" aria-hidden="true">→<\/span><span class="ds-annot-here ds-annot-here-right">this code<\/span>/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+function annotationGeometry() {
+  const context = {};
+  vm.runInNewContext(
+    `${clientFunction('function annotationRound(')};${clientFunction('function annotationTagWidth(')};${clientFunction('function annotationBox(')};${clientFunction('function annotationArrow(')};${clientFunction('function computeAnnotations(')};this.computeAnnotations=computeAnnotations;`,
+    context,
+  );
+  return context.computeAnnotations;
+}
+
+const ANNOT_GEOM = { gutterLeft: 300, gutterRight: 380, width: 800, height: 500 };
+const ANNOT_MOVE = { id: 'gate', kind: 'wrapped', tag: 'now gated', arrow: true, before: { local: true }, after: { local: true } };
+
+test('annotation geometry preserves one box per measured run and follows wrapped heights', () => {
+  const compute = annotationGeometry();
+  const shapes = compute({ moves: [ANNOT_MOVE] }, {
+    'gate:before': [{ top: 10, bottom: 34, left: 20, right: 280 }, { top: 70, bottom: 118, left: 20, right: 280 }],
+    'gate:after': [{ top: 12, bottom: 60, left: 400, right: 780 }],
+  }, ANNOT_GEOM);
+  assert.equal(shapes.boxes.length, 3);
+  assert.deepEqual(Array.from(shapes.boxes.map(({ side, y, h }) => ({ side, y, h }))), [
+    { side: 'left', y: 11, h: 22 },
+    { side: 'left', y: 71, h: 46 },
+    { side: 'right', y: 13, h: 46 },
+  ]);
+  assert.ok(shapes.boxes[0].y + shapes.boxes[0].h < shapes.boxes[1].y, 'the hunk gap remains visible');
+});
+
+test('annotation tags stay on first runs and disappear when the run is too narrow', () => {
+  const compute = annotationGeometry();
+  const shapes = compute({ moves: [ANNOT_MOVE] }, {
+    'gate:before': [{ top: 10, bottom: 34, left: 20, right: 80 }],
+    'gate:after': [{ top: 40, bottom: 64, left: 400, right: 780 }],
+  }, ANNOT_GEOM);
+  assert.deepEqual(Array.from(shapes.tags.map(({ side, text, y }) => ({ side, text, y }))), [{ side: 'right', text: 'NOW GATED', y: 51 }]);
+  assert.ok(shapes.tags[0].x > 680, 'the badge aligns to the right edge of its reserved band');
+});
+
+test('annotation tags sharing a row stack in separate reserved lanes', () => {
+  const compute = annotationGeometry();
+  const second = { ...ANNOT_MOVE, id: 'policy', tag: 'policy owner' };
+  const shared = [{ top: 10, bottom: 70, left: 400, right: 780 }];
+  const shapes = compute({ moves: [ANNOT_MOVE, second] }, {
+    'gate:after': shared,
+    'policy:after': shared,
+  }, ANNOT_GEOM);
+  assert.deepEqual(Array.from(shapes.tags.map(({ text, y, lane }) => ({ text, y, lane }))), [
+    { text: 'NOW GATED', y: 21, lane: 0 },
+    { text: 'POLICY OWNER', y: 39, lane: 1 },
+  ]);
+});
+
+test('annotation arrows remain inside gutter coordinates and are deterministic', () => {
+  const compute = annotationGeometry();
+  const regions = { 'gate:before': [{ top: 10, bottom: 30, left: 20, right: 280 }], 'gate:after': [{ top: 50, bottom: 70, left: 400, right: 780 }] };
+  const first = compute({ moves: [ANNOT_MOVE] }, regions, ANNOT_GEOM);
+  const second = compute({ moves: [ANNOT_MOVE] }, regions, ANNOT_GEOM);
+  assert.deepEqual(first, second);
+  assert.match(first.arrows[0].d, /^M300,20 C332,20 348,60 380,60$/);
+  assert.equal(first.arrows[0].head.x, 380);
+});
+
+test('a missing annotation region yields no box and degrades its arrow to an edge chevron', () => {
+  const compute = annotationGeometry();
+  const shapes = compute({ moves: [ANNOT_MOVE] }, { 'gate:before': [{ top: 10, bottom: 30, left: 20, right: 280 }] }, ANNOT_GEOM);
+  assert.equal(shapes.boxes.length, 1);
+  assert.equal(shapes.arrows.length, 1);
+  assert.equal(shapes.arrows[0].head.open, true);
+  assert.equal(shapes.arrows[0].head.x, 380);
+});
+
+test('reordered annotations deliberately cross two arrow endpoints', () => {
+  const compute = annotationGeometry();
+  const move = { ...ANNOT_MOVE, kind: 'reordered' };
+  const shapes = compute({ moves: [move] }, {
+    'gate:before': [{ top: 10, bottom: 30, left: 20, right: 280 }, { top: 50, bottom: 70, left: 20, right: 280 }],
+    'gate:after': [{ top: 12, bottom: 32, left: 400, right: 780 }, { top: 72, bottom: 92, left: 400, right: 780 }],
+  }, ANNOT_GEOM);
+  assert.equal(shapes.arrows.length, 2);
+  assert.match(shapes.arrows[0].d, /^M300,20 .*380,82$/);
+  assert.match(shapes.arrows[1].d, /^M300,60 .*380,22$/);
+});
+
+test('a starved gutter or narrow viewport removes arrows but keeps boxes', () => {
+  const compute = annotationGeometry();
+  const regions = { 'gate:before': [{ top: 10, bottom: 30, left: 20, right: 280 }], 'gate:after': [{ top: 50, bottom: 70, left: 400, right: 780 }] };
+  const starved = compute({ moves: [ANNOT_MOVE] }, regions, { ...ANNOT_GEOM, gutterRight: 320 });
+  const narrow = compute({ moves: [ANNOT_MOVE] }, regions, { ...ANNOT_GEOM, width: 600 });
+  assert.equal(starved.arrows.length, 0);
+  assert.equal(narrow.arrows.length, 0);
+  assert.equal(starved.boxes.length, 2);
+  assert.equal(narrow.boxes.length, 2);
+});
+
+test('moves without a label or hidden fact leave the diff plain apart from row tokens', () => {
+  const plainMoveTour = {
+    version: 3, title: 'Plain move', summary: 'No ink is needed.',
+    steps: [{ id: 's', order: 1, title: 'Visible relocation', kind: 'changed', file: 'a.ts', range: [1, 1], viewport: [1, 1], why: 'Both panes already show it.', moves: [{
+      id: 'visible', kind: 'moved', before: { file: 'a.ts', range: [1, 1] }, after: { file: 'a.ts', range: [1, 1] },
+    }] }],
+  };
+  const moveFiles = [{ oldPath: 'a.ts', newPath: 'a.ts', status: 'modified', hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: [
+    { type: 'del', content: 'before();', oldNo: 1 }, { type: 'add', content: 'after();', newNo: 1 },
+  ] }] }];
+  const html = renderPage({ repo: process.cwd(), tour: plainMoveTour, files: moveFiles, baseLabel: 'main', comments: [] });
+  const splitHtml = html.match(/<div data-split-inner data-loaded="1">([\s\S]*?)<div data-full-inner hidden>/)?.[1] ?? '';
+  assert.match(html, /data-move="visible:before"/);
+  assert.doesNotMatch(splitHtml, /data-annotations|data-annotation-summary|data-annot-callout|ds-diffwrap|ds-has-logic/);
+});
+
+test('a label-only move has a readable relationship equivalent outside the decorative SVG', () => {
+  const labelTour = {
+    version: 3, title: 'Readable move', summary: 'The move label remains available to assistive technology.',
+    steps: [{ id: 's', order: 1, title: 'Delegate work', kind: 'changed', file: 'a.ts', range: [1, 2], viewport: [1, 2], why: 'The caller delegates work.', moves: [{
+      id: 'delegated', kind: 'extracted', label: 'now delegated',
+      before: { file: 'a.ts', range: [1, 1] }, after: { file: 'a.ts', range: [2, 2] },
+    }] }],
+  };
+  const files = [{ oldPath: 'a.ts', newPath: 'a.ts', status: 'modified', hunks: [{ oldStart: 1, oldLines: 1, newStart: 2, newLines: 1, lines: [
+    { type: 'del', content: 'work();', oldNo: 1 }, { type: 'add', content: 'delegate(work);', newNo: 2 },
+  ] }] }];
+  const html = renderPage({ repo: process.cwd(), tour: labelTour, files, baseLabel: 'main', comments: [] });
+  const summaries = html.match(/data-annotation-summary/g) ?? [];
+  assert.equal(summaries.length, 2, 'unified and split modes each expose the relationship in their visible panel');
+  assert.match(html, /Code relationship: now delegated\. Before a\.ts:1; after a\.ts:2\./);
+  assert.match(DIFF_JS, /class:'ds-annot','aria-hidden':'true'/);
+});
+
+test('a paired move on a new-file step renders old-file and new-file streams with honest comment targets', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-paired-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  writeFileSync(join(repo, 'settle.ts'), ['function settle() {', '  balance -= amount;', '}'].join('\n'));
+  writeFileSync(join(repo, 'account.ts'), ['export function account() {', '  return true;', '}'].join('\n'));
+  execFileSync('git', ['add', 'settle.ts', 'account.ts'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'base'], { cwd: repo });
+  writeFileSync(join(repo, 'account.ts'), [
+    'export function account() {',
+    '  return true;',
+    '}',
+    'export function decreaseBalance(amount) {',
+    '  balance -= amount;',
+    '}',
+  ].join('\n'));
+
+  const pairedTour = {
+    version: 3, title: 'Extraction', summary: 'Balance math gained a named home.',
+    steps: [{
+      id: 'extract', order: 1, title: 'Extract balance update', kind: 'new-file',
+      file: 'account.ts', range: [4, 6], viewport: [1, 6], why: 'The reusable update now lives with the account.',
+      moves: [{
+        id: 'extract-balance', kind: 'extracted',
+        before: { file: 'settle.ts', range: [1, 3] },
+        after: { file: 'account.ts', range: [4, 6] },
+        label: 'balance math to decreaseBalance',
+      }],
+      pairedView: 'extract-balance',
+    }],
+  };
+  const pairedFiles = [{
+    oldPath: 'account.ts', newPath: 'account.ts', status: 'modified', hunks: [{
+      oldStart: 3, oldLines: 1, newStart: 3, newLines: 4,
+      lines: [
+        { type: 'ctx', content: '}', oldNo: 3, newNo: 3 },
+        { type: 'add', content: 'export function decreaseBalance(amount) {', newNo: 4 },
+        { type: 'add', content: '  balance -= amount;', newNo: 5 },
+        { type: 'add', content: '}', newNo: 6 },
+      ],
+    }],
+  }];
+  const html = renderPage({ repo, tour: pairedTour, files: pairedFiles, baseLabel: 'HEAD', comments: [] });
+  assert.match(html, /<span class="ds-diffhead-path">settle\.ts<\/span>/);
+  assert.match(html, /<span class="ds-diffhead-path">account\.ts<\/span>/);
+  assert.match(html, /balance -= amount/);
+  assert.match(html, /decreaseBalance/);
+  assert.match(html, /data-comment-side="left" data-comment-file="settle\.ts"/);
+  assert.match(html, /data-comment-side="right" data-comment-file="account\.ts"/);
+  assert.match(html, /data-move="[^"]*extract-balance:before[^"]*"/);
+  assert.match(html, /data-move="[^"]*extract-balance:after[^"]*"/);
+
+  const flowTour = {
+    ...pairedTour,
+    title: 'Stored source',
+    steps: [{
+      ...pairedTour.steps[0],
+      title: 'Read stored balance',
+      moves: [{
+        ...pairedTour.steps[0].moves[0],
+        kind: 'flow',
+        label: 'reads stored balance',
+      }],
+    }],
+  };
+  const flowHtml = renderPage({ repo, tour: flowTour, files: pairedFiles, baseLabel: 'HEAD', comments: [] });
+  assert.match(flowHtml, /<span class="ds-diffhead-label">Source<\/span><span class="ds-diffhead-path">settle\.ts<\/span>/);
+  assert.match(flowHtml, /<span class="ds-diffhead-label ds-blue">Destination<\/span><span class="ds-diffhead-path">account\.ts<\/span>/);
+  assert.match(flowHtml, /data-annotation-summary><span>Code relationship: reads stored balance\. Source settle\.ts:1–3; destination account\.ts:4–6\.<\/span>/);
+  assert.match(flowHtml, /<div class="ds-diffbody ds-diffbody-paired-flow">/);
+  assert.match(DIFF_CSS, /\.ds-diffbody-paired-flow \.ds-cell-l\.ds-cell-paired\{background:var\(--panel3\)\}/);
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('filmstrip progress remeasures the active marker after its layout changes', () => {
+  const writes = [];
+  let activeLeft = 350;
+  let observerCallback;
+  const nodes = { getBoundingClientRect: () => ({ left: 10, width: 540 }) };
+  const activeNode = { getBoundingClientRect: () => ({ left: activeLeft, width: 42 }) };
+  const thread = {
+    style: { setProperty(name, value) { writes.push([name, value]); } },
+  };
+  const context = {
+    active: 23,
+    filmThread: thread,
+    filmProgressObserver: null,
+    $(selector, root) {
+      if (root === thread && selector === '.ds-filmthread-nodes') return nodes;
+      if (root === nodes && selector === '[data-thread-node="23"]') return activeNode;
+      return null;
+    },
+    ResizeObserver: class {
+      constructor(callback) { observerCallback = callback; }
+      disconnect() {}
+      observe(element) { assert.equal(element, nodes); }
+    },
+  };
+
+  vm.runInNewContext(
+    [
+      clientFunction('function syncFilmProgress(){'),
+      clientFunction('function watchFilmProgress(){'),
+      'this.watchFilmProgress=watchFilmProgress;',
+    ].join('\n'),
+    context,
+  );
+
+  context.watchFilmProgress();
+  assert.deepEqual(writes.at(-1), ['--thread-pct', '361px']);
+
+  // The filmstrip expands after activation (window resize, zoom, font/layout
+  // settling). The endpoint must follow the marker's new rendered center.
+  activeLeft = 430;
+  observerCallback();
+  assert.deepEqual(writes.at(-1), ['--thread-pct', '441px']);
+});
+
+test('step activation paints annotations only after the active panel becomes visible', () => {
+  const activate = clientFunction('function activateStep(');
+  assert.equal((activate.match(/syncActiveAnnotations\(\)/g) ?? []).length, 1);
+  assert.match(activate, /var update=function\(\)\{[\s\S]*syncActiveAnnotations\(\);\s*\};\s*if\(reviewPositionReady/);
+});
 
 test('a paused story stays silent when the reviewer navigates to another step', () => {
   const spoken = [];

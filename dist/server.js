@@ -362,7 +362,7 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
                     return sendReviewPageConflict(res, page.error);
                 const allowed = new Set([
                     ...boundedReviewIndex(page.fileIndex).map((candidate) => candidate.path),
-                    ...(page.storyless ? [] : page.tour.steps.filter(isCodeStep).map((step) => step.file)),
+                    ...(page.storyless ? [] : storyReviewFiles(page.tour)),
                 ]);
                 if (!allowed.has(file))
                     return sendJson(res, 400, { error: 'That file is not part of this review.' });
@@ -1287,6 +1287,22 @@ function materializePageFile(page, file) {
     const diff = getFileDiff(page.repo, page.base, file, page.head);
     return parseUnifiedDiff(diff).find((candidate) => candidate.newPath === file);
 }
+/** Every path a story may legitimately navigate to, including move endpoints. */
+function storyReviewFiles(tour) {
+    const files = new Set();
+    for (const step of tour.steps) {
+        if (!isCodeStep(step))
+            continue;
+        files.add(step.file);
+        if ('moves' in step) {
+            for (const move of step.moves ?? []) {
+                files.add(move.before.file);
+                files.add(move.after.file);
+            }
+        }
+    }
+    return [...files];
+}
 /** The lazily-loaded "Full file" side-by-side view for one file. Works with or
  *  without a story: story-less, there's no coverage to flag, so it's just the
  *  diff reconstructed against the working tree. */
@@ -1296,7 +1312,7 @@ function renderFullFileResponse(page, file) {
     const { repo, tour, head, storyless } = page;
     const allowed = new Set([
         ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
-        ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
+        ...(storyless ? [] : storyReviewFiles(tour)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
@@ -1320,7 +1336,7 @@ function renderSplitResponse(page, file) {
     const { tour, storyless } = page;
     const allowed = new Set([
         ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
-        ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
+        ...(storyless ? [] : storyReviewFiles(tour)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
@@ -1356,6 +1372,7 @@ function renderFilePanelResponse(page, file) {
         detailedStepIndexes: new Set(),
         detailedFilePaths: new Set([file]),
         includeTrustRows: false,
+        baseRef: page.base,
         fileIndex: entry ? [entry] : undefined,
     });
     const view = model.files.find((candidate) => candidate.file === file);
@@ -1382,6 +1399,7 @@ function renderStoryStepResponse(page, rawIndex) {
         detailedStepIndexes: new Set([index - 1]),
         detailedFilePaths: new Set(),
         includeTrustRows: false,
+        baseRef: page.base,
     });
     return renderStoryStepPanel(repo, model, commentsForStory(loadComments(repo), leaseStoryId(page.lease)), index - 1);
 }
@@ -1393,6 +1411,7 @@ function renderTrustResponse(page) {
         detailedStepIndexes: new Set(),
         detailedFilePaths: new Set(),
         includeTrustRows: true,
+        baseRef: page.base,
     });
     const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
     return renderTrustEvidence(model.trust, stepIndexById, excludedReviewFiles(page.repo, page.base, page.head), stagedWorktreeDivergentFiles(page.repo, page.base, page.head), page.storyless);
@@ -1414,6 +1433,7 @@ function reviewCoverageVerdict(page) {
         detailedStepIndexes: new Set(),
         detailedFilePaths: new Set(),
         includeTrustRows: false,
+        baseRef: page.base,
     });
     return { storyless: page.storyless, uncovered: model.trust.uncovered.length };
 }
@@ -1513,7 +1533,7 @@ function renderContextResponse(page, params) {
     // but a since-feedback page can only expand files from its issued model.
     const allowed = new Set([
         ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
-        ...(storyless ? [] : tour.steps.filter(isCodeStep).map((s) => s.file)),
+        ...(storyless ? [] : storyReviewFiles(tour)),
     ]);
     if (!allowed.has(file))
         return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
@@ -1565,8 +1585,15 @@ export function finishStoryGeneration(r, storyPath, session, previousStoryConten
             const qualityErrors = requireModernStory
                 ? validateGeneratedTour(tour)
                 : validateGeneratedConceptSteps(tour);
+            const moveVerification = requireModernStory
+                ? verifyLogicMoves(session.repo ?? repoForStoryPath(storyPath), tour)
+                : { errors: [], warnings: [] };
+            qualityErrors.push(...moveVerification.errors);
             if (qualityErrors.length) {
                 throw new Error(`Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join('\n  - ')}`);
+            }
+            for (const warning of moveVerification.warnings) {
+                events.push(warningEvent('Logic move needs a closer look', warning, 'validation'));
             }
             session.selectedStory = storyPath;
             session.chooseStory = false;
@@ -1591,6 +1618,88 @@ export function finishStoryGeneration(r, storyPath, session, previousStoryConten
         status = 'failed';
     }
     return { status, result: { storyWritten, storyValid: false }, events };
+}
+function repoForStoryPath(storyPath) {
+    let cursor = dirname(resolve(storyPath));
+    while (cursor !== dirname(cursor) && basename(cursor) !== DATA_DIR)
+        cursor = dirname(cursor);
+    return basename(cursor) === DATA_DIR ? dirname(cursor) : dirname(dirname(resolve(storyPath)));
+}
+function moveTokens(text) {
+    return text.toLowerCase().match(/[a-z_$][a-z0-9_$]*|\d+|===|!==|==|!=|<=|>=|&&|\|\||[-+*/%<>]/g) ?? [];
+}
+function tokenOverlap(left, right, denominator = 'max') {
+    if (!left.length || !right.length)
+        return 0;
+    const counts = new Map();
+    for (const token of right)
+        counts.set(token, (counts.get(token) ?? 0) + 1);
+    let shared = 0;
+    for (const token of left) {
+        const count = counts.get(token) ?? 0;
+        if (count > 0) {
+            shared += 1;
+            counts.set(token, count - 1);
+        }
+    }
+    return shared / (denominator === 'left' ? left.length : Math.max(left.length, right.length));
+}
+function functionShaped(text) {
+    return /\b(?:function|def|fn)\s+[A-Za-z_$][\w$]*\s*\(|\b[A-Za-z_$][\w$]*\s*\([^)]*\)\s*(?:\{|=>)/.test(text);
+}
+/** Verify move claims against the exact old/new blobs used by the story. */
+export function verifyLogicMoves(repo, tour) {
+    const errors = [];
+    const warnings = [];
+    if (!repo)
+        return { errors: ['logic moves could not be verified because the repository path is unavailable'], warnings };
+    const steps = orderedSteps(tour);
+    steps.forEach((step, stepIndex) => {
+        if (!isCodeStep(step) || !('moves' in step))
+            return;
+        (step.moves ?? []).forEach((move, moveIndex) => {
+            const where = `steps[${stepIndex}].moves[${moveIndex}]`;
+            if (move.hidden?.as === 'destination') {
+                const endpointName = move.after.file !== step.file ? 'after' : 'before';
+                const endpoint = move[endpointName];
+                const ref = endpointName === 'before' ? (tour.base ?? 'HEAD') : tour.head;
+                if (readWholeFile(repo, endpoint.file, ref) === null) {
+                    errors.push(`${where}.hidden destination file "${endpoint.file}" could not be resolved in the repository`);
+                }
+            }
+            const readAnchor = (endpoint) => {
+                const anchor = move[endpoint];
+                const ref = endpoint === 'before' ? (tour.base ?? 'HEAD') : tour.head;
+                const slice = readFileRange(repo, anchor.file, anchor.range[0], anchor.range[1], ref);
+                const expected = anchor.range[1] - anchor.range[0] + 1;
+                if (!slice || slice.startLine !== anchor.range[0] || slice.lines.length !== expected) {
+                    errors.push(`${where}.${endpoint}.range is outside the ${endpoint === 'before' ? 'old' : 'new'} version of "${anchor.file}"`);
+                    return null;
+                }
+                return slice.lines.join('\n');
+            };
+            const before = readAnchor('before');
+            const after = readAnchor('after');
+            if (before == null || after == null)
+                return;
+            const beforeTokens = moveTokens(before);
+            const afterTokens = moveTokens(after);
+            if (move.kind === 'moved' && tokenOverlap(beforeTokens, afterTokens) < 0.7) {
+                errors.push(`${where} kind "moved" requires at least 70% token overlap between its anchors`);
+            }
+            if (move.kind === 'extracted') {
+                if (!functionShaped(after) || tokenOverlap(beforeTokens, afterTokens, 'left') < 0.5) {
+                    warnings.push(`${where} says "extracted", but its after range does not clearly contain a function-shaped majority of the old logic.`);
+                }
+            }
+            if (move.kind === 'inlined') {
+                if (!functionShaped(before) || tokenOverlap(afterTokens, beforeTokens, 'left') < 0.5) {
+                    warnings.push(`${where} says "inlined", but its before range does not clearly contain a function-shaped majority of the new logic.`);
+                }
+            }
+        });
+    });
+    return { errors, warnings };
 }
 /**
  * The shared spine for every agent workflow: emit run_started → context → app

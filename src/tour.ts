@@ -8,6 +8,16 @@ import type { CodeStepKind, Tour, TourStep, StepKind, StoryMode } from './types.
 const CODE_KINDS: CodeStepKind[] = ['changed', 'context', 'new-file'];
 const KINDS: StepKind[] = [...CODE_KINDS, 'concept'];
 const MODES: StoryMode[] = ['brief', 'guided', 'detailed'];
+const MOVE_KINDS = [
+  'moved',
+  'extracted',
+  'inlined',
+  'wrapped',
+  'unwrapped',
+  'condition-changed',
+  'reordered',
+  'flow',
+] as const;
 const CONCEPT_CODE_FIELDS = [
   'file',
   'range',
@@ -406,6 +416,7 @@ function validateCodeStep(
   step: Record<string, unknown>,
   where: string,
   storyFiles: Set<string> | null,
+  storyVersion: unknown,
   errors: string[],
 ): void {
   const stepKind = step.kind as CodeStepKind;
@@ -434,6 +445,146 @@ function validateCodeStep(
   validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
   validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
   validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor);
+  validateMoves(step, where, storyFiles, storyVersion, viewportRange ?? stepRange, errors);
+}
+
+function validateMoveAnchor(
+  value: unknown,
+  name: string,
+  storyFiles: Set<string> | null,
+  errors: string[],
+): { file: string; range: [number, number] } | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    errors.push(`${name} must be an object`);
+    return undefined;
+  }
+  const anchor = value as Record<string, unknown>;
+  const file = typeof anchor.file === 'string' ? anchor.file.trim() : '';
+  if (!file) errors.push(`${name}.file must be a non-empty string`);
+  const range = validateLineRange(anchor.range, `${name}.range`, errors);
+  if (file && storyFiles && !storyFiles.has(file)) {
+    errors.push(`${name}.file must be in storyScope.includedFiles`);
+  }
+  return file && range ? { file, range } : undefined;
+}
+
+/** Hidden facts become accessible callouts, so their schema is intentionally narrow. */
+function validateMoveHidden(value: unknown, name: string, errors: string[]): void {
+  if (value === undefined) return;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    errors.push(`${name} must be an object`);
+    return;
+  }
+  const hidden = value as Record<string, unknown>;
+  if (!['path', 'destination', 'consequence'].includes(hidden.as as string)) {
+    errors.push(`${name}.as must be one of path, destination, consequence`);
+  }
+  if (typeof hidden.tag !== 'string' || !hidden.tag.trim()) {
+    errors.push(`${name}.tag must be a non-empty string`);
+  } else {
+    validateNarrative(hidden.tag, `${name}.tag`, 'text', errors);
+    if (hidden.tag.length > 48) errors.push(`${name}.tag must be at most 48 characters`);
+  }
+  if (typeof hidden.what !== 'string' || !hidden.what.trim()) {
+    errors.push(`${name}.what must be a non-empty string`);
+  } else {
+    validateNarrative(hidden.what, `${name}.what`, 'inline', errors);
+    if (hidden.what.length > 120) errors.push(`${name}.what must be at most 120 characters`);
+  }
+}
+
+function validateMoves(
+  step: Record<string, unknown>,
+  where: string,
+  storyFiles: Set<string> | null,
+  storyVersion: unknown,
+  visibleRange: [number, number] | undefined,
+  errors: string[],
+): void {
+  if (step.moves === undefined && step.pairedView === undefined) return;
+  if (storyVersion !== 3) errors.push(`${where}.moves and pairedView require story version 3`);
+  if (step.kind === 'context') {
+    if (step.moves !== undefined) errors.push(`${where}.moves is not allowed for a context step`);
+    if (step.pairedView !== undefined) errors.push(`${where}.pairedView is not allowed for a context step`);
+    return;
+  }
+  if (step.moves === undefined) {
+    if (step.pairedView !== undefined) errors.push(`${where}.pairedView requires ${where}.moves`);
+    return;
+  }
+  if (!Array.isArray(step.moves)) {
+    errors.push(`${where}.moves must be an array`);
+    return;
+  }
+  if (step.moves.length > 6) errors.push(`${where}.moves must contain at most 6 moves`);
+  const ids = new Set<string>();
+  const validMoves = new Map<string, { before: { file: string; range: [number, number] }; after: { file: string; range: [number, number] } }>();
+  step.moves.forEach((rawMove, index) => {
+    const name = `${where}.moves[${index}]`;
+    if (typeof rawMove !== 'object' || rawMove === null || Array.isArray(rawMove)) {
+      errors.push(`${name} must be an object`);
+      return;
+    }
+    const move = rawMove as Record<string, unknown>;
+    if (typeof move.id !== 'string' || !move.id.trim()) {
+      errors.push(`${name}.id must be a non-empty string`);
+    } else if (ids.has(move.id)) {
+      errors.push(`${name}.id "${move.id}" is duplicated`);
+    } else {
+      ids.add(move.id);
+    }
+    if (!MOVE_KINDS.includes(move.kind as (typeof MOVE_KINDS)[number])) {
+      errors.push(`${name}.kind must be one of ${MOVE_KINDS.join(', ')}`);
+    }
+    const before = validateMoveAnchor(move.before, `${name}.before`, storyFiles, errors);
+    const after = validateMoveAnchor(move.after, `${name}.after`, storyFiles, errors);
+    if (move.label !== undefined && typeof move.label !== 'string') {
+      errors.push(`${name}.label must be a string`);
+    } else if (typeof move.label === 'string') {
+      validateNarrative(move.label, `${name}.label`, 'text', errors);
+      if (move.label.length > 24) errors.push(`${name}.label must be at most 24 characters`);
+    }
+    validateMoveHidden(move.hidden, `${name}.hidden`, errors);
+    if (before && after) {
+      if (before.file !== step.file && after.file !== step.file) {
+        errors.push(`${name} must anchor at least one endpoint in ${where}.file`);
+      }
+      if (
+        before.file === after.file
+        && visibleRange
+        && (after.range[1] < visibleRange[0] || after.range[0] > visibleRange[1])
+      ) {
+        errors.push(`${name}.after.range must intersect ${where}.viewport`);
+      }
+      if (
+        typeof move.hidden === 'object'
+        && move.hidden !== null
+        && !Array.isArray(move.hidden)
+        && (move.hidden as Record<string, unknown>).as === 'destination'
+        && before.file === after.file
+      ) {
+        errors.push(`${name}.hidden.as "destination" requires a cross-file move`);
+      }
+      if (typeof move.id === 'string' && move.id.trim()) validMoves.set(move.id, { before, after });
+    }
+  });
+  if (step.pairedView !== undefined) {
+    if (typeof step.pairedView !== 'string' || !step.pairedView.trim()) {
+      errors.push(`${where}.pairedView must be a non-empty move id`);
+      return;
+    }
+    const move = validMoves.get(step.pairedView);
+    if (!move) {
+      errors.push(`${where}.pairedView must reference a move id in ${where}.moves`);
+    } else {
+      if (move.before.file === move.after.file) {
+        errors.push(`${where}.pairedView must reference a cross-file move`);
+      }
+      if (move.after.file !== step.file) {
+        errors.push(`${where}.pairedView move after.file must equal ${where}.file`);
+      }
+    }
+  }
 }
 
 /**
@@ -524,7 +675,7 @@ export function validateTour(obj: unknown): string[] {
   if (typeof obj !== 'object' || obj === null) return ['story must be a JSON object'];
   const t = obj as Record<string, unknown>;
 
-  if (t.version !== 1 && t.version !== 2) errors.push('version must be 1 or 2');
+  if (t.version !== 1 && t.version !== 2 && t.version !== 3) errors.push('version must be 1, 2, or 3');
   if (t.diffFingerprint !== undefined && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
     errors.push('diffFingerprint must be a SHA-256 hex digest');
   }
@@ -602,15 +753,15 @@ export function validateTour(obj: unknown): string[] {
       errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
       // Keep reporting malformed code-anchor fields alongside the bad kind, as
       // v1 validation did, so authors can fix one step in a single pass.
-      validateCodeStep(step, where, storyFiles, errors);
+      validateCodeStep(step, where, storyFiles, t.version, errors);
       return;
     }
     if (stepKind === 'concept') {
-      if (t.version !== 2) errors.push(`${where}.kind "concept" requires story version 2`);
+      if (t.version !== 2 && t.version !== 3) errors.push(`${where}.kind "concept" requires story version 2 or 3`);
       validateConceptStep(step, where, errors);
     } else {
       codeStepCount += 1;
-      validateCodeStep(step, where, storyFiles, errors);
+      validateCodeStep(step, where, storyFiles, t.version, errors);
     }
   });
 
@@ -749,7 +900,7 @@ export function validateGeneratedTour(tour: Tour): string[] {
   const errors: string[] = validateTour(tour);
   errors.push(...validateGeneratedConceptSteps(tour));
 
-  if (tour.version !== 2) errors.push('version must be 2 for a generated story');
+  if (tour.version !== 3) errors.push('version must be 3 for a generated story');
   if (!tour.mode) errors.push('mode is required for a generated story');
   // Callers normally hand this a tour that already passed validateTour(), but it
   // is exported and agent output can be arbitrary — report a missing field

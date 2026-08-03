@@ -15,6 +15,8 @@ comment, and send it back to your agent.
 - Runs locally on your machine.
 - Uses a proper desktop UI, not a terminal review flow.
 - Works with plain git diffs, even without generating a story.
+- Draws restrained boxes and arrows directly on split diffs when code genuinely
+  moved, with accessible callouts only for facts neither pane can show.
 - Can use Claude or Codex to generate walkthroughs and address comments.
 - Works without AI. Agent features are optional.
 - Command-click or Ctrl-click a current-code identifier to open its implementation

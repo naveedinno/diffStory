@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { buildFullFileRows, buildReviewModel, hunksToSbsBlocks } from '../dist/view-model.js';
+import { buildFullFileRows, buildPairedBlocks, buildReviewModel, hunksToSbsBlocks } from '../dist/view-model.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -41,6 +41,21 @@ test('a context-only file (no diff) renders entirely as unchanged', () => {
   assert.ok(rows.every((r) => r.type === 'ctx'));
   assert.equal(rows[2].oldNo, 3);
   assert.equal(rows[2].newNo, 3);
+});
+
+test('paired rows align independent file streams at the semantic anchor tops', () => {
+  const [rows] = buildPairedBlocks(
+    { startLine: 8, lines: ['old 8', 'old 9', 'old anchor', 'old 11'] },
+    { startLine: 19, lines: ['new anchor', 'new 20', 'new 21'] },
+    [10, 10],
+    [19, 19],
+  );
+  assert.equal(rows[0].rightContent, undefined, 'new stream receives lead-in filler');
+  assert.equal(rows[2].oldNo, 10);
+  assert.equal(rows[2].newNo, 19);
+  assert.equal(rows[2].leftContent, 'old anchor');
+  assert.equal(rows[2].rightContent, 'new anchor');
+  assert.equal(rows.at(-1).leftContent, undefined, 'shorter old stream receives trailing filler');
 });
 
 test('hunksToSbsBlocks maps hunks to split rows and flags uncovered adds', () => {
@@ -218,4 +233,25 @@ test('story overview file scope stays focused while All Files keeps complete dif
   assert.equal(model.storyFilesChanged, 1);
   assert.equal('storyTotalAdd' in model, false);
   assert.equal('storyTotalDel' in model, false);
+});
+
+test('lazy file indexes keep the authored story file count truthful before diff bodies load', () => {
+  const lazyTour = {
+    version: 3,
+    title: 'Lazy story',
+    summary: 'The overview renders before file bodies.',
+    steps: [
+      { id: 's1', order: 1, title: 'Changed path', file: 'a.ts', range: [1, 1], kind: 'changed', why: 'w' },
+      { id: 's2', order: 2, title: 'Context path', file: 'context.ts', range: [1, 1], kind: 'context', why: 'w' },
+    ],
+  };
+  const fileIndex = [
+    { oldPath: 'a.ts', path: 'a.ts', status: 'modified', added: 2, removed: 1, byteSize: 24, binary: false, large: false, generated: false, metadataOnly: false, reviewHash: 'a' },
+    { oldPath: 'outside.ts', path: 'outside.ts', status: 'modified', added: 1, removed: 0, byteSize: 16, binary: false, large: false, generated: false, metadataOnly: false, reviewHash: 'b' },
+  ];
+
+  const model = buildReviewModel(process.cwd(), lazyTour, [], undefined, { fileIndex, trustPending: true });
+
+  assert.equal(model.filesChanged, 2, 'All Files still reports every indexed change');
+  assert.equal(model.storyFilesChanged, 1, 'only authored changed paths count as story files while coverage is lazy');
 });

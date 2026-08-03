@@ -17,10 +17,21 @@ const DEMO = process.env.DIFFSTORY_DEMO_DIR || join(tmpdir(), 'diffstory-demo');
 // ---------------------------------------------------------------------------
 
 const BASE_API = `import { placeOrder } from './orders.js';
+import { getCustomer } from './db.js';
+
+const MONTHLY_CAP = 1000;
 
 // POST /orders — create an order for a customer.
 export async function createOrder(req) {
   const { customerId, amount, items } = req.body;
+
+  const customer = await getCustomer(customerId);
+  const spent = customer.monthlySpend || 0;
+  const remaining = MONTHLY_CAP - spent;
+  if (amount >= remaining) {
+    return { status: 402, error: 'over the limit, ' + remaining + ' remaining' };
+  }
+
   const order = await placeOrder(customerId, amount, items);
   return { status: 201, order };
 }
@@ -45,6 +56,11 @@ export async function createOrder(req) {
 `;
 
 const BASE_ORDERS = `const orders = [];
+
+function recordSpend(customerId, amount) {
+  // demo persistence — a real impl would update the customer's monthlySpend
+  console.log('spend', customerId, '+=', amount);
+}
 
 export async function placeOrder(customerId, amount, items) {
   const order = { id: orders.length + 1, customerId, amount, items };
@@ -100,15 +116,76 @@ test('rejects an order over the monthly cap', async () => {
 });
 `;
 
+const BASE_PIPELINE = `export function prepare(input) {
+  const authorized = authorize(input);
+  return normalize(authorized);
+}
+
+function authorize(input) {
+  if (!input) throw new Error('missing input');
+  return input;
+}
+
+function recordMetric(name) {
+  console.log('metric', name);
+}
+
+function enrich(input) {
+  recordMetric('prepared');
+  return { value: input };
+}
+
+function normalize(input) {
+  return input.trim().toLowerCase();
+}
+`;
+
+const NEW_PIPELINE = `export function prepare(input) {
+  const normalized = normalize(input);
+  return authorize(normalized);
+}
+
+function normalize(input) {
+  return input.trim().toLowerCase();
+}
+
+function recordMetric(name) {
+  console.log('metric', name);
+}
+
+function enrich(input) {
+  recordMetric('prepared');
+  return { value: input };
+}
+
+function authorize(input) {
+  if (!input) throw new Error('missing input');
+  return input;
+}
+`;
+
+const BASE_RECEIPT = `export function formatReceipt(order) {
+  const total = order.items.reduce((sum, item) => sum + item.price, 0);
+  return order.id + ': ' + total;
+}
+`;
+
+const NEW_RECEIPT = `export function formatReceipt(order) {
+  const label = 'Order ' + order.id;
+  const total = order.items.reduce((sum, item) => sum + item.price, 0);
+  return label + ': ' + total;
+}
+`;
+
 const TOUR = `{
-  "version": 2,
+  "version": 3,
   "mode": "guided",
-  "title": "Add per-customer monthly spending limit",
-  "summary": "Start at the existing POST /orders boundary, follow the new decision into customer state, then return to the placement path and its proof. Slow down on the exact-cap boundary.",
+  "title": "Diff annotations in one spending-limit review",
+  "summary": "Start with a local path callout, read each cross-file relationship as a left-to-right pane pair, then inspect a consequence, a reordered two-hunk crossing, and a deliberately unlabeled move that leaves the diff plain.",
   "intent": {
-    "goal": "Stop an order from taking a customer past the monthly spending cap.",
-    "design": "The existing POST /orders path still owns placement; this change inserts a limit decision before placeOrder(), reads monthlySpend through the existing customer store, and records accepted spend in the placement path.",
-    "sources": ["commit feat: per-customer monthly spending limit"]
+    "goal": "Give the monthly-cap decision one reusable owner while demonstrating semantic annotations on realistic code.",
+    "design": "The existing POST /orders path still owns placement; each primary cross-file relationship gets its own two-pane step, hidden facts become path or consequence callouts, reordered runs cross in the gutter, and one unlabeled move proves plain diffs stay plain.",
+    "sources": ["commit refactor: extract monthly spending policy"]
   },
   "base": "main",
   "steps": [
@@ -116,6 +193,9 @@ const TOUR = `{
       "id": "s1", "order": 1, "title": "POST /orders keeps ownership and gains one pre-placement decision",
       "file": "src/api.ts", "range": [1, 16], "viewport": [1, 16],
       "highlights": [[4, 6], [8, 12], [14, 15]], "kind": "changed",
+      "moves": [
+        { "id": "gate-predicate", "kind": "condition-changed", "before": { "file": "src/api.ts", "range": [13, 13] }, "after": { "file": "src/api.ts", "range": [10, 10] }, "label": "now delegated", "hidden": { "as": "path", "tag": "success is fallthrough", "what": "allowed orders reach <code>placeOrder()</code> without an else branch" } }
+      ],
       "why": "I keep the existing order boundary and stop over-cap requests before placeOrder() can mutate anything.",
       "beats": [
         { "text": "Start here: this existing handler is where a customer order enters the app.", "highlights": [[4, 6]] },
@@ -140,6 +220,9 @@ const TOUR = `{
       "id": "s2", "order": 3, "title": "checkSpendingLimit() turns stored spend into the gate result",
       "file": "src/limits.ts", "range": [1, 11], "viewport": [1, 11],
       "highlights": [[1, 5], [7, 10]], "kind": "new-file",
+      "moves": [
+        { "id": "stored-spend-source", "kind": "flow", "before": { "file": "src/db.ts", "range": [2, 4] }, "after": { "file": "src/limits.ts", "range": [7, 9] }, "label": "reads stored spend" }
+      ],
       "why": "I isolate the cap math here, with the exact-equality comparison as the review hinge.",
       "beats": [
         { "text": "The API hands customerId and amount here, and this helper owns the fixed monthly cap.", "highlights": [[1, 5]] },
@@ -148,13 +231,16 @@ const TOUR = `{
       "calls": ["s3"], "returnsTo": "s1", "tags": ["core"]
     },
     {
-      "id": "s3", "order": 4, "title": "Existing customer storage supplies monthlySpend",
-      "file": "src/db.ts", "range": [1, 8], "viewport": [1, 8],
-      "highlights": [[2, 4], [6, 8]], "kind": "context",
-      "why": "Unchanged context: this store is the state contract the new helper relies on.",
+      "id": "s3", "order": 4, "title": "The inline API policy becomes the reusable limit helper",
+      "file": "src/limits.ts", "range": [6, 10], "viewport": [1, 11],
+      "highlights": [[6, 10]], "kind": "new-file",
+      "moves": [
+        { "id": "extract-limit", "kind": "extracted", "before": { "file": "src/api.ts", "range": [10, 15] }, "after": { "file": "src/limits.ts", "range": [6, 10] }, "label": "moved out" }
+      ],
+      "why": "I show the extraction separately so its API source and helper destination are both readable instead of competing with the stored-data relationship.",
       "beats": [
-        { "text": "Unchanged, but essential: customer state already owns monthlySpend.", "highlights": [[2, 4]] },
-        { "text": "checkSpendingLimit() reaches it through this existing getter rather than a new data path.", "highlights": [[6, 8]] }
+        { "text": "The old handler owned this calculation inline; the left pane keeps that source visible.", "highlights": [[6, 8]] },
+        { "text": "The right pane shows the same decision in its reusable helper, while the API keeps only the call site.", "highlights": [[9, 10]] }
       ],
       "returnsTo": "s2", "tags": ["context"]
     },
@@ -162,6 +248,9 @@ const TOUR = `{
       "id": "s4", "order": 5, "title": "Accepted orders feed spend back into the placement path",
       "file": "src/orders.ts", "range": [1, 13], "viewport": [1, 13],
       "highlights": [[3, 6], [10, 13]], "kind": "changed",
+      "moves": [
+        { "id": "move-recorder", "kind": "moved", "before": { "file": "src/orders.ts", "range": [3, 6] }, "after": { "file": "src/orders.ts", "range": [10, 13] }, "label": "moved below", "hidden": { "as": "consequence", "tag": "spend now feeds back", "what": "accepted orders change the budget used by the next limit check" } }
+      ],
       "why": "Back on the accepted path, I record the spend after storing the order so the next limit check can see it.",
       "beats": [
         { "text": "Now that the gate passed, the existing placeOrder() path still creates and stores the order.", "highlights": [[3, 5]] },
@@ -171,7 +260,34 @@ const TOUR = `{
       "returnsTo": "s1", "tags": ["core"]
     },
     {
-      "id": "s5", "order": 6, "title": "Rejection proof leaves the exact boundary exposed",
+      "id": "s5", "order": 6, "title": "Reordered pipeline stages cross between two rendered runs",
+      "file": "src/pipeline.ts", "range": [1, 22], "viewport": [1, 22],
+      "highlights": [[1, 4], [19, 22]], "kind": "changed",
+      "moves": [
+        { "id": "reorder-pipeline", "kind": "reordered", "before": { "file": "src/pipeline.ts", "range": [1, 22] }, "after": { "file": "src/pipeline.ts", "range": [1, 22] }, "label": "order reversed" }
+      ],
+      "why": "The two changed runs swap semantic order, so their gutter arrows cross deliberately instead of pretending the mapping stayed linear.",
+      "beats": [
+        { "text": "The entry now normalizes before authorization, changing which representation the guard receives.", "highlights": [[1, 4]] },
+        { "text": "The helper definitions move with that order; the crossed arrows make the reversal explicit across the hunk gap.", "highlights": [[19, 22]] }
+      ],
+      "tags": ["annotation-showcase"]
+    },
+    {
+      "id": "s6", "order": 7, "title": "An unlabeled move leaves the receipt diff completely plain",
+      "file": "src/receipt.ts", "range": [1, 5], "viewport": [1, 5],
+      "highlights": [[1, 5]], "kind": "changed",
+      "moves": [
+        { "id": "plain-total-move", "kind": "moved", "before": { "file": "src/receipt.ts", "range": [2, 2] }, "after": { "file": "src/receipt.ts", "range": [3, 3] } }
+      ],
+      "why": "Both panes already teach this one-line move, so the story authors no label or hidden fact and the renderer adds no annotation ink.",
+      "beats": [
+        { "text": "Skim this: the total calculation shifts by one line, and the unannotated diff is intentionally sufficient evidence.", "highlights": [[1, 5]] }
+      ],
+      "tags": ["annotation-showcase"]
+    },
+    {
+      "id": "s7", "order": 8, "title": "Rejection proof leaves the exact boundary exposed",
       "file": "test/limits.test.ts", "range": [1, 7], "viewport": [1, 7],
       "highlights": [[1, 7]], "kind": "new-file",
       "why": "The test proves an over-cap request fails, while leaving equal-to-remaining as the missing case to review.",
@@ -211,6 +327,8 @@ git(['config', 'user.name', 'diffStory demo']);
 write('src/api.ts', BASE_API);
 write('src/orders.ts', BASE_ORDERS);
 write('src/db.ts', DB);
+write('src/pipeline.ts', BASE_PIPELINE);
+write('src/receipt.ts', BASE_RECEIPT);
 git(['add', '-A']);
 git(['commit', '-qm', 'base: orders service']);
 
@@ -219,6 +337,8 @@ git(['checkout', '-q', '-b', 'feat/spending-limit']);
 write('src/api.ts', NEW_API);
 write('src/orders.ts', NEW_ORDERS);
 write('src/limits.ts', NEW_LIMITS);
+write('src/pipeline.ts', NEW_PIPELINE);
+write('src/receipt.ts', NEW_RECEIPT);
 write('test/limits.test.ts', NEW_TEST);
 git(['add', '-A']);
 git(['commit', '-qm', 'feat: per-customer monthly spending limit']);

@@ -4,6 +4,9 @@ All notable changes to diffStory are tracked here.
 
 ## Unreleased
 
+- Added restrained diff annotations to guided stories: measured region boxes and
+  gutter arrows draw on split panes, while invisible paths, destinations, and
+  consequences render as accessible in-flow callouts.
 - Added live review synchronization: agent replies, review-state changes, story
   updates, and working-tree diff drift now reach an open review page over a
   server-sent event stream instead of requiring manual reloads. Reviews stay

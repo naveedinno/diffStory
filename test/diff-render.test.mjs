@@ -83,6 +83,16 @@ test('focus index is emitted only when set', () => {
   assert.doesNotMatch(without, /data-step-focus/);
 });
 
+test('split rows emit only authored semantic move endpoint tokens', () => {
+  const withMove = renderSplitRow(
+    { type: 'ctx', oldNo: 4, newNo: 5, content: 'same' },
+    { moveTokens: ['guard:before', 'guard:after'] },
+  );
+  const withoutMove = renderSplitRow({ type: 'ctx', oldNo: 4, newNo: 5, content: 'same' });
+  assert.match(withMove, /data-move="guard:before guard:after"/);
+  assert.doesNotMatch(withoutMove, /data-move=/);
+});
+
 test('semantic diff text uses dedicated accessible ink tokens in every diff mode', () => {
   assert.match(cssRuleBody(DIFF_CSS, '.ds-diffhead-label.ds-green'), /color:var\(--diff-add-text\)/);
   assert.match(cssRuleBody(DIFF_CSS, '.ds-sign-add'), /color:var\(--diff-add-text\)/);
@@ -103,6 +113,16 @@ test('story focus keeps every code row readable without boxing each focused row'
   assert.match(unifiedFocus, /inset 3px 0 0 var\(--accent-blue\)/);
   assert.doesNotMatch(unifiedFocus, /inset 0 -?1px 0 var\(--accent-line\)/);
   assert.match(unifiedFocus, /background-image:linear-gradient/);
+});
+
+test('split placeholders and reading focus use one quiet visual signal', () => {
+  const emptyCell = cssRuleBody(DIFF_CSS, '.ds-cell-empty');
+  assert.match(emptyCell, /background:var\(--fill-1\)/);
+  assert.doesNotMatch(emptyCell, /gradient|image/);
+
+  assert.doesNotMatch(DIFF_CSS, /\.ds-(?:u?row)\.is-voice-focus::before/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /inset 3px 0 0 var\(--md-primary\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /inset 3px 0 0 var\(--md-primary\)/);
 });
 
 test('bare hunk gap matches the legacy markup exactly', () => {

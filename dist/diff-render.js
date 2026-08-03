@@ -35,7 +35,8 @@ function cell(side, row, target, intra) {
     const del = row.type === 'del';
     const sideCls = side === 'left' ? ' ds-cell-l' : ' ds-cell-r';
     // An add has no left counterpart; a del has no right counterpart.
-    if ((side === 'left' && add) || (side === 'right' && del)) {
+    const sideContent = row.paired ? (side === 'left' ? row.leftContent : row.rightContent) : row.content;
+    if ((row.paired && sideContent === undefined) || (!row.paired && ((side === 'left' && add) || (side === 'right' && del)))) {
         return `<span class="ds-cell ds-cell-empty${sideCls}"></span>`;
     }
     let no = '';
@@ -56,12 +57,14 @@ function cell(side, row, target, intra) {
         }
     }
     let tint = '';
-    if (side === 'right' && add)
+    if (row.paired)
+        tint = side === 'left' ? ' ds-cell-del ds-cell-paired' : ' ds-cell-add ds-cell-paired';
+    else if (side === 'right' && add)
         tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
     else if (side === 'left' && del)
         tint = ' ds-cell-del';
     const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
-    return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlightedCode(row.content, target)) || ' '}</span>${flag}</span>`;
+    return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlightedCode(sideContent ?? '', target)) || ' '}</span>${flag}</span>`;
 }
 /** Context/new-file steps render one full-width cell. Verbatim from singleCell()
  *  — note it deliberately takes no intra (single-cell rows never word-diff). */
@@ -76,12 +79,13 @@ function singleCell(row, target) {
 }
 export function renderSplitRow(row, opts = {}) {
     const primaryTarget = opts.rightTarget ?? opts.leftTarget;
-    const attrs = reviewRowAttrs(primaryTarget, row.type, row.content, primaryTarget ? opts.stepId : undefined);
+    const attrs = reviewRowAttrs(primaryTarget, row.type, row.rightContent ?? row.leftContent ?? row.content, primaryTarget ? opts.stepId : undefined);
     const focusAttr = opts.focusIndex === null || opts.focusIndex === undefined ? '' : ` data-step-focus="${opts.focusIndex}"`;
+    const moveAttr = opts.moveTokens?.length ? ` data-move="${esc(opts.moveTokens.join(' '))}"` : '';
     const cells = opts.single
         ? singleCell(row, opts.rightTarget)
         : `${cell('left', row, opts.leftTarget, opts.sides?.left)}<span class="ds-celldiv" aria-hidden="true"></span>${cell('right', row, opts.rightTarget, opts.sides?.right)}`;
-    return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}>${cells}</div>`;
+    return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}${moveAttr}>${cells}</div>`;
 }
 export function renderUnifiedRow(row, target, intra) {
     const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';

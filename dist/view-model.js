@@ -15,6 +15,7 @@
 import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
+import { claimedRanges } from './types.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
@@ -58,7 +59,7 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
             hotspotByStep.set(spot.step, reason);
     }
     const stepViews = steps.map((step, index) => isCodeStep(step)
-        ? buildCodeStep(repo, step, files, byId, steps.length, headRef, hotspotByStep.get(step.id), opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index))
+        ? buildCodeStep(repo, step, files, byId, steps.length, headRef, hotspotByStep.get(step.id), steps, opts?.baseRef, opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index))
         : buildConceptStep(step, byId));
     // Built from the step views, not the raw steps: the title is already projected
     // there, and parsing it twice would be the second parse this module exists to
@@ -74,7 +75,9 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
     if (opts?.trustPending)
         trust.pending = true;
     const changedFileViews = fileViews.filter((file) => file.kind !== 'context');
-    const storyPaths = new Set(coverageFiles.map((file) => file.newPath));
+    const storyPaths = new Set(coverageFiles.length
+        ? coverageFiles.map((file) => file.newPath)
+        : codeSteps.filter((step) => step.kind !== 'context').map((step) => step.file));
     const storyFileViews = changedFileViews.filter((file) => storyPaths.has(file.file));
     return {
         story: storyView(tour),
@@ -126,14 +129,15 @@ function filesForStoryCoverage(tour, files) {
     const selected = new Set(included);
     return files.filter((f) => selected.has(f.newPath));
 }
-function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, detailed = true) {
-    const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef) : { blocks: [] };
+function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, ordered, baseRef, detailed = true) {
+    const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef, baseRef) : { blocks: [] };
     const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
     const highlights = stepHighlights(step);
     const beats = stepBeats(step);
     const focusGroups = stepFocusGroups(viewport, highlights, beats);
     const focusExplicit = beats.length > 0 || highlights.length > 0;
+    const moves = buildLogicMoves(step, diffFile?.oldPath ?? step.file, ordered ?? []);
     return {
         id: step.id,
         order: step.order,
@@ -158,7 +162,67 @@ function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, detaile
         flow: flowLabel(step, byId, total),
         blocks,
         note,
+        moves,
+        pairedView: pairedMoveFor(step)?.id,
     };
+}
+/**
+ * The move whose two files become the left and right panes.
+ *
+ * Cross-file moves pair automatically: when a move lands on this step's file
+ * from a different one, that relationship *is* the view, and the reader should
+ * not have to open something to see the other side. `pairedView` remains an
+ * explicit override for a step carrying more than one cross-file move.
+ */
+export function pairedMoveFor(step) {
+    if (!('moves' in step))
+        return undefined;
+    const moves = step.moves ?? [];
+    const explicitId = 'pairedView' in step ? step.pairedView : undefined;
+    const crossFile = (move) => move.before.file !== move.after.file;
+    if (explicitId) {
+        const chosen = moves.find((move) => move.id === explicitId);
+        return chosen && crossFile(chosen) ? chosen : undefined;
+    }
+    return moves.find((move) => crossFile(move) && move.after.file === step.file);
+}
+function buildLogicMoves(step, oldFile, ordered) {
+    const authored = 'moves' in step ? step.moves ?? [] : [];
+    const pairedId = pairedMoveFor(step)?.id;
+    const targetStep = (file, range) => {
+        const index = ordered.findIndex((candidate) => isCodeStep(candidate)
+            && candidate.id !== step.id
+            && candidate.file === file
+            && claimedRanges(candidate).some((candidateRange) => rangesOverlap(candidateRange, range)));
+        return index >= 0 ? index + 1 : undefined;
+    };
+    return authored.map((move) => {
+        const paired = pairedId === move.id;
+        const beforeLocal = paired || move.before.file === step.file || move.before.file === oldFile;
+        const afterLocal = paired || move.after.file === step.file;
+        return {
+            id: move.id,
+            kind: move.kind,
+            label: move.label ? narrativeText(move.label) : undefined,
+            hidden: move.hidden
+                ? {
+                    as: move.hidden.as,
+                    tag: narrativeText(move.hidden.tag),
+                    what: narrative(move.hidden.what, 'inline'),
+                }
+                : undefined,
+            before: {
+                ...move.before,
+                local: beforeLocal,
+                targetStep: beforeLocal ? undefined : targetStep(move.before.file, move.before.range),
+            },
+            after: {
+                ...move.after,
+                local: afterLocal,
+                targetStep: afterLocal ? undefined : targetStep(move.after.file, move.after.range),
+            },
+        };
+    });
 }
 function buildConceptStep(step, byId) {
     return {
@@ -235,10 +299,19 @@ function stepFocusGroups(viewport, highlights, beats) {
         return highlights.map((range) => [range]);
     return [[viewport]];
 }
-function stepBlocks(repo, step, files, headRef) {
+function stepBlocks(repo, step, files, headRef, baseRef) {
     const viewport = stepViewport(step);
     const [start, end] = viewport;
     const file = files.find((f) => f.newPath === step.file);
+    const paired = pairedMoveFor(step);
+    if (paired && paired.before.file !== paired.after.file) {
+        const oldSlice = readFileRange(repo, paired.before.file, Math.max(1, paired.before.range[0] - 6), paired.before.range[1] + 6, baseRef);
+        const newSlice = readFileRange(repo, paired.after.file, Math.max(1, paired.after.range[0] - 6), paired.after.range[1] + 6, headRef);
+        if (oldSlice && newSlice) {
+            return { blocks: buildPairedBlocks(oldSlice, newSlice, paired.before.range, paired.after.range) };
+        }
+        return { blocks: [], note: 'paired move source could not be read at the requested revision' };
+    }
     if (step.kind === 'changed') {
         if (file && file.hunks.length) {
             const whole = readWholeFile(repo, step.file, headRef);
@@ -270,6 +343,33 @@ function stepBlocks(repo, step, files, headRef) {
         return { blocks: [r.lines.map((c, i) => ({ type: 'add', newNo: r.startLine + i, content: c, comment: true }))] };
     }
     return { blocks: [r.lines.map((c, i) => ctxRow(c, r.startLine + i))] };
+}
+/** Align two independent file slices once at their semantic-anchor top lines. */
+export function buildPairedBlocks(oldSlice, newSlice, beforeRange, afterRange) {
+    const oldLead = Math.max(0, beforeRange[0] - oldSlice.startLine);
+    const newLead = Math.max(0, afterRange[0] - newSlice.startLine);
+    const lead = Math.max(oldLead, newLead);
+    const oldPad = lead - oldLead;
+    const newPad = lead - newLead;
+    const length = Math.max(oldPad + oldSlice.lines.length, newPad + newSlice.lines.length);
+    const rows = [];
+    for (let index = 0; index < length; index += 1) {
+        const oldIndex = index - oldPad;
+        const newIndex = index - newPad;
+        const leftContent = oldIndex >= 0 && oldIndex < oldSlice.lines.length ? oldSlice.lines[oldIndex] : undefined;
+        const rightContent = newIndex >= 0 && newIndex < newSlice.lines.length ? newSlice.lines[newIndex] : undefined;
+        rows.push({
+            type: 'ctx',
+            content: rightContent ?? leftContent ?? '',
+            leftContent,
+            rightContent,
+            oldNo: leftContent === undefined ? undefined : oldSlice.startLine + oldIndex,
+            newNo: rightContent === undefined ? undefined : newSlice.startLine + newIndex,
+            comment: true,
+            paired: true,
+        });
+    }
+    return [rows];
 }
 function rowsInViewport(rows, [start, end]) {
     return rows.filter((row, index) => rowInViewport(row, rows, index, start, end));

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { finishStoryGeneration } from '../dist/server.js';
+import { execFileSync } from 'node:child_process';
+import { finishStoryGeneration, verifyLogicMoves } from '../dist/server.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-generate-finish-'));
 const longPrimerBody = [
@@ -21,7 +22,7 @@ function writeStory(repo, stepKind, stepOverrides = {}) {
   writeFileSync(
     path,
     JSON.stringify({
-      version: 2,
+      version: 3,
       mode: 'guided',
       title: 'Generated story',
       summary: 'Generated story summary',
@@ -68,7 +69,7 @@ test('generation finish accepts only a valid written story', () => {
   rmSync(repo, { recursive: true, force: true });
 });
 
-test('generation finish accepts an interleaved v2 concept primer before code', () => {
+test('generation finish accepts an interleaved v3 concept primer before code', () => {
   const repo = tmp();
   const storyPath = writeStory(repo, 'changed');
   const story = JSON.parse(readFileSync(storyPath, 'utf8'));
@@ -98,6 +99,59 @@ test('generation finish accepts an interleaved v2 concept primer before code', (
   assert.equal(session.selectedStory, storyPath);
   assert.equal(session.chooseStory, false);
 
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('generation verifies moved anchors against old and new repository blobs', () => {
+  const repo = tmp();
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  const logic = ['function updateBalance(amount) {', '  balance -= amount;', '}'];
+  writeFileSync(join(repo, 'old.ts'), logic.join('\n'));
+  execFileSync('git', ['add', 'old.ts'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'base'], { cwd: repo });
+  rmSync(join(repo, 'old.ts'));
+  writeFileSync(join(repo, 'new.ts'), logic.join('\n'));
+  const story = {
+    version: 3, mode: 'guided', title: 'Moved balance logic', summary: 'Follow the balance update into its new home.',
+    base: 'HEAD', intent: { goal: 'Keep balance updates together.', design: 'The old body moves into the new module.', sources: ['code-derived'] },
+    steps: [{
+      id: 'move', order: 1, title: 'Move balance update', kind: 'changed', file: 'new.ts',
+      range: [1, 3], viewport: [1, 3], highlights: [[1, 3]], why: 'The same update now has one home.',
+      beats: [{ text: 'The new module owns the existing balance update.', highlights: [[1, 3]] }],
+      moves: [{
+        id: 'move-balance', kind: 'moved',
+        before: { file: 'old.ts', range: [1, 3] }, after: { file: 'new.ts', range: [1, 3] },
+        label: 'moved out',
+      }],
+    }],
+  };
+  assert.deepEqual(verifyLogicMoves(repo, story), { errors: [], warnings: [] });
+  const storyPath = join(repo, '.diffstory', 'story.json');
+  mkdirSync(join(storyPath, '..'), { recursive: true });
+  writeFileSync(storyPath, JSON.stringify(story));
+  const accepted = finishStoryGeneration({ ok: true, output: '' }, storyPath, { repo, chooseStory: true });
+  assert.equal(accepted.status, 'complete');
+  assert.equal(accepted.result.storyValid, true);
+
+  writeFileSync(join(repo, 'new.ts'), ['function unrelated() {', '  return false;', '}'].join('\n'));
+  const falseMove = verifyLogicMoves(repo, story);
+  assert.ok(falseMove.errors.some((error) => error.includes('at least 70% token overlap')));
+
+  const outOfRange = structuredClone(story);
+  outOfRange.steps[0].moves[0].after.range = [1, 30];
+  assert.ok(verifyLogicMoves(repo, outOfRange).errors.some((error) => error.includes('outside the new version of "new.ts"')));
+
+  const missingDestination = structuredClone(story);
+  missingDestination.steps[0].moves[0].hidden = { as: 'destination', tag: 'off screen', what: 'inspect the new owner' };
+  missingDestination.steps[0].moves[0].after.file = 'missing.ts';
+  assert.ok(verifyLogicMoves(repo, missingDestination).errors.some((error) => error.includes('hidden destination file "missing.ts" could not be resolved')));
+
+  writeFileSync(storyPath, JSON.stringify(story));
+  const rejected = finishStoryGeneration({ ok: true, output: '' }, storyPath, { repo, chooseStory: true });
+  assert.equal(rejected.status, 'failed');
+  assert.match(rejected.events[0].technicalDetail, /70% token overlap/);
   rmSync(repo, { recursive: true, force: true });
 });
 

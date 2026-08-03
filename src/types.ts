@@ -124,6 +124,48 @@ export interface CodeTourStepBase extends TourStepBase {
   returnsTo?: string;
 }
 
+/** Which version of a file a semantic move endpoint addresses. */
+export interface MoveAnchor {
+  /** Repo-relative path. Cross-file moves may name a path other than the step file. */
+  file: string;
+  /** Inclusive old-side (`before`) or new-side (`after`) line range. */
+  range: [number, number];
+}
+
+/** The closed vocabulary the app can render as a semantic logic move. */
+export type LogicMoveKind =
+  | 'moved'
+  | 'extracted'
+  | 'inlined'
+  | 'wrapped'
+  | 'unwrapped'
+  | 'condition-changed'
+  | 'reordered'
+  | 'flow';
+
+/** A fact about a move that has no line of code to point at. */
+export interface MoveHidden {
+  /** The invisible relationship the callout describes. */
+  as: 'path' | 'destination' | 'consequence';
+  /** Short plain-text callout headline. */
+  tag: string;
+  /** One inline-tier clause the reviewer can act on. */
+  what: string;
+}
+
+/** One agent-authored semantic relationship between old and new code. */
+export interface LogicMove {
+  /** Unique within the containing step. */
+  id: string;
+  kind: LogicMoveKind;
+  before: MoveAnchor;
+  after: MoveAnchor;
+  /** Two- or three-word plain-text tag rendered on the annotation border. */
+  label?: string;
+  /** The one fact about this move that neither pane shows. */
+  hidden?: MoveHidden;
+}
+
 /** A changed/new-file stop that may explicitly claim scattered changed spans. */
 export interface ChangedCodeTourStep extends CodeTourStepBase {
   kind: 'changed' | 'new-file';
@@ -134,6 +176,10 @@ export interface ChangedCodeTourStep extends CodeTourStepBase {
    * Absent means the step claims exactly `range`, preserving legacy behaviour.
    */
   ranges?: Array<[number, number]>;
+  /** Semantic moves this step's evidence demonstrates. Requires story version 3. */
+  moves?: LogicMove[];
+  /** Cross-file move id to present as old-file/new-file paired panes. Requires version 3. */
+  pairedView?: string;
 }
 
 /** An unchanged-code stop; context can frame evidence but never claim diff coverage. */
@@ -189,8 +235,8 @@ export function claimedRanges(step: CodeTourStep): Array<[number, number]> {
 
 /** The whole reading plan the AI emits. */
 export interface Tour {
-  /** v1 contains code-only steps; v2 also permits concept primers. */
-  version: 1 | 2;
+  /** v1 contains code-only steps; v2 permits concepts; v3 permits semantic moves. */
+  version: 1 | 2 | 3;
   /** SHA-256 of the exact rendered git diff when the story was last generated or repaired. */
   diffFingerprint?: string;
   /** Immutable post-story repository evidence used for scope-aware freshness and since-story diffs. */

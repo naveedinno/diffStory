@@ -77,7 +77,7 @@ test('generated-story validation requires context, camera framing, and narrated 
   assert.deepEqual(validateTour(legacyCompatible), []);
 
   const generatedErrors = validateGeneratedTour(legacyCompatible);
-  assert.ok(generatedErrors.includes('version must be 2 for a generated story'));
+  assert.ok(generatedErrors.includes('version must be 3 for a generated story'));
   assert.ok(generatedErrors.includes('mode is required for a generated story'));
   assert.ok(generatedErrors.includes('intent is required for a generated story'));
   assert.ok(generatedErrors.includes('steps[0].viewport is required for a generated story'));
@@ -116,7 +116,7 @@ test('generated-story validation keeps the changed range in frame and in at leas
 
   const valid = {
     ...base,
-    version: 2,
+    version: 3,
     steps: [{
       ...base.steps[0],
       viewport: [10, 26],
@@ -393,10 +393,91 @@ test('accepts the pure deleted-file sentinel anchor', () => {
 });
 
 test('flags unsupported version, missing title, and empty steps', () => {
-  const errs = validateTour({ version: 3, steps: [] });
+  const errs = validateTour({ version: 4, steps: [] });
   assert.ok(errs.some((e) => e.includes('version')));
   assert.ok(errs.some((e) => e.includes('title')));
   assert.ok(errs.some((e) => e.includes('steps')));
+});
+
+test('story v3 validates semantic moves and cross-file paired views', () => {
+  const story = {
+    version: 3,
+    title: 'Logic moves',
+    summary: 'Review the guard and extraction.',
+    storyScope: { includedFiles: ['src/settle.ts', 'src/account.ts'] },
+    steps: [{
+      id: 'settle', order: 1, title: 'Guarded settlement', kind: 'changed',
+      file: 'src/account.ts', range: [18, 24], viewport: [10, 30], why: 'The balance update now has a named home.',
+      moves: [
+        {
+          id: 'extract-balance', kind: 'extracted',
+          before: { file: 'src/settle.ts', range: [40, 44] },
+          after: { file: 'src/account.ts', range: [18, 24] },
+          label: 'moved out',
+        },
+        {
+          id: 'guard-balance', kind: 'wrapped',
+          before: { file: 'src/account.ts', range: [19, 21] },
+          after: { file: 'src/account.ts', range: [18, 24] },
+          label: 'now gated by isOpen',
+        },
+      ],
+      pairedView: 'extract-balance',
+    }],
+  };
+  assert.deepEqual(validateTour(story), []);
+
+  const errors = (step, version = 3, scope = story.storyScope) => validateTour({
+    ...story, version, storyScope: scope, steps: [{ ...story.steps[0], ...step }],
+  });
+  assert.ok(errors({}, 2).includes('steps[0].moves and pairedView require story version 3'));
+  assert.ok(errors({ moves: [...story.steps[0].moves, ...Array.from({ length: 5 }, (_, i) => ({
+    ...story.steps[0].moves[1], id: `extra-${i}`,
+  }))] }).includes('steps[0].moves must contain at most 6 moves'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[0], id: 'same' }, { ...story.steps[0].moves[1], id: 'same' }], pairedView: undefined })
+    .includes('steps[0].moves[1].id "same" is duplicated'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], kind: 'teleported' }], pairedView: undefined })
+    .some((error) => error.includes('steps[0].moves[0].kind must be one of')));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], before: { file: '', range: [1] } }], pairedView: undefined })
+    .includes('steps[0].moves[0].before.file must be a non-empty string'));
+  // Labels are border tabs now: optional, plain text, and deliberately short.
+  assert.deepEqual(errors({ moves: [{ ...story.steps[0].moves[1], kind: 'flow', label: undefined }], pairedView: undefined }), []);
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], label: '<code>isOpen</code>' }], pairedView: undefined })
+    .some((error) => error.includes('steps[0].moves[0].label') && error.includes('is not allowed in a plain-text field')));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], label: 'x'.repeat(25) }], pairedView: undefined })
+    .includes('steps[0].moves[0].label must be at most 24 characters'));
+  // Hidden facts are the only callout source and validate each fixed field.
+  assert.deepEqual(errors({ moves: [{ ...story.steps[0].moves[1], hidden: {
+    as: 'path', tag: 'no else branch exists', what: 'rebate trades now settle <code>free</code>',
+  } }], pairedView: undefined }), []);
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: [] }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden must be an object'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'branch', tag: 'x', what: 'y' } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.as must be one of path, destination, consequence'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: '', what: 'y' } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.tag must be a non-empty string'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: 'x'.repeat(49), what: 'y' } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.tag must be at most 48 characters'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: '<em>x</em>', what: 'y' } }], pairedView: undefined })
+    .some((error) => error.includes('steps[0].moves[0].hidden.tag') && error.includes('is not allowed in a plain-text field')));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: 'x', what: '' } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.what must be a non-empty string'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: 'x', what: 'y'.repeat(121) } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.what must be at most 120 characters'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'path', tag: 'x', what: '<p>y</p>' } }], pairedView: undefined })
+    .some((error) => error.includes('steps[0].moves[0].hidden.what') && error.includes('is not allowed in an inline field')));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], hidden: { as: 'destination', tag: 'elsewhere', what: 'open the helper' } }], pairedView: undefined })
+    .includes('steps[0].moves[0].hidden.as "destination" requires a cross-file move'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], before: { file: 'src/other.ts', range: [19, 21] }, after: { file: 'src/other.ts', range: [22, 24] } }], pairedView: undefined }, 3, null)
+    .includes('steps[0].moves[0] must anchor at least one endpoint in steps[0].file'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[1], after: { file: 'src/account.ts', range: [80, 84] } }], pairedView: undefined })
+    .includes('steps[0].moves[0].after.range must intersect steps[0].viewport'));
+  assert.ok(errors({ moves: [story.steps[0].moves[1]], pairedView: 'guard-balance' })
+    .includes('steps[0].pairedView must reference a cross-file move'));
+  assert.ok(errors({ moves: [story.steps[0].moves[0]], pairedView: 'missing' })
+    .includes('steps[0].pairedView must reference a move id in steps[0].moves'));
+  assert.ok(errors({ moves: [{ ...story.steps[0].moves[0], before: { file: 'src/outside.ts', range: [1, 2] } }] })
+    .includes('steps[0].moves[0].before.file must be in storyScope.includedFiles'));
 });
 
 test('flags a bad kind and a malformed range', () => {
@@ -891,8 +972,8 @@ test('a legacy question field is ignored, and malformed tags stay a validation e
   // Review questions are gone from the product. Stories written before that
   // still carry the field, and they must keep loading rather than fail a gate
   // for a value nothing reads any more.
-  assert.deepEqual(validateGeneratedTour(tour(step({ question: 'Does this hold?' }))), []);
-  assert.deepEqual(validateGeneratedTour(tour(step({ question: undefined }))), []);
+  assert.deepEqual(validateGeneratedTour({ ...tour(step({ question: 'Does this hold?' })), version: 3 }), []);
+  assert.deepEqual(validateGeneratedTour({ ...tour(step({ question: undefined })), version: 3 }), []);
 
   // Agent output is untrusted JSON. A non-string tag is a useful validation
   // error, never a `.trim is not a function` crash in the generation result.
@@ -958,7 +1039,7 @@ test('optional ranges lets one step claim scattered spans without widening the c
     tags: ['skim'],
   });
   assert.deepEqual(validateTour(scattered), []);
-  assert.deepEqual(validateGeneratedTour(scattered), []);
+  assert.deepEqual(validateGeneratedTour({ ...scattered, version: 3 }), []);
 
   // Multi-range coverage is reserved for an explicitly skimmable mechanical
   // sweep. Otherwise the agent could hide substantive review points in one step.
@@ -993,7 +1074,7 @@ test('whole-file deletion ranges must contain the deletion anchor', () => {
   ], { mode: 'guided', intent: { goal: 'g', design: 'd', sources: ['conversation'] } });
 
   assert.deepEqual(validateTour(deletion([[0, 0]])), []);
-  assert.deepEqual(validateGeneratedTour(deletion([[0, 0]])), []);
+  assert.deepEqual(validateGeneratedTour({ ...deletion([[0, 0]]), version: 3 }), []);
   assert.ok(validateTour(deletion([[1, 1]]))
     .some((e) => e.includes('range must be contained in one of steps[0].ranges')));
 });

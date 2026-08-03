@@ -284,6 +284,20 @@ to "callouts only" if the overlay fails for any reason.
 The SVG may draw a short dashed leader from the anchor region into the callout;
 the callout's own rect is DOM, never SVG.
 
+A cross-file destination callout must expose the relationship direction before
+the authored explanation. When the off-screen endpoint is the old/source side,
+render `CROSS-FILE SOURCE  [file:range] → THIS CODE`; when it is the new side,
+render `CROSS-FILE DESTINATION  THIS CODE → [file:range]`. The file endpoint is
+the jump button. Do not put the relationship arrow inside that button: doing so
+makes an off-screen source look like the destination.
+
+The callout is a fallback, not the default cross-file presentation. The step's
+primary cross-file relationship must use the two panes — source file on the
+left, destination file on the right. If two primary relationships compete for
+the panes, split them into separate story steps. Use the callout only for a
+secondary third-file fact that would otherwise displace the step's main
+comparison.
+
 ---
 
 ## 6. The five shapes
@@ -306,6 +320,11 @@ Every annotation is one of these. No others.
 | after side / structural | `--accent-blue` |
 | a path or destination you cannot see | `--md-warn` (amber) |
 | a consequence that breaks something | `--diff-del-text` |
+
+Exception: a paired `flow` source is dependency context, not removed code. Label
+the panes `SOURCE` and `DESTINATION`, keep the source pane neutral, and use the
+structural blue for both endpoint boxes. A real `moved` or `extracted`
+relationship keeps `BEFORE`/`AFTER` and deletion/addition colouring.
 
 Kind is carried by shape and tag text, never by a second hue. Do **not** introduce
 green for annotations — the diff already owns green for "added line", and a green

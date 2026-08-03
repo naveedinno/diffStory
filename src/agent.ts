@@ -102,7 +102,7 @@ export function storyPrompt(
     : '';
   return (
     `Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
-    `Write ${DATA_DIR}/story.json, set its "version" field to 2, set its "base" field to "${baseRef}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
+    `Write ${DATA_DIR}/story.json, set its "version" field to 3, set its "base" field to "${baseRef}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
     storyScopeContract +
     scopeContract +
@@ -117,6 +117,7 @@ export function storyPrompt(
     `- Top level: "version", "title", "summary", "base", "mode", "intent", "steps"; "title" and "summary" are required.\n` +
     `- Every step: "id", "order" (number 1..N), "title", "kind".\n` +
     `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical".\n` +
+    `- Optional moves (max 6): "id", "kind", "before"/"after" {"file","range"}, "label" (tag, max 24), "hidden" {"as":path|destination|consequence, "tag" max 48, "what" max 120}; kinds are moved/extracted/inlined/wrapped/unwrapped/condition-changed/reordered/flow.\n` +
     `- Every beat: "text" (not "body" or "prose") and non-empty "highlights". "body" is concept-only.\n` +
     // The format is validator-enforced, so it is pinned here rather than left to
     // the skill: prose about a format does not survive being read as reliably as
@@ -124,8 +125,8 @@ export function storyPrompt(
     // literally instead of failing loudly.
     `Prose is restricted HTML, never Markdown ("**bold**" renders as literal asterisks):\n` +
     `- Concept "body" takes block tags: p, h2-h4, ul, ol, li, blockquote, pre, hr, table, caption, thead, tbody, tr, th, td, dl, dt, dd.\n` +
-    `- "why", beat "text", "summary", "intent.goal"/"design"/"nonGoals", "hotspots[].reason" take INLINE tags only: code, kbd, strong, em, sup, sub, span, br.\n` +
-    `- Every "title" and "storyScope.reviewerNote" is plain text with no tags at all.\n` +
+    `- "why", beat "text", "summary", "intent.goal"/"design"/"nonGoals", "hotspots[].reason", move "hidden.what" take INLINE tags only: code, kbd, strong, em, sup, sub, span, br.\n` +
+    `- "title", move "label"/"hidden.tag", and "storyScope.reviewerNote" are plain text with no tags.\n` +
     `- Every <table> needs a <caption>; a table without one is rejected. The caption is what the read-aloud voice speaks instead of the table.\n` +
     `- No links, images, SVG, id, or style. Writing about a tag means escaping it: &lt;script&gt;.\n` +
     // The self-check list is what actually gets verified, so it names every
@@ -287,7 +288,7 @@ export function storyRepairPrompt(input: {
     `Preservation contract:\n` +
     `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
     `- Preserve every unaffected concept primer exactly, including its body, preparesFor links, diagram, tags, chapter, and just-in-time position. Concept primers do not claim coverage.\n` +
-    `- Keep a legacy version 1 story at version 1 when the repair only edits code steps; upgrade it to version 2 only if this repair introduces a concept primer. Preserve version 2 once present.\n` +
+    `- Preserve legacy version 1 or 2 when the repair does not add semantic moves. Upgrade to version 2 when a v1 repair introduces a concept primer, and to version 3 whenever the repair adds moves or pairedView. Preserve version 3 once present.\n` +
     `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
     `- Keep the story short, informal, causal, and review-oriented.\n` +
     // Same reason the generation prompt pins it: the repair path is a second

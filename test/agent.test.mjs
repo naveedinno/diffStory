@@ -23,7 +23,7 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
-  assert.ok(p.includes('set its "version" field to 2'));
+  assert.ok(p.includes('set its "version" field to 3'));
   assert.ok(p.includes('Use the diffstory-storyteller skill'));
   assert.ok(!p.includes('diffStory review-tour skill'));
   assert.ok(p.includes('reviewer, not a changelog'));
@@ -56,8 +56,9 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   // assertions above are. This cap just stops the skill leaking back in wholesale.
   // Raised from 4000 when the HTML format contract landed — that contract is
   // validator-enforced, so by the rule above it belongs here rather than in the
-  // skill. The craft-section assertions above remain the real drift guard.
-  assert.ok(p.length < 4600, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  // skill. Raised again for the validator-enforced v3 move field contract; the
+  // craft-section assertions above remain the real drift guard.
+  assert.ok(p.length < 4800, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -78,7 +79,7 @@ test('storyPrompt supports story detail levels', () => {
     // block in agent.ts) because deep-skill prose does not reliably survive being
     // read — and an out-of-tier tag is now a validation failure. This ceiling
     // buys correctness, not verbosity; keep new prose out of it.
-    assert.ok(prompt.length < 4600, `${mode} prompt grew to ${prompt.length} chars`);
+    assert.ok(prompt.length < 4800, `${mode} prompt grew to ${prompt.length} chars`);
   }
 });
 
@@ -144,7 +145,7 @@ test('bundled diffstory-storyteller skill teaches just-in-time concept primers',
 test('bundled diffstory-storyteller skill pins concept schema, limits, and diagram safety', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   const flat = skill.replace(/\s+/g, ' ');
-  assert.ok(skill.includes('Newly generated stories use `"version": 2`'));
+  assert.ok(skill.includes('Newly generated stories use `"version": 3`'));
   assert.ok(skill.includes('60-180 words'));
   assert.match(skill, /hard maximum\s+of 220 words/);
   assert.ok(skill.includes('Brief: at most 1 concept primer'));
@@ -160,7 +161,7 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
   assert.ok(skill.includes('Stories longer than 10 steps'));
 });
 
-test('bundled skill schema example is a valid interleaved v2 story', () => {
+test('bundled skill schema example is a valid interleaved v3 story', () => {
   const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
   const example = JSON.parse(skill.split('## Schema')[1].split('```jsonc')[1].split('```')[0]);
   assert.deepEqual(validateTour(example), []);
@@ -459,8 +460,8 @@ test('storyRepairPrompt preserves unaffected steps and targets one repair', () =
   assert.match(prompt, /Preserve every unaffected step/);
   assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
   assert.match(prompt, /Preserve every unaffected concept primer/);
-  assert.match(prompt, /Keep a legacy version 1 story at version 1/);
-  assert.match(prompt, /upgrade it to version 2 only if this repair introduces a concept primer/);
+  assert.match(prompt, /Preserve legacy version 1 or 2/);
+  assert.match(prompt, /version 3 whenever the repair adds moves or pairedView/);
   assert.match(prompt, /concept primers do not claim coverage/i);
   assert.match(prompt, /\.diffstory\/story\.json/);
   assert.match(prompt, /diffstory-storyteller/);
@@ -737,7 +738,29 @@ test('storyPrompt pins machine-checked field names the skill prose cannot convey
   assert.ok(p.includes('optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical"'));
   assert.ok(p.includes('"text" (not "body" or "prose")'));
   assert.ok(p.includes('"body" is concept-only'));
+  assert.ok(p.includes('Optional moves (max 6)'));
+  assert.ok(p.includes('condition-changed'));
+  assert.ok(p.includes('"label" (tag, max 24)'));
+  assert.ok(p.includes('"hidden" {"as":path|destination|consequence, "tag" max 48, "what" max 120}'));
+  assert.ok(p.includes('move "hidden.what" take INLINE tags only'));
+  assert.ok(p.includes('move "label"/"hidden.tag"'));
   assert.ok(p.includes('One omission invalidates the story'));
+});
+
+test('bundled storyteller skill applies the diff-annotation restraint filter', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  assert.ok(flat.includes('could the reviewer learn this by reading the two columns?'));
+  for (const kind of ['`moved`', '`extracted`', '`inlined`', '`wrapped`', '`unwrapped`', '`condition-changed`', '`reordered`', '`flow`']) {
+    assert.ok(flat.includes(kind), `skill omits ${kind}`);
+  }
+  assert.ok(flat.includes('Never use `flow` when a named verb fits'));
+  assert.ok(flat.includes('before.range` uses old/pre-change line numbers'));
+  assert.ok(flat.includes("source on the left and destination on the right"));
+  assert.ok(flat.includes('split them into separate steps'));
+  assert.ok(flat.includes('Use a `destination` callout only as a fallback'));
+  assert.ok(flat.includes('a branch with **no code to read**'));
+  assert.ok(flat.includes('`hidden` is the only field that produces a callout'));
 });
 
 test('bundled diffstory-storyteller skill keeps sweep steps from becoming diff narration', () => {

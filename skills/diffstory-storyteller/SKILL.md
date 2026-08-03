@@ -34,8 +34,8 @@ tell the user to open or refresh the installed diffStory app.
 - Every story under `.diffstory/stories/` must carry a top-level `storyScope`
   with `includedFiles`, and every code step's `file` must appear in it. The app
   rejects the story otherwise.
-- Newly generated stories use `"version": 2`. Version 1 stories remain readable;
-  do not rewrite an existing v1 story merely to modernize its number.
+- Newly generated stories use `"version": 3`. Version 1 and 2 stories remain
+  readable; do not rewrite an existing story merely to modernize its number.
 - Open the story with an `intent` block whose `goal` cites real `sources`; use
   `["code-derived"]` when no evidence exists.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
@@ -444,8 +444,8 @@ what you need while writing:
 | Field | You may write |
 | --- | --- |
 | concept `body` | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
-| `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
-| every `title`, `storyScope.reviewerNote` | plain text — no tags at all |
+| `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason`, `moves[].hidden.what` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
+| every `title`, `moves[].label`, `moves[].hidden.tag`, `storyScope.reviewerNote` | plain text — no tags at all |
 
 Block tags in an inline field are rejected: those fields render inside a `<p>` or
 a `<button>`, which cannot legally hold them.
@@ -601,6 +601,105 @@ representative instance.
 `viewport` is the review window. `highlights` are what the narrator is pointing
 at. `range` is the local anchor and legacy fallback claim. Optional top-level
 `ranges` is the complete coverage claim when present.
+
+### 5.4. Record semantic logic moves
+
+Annotations draw on the code itself. Before adding one, ask: **could the reviewer
+learn this by reading the two columns?** If yes, write no move. A picture of an
+`if` that is already visible in green costs the reader attention and teaches them
+nothing. Most steps should have no annotations.
+
+Specifically, do NOT annotate:
+
+- a guard whose condition and body are both visible in the diff
+- a call that replaced inline code when both sides are on screen
+- a rename, a reformat, or a comment change
+- a relocation whose destination is already the right-hand pane
+
+DO annotate:
+
+- a branch with **no code to read** — an unwritten `else`, a silent skip
+- a destination in a file that is **not one of the two panes**
+- an ordering or dependency consequence that **no line states**
+- a region whose true extent is not obvious from the diff colouring
+
+Never use `flow` when a named verb fits.
+
+| Kind | Meaning | Disambiguation rule |
+| --- | --- | --- |
+| `moved` | Same logic, new home (may be cross-file) | No call remains at the old site |
+| `extracted` | Logic became a named function + a call site (may be cross-file) | A call *replaces* it at the old site |
+| `inlined` | Reverse of `extracted`: a call was replaced by its body | — |
+| `wrapped` | Lines are now guarded by a new condition | The branch structure *grew* a gate |
+| `unwrapped` | A guard was removed from these lines | — |
+| `condition-changed` | Same branch shape, different predicate | Structure unchanged; only the test changed |
+| `reordered` | Blocks swapped execution order | Nothing added or removed; order flipped |
+| `flow` | Freeform labeled connection, any before-anchor → any after-anchor | Only when no verb above fits; `label` is required |
+
+Each move is `{ "id", "kind", "before", "after", "label"?, "hidden"? }`. Each
+endpoint is `{ "file": "repo/relative/path", "range": [start, end] }`.
+`before.range` uses old/pre-change line numbers in the base blob. `after.range`
+uses new/post-change line numbers in the current or head blob. At least one
+endpoint file must match the containing step's `file`. Keep ids unique within
+the step and use at most 6 moves in one step.
+
+`label` is a two-or-three-word plain-text tag on a box border, at most 24
+characters: `unconditional`, `now gated`, `moved out`. It is not a sentence and
+contains no HTML. Omit it when a tag would only restate the visible diff.
+
+`hidden` is the only field that produces a callout. Use it for the one fact with
+no line of code to point at: `{ "as": "path"|"destination"|"consequence",
+"tag": "plain headline", "what": "one inline-tier clause" }`. `tag` is plain
+text, at most 48 characters; `what` is inline HTML, at most 120. A `destination`
+hidden fact is only valid for a cross-file move.
+
+Cross-file moves pair the panes automatically. When a move's two endpoints are
+in different files and the `after` endpoint is this step's file, the reviewer
+sees the old file on the left and the new file on the right with no extra
+field. Do not add `pairedView` for that ordinary case; it exists only to choose
+between several cross-file moves on one step. Treat the pane pair as the default
+for the step's primary cross-file evidence. If two cross-file relationships
+compete for those panes, split them into separate steps before hiding either
+endpoint in a callout.
+
+Use a `destination` callout only as a fallback for a genuinely secondary third
+file that cannot become one of the panes without obscuring the step's main
+comparison. Never use one merely because the author picked a different
+`pairedView` relationship.
+
+Example:
+
+```jsonc
+"moves": [
+  {
+    "id": "silent-cross-path",
+    "kind": "wrapped",
+    "before": { "file": "contracts/core/libraries/LibSettlement.sol", "range": [251, 254] },
+    "after": { "file": "contracts/core/libraries/LibSettlement.sol", "range": [244, 260] },
+    "label": "now gated",
+    "hidden": {
+      "as": "path",
+      "tag": "no else branch exists",
+      "what": "cross-party settlement now <code>skips</code> this debit entirely"
+    }
+  },
+  {
+    // Deliberately no hidden callout: the two panes already show this extent.
+    "id": "reorder-ledgers",
+    "kind": "reordered",
+    "before": { "file": "contracts/core/libraries/LibSettlement.sol", "range": [271, 278] },
+    "after": { "file": "contracts/core/libraries/LibSettlement.sol", "range": [264, 271] },
+    "label": "order swapped"
+  }
+]
+```
+
+For a substantial cross-file relationship that is the step's main claim, show
+its source on the left and destination on the right. Set `pairedView` only when
+several cross-file moves exist and the automatic choice is not that primary
+relationship. A paired view is for reading one meaningful old-body/new-body
+relationship side by side; do not use it for tiny call-site changes or as a
+general two-file diff.
 
 ### 5.5. Add precise code read-aloud focus when useful
 
@@ -1079,7 +1178,7 @@ Falsifiable checks — run each one, do not skim:
 
 ```jsonc
 {
-  "version": 2,
+  "version": 3,
   "mode": "guided",
   "title": "Short title for the whole change — plain text, no tags",
   "summary": "1-3 short sentences: how the steps walk the implementation and where to slow down. The goal and designed flow live in intent, not here. Inline tags only, e.g. <code>settleFunding()</code>.",
@@ -1125,6 +1224,15 @@ Falsifiable checks — run each one, do not skim:
         }
       ],
       "calls": ["s2"],
+      "moves": [
+        {
+          "id": "extract-cap",
+          "kind": "extracted",
+          "before": { "file": "contracts/Funding.sol", "range": [129, 131] },
+          "after": { "file": "contracts/lib/RateMath.sol", "range": [40, 52] },
+          "label": "moved out"
+        }
+      ],
       "tags": ["entrypoint", "core"]
     },
     {
