@@ -135,6 +135,9 @@ test('split hunk gap keeps the middle control on the split divider', () => {
   assert.match(html, /<span class="ds-gap-side ds-gap-side-l">/);
   assert.match(html, /<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all"/);
   assert.match(html, /<span class="ds-gap-side ds-gap-side-r">/);
+  assert.match(html, /data-gap-chunk="5"/);
+  assert.match(html, /aria-label="Show 5 lines below"[^>]*>↓ 5</);
+  assert.match(html, /aria-label="Show 5 lines above"[^>]*>↑ 5</);
 });
 
 test('bare split hunk gap uses the split divider scaffold', () => {
@@ -142,6 +145,16 @@ test('bare split hunk gap uses the split divider scaffold', () => {
   assert.match(html, /^<div class="ds-hunkgap ds-hunkgap-split">/);
   assert.match(html, /<span class="ds-gap-mid"><span>⋯<\/span><\/span>/);
   assert.doesNotMatch(html, /data-gap/);
+});
+
+test('split viewport edge exposes only the adjacent five-line direction', () => {
+  const before = renderHunkGap({ file: 'a.ts', from: 1, to: 30 }, { split: true, edge: 'before' });
+  assert.match(before, /data-expand="up"/);
+  assert.doesNotMatch(before, /data-expand="down"/);
+
+  const after = renderHunkGap({ file: 'a.ts', from: 50, to: 'eof' }, { split: true, edge: 'after' });
+  assert.match(after, /data-expand="down"/);
+  assert.doesNotMatch(after, /data-expand="up"/);
 });
 
 test('attrs helpers escape file paths', () => {
@@ -166,9 +179,10 @@ test('interactive hunk gap carries range data and expand buttons', () => {
   assert.match(html, /data-expand="down"/);
   assert.match(html, /data-expand="all"/);
   assert.match(html, /data-expand="up"/);
-  assert.match(html, /aria-label="Show the first 20 hidden lines"/);
+  assert.match(html, /data-gap-chunk="20"/);
+  assert.match(html, /aria-label="Show 20 lines below"/);
   assert.match(html, /aria-label="Show all hidden lines"/);
-  assert.match(html, /aria-label="Show the last 20 hidden lines"/);
+  assert.match(html, /aria-label="Show 20 lines above"/);
 });
 
 test('eof gap omits the up button', () => {

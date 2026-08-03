@@ -195,6 +195,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-gap-mid{position:relative;flex:none;width:0;height:22px;display:flex;align-items:center;justify-content:center;color:var(--dim2)}
 .ds-gap-mid>.ds-gapbtn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
 .ds-gapbtn{font:inherit;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:var(--radius-sm);border:1px solid var(--line-soft);background:transparent;color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease}
+.ds-hunkgap-split .ds-gapbtn-context{opacity:1}
 .ds-hunkgap.is-expandable:hover .ds-gapbtn,.ds-gapbtn:focus-visible{opacity:1}
 .ds-gapbtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-gapbtn:disabled{opacity:.4;cursor:default}
@@ -602,11 +603,12 @@ export const DIFF_JS = `
     var eof=toAttr==='eof';
     var to=eof?0:parseInt(toAttr||'0',10);
     var mode=btn.getAttribute('data-expand');
+    var chunk=Math.max(1,parseInt(gap.getAttribute('data-gap-chunk')||'20',10)||20);
     clearGapError(gap);gap.setAttribute('aria-busy','true');
     var rf,rt;
     if(mode==='all'){rf=from;rt=eof?'eof':to;}
-    else if(mode==='down'){rf=from;rt=eof?(from+19):Math.min(to,from+19);}
-    else{rf=Math.max(from,to-19);rt=to;}
+    else if(mode==='down'){rf=from;rt=eof?(from+chunk-1):Math.min(to,from+chunk-1);}
+    else{rf=Math.max(from,to-chunk+1);rt=to;}
     var holder=closest(gap,'.ds-filepanel')||closest(gap,'.ds-diff');
     var layout=closest(gap,'[data-split-inner]')?'split':'unified';
     var btns=[].slice.call(gap.querySelectorAll('.ds-gapbtn'));

@@ -1599,6 +1599,38 @@ test('story viewport controls visible code while highlights control narration fo
   rmSync(repo, { recursive: true, force: true });
 });
 
+test('split story viewport exposes five-line expansion above and below', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-viewport-expand-'));
+  writeFileSync(join(repo, 'a.ts'), Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join('\n'));
+  const viewportTour = {
+    version: 1,
+    title: 'Expandable viewport',
+    summary: 'Reveal nearby context without leaving the story.',
+    steps: [{
+      id: 's1', order: 1, title: 'Inspect the middle', file: 'a.ts', kind: 'changed',
+      range: [6, 6], viewport: [4, 8], why: 'The local change needs a little optional context.',
+    }],
+  };
+  const viewportFiles = [{
+    oldPath: 'a.ts', newPath: 'a.ts', status: 'modified', hunks: [{
+      oldStart: 6, oldLines: 1, newStart: 6, newLines: 1,
+      lines: [{ type: 'add', content: 'line 6', newNo: 6 }],
+    }],
+  }];
+
+  const html = renderPage({ repo, tour: viewportTour, files: viewportFiles, baseLabel: 'main', comments: [] });
+  const split = html.match(/<div data-split-inner data-loaded="1">([\s\S]*?)<\/div>\s*<div data-full-inner/)?.[1] ?? '';
+  const beforeGap = split.match(/<div class="ds-hunkgap is-expandable ds-hunkgap-split" data-gap data-gap-file="a\.ts" data-gap-from="1" data-gap-to="3"[\s\S]*?<\/div>/)?.[0] ?? '';
+  assert.match(beforeGap, /data-gap-chunk="5"/);
+  assert.match(beforeGap, /aria-label="Show 5 lines above"[^>]*>↑ 5</);
+  assert.doesNotMatch(beforeGap, /data-expand="down"/);
+  assert.match(split, /data-gap-from="9" data-gap-to="eof" data-gap-chunk="5"/);
+  assert.match(split, /aria-label="Show 5 lines below"[^>]*>↓ 5</);
+  assert.doesNotMatch(html.match(/<div data-diff-inner hidden>([\s\S]*?)<\/div>\s*<div data-split-inner/)?.[1] ?? '', /data-gap/);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
 test('story beats render as separate spoken notes with exact focus groups', () => {
   const beatTour = {
     version: 1,

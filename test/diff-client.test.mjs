@@ -108,6 +108,9 @@ test('expand-context client is wired', () => {
 
 test('hunk expansion remains discoverable without hover on touch devices', () => {
   assert.match(DIFF_CSS, /@media \(hover:none\),\(pointer:coarse\)\{\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-split \.ds-gapbtn-context\{opacity:1\}/);
+  assert.match(DIFF_JS, /data-gap-chunk/);
+  assert.match(DIFF_JS, /from\+chunk-1/);
 });
 
 test('split divider and change rows have keyboard review foundations', () => {

@@ -1205,14 +1205,23 @@ function diffInner(s, comments) {
     }
     const head = diffHead(s);
     const hunkGap = () => (s.context || s.newFile ? renderHunkGap() : renderHunkGap(undefined, { split: true }));
+    const canExpandViewport = !s.context && !s.newFile && !s.pairedView && s.viewport[0] > 0;
+    const viewportBefore = canExpandViewport && s.viewport[0] > 1
+        ? renderHunkGap({ file: s.file, from: 1, to: s.viewport[0] - 1 }, { split: true, edge: 'before' })
+        : '';
+    const viewportAfter = canExpandViewport
+        ? renderHunkGap({ file: s.file, from: s.viewport[1] + 1, to: 'eof' }, { split: true, edge: 'after' })
+        : '';
     const callouts = calloutsByLastRow(s);
-    const body = s.blocks
-        .map((block, bi) => {
-        const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return ((bi > 0 ? hunkGap() : '') +
-            block.map((row) => sbsRow(row, s, comments, bi, intra) + rowCallouts(row, callouts)).join(''));
-    })
-        .join('');
+    const body = viewportBefore +
+        s.blocks
+            .map((block, bi) => {
+            const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
+            return ((bi > 0 ? hunkGap() : '') +
+                block.map((row) => sbsRow(row, s, comments, bi, intra) + rowCallouts(row, callouts)).join(''));
+        })
+            .join('') +
+        viewportAfter;
     const note = s.note && s.blocks.some((b) => b.length)
         ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
         : '';
