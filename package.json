@@ -1,7 +1,7 @@
 {
   "name": "@naveedinno/diffstory",
   "version": "0.1.0",
-  "description": "diffStory \u2014 the agent tells the story of its change: a guided, in-order diff review with a comment loop back to the agent.",
+  "description": "diffStory \u2014 guided, in-order diff review with a local queued-comment handoff.",
   "type": "module",
   "author": "naveedinno <naveedinno@proton.me>",
   "repository": {

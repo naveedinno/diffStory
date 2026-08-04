@@ -10,15 +10,15 @@ Read a code change in the order it actually makes sense.
 diffStory is a local desktop app for reviewing git diffs. Open the app,
 pick a repo, choose what changed, and review the real diff with an optional
 AI-written walkthrough. When something needs work, select the exact text, add a
-comment, and send it back to your agent.
+comment, then copy it or keep it in the review queue.
 
 - Runs locally on your machine.
 - Uses a proper desktop UI, not a terminal review flow.
 - Works with plain git diffs, even without generating a story.
 - Draws restrained boxes and arrows directly on split diffs when code genuinely
   moved, with accessible callouts only for facts neither pane can show.
-- Can use Claude or Codex to generate walkthroughs and address comments.
-- Works without AI. Agent features are optional.
+- Can use Claude or Codex to generate and repair walkthroughs.
+- Works without AI. Story-writing features are optional.
 - Command-click or Ctrl-click a current-code identifier to open its implementation
   through the small VS Code navigation bridge.
 
@@ -46,8 +46,7 @@ npm install
 Then open **diffStory** from Spotlight, Finder, or Launchpad. There is no
 diffStory CLI and no terminal review workflow.
 
-Optional: install Claude or Codex on your PATH if you want generated stories or
-agent-handled review comments.
+Optional: install Claude or Codex on your PATH if you want generated stories.
 
 ## Demo
 
@@ -74,13 +73,15 @@ couple of comments so you can see the full review loop.
    commit, or any two refs.
 5. Read the diff in **All files**, or open **Story** and generate a guided
    walkthrough.
-6. Select exact text in the diff, right-click, and add a comment.
-7. In the header, choose an **Agent task**: reuse an existing Codex task or
-   start a new one. Every composer shows that destination before **Ask agent**,
-   and later questions keep reusing it until you choose another task.
+6. Select exact text in the diff, right-click **Comment selected code**, choose
+   **Fix request**, **Question**, or **Note**, and write the comment.
+7. **Copy** is the default action and does not save anything. Use **Add to queue**
+   when you want to keep the comment for the end of the review.
+8. Open **Review → Comments** to edit or remove queued comments, jump back to
+   their code, or use **Copy all** for one portable handoff.
 
-You can use diffStory as a clean diff viewer without an agent. The AI parts are
-only needed when you want generated stories or agent-handled comments.
+You can use diffStory as a clean diff viewer without an agent. AI is only needed
+when you want a generated or repaired story.
 
 ## What You See
 
@@ -108,18 +109,17 @@ read comes from git.
 
 ## Review Workflow
 
-diffStory keeps long reviews oriented and makes the handoff back from an agent
-explicit:
+diffStory keeps long reviews oriented and makes comments portable:
 
-- **Review rounds** capture the diff when feedback is sent and again when the
-  agent finishes. Use **Since review** to inspect only the follow-up changes.
-- **Feedback verification** collects addressed comments in one inbox. Accept a
-  fix after checking it, or reopen the comment without losing the conversation.
-- **Reusable Codex tasks** keep review questions in the implementation chat you
-  select. The binding is remembered per repository in this browser, and a new
-  task becomes the destination for later questions as soon as its first run completes.
-- **Review** stays focused on unresolved feedback, the review timeline, and
-  approval. Copy and resend recovery actions live under **More review actions**.
+- **Inline comments** open directly beneath selected code—never in a modal. The
+  exact selection is the anchor and travels with the comment.
+- **Copy** is primary and one-shot: it copies the type, file, line range, diff
+  side, selected code, and comment without writing to `.diffstory/`.
+- **Add to queue** is the only persistence action.
+- **Review → Comments** groups queued comments by file. Edit or remove them,
+  jump back to the code, or use **Copy all** when the review is ready.
+- **Review** keeps coverage, queued comments, challenge checks, and explicit
+  actions on one page.
 - **File search and filters** narrow the sidebar to seen or unseen files, files with
   comments, unexplained changes, tests, or files changed since your review.
 - **Resume review** returns to the last file, line, and display mode on this
@@ -131,8 +131,6 @@ explicit:
 - Open a story step to land on its first spotlight, then select any narration
   beat to move the highlight to the exact lines it explains. Read-aloud follows
   the same camera path automatically.
-- The review timeline records feedback handoffs, agent completions, replies, and
-  verification decisions for the current change.
 
 ## Agent Setup
 
@@ -157,14 +155,14 @@ cd diffStory
 ```
 
 If no agent is installed, diffStory still opens and still works as a local diff
-viewer. Story generation and comment handoff will be unavailable until Claude or
-Codex is on your PATH.
+viewer with the complete comment queue. Only story generation and repair are
+unavailable until Claude or Codex is on your PATH.
 
 ## VS Code Navigation Bridge
 
 The optional VS Code companion is deliberately tiny. It has no review sidebar,
-Git model, comments, stories, commands, or webview. It only lets the diffStory
-app reuse VS Code's language intelligence.
+Git model, comments, stories, commands, or webview. It only lets diffStory open
+an exact reviewed source location in VS Code.
 
 Install it from this checkout:
 
@@ -172,14 +170,14 @@ Install it from this checkout:
 cd vscode-extension
 npm install
 npm run package
-code --install-extension diffstory-vscode-0.9.0.vsix
+code --install-extension diffstory-vscode-0.9.2.vsix
 ```
 
-Keep the reviewed repository open in VS Code. In diffStory, Command-click on
-macOS or Ctrl-click elsewhere on an identifier in the current-code side of a
-diff. The bridge asks VS Code for an implementation first, falls back to a
-definition, and finally opens the clicked source position if the language
-extension reports neither.
+In diffStory, Command-click on macOS or Ctrl-click elsewhere on an identifier
+in the current-code side of a diff. If needed, the bridge opens the reviewed
+repository in VS Code first and resumes the requested navigation after the
+workspace loads. It opens the reviewed file, places the caret at the clicked
+location, and brings that line into view without a success notification.
 
 The bridge keeps the previous extension identifier, so installing it upgrades
 and replaces the retired full DiffStory review extension.
@@ -190,7 +188,7 @@ diffStory stores review state inside the repo you open:
 
 ```text
 .diffstory/story.json      generated reading order
-.diffstory/comments.json   local review comments and agent replies
+.diffstory/comments.json   local queued review comments
 .diffstory/review-state.json review rounds, snapshots, and timeline events
 .diffstory/stories/        optional saved named stories
 ```
@@ -282,18 +280,11 @@ from a diffStory clone.
 Install one of them and make sure its command is available on your PATH. You can
 still read diffs without an agent.
 
-**Why are Codex Cloud tasks not in the destination picker?**
-
-The current Codex Cloud CLI can list and start Cloud tasks, but it does not
-provide a follow-up/resume operation. diffStory lists resumable local and Codex
-Desktop tasks for the selected repository instead of presenting a Cloud task it
-cannot continue.
-
 ## How It Works
 
 The diffStory desktop app starts its private local Node server and renders the UI. The server
 reads your local git repository, renders the diff, stores review state in
-`.diffstory/`, and can ask Claude or Codex to generate or address review work.
+`.diffstory/`, and can ask Claude or Codex to generate or repair a story.
 
 The app uses Node built-ins for its runtime server. It does not need a hosted
 service, database, browser extension, or cloud account.

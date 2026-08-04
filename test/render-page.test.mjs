@@ -333,7 +333,7 @@ test('transport, beats and the numeral thread share one floating island', () => 
   // Steps still render their own dock; the client adopts each one into the stage.
   assert.match(html, /class="ds-dock-stage" data-dock-slot/);
   assert.match(PAGE_JS, /function adoptStepDocks\(\)\{[\s\S]*?stage\.appendChild\(dock\);/);
-  assert.match(PAGE_JS, /mountThreads\(fresh\);adoptStepDocks\(\);/);
+  assert.match(PAGE_JS, /mountCommentPins\(fresh\);adoptStepDocks\(\);/);
   // Beat lookups now cross trees: the beat lives in the island, its diff in the panel.
   assert.match(PAGE_JS, /function beatHost\(panel\)\{/);
   assert.match(PAGE_JS, /function beatPanel\(node\)\{/);
@@ -374,7 +374,7 @@ test('narrated stories use one quiet review row and keep secondary controls out 
   assert.doesNotMatch(html, /class="ds-titlebar"/);
 });
 
-test('toolbar keeps the decision signal primary and demotes agent routing', () => {
+test('toolbar keeps the review decision signal without comment delivery routing', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /\.ds-reviewchrome\{height:56px[^}]*overflow:visible/, 'header overlays must not be clipped or focus-scroll the chrome');
   // One Review entrance, not two: the tab carries the status the chip used to.
@@ -382,16 +382,14 @@ test('toolbar keeps the decision signal primary and demotes agent routing', () =
   assert.doesNotMatch(html, /data-review-menu-pop|aria-haspopup="dialog"/);
   assert.match(html, /id="ds-tab-review"[^>]*data-review-status/);
   assert.match(html, />Review</);
-  assert.match(html, /id="ds-tab-review"[^>]*aria-label="Review, 0 unresolved notes(?:, [^"]+)?"/);
+  assert.match(html, /id="ds-tab-review"[^>]*aria-label="Review, 0 queued comments(?:, [^"]+)?"/);
   assert.match(html, /data-unexplained-count="\d+"/);
   assert.match(html, /ds-review-summary/);
-  assert.match(html, /data-agent-target-control/);
-  assert.match(html, /data-agent-target-select/);
-  assert.match(html, /data-agent-target-name>Choose task</);
-  assert.match(html, /data-review-section="actions"[\s\S]*data-agent-target-control/);
+  assert.doesNotMatch(html, /data-agent-target-control|data-agent-target-select|data-agent-target-name/);
   assert.match(html, /data-repo="/);
   assert.doesNotMatch(html, /data-send-all/);
-  assert.match(html, />Resend open comments</);
+  assert.match(html, />Review comments/);
+  assert.match(html, /data-copy-comments="queued"[^>]*>Copy all/);
   assert.match(html, />Review actions</);
   assert.doesNotMatch(html, /data-verdict/);
   // The verdict is pinned above the tab bar rather than being a tab of its own.
@@ -502,15 +500,16 @@ test('secondary review text tokens retain 4.5 to 1 contrast on every surface tie
   }
 });
 
-test('review page renders notes, filters, resume, and story repair affordances', () => {
+test('review page renders the queued notes, resume, and story repair affordances', () => {
   const comments = [{
-    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'addressed',
-    createdAt: new Date().toISOString(), selectedText: 'return 1', turns: [{ role: 'ai', text: 'Fixed it', at: new Date().toISOString() }],
+    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'open',
+    createdAt: new Date().toISOString(), selectedText: 'return 1',
   }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-tools/);
+  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-view="feedback"/);
   assert.doesNotMatch(html, /data-feedback-view="timeline"/);
-  assert.match(html, /Needs verification/);
+  assert.match(html, /Tighten this/);
+  assert.doesNotMatch(html, /AI replied|data-feedback-filter/);
   assert.match(html, /data-file-search/);
   assert.match(html, /data-resume-review/);
   assert.match(html, /data-shortcuts-open/);
@@ -520,7 +519,7 @@ test('review page renders notes, filters, resume, and story repair affordances',
 
 test('review interaction regressions keep hidden states, note actions, and resume semantics intact', () => {
   const comments = [{
-    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'resolved',
+    id: 'c1', file: 'src/demo.ts', line: 2, type: 'change', body: 'Tighten this', status: 'open',
     createdAt: new Date().toISOString(), selectedText: 'const orders = [];',
   }];
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
@@ -534,7 +533,7 @@ test('review interaction regressions keep hidden states, note actions, and resum
   assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
   assert.match(html, /\.ds-dock\{[^}]*width:100%;min-width:0;max-width:100%;margin:0[^}]*border-radius:16px/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
-  assert.ok(html.includes("String(c.selectedText).replace(/\\s+/g,' ')"));
+  assert.match(html, /<script type="application\/json" id="ds-initial-comments">[^<]*const orders = \[\];/);
 });
 
 test('filmstrip navigation names review steps by purpose instead of implementation file', () => {
@@ -573,25 +572,25 @@ test('filmstrip navigation names review steps by purpose instead of implementati
   assert.match(html, /if\(i<=1\)scroll\.scrollLeft=0/);
 });
 
-test('submitting a comment sends it to the agent immediately', () => {
+test('comment composer makes default copy and optional queue explicit', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /data-selection-menu/);
-  assert.match(html, />Ask<\/button>/);
-  assert.match(html, />Ask for change<\/button>/);
-  assert.match(html, />Nit<\/button>/);
-  assert.match(html, /setAttribute\('aria-label','What should change\?'\)/);
-  assert.match(html, /chatHead\('What should change\?','Anchored to your selection'\)/);
-  assert.match(html, /ta\.placeholder='What should change\?…'/);
-  assert.doesNotMatch(html, /New review comment|Comment on the selected text/);
+  assert.match(html, /data-selection-comment>Comment selected code<\/button>/);
+  assert.doesNotMatch(html, />Ask for change<\/button>/);
+  assert.match(html, /setAttribute\('role','region'\)/);
+  assert.match(html, /'Comment selected code'/);
+  assert.match(html, /ta\.placeholder='Write a question, requested fix, or note…'/);
+  assert.match(html, /row\.parentNode\.insertBefore\(box,row\.nextSibling\)/);
+  assert.doesNotMatch(html, /activateModal\(box,composerReturnFocus\)/);
+  assert.doesNotMatch(html, /box\.setAttribute\('aria-modal','true'\)/);
   assert.match(html, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
   assert.doesNotMatch(html, /Leave a comment on this line/);
   assert.doesNotMatch(html, /ds-addcomment/);
-  assert.doesNotMatch(html, /then Ask agent/);
-  assert.match(html, /'Save only'/);
-  assert.match(html, /'Choose task & ask'/);
-  assert.match(html, /data-agent-target-cta/);
-  assert.match(html, /allComments\.push\(c\);noteBlockingFeedbackMutation\(c\);removeComposer\(box,false\);syncThreads\(\);syncFeedbackCards\(\);refreshCount\(\);/);
-  assert.match(html, /if\(run\)sendToAgent\(\[c\.id\]\)/);
+  assert.match(html, /'Copy'/);
+  assert.match(html, /'Add to queue'/);
+  assert.doesNotMatch(html, /Send to AI|data-agent-target-cta|sendToAgent/);
+  assert.match(html, /function copyDraft\(\)[\s\S]*writeClipboard\(commentsToText\(\[payload\]\)/);
+  assert.match(html, /function queue\(\)[\s\S]*method:'POST'/);
 });
 
 test('review sidebar can be grabbed, resized, and remembered', () => {
@@ -637,8 +636,7 @@ test('compact review opens on the diff and keeps the optional sidebar as an over
   assert.match(html, /\.ds-filetree-count\{display:none\}/);
   assert.match(html, /\.ds-sidebar-toggle\{width:44px;height:44px/);
   assert.match(html, /\.ds-back\{min-height:44px/);
-  assert.match(html, /\.ds-feedback-filters button\{[^}]*height:44px/);
-  assert.match(html, /\.ds-feedback-filters button\{[^}]*min-width:44px/);
+  assert.match(html, /\.ds-ghost,\.ds-feedback-action\{min-height:44px/);
   assert.match(html, /\.ds-comment-pin\{[^}]*height:44px;min-width:44px/);
   assert.match(html, /\.ds-changebtn\{width:44px;height:44px/);
   assert.match(html, /\.ds-viewed-toggle\{height:44px/);
@@ -2366,7 +2364,7 @@ test('review status stays honest without a verdict: blocking notes and divergenc
     repo: process.cwd(), tour, files, baseLabel: 'main',
     comments: [{ ...concern, id: 'blocking', type: 'change', severity: 'blocking' }],
   });
-  assert.match(blockingHtml, /1 unresolved note/);
+  assert.match(blockingHtml, /1 queued comment/);
   assert.doesNotMatch(blockingHtml, /data-verdict/);
 
   const divergentHtml = renderPage({
@@ -3151,7 +3149,7 @@ test('the review page is tabbed, with the verdict pinned above the tabs', () => 
 
   // The pinned strip is the summary only — no evidence, no cards, no panel chrome.
   const summary = html.match(/<div class="ds-reviewsummary"[\s\S]*?<div class="ds-reviewtabs"/)[0];
-  assert.match(summary, /unresolved note/);
+  assert.match(summary, /queued comment/);
   assert.match(summary, /ds-trustpill/);
   assert.doesNotMatch(summary, /ds-trust-stats|ds-trust-card|ds-unexplained|ds-exclusion-card|ds-feedback-list/);
 
@@ -3258,7 +3256,7 @@ test('every retired drawer entry point still reaches the evidence it named', () 
   assert.match(html, /data-trust-evidence data-trust-pending=/);
 });
 
-test('the review page carries the notes list, filters, challenge, and actions', () => {
+test('the review page carries the queue, challenge, and saved-review action', () => {
   const html = renderPage({
     repo: process.cwd(),
     tour,
@@ -3269,9 +3267,10 @@ test('the review page carries the notes list, filters, challenge, and actions', 
     ],
   });
 
-  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-tools[\s\S]*data-feedback-view="feedback"/);
+  assert.match(html, /data-review-section="notes"[\s\S]*data-feedback-view="feedback"/);
   assert.match(html, /data-review-section="challenge"[\s\S]*data-feedback-view="challenge"/);
-  assert.match(html, /data-review-section="actions"[\s\S]*data-address-all[\s\S]*data-copy-comments="all"/);
+  assert.match(html, /data-review-section="actions"[\s\S]*Saved reviews/);
+  assert.doesNotMatch(html, /data-address-all|data-copy-comments="all"|data-feedback-tools/);
   // The nested drawer tablist is exactly the cramping this change removes.
   assert.doesNotMatch(html, /data-feedback-open|data-feedback-panel|ds-drawer-tabs/);
 });

@@ -73,7 +73,8 @@ test('HTTP live stream authenticates leases, keeps two tabs valid, and emits fil
     const stream = await fetch(`${base}/api/events?page=${encodeURIComponent(firstToken)}`, { signal: controller.signal });
     assert.equal(stream.status, 200);
     const reader = stream.body.getReader();
-    await readUntil(reader, /event: state/);
+    const initialState = await readUntil(reader, /event: state/);
+    assert.match(initialState, /"diffChanged":false/, 'a freshly rendered page must start current');
 
     writeFileSync(join(repo, '.diffstory', 'comments.json'), `${JSON.stringify([{
       id: 'external', file: 'README.md', line: 1, type: 'question', severity: 'concern',
@@ -149,10 +150,10 @@ test('lease-scoped review state and comment mutations tolerate a story mid-rewri
 
     const patched = await fetch(`${base}/api/comments/${encodeURIComponent(comment.id)}?page=${page}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: 'resolved' }),
+      body: JSON.stringify({ type: 'nit', body: 'Still fine after the rewrite?' }),
     });
     assert.equal(patched.status, 200, 'a persisted mutation must not be reported as failed');
-    assert.equal((await patched.json()).status, 'resolved');
+    assert.deepEqual(await patched.json(), { ...comment, type: 'nit', body: 'Still fine after the rewrite?' });
   } finally {
     server.close(() => {});
     rmSync(repo, { recursive: true, force: true });

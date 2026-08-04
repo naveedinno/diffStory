@@ -1,17 +1,10 @@
-// Read/write the reviewer's comments. This is the handoff file the agent consumes
-// during /address-review, so the shape is deliberately stable and human-readable.
+// Read/write the reviewer's queued comments. The shape stays human-readable so
+// Copy all can produce a portable review without coupling comments to an agent.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { commentsPath } from './config.js';
-import type {
-  Comment,
-  CommentSelection,
-  CommentSeverity,
-  CommentSide,
-  CommentStatus,
-  CommentType,
-} from './types.js';
+import type { Comment, CommentSelection, CommentSeverity, CommentSide, CommentStatus, CommentType } from './types.js';
 
 const TYPES: CommentType[] = ['change', 'question', 'nit'];
 const SEVERITIES: CommentSeverity[] = ['blocking', 'concern', 'nit'];
@@ -46,18 +39,6 @@ export class InvalidCommentStoreError extends Error {
     this.name = 'InvalidCommentStoreError';
     this.health = health;
   }
-}
-
-/**
- * Back-compat: a legacy single `reply` reads as one `ai` turn so every caller can
- * treat `body` + `turns` as the whole conversation. Non-mutating; leaves `reply` in place.
- */
-export function normalizeComment(c: Comment): Comment {
-  if (Array.isArray(c.turns) && c.turns.length) return c;
-  if (typeof c.reply === 'string' && c.reply.trim()) {
-    return { ...c, turns: [{ role: 'ai', text: c.reply, at: c.createdAt }] };
-  }
-  return c;
 }
 
 export function loadCommentsWithHealth(repo: string): CommentLoadResult {
@@ -100,7 +81,7 @@ export function loadCommentsWithHealth(repo: string): CommentLoadResult {
     }
   }
   return {
-    comments: (data as Comment[]).map(normalizeComment),
+    comments: data as Comment[],
     health: { status: 'healthy', source: 'file' },
     sourceDigest: hashSource(raw),
   };
@@ -148,7 +129,6 @@ export interface NewComment {
   selectedText?: string;
   selection?: Partial<CommentSelection>;
   type: string;
-  severity?: string;
   body: string;
   reviewRound?: number;
   reviewSnapshotId?: string;
@@ -161,20 +141,11 @@ export function addComment(repo: string, input: NewComment): Comment {
   }
   if (typeof input.file !== 'string' || !input.file) throw new Error('comment file is required');
   const type = TYPES.includes(input.type as CommentType) ? (input.type as CommentType) : 'change';
-  const severity = SEVERITIES.includes(input.severity as CommentSeverity)
-    ? (input.severity as CommentSeverity)
-    : type === 'nit'
-      ? 'nit'
-      : type === 'change'
-        ? 'blocking'
-        : 'concern';
-
   const comment: Comment = {
     id: nextId(),
     file: input.file,
     line: Number.isFinite(input.line) ? Math.trunc(input.line) : 0,
     type,
-    severity,
     body: input.body.trim(),
     status: 'open',
     createdAt: new Date().toISOString(),
@@ -214,37 +185,28 @@ export function deleteComment(repo: string, id: string): boolean {
   return true;
 }
 
-/**
- * Update a comment's status (the reviewer resolving / reopening a thread).
- * Returns the updated comment, or null if no comment has that id. The agent's
- * `reply` and everything else is preserved.
- */
-export function setCommentStatus(repo: string, id: string, status: string): Comment | null {
-  if (!STATUSES.includes(status as CommentStatus)) {
-    throw new Error(`status must be one of ${STATUSES.join(', ')}`);
+export interface CommentUpdate {
+  type?: string;
+  body?: string;
+}
+
+/** Edit the reviewer-owned fields of an already queued comment. */
+export function updateComment(repo: string, id: string, input: CommentUpdate): Comment | null {
+  if (!input || (input.type === undefined && input.body === undefined)) {
+    throw new Error('comment type or body is required');
   }
   const loaded = writableComments(repo);
   const target = loaded.comments.find((c) => c.id === id);
   if (!target) return null;
-  target.status = status as CommentStatus;
-  saveComments(repo, loaded.comments, loaded.sourceDigest);
-  return target;
-}
-
-/**
- * Reviewer follow-up: append a `user` turn to a comment's conversation and reopen the
- * thread so the agent re-engages. Returns the updated comment, or null if no comment has
- * that id. Throws on empty text.
- */
-export function appendUserMessage(repo: string, id: string, text: string): Comment | null {
-  const body = typeof text === 'string' ? text.trim() : '';
-  if (!body) throw new Error('message text is required');
-  const loaded = writableComments(repo);
-  const target = loaded.comments.find((c) => c.id === id);
-  if (!target) return null;
-  if (!Array.isArray(target.turns)) target.turns = [];
-  target.turns.push({ role: 'user', text: body, at: new Date().toISOString() });
-  target.status = 'open';
+  if (input.type !== undefined) {
+    if (!TYPES.includes(input.type as CommentType)) throw new Error(`type must be one of ${TYPES.join(', ')}`);
+    target.type = input.type as CommentType;
+    delete target.severity;
+  }
+  if (input.body !== undefined) {
+    if (typeof input.body !== 'string' || !input.body.trim()) throw new Error('comment body is required');
+    target.body = input.body.trim();
+  }
   saveComments(repo, loaded.comments, loaded.sourceDigest);
   return target;
 }

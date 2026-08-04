@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commentHtml, renderPage } from '../dist/render.js';
+import { renderPage } from '../dist/render.js';
 
 const tour = {
   version: 1,
@@ -30,14 +30,14 @@ const files = [{
   }],
 }];
 
-test('notes filters expose their initial pressed state', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-
-  assert.match(html, /class="ds-feedback-filters"[^>]*role="group" aria-label="Filter notes"/);
-  assert.match(html, /data-feedback-filter="all" aria-pressed="true">All<\/button>/);
-  for (const filter of ['blocking', 'addressed', 'open', 'changed', 'resolved']) {
-    assert.match(html, new RegExp(`data-feedback-filter="${filter}" aria-pressed="false"`));
-  }
+test('the queue has no status-filter lifecycle and names its edit controls', () => {
+  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [{
+    id: 'c1', file: 'a.ts', line: 1, type: 'question', body: 'Why?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
+  }] });
+  assert.doesNotMatch(html, /data-feedback-filter/);
+  assert.match(html, /role="group" aria-label="Comment type"/);
+  assert.match(html, /data-edit-body rows="3" aria-label="Edit review comment"/);
+  assert.match(html, /data-copy-comments="queued"/);
 });
 
 test('server-rendered textareas keep accessible names beyond their placeholders', () => {
@@ -45,16 +45,10 @@ test('server-rendered textareas keep accessible names beyond their placeholders'
   assert.match(storyless, /id="storyReviewerNote"[^>]*aria-labelledby="storyReviewerNoteLabel"[^>]*aria-describedby="storyReviewerNoteHelp"/);
   assert.match(storyless, /id="storyReviewerNoteLabel">What should this change accomplish\?<\/span>/);
 
-  const thread = commentHtml({
-    id: 'c1',
-    file: 'src/a.ts',
-    line: 7,
-    type: 'question',
-    body: 'Why?',
-    status: 'open',
-    createdAt: '2026-01-01T00:00:00Z',
-  });
-  assert.match(thread, /data-thread-ta aria-label="Reply to diffStory about src\/a\.ts, line 7"/);
+  const queued = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [{
+    id: 'c1', file: 'src/a.ts', line: 7, type: 'question', body: 'Why?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
+  }] });
+  assert.match(queued, /aria-label="Edit review comment"/);
 });
 
 test('command dialog has a persistent name, description, and close name', () => {

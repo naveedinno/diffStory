@@ -214,6 +214,31 @@ export function reviewFileIndexSnapshot(repo, base, head) {
         excludedFiles,
     };
 }
+/** Capture the bounded review index and the exact identity derived from it as
+ * one stable snapshot. This identity is shared by rendered page leases, lazy
+ * evidence validation, and live drift detection; those paths must never use
+ * different fingerprint algorithms for the same repository state. */
+export function reviewChangeIndexSnapshot(repo, base, head) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const before = reviewSourceMetadataFingerprint(repo, base, head);
+        const indexSnapshot = reviewFileIndexSnapshot(repo, base, head);
+        const confirmed = reviewSourceMetadataFingerprint(repo, base, head);
+        if (confirmed !== before)
+            continue;
+        const changeFingerprint = createHash('sha256').update(JSON.stringify({
+            base,
+            head: head ?? 'working-tree',
+            source: confirmed,
+            files: indexSnapshot.fileIndex.map((file) => [file.path, file.reviewHash]),
+        })).digest('hex');
+        return {
+            ...indexSnapshot,
+            sourceFingerprint: confirmed,
+            changeFingerprint,
+        };
+    }
+    throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
+}
 function reviewIndexNumstat(repo, base, head, stagedOnly, indexDivergent, untracked) {
     const args = ['diff', '--numstat', '--no-color', base];
     if (head)
@@ -406,72 +431,11 @@ export function excludedReviewFiles(repo, base, head) {
         .filter((file) => file !== null)
         .sort((a, b) => a.path.localeCompare(b.path));
 }
-/**
- * Fingerprint the complete review change without materialising its contents in
- * the browser-facing diff. The bounded renderer may omit generated, oversized,
- * binary, and metadata-only files, but none of those omissions may let an old
- * approval survive.
- *
- * For fixed ref comparisons, Git's full raw diff contains exact object ids and
- * modes. For a working-tree comparison Git intentionally writes an all-zero
- * destination id, so we additionally hash the current bytes/mode of every
- * changed and untracked path. `.diffstory/**` is app state, not product code.
- */
+/** Fingerprint the same complete review identity used by page leases. The
+ * underlying index includes excluded paths plus index/worktree blob identities,
+ * while `.diffstory/**` remains app state rather than product code. */
 export function reviewChangeFingerprint(repo, base, head) {
-    const hash = createHash('sha256');
-    const resolvedBase = tryGit(repo, ['rev-parse', '--verify', `${base}^{tree}`])?.trim() ?? base;
-    const resolvedHead = head
-        ? tryGit(repo, ['rev-parse', '--verify', `${head}^{tree}`])?.trim() ?? head
-        : 'working-tree';
-    hash.update('diffstory-full-change-v2\0');
-    hash.update(resolvedBase);
-    hash.update('\0');
-    hash.update(resolvedHead);
-    hash.update('\0');
-    const args = ['diff', '--raw', '-z', '--full-index', '--no-abbrev', '--no-renames', base];
-    if (head)
-        args.push(head);
-    args.push('--', APP_DATA_PATHSPEC);
-    updateFingerprintPart(hash, 'base-to-review', git(repo, args));
-    if (!head) {
-        // Base→worktree alone does not identify the index. Hash both Git boundaries
-        // explicitly so restaging different bytes invalidates an approval even when
-        // the visible filesystem and aggregate diff do not change.
-        updateFingerprintPart(hash, 'base-to-index', git(repo, [
-            'diff',
-            '--cached',
-            '--raw',
-            '-z',
-            '--full-index',
-            '--no-abbrev',
-            '--no-renames',
-            base,
-            '--',
-            APP_DATA_PATHSPEC,
-        ]));
-        updateFingerprintPart(hash, 'index-to-worktree', git(repo, [
-            'diff',
-            '--raw',
-            '-z',
-            '--full-index',
-            '--no-abbrev',
-            '--no-renames',
-            '--',
-            APP_DATA_PATHSPEC,
-        ]));
-        const paths = [
-            ...new Set([
-                ...changedPaths(repo, [base]),
-                ...changedPaths(repo, ['--cached', base]),
-                ...changedPaths(repo, []),
-                ...untrackedFiles(repo),
-            ]),
-        ].sort();
-        const identities = workingPathIdentities(repo, paths);
-        for (const path of paths)
-            updateWorkingPathFingerprint(path, identities.get(path), hash);
-    }
-    return hash.digest('hex');
+    return reviewChangeIndexSnapshot(repo, base, head).changeFingerprint;
 }
 /**
  * Cheap identity for the set of live review sources. Existing-file byte
@@ -503,21 +467,6 @@ export function reviewSourceMetadataFingerprint(repo, base, head) {
         ]) ?? '');
     }
     return hash.digest('hex');
-}
-function updateFingerprintPart(hash, label, value) {
-    hash.update(label);
-    hash.update('\0');
-    hash.update(String(Buffer.byteLength(value)));
-    hash.update('\0');
-    hash.update(value);
-    hash.update('\0');
-}
-function updateWorkingPathFingerprint(path, identity, hash) {
-    hash.update('path\0');
-    hash.update(path);
-    hash.update('\0');
-    hash.update(identity ?? 'missing');
-    hash.update('\0');
 }
 /** Git pathspecs that subtract the given paths from a diff (`:(exclude)<path>`). */
 export function excludePathspecs(paths) {

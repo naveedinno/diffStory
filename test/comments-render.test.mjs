@@ -1,12 +1,12 @@
-// Comments rendering across views. Run with: npm test
+// Review-comment rendering contract. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commentHtml, renderPage, renderFullFile } from '../dist/render.js';
+import { renderPage, renderFullFile } from '../dist/render.js';
 
 const tour = {
   version: 1, title: 't', summary: 's',
   steps: [{ id: 's1', order: 1, title: 'c', file: 'a.ts', range: [1, 2], kind: 'changed',
-            why: 'I changed this so the next helper receives the value it needs.' }],
+    why: 'I changed this so the next helper receives the value it needs.' }],
 };
 const files = [{
   oldPath: 'a.ts', newPath: 'a.ts', status: 'modified',
@@ -17,131 +17,68 @@ const files = [{
   ] }],
 }];
 
-test('renderFullFile marks every current-file line selectable for comments', () => {
-  const rows = [
+function render(comments = []) {
+  return renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
+}
+
+test('full-file and diff rows expose exact side-aware selectable text', () => {
+  const full = renderFullFile([
     { type: 'ctx', oldNo: 1, newNo: 1, content: 'line one' },
     { type: 'add', newNo: 2, content: 'line two' },
+  ], { file: 'a.ts', newFile: false });
+  assert.match(full, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
+  assert.match(full, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="2"/);
+
+  const page = render();
+  assert.match(page, /ds-urow ds-row-del[^>]*data-file="a\.ts" data-line="1"/);
+  assert.match(page, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
+  assert.match(page, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="1"/);
+  assert.doesNotMatch(page, /ds-addcomment/);
+});
+
+test('Review → Comments renders only queued comments with their exact anchor text', () => {
+  const comments = [
+    { id: 'queued', file: 'a.ts', line: 1, type: 'question', selectedText: 'new1', body: 'Why this branch?', status: 'open', createdAt: '2026-01-01T00:00:00Z' },
+    { id: 'legacy-addressed', file: 'a.ts', line: 2, type: 'change', body: 'old reply', status: 'addressed', createdAt: '2026-01-01T00:00:00Z', reply: 'legacy' },
+    { id: 'legacy-resolved', file: 'a.ts', line: 2, type: 'nit', body: 'done', status: 'resolved', createdAt: '2026-01-01T00:00:00Z' },
   ];
-  const html = renderFullFile(rows, { file: 'a.ts', newFile: false });
-  assert.match(html, /data-file="a\.ts" data-line="1"/);
-  assert.match(html, /data-file="a\.ts" data-line="2"/);
-  assert.match(html, /data-comment-code="1"/);
-  assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
-  assert.match(html, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="1"/);
-  assert.doesNotMatch(html, /ds-addcomment/);
-});
-
-test('all-files diff rows expose side-aware selectable comment text', () => {
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
-  assert.match(html, /ds-urow ds-row-add[^>]*data-file="a\.ts" data-line="1"/);
-  assert.match(html, /data-line="2"/);
-  assert.match(html, /data-comment-code="1"/);
-  assert.doesNotMatch(html, /ds-addcomment/);
-  assert.match(html, /ds-urow ds-row-del[^>]*data-file="a\.ts" data-line="1"/);
-  assert.match(html, /data-comment-side="left" data-comment-file="a\.ts" data-comment-line="1"/);
-  assert.match(html, /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="1"/);
-});
-
-test('a selected-text comment renders by (file,line) with no step and shows its snippet', () => {
-  const comments = [{ id: 'c1', file: 'a.ts', line: 1, type: 'change',
-                      selectedText: 'new1',
-                      selection: { startLine: 1, endLine: 1, startColumn: 1, endColumn: 4 },
-                      body: 'NEEDS_FIX_HERE', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /NEEDS_FIX_HERE/);
-  assert.match(html, /ds-comment-selection/);
+  const html = render(comments);
+  assert.match(html, /Review comments/);
+  assert.match(html, />1 queued</);
+  assert.match(html, /Why this branch\?/);
   assert.match(html, /new1/);
+  assert.doesNotMatch(html, /old reply|legacy-addressed|legacy-resolved/);
 });
 
-test('a left-side selected-text comment renders beside the old panel line', () => {
-  const comments = [{ id: 'c1', file: 'a.ts', line: 1, side: 'left', type: 'question',
-                      selectedText: 'old',
-                      selection: { startLine: 1, endLine: 1 },
-                      body: 'OLD_SIDE_QUESTION', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /OLD_SIDE_QUESTION/);
-  assert.match(html, /Selected/);
-  assert.match(html, /old/);
+test('queued cards support jump, edit, and remove without chat or AI actions', () => {
+  const html = render([{ id: 'c1', file: 'a.ts', line: 1, type: 'change', body: 'Fix this', status: 'open', createdAt: '2026-01-01T00:00:00Z' }]);
+  assert.match(html, /data-goto-comment="c1"/);
+  assert.match(html, /data-edit-comment="c1"/);
+  assert.match(html, /data-remove-comment="c1"/);
+  assert.match(html, /data-comment-editor/);
+  assert.match(html, /data-edit-flavor="change" aria-pressed="true"/);
+  assert.match(html, /data-edit-body/);
+  assert.doesNotMatch(html, /Send to AI|Ask agent|Review conversation|data-thread-ta|data-send-comment|data-agent-target/);
 });
 
-test('a multi-turn comment renders body then turns in order', () => {
-  const html = commentHtml({
-    id: 'c3', file: 'a.ts', line: 1, type: 'question',
-    body: 'why this branch?', status: 'addressed', createdAt: '2026-01-01T00:00:00Z',
-    turns: [
-      { role: 'ai', text: 'It guards the retry path.', at: '2026-01-01T00:01:00Z' },
-      { role: 'user', text: 'what about the first attempt?', at: '2026-01-01T00:02:00Z' },
-      { role: 'ai', text: 'First attempt skips it.', at: '2026-01-01T00:03:00Z' },
-    ],
-  });
-  const iBody = html.indexOf('why this branch?');
-  const iAi1 = html.indexOf('It guards the retry path.');
-  const iUser = html.indexOf('what about the first attempt?');
-  const iAi2 = html.indexOf('First attempt skips it.');
-  assert.ok(iBody >= 0 && iAi1 > iBody && iUser > iAi1 && iAi2 > iUser, 'turns render in order after body');
-  assert.match(html, /ds-turn-user/);
-  assert.match(html, /data-hasreply="1"/);
-  assert.doesNotMatch(html, /data-send/);
-  // The in-thread chat composer must be present server-side so existing threads
-  // (loaded at page-load time) have a reply box after reload.
-  assert.match(html, /ds-thread-composer/);
-  assert.match(html, /data-thread-send/);
-  assert.match(html, /data-thread-ta/);
+test('the queue has one primary Copy all action and no delivery controls', () => {
+  const html = render([{ id: 'c1', file: 'a.ts', line: 1, type: 'nit', body: 'Note', status: 'open', createdAt: '2026-01-01T00:00:00Z' }]);
+  assert.match(html, /class="ds-btn ds-btn-solid" data-copy-comments="queued"[^>]*>Copy all</);
+  assert.doesNotMatch(html, /data-address-all|Send queued|Copy queued|Copy full review/);
 });
 
-test('agent replies render Markdown as safe chat content', () => {
-  const html = commentHtml({
-    id: 'c2',
-    file: 'a.ts',
-    line: 1,
-    type: 'question',
-    body: 'Can this use `fills[i]`?',
-    status: 'addressed',
-    createdAt: '2026-01-01T00:00:00Z',
-    reply: 'Use `fills[i]` for **mixed batches**.\n\n- Wallet-only batches can skip fills.\n- Non-wallet ops still need data.\n\n<script>alert(1)</script>',
-  });
-
-  assert.match(html, /class="ds-reply-body ds-md"/);
-  assert.match(html, /<code>fills\[i\]<\/code>/);
-  assert.match(html, /<strong>mixed batches<\/strong>/);
-  assert.match(html, /<ul><li>Wallet-only batches can skip fills\.<\/li><li>Non-wallet ops still need data\.<\/li><\/ul>/);
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.doesNotMatch(html, /<script>alert/);
+test('selection context menu has one comment action; type is chosen in the composer', () => {
+  const html = render();
+  assert.match(html, /data-selection-comment>Comment selected code</);
+  assert.doesNotMatch(html, /data-selection-action=/);
 });
 
-test('server-rendered thread composer makes the agent route and send choice explicit', () => {
-  const html = commentHtml({
-    id: 'c9', file: 'a.ts', line: 1, type: 'question',
-    body: 'q?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
-  });
-  assert.match(html, /data-thread-add/);
-  assert.match(html, /data-thread-send/);
-  assert.match(html, /data-agent-target-name/);
-  assert.match(html, />Save</);
-  assert.match(html, />Choose task &amp; ask</);
-});
-
-test('server-rendered comments collapse selected code and move thread actions into a menu', () => {
-  const html = commentHtml({
-    id: 'c10', file: 'a.ts', line: 1, type: 'question', selectedText: 'const veryLongSelection = true;',
-    body: 'q?', status: 'open', createdAt: '2026-01-01T00:00:00Z',
-  });
-  assert.match(html, /<details class="ds-comment-selection">/);
-  assert.match(html, /ds-comment-selection-preview/);
-  assert.match(html, /aria-label="Conversation actions"/);
-  assert.match(html, />Delete conversation</);
-  assert.doesNotMatch(html, /ds-comment-actions/);
-});
-
-test('review header separates the agent task from compact review status', () => {
-  const comments = [{ id: 'c1', file: 'a.ts', line: 1, type: 'change',
-    body: 'x', status: 'open', createdAt: '2026-01-01T00:00:00Z' }];
-  const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments });
-  assert.match(html, /data-agent-target-control/);
-  // The open-note count rides the Review tab now that the chip is gone.
-  assert.match(html, /id="ds-tab-review"[\s\S]*?class="ds-tab-badge" id="ds-open-count"/);
-  assert.match(html, /<b>1<\/b>/);
-  assert.match(html, />Resend open comments</);
-  assert.match(html, />Review actions</);
-  assert.doesNotMatch(html, /data-send-all/);
+test('queued comments are grouped by file and the empty state teaches the C shortcut', () => {
+  const grouped = render([
+    { id: 'c1', file: 'a.ts', line: 2, type: 'nit', body: 'Second', status: 'open', createdAt: '2026-01-01T00:00:01Z' },
+    { id: 'c2', file: 'a.ts', line: 1, type: 'question', body: 'First', status: 'open', createdAt: '2026-01-01T00:00:00Z' },
+  ]);
+  assert.equal((grouped.match(/data-feedback-group="a\.ts"/g) ?? []).length, 1);
+  assert.ok(grouped.indexOf('First') < grouped.indexOf('Second'));
+  assert.match(render(), /No queued comments\. Select code in the diff and press C\./);
 });

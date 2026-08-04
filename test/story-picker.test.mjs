@@ -23,14 +23,13 @@ test('compact session cards preserve trust and review facts on mobile', () => {
       freshness: 'current',
       current: true,
       openComments: 2,
-      addressedComments: 0,
       updatedAt: Date.now(),
     }],
   });
 
   assert.match(html, /<b>7<\/b> code stops \+ 1 primer/);
   assert.doesNotMatch(html, /Round /);
-  assert.match(html, /<b>2<\/b> open notes/);
+  assert.match(html, /<b>2<\/b> queued comments/);
   assert.doesNotMatch(html, /session-facts>span:nth-child/);
   assert.match(html, /\.story-row\{position:relative;display:block;border:1px solid var\(--line-soft\)[^}]*background:color-mix\(in srgb,var\(--surface\) 58%,var\(--surface-2\)\)[^}]*overflow:hidden/);
   assert.match(html, /\.row-main\{[^}]*padding:15px 19px[^}]*background:transparent/, 'lets the action column use the full card width');

@@ -38,7 +38,6 @@ export interface StorySummary {
   additions: number;
   deletions: number;
   openComments: number;
-  addressedComments: number;
   /** False for the navigation-first history projection, which intentionally
    * avoids rebuilding the repository diff before the page can render. */
   liveEvidence: boolean;
@@ -156,7 +155,6 @@ function storySummary(repo: string, id: string, liveEvidence: boolean): StorySum
           additions: 0,
           deletions: 0,
           openComments: 0,
-          addressedComments: 0,
         };
     return {
       id,
@@ -202,7 +200,6 @@ function storySummary(repo: string, id: string, liveEvidence: boolean): StorySum
       additions: 0,
       deletions: 0,
       openComments: 0,
-      addressedComments: 0,
       liveEvidence,
     };
   }
@@ -229,7 +226,6 @@ function storySession(
   | 'additions'
   | 'deletions'
   | 'openComments'
-  | 'addressedComments'
 > {
   const empty = {
     freshness: 'unverified' as const,
@@ -239,7 +235,6 @@ function storySession(
     additions: 0,
     deletions: 0,
     openComments: 0,
-    addressedComments: 0,
   };
   try {
     const resolvedBase = resolveBase(repo, base);
@@ -269,7 +264,6 @@ function storySession(
       additions,
       deletions,
       openComments: comments.filter((comment) => comment.status === 'open').length,
-      addressedComments: comments.filter((comment) => comment.status === 'addressed').length,
     };
   } catch {
     return empty;

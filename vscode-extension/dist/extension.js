@@ -36,53 +36,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 const vscode = __importStar(require("vscode"));
 const navigation_js_1 = require("./navigation.js");
-function toTarget(location) {
-    if ('targetUri' in location) {
-        return { uri: location.targetUri, selection: location.targetSelectionRange ?? location.targetRange };
-    }
-    return { uri: location.uri, selection: location.range };
-}
-function uniqueTargets(locations) {
-    const targets = [];
-    const seen = new Set();
-    for (const location of locations ?? []) {
-        const target = toTarget(location);
-        const key = `${target.uri.toString()}#${target.selection.start.line}:${target.selection.start.character}`;
-        if (seen.has(key))
-            continue;
-        seen.add(key);
-        targets.push(target);
-    }
-    return targets;
-}
-async function providerTargets(command, source, position) {
+const PENDING_NAVIGATION_KEY = 'diffstory.pendingNavigation';
+const PENDING_NAVIGATION_TTL_MS = 5 * 60 * 1000;
+async function navigateRequest(request) {
     try {
-        const locations = await vscode.commands.executeCommand(command, source, position);
-        return uniqueTargets(locations);
+        const source = vscode.Uri.file(request.path);
+        const document = await vscode.workspace.openTextDocument(source);
+        const point = (0, navigation_js_1.clampNavigationPoint)(request, document.lineCount, (line) => document.lineAt(line).text.length);
+        const position = new vscode.Position(point.line, point.character);
+        const sourceSelection = new vscode.Range(position, position);
+        const editor = await vscode.window.showTextDocument(document, {
+            preview: true,
+            preserveFocus: false,
+            selection: sourceSelection,
+        });
+        editor.revealRange(sourceSelection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
     }
-    catch {
-        return [];
+    catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        await vscode.window.showErrorMessage(`DiffStory could not open that source location: ${detail}`);
     }
 }
-async function chooseTarget(targets, kind) {
-    if (targets.length < 2)
-        return targets[0];
-    const selected = await vscode.window.showQuickPick(targets.map((target) => ({
-        label: vscode.workspace.asRelativePath(target.uri, false),
-        description: `line ${target.selection.start.line + 1}`,
-        detail: target.uri.fsPath,
-        target,
-    })), { placeHolder: `Choose ${kind}` });
-    return selected?.target;
+async function validateRepository(repo) {
+    const repository = vscode.Uri.file(repo);
+    const stat = await vscode.workspace.fs.stat(repository);
+    if (!(stat.type & vscode.FileType.Directory))
+        throw new Error('The reviewed repository folder is unavailable.');
+    await vscode.workspace.fs.stat(vscode.Uri.joinPath(repository, '.git'));
+    return repository;
 }
-async function openTarget(target) {
-    await vscode.window.showTextDocument(target.uri, {
-        preview: true,
-        preserveFocus: false,
-        selection: target.selection,
-    });
+async function resumePendingNavigation(context) {
+    const pending = context.globalState.get(PENDING_NAVIGATION_KEY);
+    if (!pending)
+        return;
+    if (!pending.request ||
+        !Number.isFinite(pending.requestedAt) ||
+        Date.now() - pending.requestedAt > PENDING_NAVIGATION_TTL_MS) {
+        await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
+        return;
+    }
+    const source = vscode.Uri.file(pending.request.path);
+    if (!vscode.workspace.getWorkspaceFolder(source))
+        return;
+    await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
+    await navigateRequest(pending.request);
 }
-async function navigate(uri) {
+async function navigate(uri, context) {
     if (uri.path !== '/navigate')
         return;
     const request = (0, navigation_js_1.parseNavigationQuery)(uri.query);
@@ -91,43 +90,32 @@ async function navigate(uri) {
         return;
     }
     try {
-        const source = vscode.Uri.file(request.path);
-        if (!vscode.workspace.getWorkspaceFolder(source)) {
-            await vscode.window.showErrorMessage('Open the reviewed repository in VS Code before navigating from DiffStory.');
-            return;
-        }
-        const document = await vscode.workspace.openTextDocument(source);
-        const line = Math.min(request.line - 1, Math.max(0, document.lineCount - 1));
-        const character = Math.min(request.column - 1, document.lineAt(line).text.length);
-        const position = new vscode.Position(line, character);
-        const sourceSelection = new vscode.Range(position, position);
-        // Activating the source editor gives installed language extensions the same
-        // context they receive before a normal F12/Cmd-click navigation request.
-        await vscode.window.showTextDocument(document, {
-            preview: true,
-            preserveFocus: false,
-            selection: sourceSelection,
+        const preparation = await (0, navigation_js_1.prepareNavigation)(request, {
+            containsSource: (path) => Boolean(vscode.workspace.getWorkspaceFolder(vscode.Uri.file(path))),
+            persistPending: async (pending) => {
+                await context.globalState.update(PENDING_NAVIGATION_KEY, {
+                    request: pending,
+                    requestedAt: Date.now(),
+                });
+            },
+            openRepository: async (repo) => {
+                const repository = await validateRepository(repo);
+                await vscode.commands.executeCommand('vscode.openFolder', repository, false);
+            },
         });
-        const implementations = await providerTargets('vscode.executeImplementationProvider', source, position);
-        const implementation = await chooseTarget(implementations, 'implementation');
-        if (implementation) {
-            await openTarget(implementation);
-            return;
-        }
-        const definitions = await providerTargets('vscode.executeDefinitionProvider', source, position);
-        const definition = await chooseTarget(definitions, 'definition');
-        if (definition) {
-            await openTarget(definition);
-            return;
-        }
-        await vscode.window.showInformationMessage('No implementation or definition was reported; opened the clicked symbol instead.');
+        if (preparation === 'ready')
+            await navigateRequest(request);
+        else
+            await resumePendingNavigation(context);
     }
     catch (error) {
+        await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
         const detail = error instanceof Error ? error.message : String(error);
-        await vscode.window.showErrorMessage(`DiffStory could not open that symbol: ${detail}`);
+        await vscode.window.showErrorMessage(`DiffStory could not open the reviewed repository: ${detail}`);
     }
 }
 function activate(context) {
-    context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: navigate }));
+    context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: (uri) => navigate(uri, context) }), vscode.workspace.onDidChangeWorkspaceFolders(() => { void resumePendingNavigation(context); }));
+    void resumePendingNavigation(context);
 }
 //# sourceMappingURL=extension.js.map

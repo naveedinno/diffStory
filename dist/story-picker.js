@@ -42,9 +42,7 @@ function storyRow(s, now, routeBase, index) {
                         : { label: 'Current', cls: 'ready', detail: s.outsideStoryDrift
                                 ? `Story current · ${plural(s.outsideStoryDrift, 'side file')} changed`
                                 : 'Story matches its captured scope' };
-    const activity = s.addressedComments
-        ? `${plural(s.addressedComments, 'reply')} ready to verify`
-        : state.detail;
+    const activity = state.detail;
     // This page is plain text end to end — no story markup renders here, so both
     // authored fields take the text projection and the local esc() as before.
     const title = narrativeText(s.title) || s.id;
@@ -60,7 +58,7 @@ function storyRow(s, now, routeBase, index) {
         `<span><b>${s.liveFiles || s.files}</b> files</span>` +
         (s.liveEvidence ? `<span><b class="plus">+${s.additions}</b> <b class="minus">−${s.deletions}</b></span>` : '') +
         `<span><b>${Math.max(0, s.steps - s.primers)}</b> code stops${s.primers ? ` + ${plural(s.primers, 'primer')}` : ''}</span>` +
-        (s.openComments ? `<span><b>${s.openComments}</b> open ${s.openComments === 1 ? 'note' : 'notes'}</span>` : '') +
+        (s.openComments ? `<span><b>${s.openComments}</b> queued ${s.openComments === 1 ? 'comment' : 'comments'}</span>` : '') +
         `</span>` +
         `<span class="row-foot"><span class="chip"${s.scope.command ? ` title="${esc(s.scope.command)}"` : ''}>${esc(s.scope.label)}</span><span>${esc(activity)}</span><span>${relTime(s.updatedAt, now)}</span></span>` +
         `</span>` +

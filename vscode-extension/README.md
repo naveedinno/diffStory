@@ -5,13 +5,12 @@ has no sidebar, review UI, commands, Git model, comments, or story renderer.
 
 When you Command-click or Ctrl-click an identifier in DiffStory, the bridge:
 
-1. receives the source file, line, and column through VS Code's system URI;
-2. asks the installed language extension for implementations;
-3. falls back to definitions when no implementation is reported; and
-4. opens the clicked source location when neither provider has a destination.
-
-The repository should already be open in VS Code so its language extension has
-the correct workspace context.
+1. receives the reviewed repository and source location through VS Code's
+   system URI;
+2. opens that repository when it is not already in the current workspace;
+3. resumes the requested navigation after VS Code loads the workspace;
+4. opens the reviewed file, places the caret at the clicked location, and
+   reveals that line without an extra success notification.
 
 ## Install from this checkout
 
@@ -19,7 +18,7 @@ the correct workspace context.
 cd vscode-extension
 npm install
 npm run package
-code --install-extension diffstory-vscode-0.9.0.vsix
+code --install-extension diffstory-vscode-0.9.2.vsix
 ```
 
 The package keeps the previous `naveedinno.diffstory-vscode` identifier. Installing

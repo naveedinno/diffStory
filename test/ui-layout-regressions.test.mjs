@@ -133,15 +133,11 @@ test('compact review surfaces are width-contained while code and film navigation
   assert.doesNotMatch(source, /\.ds-stage-num|\.ds-step-pos/);
 });
 
-test('notes filters wrap into a stable grid and keep pressed state synchronized', () => {
-  assert.match(source, /\.ds-feedback-filters\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(source, /@media\(max-width:560px\)\{\.ds-feedback-filters\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.doesNotMatch(source, /\.ds-feedback-filters\{[^}]*overflow-x:auto/);
-  assert.match(
-    source,
-    /btn\.setAttribute\('aria-pressed',active\?'true':'false'\)/,
-  );
-  assert.match(source, /filterFeedback\(activeFeedbackFilter\)/);
+test('queued comments use stable file groups without lifecycle filters', () => {
+  assert.match(source, /\.ds-feedback-list\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(source, /\.ds-feedback-group\{display:grid;gap:8px\}/);
+  assert.match(source, /\.ds-feedback-group-head\{display:flex;align-items:center;justify-content:space-between/);
+  assert.doesNotMatch(source, /ds-feedback-filters|filterFeedback|activeFeedbackFilter/);
 });
 
 test('mobile story drift switches from the file list to one lazy detail and back', () => {
@@ -223,15 +219,19 @@ test('since-story resize swaps renderers and focus follows the visible mobile su
   assert.equal(harness.drawer.classList.contains('is-detail'), false);
 });
 
-test('review dialogs expose complete client-side focus and radio semantics', () => {
+test('review dialogs and the inline composer expose complete focus and radio semantics', () => {
   assert.match(source, /var firstCommand=\$\('\[data-command\]',commandRoot\)/);
   assert.match(source, /if\(firstCommand\)firstCommand\.focus\(\)/);
   assert.match(source, /function syncComposerRadioGroup\(group,selected\)/);
   assert.match(source, /choice\.tabIndex=active\?0:-1/);
   assert.match(source, /tabs\.addEventListener\('keydown',function\(e\)\{moveComposerRadio\(tabs,'\.ds-composer-tab',e\);\}\)/);
-  assert.match(source, /severity\.addEventListener\('keydown',function\(e\)\{moveComposerRadio\(severity,'\.ds-severity-choice',e\);\}\)/);
-  assert.match(source, /ta\.setAttribute\('aria-label','Review note'\)/);
-  assert.match(source, /ta\.setAttribute\('aria-label','Reply to '\+BRAND\)/);
+  assert.match(source, /box\.setAttribute\('role','region'\)/);
+  assert.match(source, /row\.parentNode\.insertBefore\(box,row\.nextSibling\)/);
+  assert.doesNotMatch(source, /activateModal\(box,composerReturnFocus\)/);
+  assert.doesNotMatch(source, /severity\.addEventListener/);
+  assert.match(source, /ta\.setAttribute\('aria-label','Review comment'\)/);
+  assert.match(source, /ta\.setAttribute\('aria-label','Edit review comment'\)/);
+  assert.doesNotMatch(source, /Reply to '\+BRAND|data-thread-ta/);
   assert.doesNotMatch(source, /ds-playstep/);
 });
 

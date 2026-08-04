@@ -9,8 +9,8 @@ git repository you choose, and writes review state into that repository's
 - The core app does not require a hosted service, database, browser extension, or
   cloud account.
 - Plain diff viewing stays local.
-- Generated stories and agent-handled comments only run when you choose an
-  installed agent such as Claude or Codex.
+- Generated or repaired stories only run when you choose an installed agent
+  such as Claude or Codex. Review comments are never sent by diffStory.
 - Optional Kokoro voice setup creates a local Python environment under
   `~/.diffstory/kokoro-venv`.
 

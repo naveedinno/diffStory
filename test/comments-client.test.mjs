@@ -1,4 +1,4 @@
-// The review-page client wiring for cross-view comments. Run with: npm test
+// Browser contract for the queue-first review-comment system. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -8,535 +8,155 @@ test('the generated browser client is valid JavaScript', () => {
   assert.doesNotThrow(() => new vm.Script(PAGE_JS));
 });
 
-test('client initialization preserves excluded-only scope truth', () => {
-  assert.match(PAGE_JS, /if\(progress&&!fileItems\.length&&excludedCount\)progress\.textContent=excludedCount\+/);
-  assert.match(PAGE_JS, /excluded\?', '\+excluded\+' excluded '/);
-  assert.doesNotMatch(PAGE_JS, /excludedCount\+' '\+\(excludedCount===1\?'file':'files'\)\+' · kept lazy'/);
-});
-
-test('resume control contains long file paths inside the resizable sidebar', () => {
-  assert.match(PAGE_CSS, /\.ds-resume-review\{[^}]*min-width:0[^}]*overflow:hidden/);
-  assert.match(PAGE_CSS, /\.ds-resume-review \[data-resume-review-label\]\{[^}]*min-width:0[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
-  assert.match(PAGE_JS, /btn\.title=text;btn\.setAttribute\('aria-label',text\)/);
-  assert.match(PAGE_JS, /btn\.removeAttribute\('title'\);btn\.removeAttribute\('aria-label'\)/);
-});
-
-test('client defines thread mounting and a comment cache', () => {
-  assert.match(PAGE_JS, /function mountThreads\(/);
-  assert.match(PAGE_JS, /function syncThreads\(/);
+test('comment state is a canonical queue cache independent of lazy diff mounting', () => {
   assert.match(PAGE_JS, /function initialComments\(\)/);
-  assert.match(PAGE_JS, /document\.getElementById\('ds-initial-comments'\)/);
   assert.match(PAGE_JS, /var allComments=initialComments\(\)/);
+  assert.match(PAGE_JS, /function queuedComments\(\)\{return allComments\.filter/);
+  assert.match(PAGE_JS, /function mountCommentPins\(scope\)/);
+  assert.match(PAGE_JS, /function syncCommentPins\(\)/);
+  assert.match(PAGE_JS, /mountCommentPins\(fresh\)/);
+  assert.match(PAGE_JS, /mountCommentPins\(panel\)/);
 });
 
-test('comment conversations open in a floating sidecar instead of splitting the diff', () => {
-  assert.match(PAGE_CSS, /\.ds-thread\{position:fixed/);
-  assert.match(PAGE_CSS, /\.ds-thread\.is-open\{display:block/);
-  assert.match(PAGE_CSS, /\.ds-comment-pin\{position:absolute/);
-  assert.match(PAGE_JS, /function openCommentSurface\(/);
+test('queued pins jump to Review → Comments and never open a conversation surface', () => {
   assert.match(PAGE_JS, /data-comment-launcher/);
-  assert.match(PAGE_JS, /data-comment-surface-close/);
-  assert.match(PAGE_JS, /setAttribute\('aria-expanded'/);
-  assert.match(PAGE_JS, /if\(focusInside\)surface\.focus\(\{preventScroll:true\}\)/);
-  assert.match(PAGE_JS, /t\.tabIndex=-1/);
-  assert.match(PAGE_JS, /setSidebarCollapsed\(true,false\)/);
-  assert.match(PAGE_JS, /setSidebarCollapsed\(false,false\)/);
+  assert.match(PAGE_JS, /data-queued-comment-id/);
+  assert.match(PAGE_JS, /function gotoQueuedComment\(id\)/);
+  assert.match(PAGE_JS, /setReviewTab\('notes',false\)/);
+  assert.doesNotMatch(PAGE_JS, /openCommentSurface|Review conversation|activeCommentSurface/);
 });
 
-test('show in diff waits for a lazily mounted conversation before opening it', () => {
-  assert.match(PAGE_JS, /function openWhenMounted\(\)/);
-  assert.match(PAGE_JS, /if\(\+\+attempt<50\)setTimeout\(openWhenMounted,80\)/);
-  assert.match(PAGE_JS, /setTimeout\(openWhenMounted,80\)/);
+test('Go to code survives lazy loading and highlights the exact anchor row', () => {
+  assert.match(PAGE_JS, /function commentRows\(c,scope\)/);
+  assert.match(PAGE_JS, /!closest\(row,'\[hidden\]'\)&&row\.getClientRects\(\)\.length>0/);
+  assert.match(PAGE_JS, /return visible\|\|rows\[0\]\|\|null/);
+  assert.match(PAGE_JS, /function gotoComment\(id\)/);
+  assert.match(PAGE_JS, /function focusWhenMounted\(\)/);
+  assert.match(PAGE_JS, /if\(\+\+attempt<50\)setTimeout\(focusWhenMounted,80\)/);
+  assert.match(PAGE_JS, /row\.classList\.add\('ds-comment-anchor-target'\)/);
 });
 
-test('new review comments compose in the same floating surface', () => {
-  assert.match(PAGE_CSS, /\.ds-composer\{position:fixed/);
-  assert.match(PAGE_JS, /box\.setAttribute\('role','dialog'\)/);
-  assert.match(PAGE_JS, /box\.setAttribute\('aria-modal','true'\)/);
+test('the composer is compact, inline, and anchored to the selected side', () => {
+  assert.match(PAGE_JS, /box\.setAttribute\('data-comment-side',side\)/);
+  assert.match(PAGE_JS, /row\.parentNode\.insertBefore\(box,row\.nextSibling\)/);
+  assert.match(PAGE_CSS, /\.ds-composer\{width:min\(600px,calc\(100% - 24px\)\)/);
+  assert.match(PAGE_CSS, /\.ds-composer\[data-comment-side="left"\]/);
+  assert.match(PAGE_JS, /function revealComposer\(box\)/);
+  assert.match(PAGE_JS, /stickyHeight=sticky\.reduce/);
+  assert.match(PAGE_JS, /scroller\.scrollTo\(\{top:top,behavior:'auto'\}\)/);
+  assert.match(PAGE_JS, /ta\.focus\(\{preventScroll:true\}\)/);
+  assert.match(PAGE_JS, /revealComposer\(box\)/);
+  assert.doesNotMatch(PAGE_JS, /ds-composer-selection/);
+  assert.doesNotMatch(PAGE_JS, /aria-modal.*New review comment/);
+});
+
+test('comment type is chosen inside the composer', () => {
   assert.match(PAGE_JS, /tabs\.setAttribute\('role','radiogroup'\)/);
   assert.match(PAGE_JS, /b\.setAttribute\('role','radio'\)/);
-  assert.match(PAGE_JS, /activateModal\(box,composerReturnFocus\)/);
-  assert.match(PAGE_JS, /deactivateModal\(b,restoreFocus!==false\)/);
-  assert.match(PAGE_JS, /document\.body\.appendChild\(box\)/);
-  assert.doesNotMatch(PAGE_JS, /anchor\.parentNode\.insertBefore\(box,anchor\.nextSibling\)/);
+  assert.match(PAGE_JS, /function composerFlavorIcon\(type\)/);
+  assert.match(PAGE_JS, /b\.appendChild\(composerFlavorIcon\(v\)\)/);
+  assert.match(PAGE_JS, /span\.setAttribute\('aria-hidden','true'\)/);
+  assert.match(PAGE_CSS, /\.ds-composer-type-icon svg\{[^}]*stroke-width:1\.6/);
+  assert.match(PAGE_JS, /change:\{label:'Fix request'/);
+  assert.match(PAGE_JS, /question:\{label:'Question'/);
+  assert.match(PAGE_JS, /nit:\{label:'Note'/);
+  assert.doesNotMatch(PAGE_JS, /severityForFlavor|ds-composer-severity/);
 });
 
-test('deleting a review conversation is visibly destructive and requires confirmation', () => {
-  assert.match(PAGE_CSS, /\.ds-del\{color:var\(--del-text\)/);
-  assert.match(PAGE_JS, /window\.confirm\('Delete this review conversation\? This cannot be undone\.'/);
+test('Copy is the primary default action and never persists', () => {
+  const start = PAGE_JS.indexOf('function copyDraft()');
+  const end = PAGE_JS.indexOf("add.type='button'", start);
+  const copy = PAGE_JS.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(copy, /writeClipboard\(commentsToText\(\[payload\]\)/);
+  assert.match(copy, /removeComposer\(box,false\)/);
+  assert.doesNotMatch(copy, /fetch\(/);
+  assert.match(PAGE_JS, /ds-btn ds-btn-solid ds-composer-copy','Copy'/);
+  assert.match(PAGE_JS, /ds-ghost ds-composer-add','Add to queue'/);
 });
 
-test('the context menu opens the composer from selected review text', () => {
-  assert.match(PAGE_JS, /document\.addEventListener\('contextmenu',openSelectionMenu\)/);
-  assert.match(PAGE_JS, /function currentSelectionContext\(/);
-  assert.match(PAGE_JS, /function contextForSelectionMenu\(e\)/);
-  assert.match(PAGE_JS, /selectionContext&&pointInSelection\(e\.clientX,e\.clientY\)/);
-  assert.match(PAGE_JS, /if\(e\.button!==0\)return/);
-  assert.match(PAGE_JS, /data-selection-action/);
-  assert.doesNotMatch(PAGE_JS, /ds-addcomment/);
+test('Add to queue is the only composer action that writes', () => {
+  const start = PAGE_JS.indexOf('function queue()');
+  const end = PAGE_JS.indexOf('function copyDraft()', start);
+  const queue = PAGE_JS.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(queue, /method:'POST'/);
+  assert.match(queue, /body:JSON\.stringify\(payload\)/);
+  assert.match(queue, /replaceComment\(c\)/);
+  assert.match(queue, /syncCommentPins\(\)/);
+  assert.match(queue, /Added to the review queue/);
 });
 
-test('right click survives a browser-collapsed selection but stays inside its highlight', () => {
-  assert.match(PAGE_JS, /selectionRects=\[\]/);
-  assert.match(PAGE_JS, /range\.getClientRects/);
-  assert.match(PAGE_JS, /function cacheSelectionContext\(\)/);
-  assert.match(PAGE_JS, /cacheSelectionContext\(\)/);
-  assert.match(PAGE_JS, /function isSecondarySelectionGesture\(e\)/);
-  assert.match(PAGE_JS, /e\.button===2\|\|\(e\.button===0&&e\.ctrlKey\)/);
-  assert.match(PAGE_JS, /if\(isSecondarySelectionGesture\(e\)\)\{selectionContextMenuPending=true/);
-  assert.match(PAGE_JS, /if\(isSecondarySelectionGesture\(e\)\|\|\(e&&e\.button!==0\)\)return/);
-  assert.match(PAGE_JS, /return selectionContext&&pointInSelection\(e\.clientX,e\.clientY\)\?selectionContext:null/);
-  assert.match(PAGE_JS, /var ctx=contextForSelectionMenu\(e\);\s*selectionContextMenuPending=false;\s*if\(!ctx\)return;\s*e\.preventDefault\(\)/);
+test('exact selected code and line range are carried into copy and queue drafts', () => {
+  assert.match(PAGE_JS, /selectedText=ctx\.selectedText\|\|''/);
+  assert.match(PAGE_JS, /selectedText:selectedText,selection:ctx\.selection,status:'open'/);
+  assert.match(PAGE_JS, /startLine:startLine,endLine:endLine,startColumn:firstOffset\.start,endColumn:lastOffset\.end/);
 });
 
-test('cached selection geometry clears after an ordinary collapsed selection', () => {
-  assert.match(PAGE_JS, /function clearCollapsedSelection\(\)/);
-  assert.match(PAGE_JS, /if\(selectionContextMenuPending\)return/);
-  assert.match(PAGE_JS, /selectionContext=null;selectionRects=\[\]/);
-  assert.match(PAGE_JS, /document\.addEventListener\('selectionchange',clearCollapsedSelection\)/);
+test('keyboard default copies; adding Shift queues', () => {
+  assert.match(PAGE_JS, /Meta\+Enter Control\+Enter Meta\+Shift\+Enter Control\+Shift\+Enter/);
+  assert.match(PAGE_JS, /if\(e\.shiftKey\)queue\(\);else copyDraft\(\)/);
+  assert.doesNotMatch(PAGE_JS, /ds-composer-hint/);
 });
 
-test('selection endpoints may land on a diff row wrapper', () => {
-  assert.match(PAGE_JS, /var intendedSide=\(startCode\|\|endCode\)\?/);
-  assert.doesNotMatch(PAGE_JS, /if\(!startCode\|\|!endCode\)return null/);
+test('the selection context menu has one entry and C opens the same composer', () => {
+  assert.match(PAGE_JS, /Comment selected code/);
+  assert.match(PAGE_JS, /data-selection-comment/);
+  assert.doesNotMatch(PAGE_JS, /data-selection-action/);
+  assert.match(PAGE_JS, /e\.key==='c'\|\|e\.key==='C'/);
+  assert.match(PAGE_JS, /openComposer\(cctx\.anchorRow,'change',cctx\)/);
 });
 
-test('the selection context is constrained to one diff side', () => {
+test('selection stays constrained to one diff side', () => {
   assert.match(PAGE_JS, /data-comment-side/);
-  assert.match(PAGE_JS, /data-comment-file/);
-  assert.match(PAGE_JS, /data-comment-line/);
   assert.match(PAGE_JS, /if\(side&&s!==side\)return null/);
-  assert.match(PAGE_JS, /side:side/);
-});
-
-test('code selection locks out the opposite side while dragging', () => {
   assert.match(PAGE_CSS, /body\.ds-selecting-right \.ds-code\[data-comment-side="left"\]/);
   assert.match(PAGE_CSS, /body\.ds-selecting-left \.ds-code\[data-comment-side="right"\]/);
-  assert.match(PAGE_CSS, /-webkit-user-select:none;user-select:none/);
-  assert.match(PAGE_JS, /function trackSelectionSide\(e\)/);
-  assert.match(PAGE_JS, /document\.addEventListener\('mousedown',trackSelectionSide\)/);
 });
 
-test('refreshComments caches the list and re-syncs threads', () => {
-  // The fetch(API) handler stores the list into allComments and calls syncThreads.
-  assert.match(PAGE_JS, /allComments\s*=\s*list/);
-  assert.match(PAGE_JS, /syncThreads\(\)/);
+test('Review queue cards can be edited and removed', () => {
+  assert.match(PAGE_JS, /function openQueuedCommentEditor\(card\)/);
+  assert.match(PAGE_JS, /function saveQueuedComment\(card\)/);
+  assert.match(PAGE_JS, /method:'PATCH'/);
+  assert.match(PAGE_JS, /JSON\.stringify\(\{type:type,body:body\}\)/);
+  assert.match(PAGE_JS, /function removeQueuedComment\(id\)/);
+  assert.match(PAGE_JS, /window\.confirm\('Remove this queued comment\?'\)/);
+  assert.match(PAGE_JS, /method:'DELETE'/);
 });
 
-test('refreshing feedback preserves server-rendered before/current evidence', () => {
-  assert.match(PAGE_JS, /var existing=old\[c\.id\],card=existing\?existing\.node/);
-  assert.match(PAGE_JS, /if\(existing\)patchFeedbackContent\(card,c\)/);
-  assert.doesNotMatch(PAGE_JS, /allComments\.forEach\(function\(c\)\{var card=buildFeedbackCardClient/);
+test('refreshing comments re-renders the queue, pins, and file flags', () => {
+  assert.match(PAGE_JS, /if\(Array\.isArray\(list\)\)allComments=list/);
+  assert.match(PAGE_JS, /syncCommentPins\(\);syncFeedbackCards\(\);syncFileCommentFlags\(\);refreshCount\(\)/);
+  assert.match(PAGE_JS, /No queued comments\. Select code in the diff and press C\./);
 });
 
-test('client renders comment replies through the same Markdown path', () => {
-  assert.match(PAGE_JS, /function renderMarkdown\(/);
-  assert.match(PAGE_JS, /function renderInlineMarkdown\(/);
-  assert.match(PAGE_JS, /markdownBlock\('ds-comment-body ds-md',c\.body\)/);
-  assert.match(PAGE_JS, /function turnNode\(/);
-  assert.match(PAGE_JS, /function renderConversation\(/);
-  assert.match(PAGE_JS, /renderConversation\(wrap,c\)/);
+test('Copy all exports queued comments only, including exact code context', () => {
+  assert.match(PAGE_JS, /function copyComments\(\)/);
+  assert.match(PAGE_JS, /filter\(function\(c\)\{return c\.status==='open';\}\)/);
+  assert.match(PAGE_JS, /Code review comments from diffStory/);
+  assert.match(PAGE_JS, /Selected code:/);
+  assert.match(PAGE_JS, /Comment:/);
+  assert.doesNotMatch(PAGE_JS, /commentTurnsToText|AI reply|paste them to your agent/);
 });
 
-test('client no longer renders a Send again button', () => {
-  assert.doesNotMatch(PAGE_JS, /Send again/);
+test('the review-comment feature contains no AI delivery or conversation machinery', () => {
+  for (const forbidden of [
+    'ADDRESS_API', 'CODEX_TASK_API', 'sendToAgent', 'chooseAddressAgent',
+    'Send to AI', 'Ask agent', 'Review conversation', 'data-thread-send',
+    'data-thread-ta', 'data-address-all', 'data-send-comment', '/message',
+  ]) assert.equal(PAGE_JS.includes(forbidden), false, forbidden);
 });
 
-test('address runs drive the shared ProgressPanel, not a bespoke bubble', () => {
-  // Sending comments to the agent mounts the one shared ProgressPanel inline in the card
-  // and streams the run through it — the agent's real plan, active step, and elapsed time.
-  assert.match(PAGE_JS, /function sendToAgent\(ids,fromCard,target\)/);
-  assert.match(PAGE_JS, /function mountPanelInCard\(/);
-  assert.match(PAGE_JS, /function restoreAgentPanel\(/);
-  assert.match(PAGE_JS, /new ProgressPanel\(root,/);
-  assert.match(PAGE_JS, /runProgress\(panel,ADDRESS_API,payload,ctrl\)/);
-  assert.match(PAGE_CSS, /\.ds-ai-badge/);
-  // A code-changing run offers a reload through the panel's own footer.
-  assert.match(PAGE_JS, /data-reload-diff/);
-  // The old live bubble that echoed internal phase names is gone for good.
-  assert.doesNotMatch(PAGE_CSS, /\.ds-reply-live/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-live-updates/);
-  assert.doesNotMatch(PAGE_CSS, /dsLiveTyping/);
-  assert.doesNotMatch(PAGE_JS, /function agentDraftText\(/);
-  assert.doesNotMatch(PAGE_JS, /function addressProgressPanel\(/);
-});
-
-test('address runs bind to a reusable Codex task and send that choice', () => {
-  assert.match(PAGE_JS, /function chooseAddressAgent\(/);
-  assert.match(PAGE_JS, /fetch\('\/api\/agents'\)/);
-  assert.match(PAGE_JS, /fetch\(CODEX_TASK_API\)/);
-  assert.match(PAGE_JS, /New Codex task/);
-  assert.match(PAGE_JS, /data-agent-task-option/);
-  assert.match(PAGE_JS, /payload\.agent=target\.agent/);
-  assert.match(PAGE_JS, /payload\.codexThreadId=target\.threadId/);
-  assert.match(PAGE_JS, /payload\.codexTaskLabel=target\.label\|\|'Selected Codex task'/);
-  assert.match(PAGE_JS, /payload\.newCodexTask=true/);
-  assert.match(PAGE_JS, /readAgentTarget\(\)/);
-  assert.match(PAGE_JS, /saveAgentTarget\(target\)/);
-});
-
-test('agent task picker opens immediately while slow task discovery stays inside the dialog', () => {
-  const shell = PAGE_JS.indexOf('renderAgentTargetChooser([],[],null,done,codexOnly,true)');
-  const discovery = PAGE_JS.indexOf("fetch('/api/agents')", shell);
-  assert.ok(shell >= 0 && discovery > shell, 'renders the loading dialog before starting discovery');
-  assert.match(PAGE_JS, /Loading available tasks…/);
-  assert.match(PAGE_JS, /request!==agentChooserRequest/);
-  assert.match(PAGE_JS, /agentChooserRequest\+\+/);
-  assert.match(PAGE_CSS, /\.ds-agent-task-loading/);
-  assert.match(PAGE_CSS, /\.ds-agent-task-spinner/);
-});
-
-test('a freshly loaded full file gets its threads mounted', () => {
-  assert.match(PAGE_JS, /mountThreads\(fullInner\)/);
-});
-
-test('resolving a comment updates all cross-surfaced copies via patchComment', () => {
-  assert.match(PAGE_JS, /patchComment\(c\);refreshCount\(\)/);
-});
-
-test('client mounts a persistent chat composer that posts and re-runs the agent', () => {
-  assert.match(PAGE_JS, /function buildThreadComposer\(/);
-  assert.match(PAGE_JS, /function sendThreadMessage\(/);
-  assert.match(PAGE_JS, /data-thread-send/);
-  assert.match(PAGE_JS, /data-thread-ta/);
-  assert.match(PAGE_JS, /\/message/);
-  assert.match(PAGE_JS, /sendToAgent\(\[id\],wrap\)/);
-  assert.match(PAGE_CSS, /\.ds-thread-composer/);
-  assert.match(PAGE_CSS, /\.ds-thread-ta/);
-});
-
-test('the composer send is disabled while the agent is busy', () => {
-  assert.match(PAGE_JS, /\[data-thread-send\]'\)\.forEach/);
-  assert.match(PAGE_JS, /\[data-thread-add\]'\)\.forEach/);
-});
-
-test('global comment counts and batch actions use the canonical cache before lazy panels mount', () => {
-  // A saved comment can have zero or several mounted .ds-comment nodes. The API cache
-  // must remain canonical so neither lazy loading nor cross-surfacing changes the count.
-  assert.match(PAGE_JS, /function commentIds\(predicate\)/);
-  assert.match(PAGE_JS, /allComments\.forEach\(function\(c\)/);
-  assert.match(PAGE_JS, /return commentIds\(function\(c\)\{return c\.status==='open';\}\)/);
-  assert.match(PAGE_JS, /var openN=commentIds\(function\(c\)\{return c\.status!=='resolved';\}\)\.length/);
-  assert.match(PAGE_JS, /var totalN=commentIds\(\)\.length/);
-  assert.doesNotMatch(PAGE_JS, /uniqueIds\('\.ds-comment/);
-  assert.doesNotMatch(PAGE_JS, /\$all\('\.ds-comment'\)\.length-\$all\('\.ds-comment\.status-resolved'\)\.length/);
-});
-
-test('patching a lazy comment updates the canonical cache before refreshing counts', () => {
-  assert.match(PAGE_JS, /function patchComment\(c\)\{\s*var found=false;/);
-  assert.match(PAGE_JS, /allComments\[ai\]=c;found=true/);
-  assert.match(PAGE_JS, /if\(!found\)allComments\.push\(c\)/);
-});
-
-test('notes are one-shot: no verdict or checkpoint machinery in the client', () => {
-  assert.doesNotMatch(PAGE_JS, /\/api\/review\/verdict/);
-  assert.doesNotMatch(PAGE_JS, /\/api\/review\/checkpoint/);
-  assert.doesNotMatch(PAGE_JS, /data-verdict/);
-  assert.doesNotMatch(PAGE_JS, /data-review-mode/);
-  assert.match(PAGE_JS, /commentSeverity\(c\)==='blocking'/);
-  assert.match(PAGE_JS, /function noteBlockingFeedbackMutation\(comment\)/);
-  assert.match(PAGE_JS, /function syncReviewFeedbackIdentity\(\)/);
-  assert.match(PAGE_JS, /data-index-divergence-count/);
-});
-
-test('the new-comment composer shows its agent task and separates save from send', () => {
-  assert.match(PAGE_JS, /function buildComposer\(/);
-  assert.match(PAGE_JS, /function buildAgentRoute\(/);
-  assert.match(PAGE_JS, /ds-composer-add/);
-  assert.match(PAGE_JS, /'Save only'/);
-  assert.match(PAGE_JS, /'Choose task & ask'/);
-  assert.match(PAGE_JS, /data-agent-target-cta/);
-  // shared helper gates the run on a flag; Save only => false, Ask agent => true
-  assert.match(PAGE_JS, /function submitComment\(run\)/);
-  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[c\.id\]\)/);
-  assert.match(PAGE_JS, /submitComment\(false\)/);
-  assert.match(PAGE_JS, /submitComment\(true\)/);
-});
-
-test('Enter asks the agent from a new comment while Shift+Enter stays multiline', () => {
-  assert.match(PAGE_JS, /ta\.title='Enter to ask agent · Shift\+Enter for a new line'/);
-  assert.match(PAGE_JS, /ta\.setAttribute\('aria-keyshortcuts','Enter'\)/);
-  assert.match(PAGE_JS, /if\(e\.key!=='Enter'\|\|e\.shiftKey\|\|e\.isComposing\)return;e\.preventDefault\(\);if\(!ask\.disabled\)submitComment\(true\)/);
-});
-
-test('the thread composer shows its agent task and separates save from send', () => {
-  assert.match(PAGE_JS, /function buildThreadComposer\(/);
-  assert.match(PAGE_JS, /data-thread-add/);
-  assert.match(PAGE_JS, /'Save'/);
-  assert.match(PAGE_JS, /'Choose task & ask'/);
-  // sendThreadMessage gates the agent run on the `run` flag:
-  assert.match(PAGE_JS, /function sendThreadMessage\(wrap,run\)/);
-  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\],wrap\)/);
-  // delegation: Save reply => run=false, Ask agent => run=true
-  assert.match(PAGE_JS, /\[data-thread-add\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),false\)/);
-  assert.match(PAGE_JS, /\[data-thread-send\]'\);if\(b\)\{sendThreadMessage\(closest\(b,'\.ds-comment'\),true\)/);
-  // Enter sends via the run path
-  assert.match(PAGE_JS, /sendThreadMessage\(closest\(ta,'\.ds-comment'\),true\)/);
-});
-
-test('Ask agent sends an existing popup conversation even when the reply box is empty', () => {
-  assert.match(PAGE_JS, /if\(!text\)\{if\(run\)sendToAgent\(\[id\],wrap\);return;\}/);
-  assert.match(PAGE_JS, /if\(run\)sendToAgent\(\[id\],wrap\);/);
-});
-
-test('conversation hierarchy keeps code context compact and secondary actions quiet', () => {
-  assert.match(PAGE_CSS, /\.ds-thread\{position:fixed[^}]*width:min\(460px[^}]*max-height:calc\(100vh - 96px\)/);
-  assert.match(PAGE_CSS, /\.ds-comment-selection>summary/);
-  assert.match(PAGE_CSS, /\.ds-comment-selection-preview/);
-  assert.match(PAGE_CSS, /\.ds-comment-menu-pop/);
-  assert.match(PAGE_CSS, /\.ds-thread-composer\{position:sticky/);
-  assert.match(PAGE_JS, /ds-comment-selection-preview/);
-  assert.match(PAGE_JS, /ds-comment-menu-pop/);
-  assert.match(PAGE_JS, /Delete conversation/);
-});
-
-test('multiple comments on one anchor show one conversation and one composer at a time', () => {
-  assert.match(PAGE_CSS, /\.ds-comment\[hidden\]\{display:none!important\}/);
-  assert.match(PAGE_CSS, /\.ds-chat-nav\[hidden\]\{display:none!important\}/);
-  assert.match(PAGE_JS, /function surfaceComments\(/);
-  assert.match(PAGE_JS, /function showCommentInSurface\(/);
-  assert.match(PAGE_JS, /comments\[k\]\.hidden=!active/);
-  assert.match(PAGE_JS, /data-comment-position/);
-  assert.match(PAGE_JS, /data-comment-prev/);
-  assert.match(PAGE_JS, /data-comment-next/);
-  assert.match(PAGE_JS, /showCommentInSurface\(surface,wrap\.getAttribute\('data-comment-id'\)\)/);
-});
-
-test('the compact Review menu runs the batch and tracks the open count', () => {
-  assert.match(PAGE_JS, /\[data-address-all\]'\);if\(b\)\{if\(b\.disabled\)return;sendToAgent\('all'\)/);
-  assert.match(PAGE_JS, /ds-review-summary-label/);
-  assert.doesNotMatch(PAGE_JS, /ds-send-all/);
-});
-
-test('agent target labels update every sending surface and mark the current task', () => {
-  assert.match(PAGE_JS, /function applyAgentTargetTo\(scope,target\)/);
-  assert.match(PAGE_JS, /\$all\('\[data-agent-target-name\]',scope\)\.forEach/);
-  assert.match(PAGE_JS, /mountThreads\(scope\)[\s\S]*?applyAgentTargetTo\(scope,readAgentTarget\(\)\)/);
-  assert.match(PAGE_JS, /button\.textContent=has\?'Ask agent':'Choose task & ask'/);
-  assert.match(PAGE_JS, /selected\?'Current':target\.meta/);
-  assert.match(PAGE_JS, /target\.agent==='codex'&&target\.mode==='new'/);
-});
-
-test('agent and review controls stay distinct at compact widths', () => {
-  assert.match(PAGE_CSS, /@media \(max-width:900px\)[\s\S]*?\.ds-agent-target\{width:36px/);
-  // The review status is a flag on the tab now — amber while the review page
-  // still wants a decision, and simply absent once it does not.
-  assert.match(PAGE_CSS, /\.ds-tab-flag\{[^}]*color:var\(--amber\)/);
-  assert.match(PAGE_CSS, /\.ds-tab-flag\[hidden\]\{display:none\}/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-review-menu/);
-  assert.match(PAGE_CSS, /@media \(max-width:620px\)[\s\S]*?\.ds-agent-chooser\{align-items:flex-end/);
-  assert.match(PAGE_CSS, /@media \(max-width:620px\)\{\.ds-thread-composer-foot\{align-items:stretch\}\}/);
-});
-
-test('nested dialogs preserve the underlying modal and only trap focus in the top layer', () => {
-  assert.doesNotMatch(PAGE_JS, /reviewMenuReturnFocus/);
-  assert.match(PAGE_JS, /agentChooserReturnFocus/);
-  assert.match(PAGE_JS, /modalStack=\[\],modalBackgroundSnapshots=\[\]/);
-  assert.match(PAGE_JS, /modalStack\.push\(\{root:root,returnFocus:/);
-  assert.match(PAGE_JS, /modalStack\.splice\(index,1\);syncModalBackground\(\);syncModalScrollLock\(\)/);
-  assert.match(PAGE_JS, /if\(node===top\)\{restoreModalNode\(snapshot\);return;\}/);
-  assert.match(PAGE_JS, /if\(!top\)\{modalBackgroundSnapshots\.forEach\(restoreModalNode\);modalBackgroundSnapshots=\[\];return;\}/);
-  assert.match(PAGE_JS, /activateModal\(root,agentChooserReturnFocus\)/);
-  assert.match(PAGE_JS, /deactivateModal\(old,restore!==false\)/);
-  assert.match(PAGE_JS, /commandReturnFocus/);
-  assert.match(PAGE_JS, /var modalRoot=topModalRoot\(\)/);
-  assert.match(PAGE_JS, /focusInside=modalRoot\.contains\(document\.activeElement\)/);
-  assert.match(PAGE_JS, /if\(modalRoot\)return/);
-  assert.match(PAGE_JS, /var escapeModal=topModalRoot\(\)/);
-  assert.doesNotMatch(PAGE_JS, /data-ds-prev-hidden/);
-});
-
-test('copying all comments includes every conversation turn, not only legacy replies', () => {
-  assert.match(PAGE_JS, /function commentTurnsToText\(/);
-  assert.match(PAGE_JS, /c\.turns\.forEach/);
-  assert.match(PAGE_JS, /who=t\.role==='ai'\?BRAND\+' reply':'Reviewer'/);
-  assert.match(PAGE_JS, /commentTurnsToText\(c\)\.forEach/);
-});
-
-test('ordinary selection stays quiet while right click and keyboard actions remain available', () => {
-  assert.doesNotMatch(PAGE_JS, /showSelectionQuick/);
-  assert.doesNotMatch(PAGE_JS, /data-selection-quick-action/);
-  assert.match(PAGE_JS, /e\.key==='c'\|\|e\.key==='C'/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-selection-quick/);
-});
-
-test('the notes page verifies replies and resolves without a timeline', () => {
-  assert.match(PAGE_JS, /data-review-section="notes"|reviewView/);
-  assert.match(PAGE_JS, /function updateCommentStatus\(/);
-  assert.match(PAGE_JS, /data-accept-fix/);
-  assert.match(PAGE_JS, /data-reopen-comment/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-review-timeline/);
-});
-
-test('file filters, resume state, and keyboard commands stay local to the review', () => {
+test('file filters, resume state, and generic review dialogs remain local', () => {
   assert.match(PAGE_JS, /function applyFileFilters\(/);
   assert.match(PAGE_JS, /function restoreReviewPosition\(/);
-  assert.match(PAGE_JS, /localStorage\.setItem\(reviewUiKey\(\)/);
-  assert.match(PAGE_JS, /btn\.hidden=!text\|\|!inFiles/);
-  assert.match(PAGE_JS, /function setView\(v,focusAfter\)[\s\S]*?revealResumeReview\(\)/);
-  assert.match(PAGE_JS, /e\.key==='\?'/);
-  assert.match(PAGE_JS, /e\.key==='\/'/);
+  assert.match(PAGE_JS, /modalStack=\[\],modalBackgroundSnapshots=\[\]/);
+  assert.match(PAGE_JS, /commandReturnFocus/);
+  assert.match(PAGE_JS, /var modalRoot=topModalRoot\(\)/);
 });
 
-test('targeted story repair uses the shared progress panel', () => {
-  assert.match(PAGE_JS, /function repairStory\(/);
-  assert.match(PAGE_JS, /runProgress\(panel,'\/api\/story\/repair'/);
-  assert.match(PAGE_JS, /data-story-repair/);
-  assert.match(PAGE_JS, /closest\(t,'input\[data-story-file\]'\)/);
-  assert.doesNotMatch(PAGE_JS, /closest\(t,'\[data-story-file\]'\)/);
-  assert.match(PAGE_JS, /function closeStoryTuneMenus\(/);
-  assert.match(PAGE_JS, /if\(!closest\(t,'\.ds-story-tune'\)\)closeStoryTuneMenus\(\)/);
-  assert.match(PAGE_JS, /var openTune=\$\('\.ds-story-tune\[open\]'\)/);
-  assert.match(PAGE_CSS, /\.ds-story-tune>summary\{[^}]*min-height:32px[^}]*padding:0 10px/);
-  assert.match(PAGE_CSS, /\.ds-story-tune\[open\]>summary\{/);
-  // Repair rides in the step title row now that the review-question strip is gone.
-  assert.match(PAGE_CSS, /\.ds-step-titlerow \.ds-story-tune\{[^}]*margin-left:auto/);
-  assert.doesNotMatch(PAGE_CSS, /ds-review-question/);
-});
-
-test('live review reconnects through the page lease and recovers durable state', () => {
-  assert.match(PAGE_JS, /new EventSource\(reviewPageUrl\('\/api\/events'\)\)/);
-  assert.match(PAGE_JS, /source\.onopen=function\(\)\{/);
-  assert.match(PAGE_JS, /refreshComments\(null,true\);refreshReviewState\(\)/);
-  assert.match(PAGE_JS, /source\.addEventListener\('state'/);
-  assert.match(PAGE_JS, /source\.addEventListener\('diff-changed'/);
-  assert.match(PAGE_JS, /source\.addEventListener\('story-synced'/);
-  assert.match(PAGE_JS, /var LIVE_BANNER_KINDS=\[/);
-  assert.match(PAGE_JS, /\{kind:'diff',message:/);
-  assert.match(PAGE_JS, /\{kind:'disconnected',message:/);
-  assert.doesNotMatch(PAGE_JS, /\{kind:'story',message:/);
-  assert.match(PAGE_JS, /function scheduleStoryReload\(\)/);
-  assert.match(PAGE_JS, /storyReloadTimer=setTimeout\(function\(\)\{[^}]*location\.reload\(\);\},10000\)/);
-  assert.match(PAGE_JS, /function cancelStoryReload\(\)\{hideStoryReloadToast\(\);toast\('Automatic reload cancelled\.'\);\}/);
-  assert.match(PAGE_JS, /if\(on\)scheduleStoryReload\(\);else hideStoryReloadToast\(\);/);
-  assert.match(PAGE_JS, /data-story-reload-cancel/);
-  assert.match(PAGE_JS, /data-live-diff-stale/);
-  assert.match(PAGE_JS, /fetch\(reviewPageUrl\('\/api\/review-state'\)\)/);
-  assert.match(PAGE_JS, /function aiTurnKeys\(/);
-  assert.match(PAGE_JS, /Agent replied to /);
-  assert.match(PAGE_CSS, /\.ds-live-banner\{position:fixed/);
-  assert.match(PAGE_CSS, /\.ds-live-banner\{[^}]*right:16px[^}]*width:min\(420px,calc\(100vw - 32px\)\)[^}]*grid-template-columns:28px minmax\(0,1fr\) auto 36px/);
-  assert.match(PAGE_CSS, /\.ds-live-banner button\{[^}]*height:36px/);
-  assert.match(PAGE_CSS, /\.ds-live-banner button:focus-visible\{[^}]*box-shadow:0 0 0 3px var\(--accent-soft\)/);
-  assert.match(PAGE_CSS, /\.ds-live-banner\[data-live-kind="disconnected"\]/);
-  assert.doesNotMatch(PAGE_CSS, /\.ds-live-banner\{[^}]*left:calc\(/);
-});
-
-test('live events survive bfcache restores and outlast the reconnect interval', () => {
-  // A Back-button (bfcache) restore revives the page with a closed EventSource;
-  // pagehide/pageshow must close and reopen the stream instead of beforeunload.
-  assert.match(PAGE_JS, /addEventListener\('pagehide'/);
-  assert.match(PAGE_JS, /addEventListener\('pageshow'/);
-  assert.match(PAGE_JS, /\.persisted/);
-  assert.doesNotMatch(PAGE_JS, /addEventListener\('beforeunload',function\(\)\{source\.close\(\);\}/);
-  // The disconnect banner may only appear after the server's retry interval
-  // (1500ms) has had a chance to reconnect — otherwise it flashes on every drop.
-  const grace = PAGE_JS.match(/setLiveIssue\('disconnected',true\);\},(\d+)\)/);
-  assert.ok(grace && Number(grace[1]) > 1500, 'disconnect grace must outlast the SSE retry interval');
-  // A dead lease (409) surfacing through a live refresh is a disconnect, not a
-  // comment-store error toast.
-  assert.match(PAGE_JS, /status===409/);
-});
-
-test('the coverage verdict resolves the pill and unblocks the review chip', () => {
-  // Without the auto-resolve the pill stays in its unknown state forever, and
-  // because refreshCount() derives the chip's clean state from the pill's class,
-  // the review chip could never legitimately go green.
-  assert.match(PAGE_JS, /function resolveCoverage\(\)/);
-  assert.match(PAGE_JS, /reviewPageUrl\('\/api\/review\/coverage'\)/);
-  assert.match(PAGE_JS, /scheduleCoverageResolve\(\)/);
-  assert.match(PAGE_JS, /requestIdleCallback\(resolveCoverage/, 'coverage must not compete with first paint');
-
-  // The verdict has to reach both the pill and the chip's input attribute.
-  assert.match(PAGE_JS, /function applyCoverageVerdict\(uncovered,storyless\)/);
-  assert.match(PAGE_JS, /reviewBtn\.setAttribute\('data-unexplained-count',String\(uncovered\)\)/);
-  assert.match(PAGE_JS, /pill\.classList\.remove\('is-unknown'\)/);
-  assert.match(PAGE_JS, /pill\.classList\.add\('is-clean'\)/);
-
-  // Numeric coercion is what keeps the innerHTML rebuild injection-free.
-  assert.match(PAGE_JS, /Number\(\(verdict&&verdict\.uncovered\)\|\|0\)/);
-  assert.match(PAGE_JS, /Number\(pill\.getAttribute\('data-trust-excluded'\)\|\|0\)/);
-});
-
-test('a coverage check that cannot run stays unknown rather than clean', () => {
-  assert.match(PAGE_JS, /function markCoverageUnavailable\(\)/);
-  assert.match(PAGE_JS, /Coverage unchecked · open to retry/);
-  // The failure path must never reach the branch that adds is-clean.
-  const applied = PAGE_JS.slice(PAGE_JS.indexOf('function markCoverageUnavailable'), PAGE_JS.indexOf('function resolveCoverage'));
-  assert.doesNotMatch(applied, /is-clean/);
-});
-
-test('the inline evidence load settles a pill that is still checking', () => {
-  assert.match(PAGE_JS, /next=parsed\.querySelector\('\[data-trust-evidence\]'\)/);
-  assert.match(PAGE_JS, /if\(verdict\)applyCoverageVerdict\(Number\(verdict\|\|0\)/);
-  // An empty data-trust-uncovered means the server had no verdict; the falsy
-  // check keeps that from being read as zero uncovered ranges.
-  assert.match(PAGE_JS, /var verdict=next\.getAttribute\('data-trust-uncovered'\)/);
-  // gotoReview chains a scroll on this, so it must hand back the in-flight promise.
-  assert.match(PAGE_JS, /if\(trustLoadPromise\)return trustLoadPromise/);
-  assert.match(PAGE_JS, /return trustLoadPromise;/);
-});
-
-test('the view machine knows three views and one spatial order', () => {
-  assert.match(PAGE_JS, /var DS_VIEWS=\['tour','files','review'\]/);
-  assert.match(PAGE_JS, /if\(reviewView\)reviewView\.hidden=v!=='review'/);
-  // Direction must come from tab order, not a two-way flip.
-  assert.match(PAGE_JS, /runWorkspaceTransition\('view',viewIndex\(v\)>viewIndex\(previous\)\?1:-1,update\)/);
-  // Reading `previous` from panel visibility is ambiguous mid-transition with
-  // three panels; the attribute is the single source of truth.
-  assert.match(PAGE_JS, /var previous=currentView\(\)/);
-  assert.match(PAGE_JS, /if\(v==='review'\)loadTrustEvidence\(\)/);
-  assert.doesNotMatch(PAGE_JS, /function setReviewMenu|data-review-menu-pop|openFeedbackDrawer|function setFeedbackPanel/);
-});
-
-test('review sections are reachable and scroll without dragging the diff sideways', () => {
-  assert.match(PAGE_JS, /function gotoReview\(section,path\)/);
-  assert.match(PAGE_JS, /\[data-review-section="'\+section\+'"\]/);
-  assert.match(PAGE_JS, /\[data-excluded-file="'\+path\+'"\]/);
-  // The blanket no-scrollIntoView rule exists so navigation never scrolls a
-  // horizontal ancestor; the review page scrolls its own panel instead.
-  assert.match(PAGE_JS, /reviewView\.scrollTo\(\{top:Math\.max\(0,top\)/);
-  assert.doesNotMatch(PAGE_JS, /scrollIntoView/);
-  // Aiming at the unexplained changes opens them; arriving at the page does not.
-  assert.match(PAGE_JS, /section==='unexplained'.*disclosure\.open=true/);
-  // The pill's arrow follows its own verdict once coverage resolves.
-  assert.match(PAGE_JS, /pill\.setAttribute\('data-goto-review',uncovered>0&&!storyless\?'unexplained':excluded\?'exclusions':'evidence'\)/);
-});
-
-test('the review page tabs select panels, walk by keyboard, and are remembered', () => {
-  // Selecting a tab is one state change: attribute, buttons, panels, saved spot.
-  assert.match(PAGE_JS, /page\.setAttribute\('data-review-tab',tab\)/);
-  assert.match(PAGE_JS, /panel\.hidden=panel\.getAttribute\('data-review-panel'\)!==tab/);
-  assert.match(PAGE_JS, /node\.setAttribute\('aria-selected',on\?'true':'false'\);\s*node\.tabIndex=on\?0:-1/);
-  // A new panel starts at the top; a carried-over offset points at nothing.
-  assert.match(PAGE_JS, /setReviewTab\(tab,focusTab\);\s*if\(reviewView\)reviewView\.scrollTo\(\{top:0/);
-  // Deep links still land: the section's own panel becomes the selected tab.
-  assert.match(PAGE_JS, /var panel=closest\(dest,'\[data-review-panel\]'\);\s*if\(panel\)setReviewTab\(panel\.getAttribute\('data-review-panel'\),false\)/);
-  // Keyboard: the review tablist walks like the view tablist, wrapping.
-  assert.match(PAGE_JS, /reviewTabs\[\(rti\+\(e\.key==='ArrowRight'\?1:-1\)\+reviewTabs\.length\)%reviewTabs\.length\]/);
-  // The tab you left is the tab you come back to.
-  assert.match(PAGE_JS, /reviewTab:activeReviewTab\(\)/);
-  assert.match(PAGE_JS, /if\(state\.reviewTab\)setReviewTab\(state\.reviewTab,false\)/);
-});
-
-test('the coverage tab flag and note count stay tied to the facts', () => {
-  // The flag is written from the resolved verdict, never guessed at paint time.
-  assert.match(PAGE_JS, /function applyCoverageFlag\(uncovered,outside\)/);
-  assert.match(PAGE_JS, /applyCoverageFlag\(uncovered>0&&!storyless\?uncovered:0,/);
-  // Decorative mark, spoken label — written together so they cannot disagree.
-  assert.match(PAGE_JS, /flag\.textContent=text;flag\.hidden=!text/);
-  assert.match(PAGE_JS, /tab\.setAttribute\('aria-label','Coverage, '\+label\);else tab\.removeAttribute\('aria-label'\)/);
-  assert.match(PAGE_JS, /notesTabCount\.textContent=openN;notesTabCount\.hidden=openN===0/);
-});
-
-test('the review tab is the only review entrance and carries its status', () => {
-  assert.match(PAGE_JS, /\$\('\[data-review-status\]'\)/);
-  assert.match(PAGE_JS, /var flag=\$\('\[data-review-flag\]'\);if\(flag\)flag\.hidden=blockingN===0&&!!clean/);
-  assert.doesNotMatch(PAGE_JS, /data-review-menu/);
-});
-
-test('three tabs roving-select with wrap and Home/End', () => {
-  assert.match(PAGE_JS, /viewTab&&\(e\.key==='ArrowLeft'\|\|e\.key==='ArrowRight'\|\|e\.key==='Home'\|\|e\.key==='End'\)/);
-  assert.match(PAGE_JS, /tabs\[\(ti\+\(e\.key==='ArrowRight'\?1:-1\)\+tabs\.length\)%tabs\.length\]/);
-  assert.match(PAGE_JS, /setView\(nextView,true\)/);
+test('excluded-only scope truth and sidebar containment remain intact', () => {
+  assert.match(PAGE_JS, /if\(progress&&!fileItems\.length&&excludedCount\)progress\.textContent=excludedCount\+/);
+  assert.match(PAGE_CSS, /\.ds-resume-review\{[^}]*min-width:0[^}]*overflow:hidden/);
+  assert.match(PAGE_CSS, /\.ds-resume-review \[data-resume-review-label\]\{[^}]*text-overflow:ellipsis/);
 });

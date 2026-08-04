@@ -302,8 +302,8 @@ const TOUR = `{
 `;
 
 const COMMENTS = `[
-  { "id": "c_demo1", "step": "s2", "file": "src/limits.ts", "line": 10, "type": "change", "body": "Boundary bug? 'amount < remaining' rejects a spend that exactly equals the remaining budget. Should this be '<=' ?", "status": "open", "createdAt": "2026-06-14T12:00:00.000Z" },
-  { "id": "c_demo2", "step": "s1", "file": "src/api.ts", "line": 11, "type": "question", "body": "Is 402 the right status for over-limit, or should this be 403/429? What does the rest of the API use?", "status": "open", "createdAt": "2026-06-14T12:01:00.000Z" }
+  { "id": "c_demo1", "step": "s2", "file": "src/limits.ts", "line": 10, "side": "right", "type": "change", "selectedText": "  return { ok: amount < remaining, remaining };", "selection": { "startLine": 10, "endLine": 10, "startColumn": 1, "endColumn": 48 }, "body": "Boundary bug? 'amount < remaining' rejects a spend that exactly equals the remaining budget. Should this be '<=' ?", "status": "open", "createdAt": "2026-06-14T12:00:00.000Z" },
+  { "id": "c_demo2", "step": "s1", "file": "src/api.ts", "line": 11, "side": "right", "type": "question", "selectedText": "    return { status: 402, error: 'over the limit, ' + limit.remaining + ' remaining' };", "selection": { "startLine": 11, "endLine": 11, "startColumn": 1, "endColumn": 87 }, "body": "Is 402 the right status for over-limit, or should this be 403/429? What does the rest of the API use?", "status": "open", "createdAt": "2026-06-14T12:01:00.000Z" }
 ]
 `;
 

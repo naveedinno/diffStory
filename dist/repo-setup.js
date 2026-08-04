@@ -8,7 +8,8 @@ const SHARED_LINE = `${DATA_DIR}/comments.json`;
 const LOCAL_LINE = `${DATA_DIR}/`;
 const STORYTELLER_SKILL = 'diffstory-storyteller';
 const LEGACY_STORYTELLER_SKILL = 'review-tour';
-const SKILLS = [STORYTELLER_SKILL, 'address-review'];
+const RETIRED_REVIEW_SKILL = 'address-review';
+const SKILLS = [STORYTELLER_SKILL];
 /**
  * Edit the repo's .gitignore for the chosen tracking mode (idempotent):
  *  - 'shared': only comments.json is ignored (story.json stays tracked, travels with a PR).
@@ -94,6 +95,7 @@ export function updateSkills(home, sourceRoot = bundledSkillsRoot()) {
         // The producer skill was renamed in place. Remove the old install so agents
         // do not expose two commands that write the same story artifact.
         rmSync(join(targetRoot, LEGACY_STORYTELLER_SKILL), { recursive: true, force: true });
+        rmSync(join(targetRoot, RETIRED_REVIEW_SKILL), { recursive: true, force: true });
         for (const skill of SKILLS) {
             const source = join(sourceRoot, skill);
             if (!existsSync(source))

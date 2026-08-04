@@ -15,6 +15,7 @@ test('VS Code bridge URL carries an absolute source location for the installed b
   assert.equal(url.protocol, 'vscode:');
   assert.equal(url.host, 'naveedinno.diffstory-vscode');
   assert.equal(url.pathname, '/navigate');
+  assert.equal(url.searchParams.get('repo'), '/tmp/review repo');
   assert.equal(url.searchParams.get('path'), '/tmp/review repo/src/order flow.ts');
   assert.equal(url.searchParams.get('line'), '42');
   assert.equal(url.searchParams.get('column'), '17');
@@ -63,6 +64,7 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
     assert.equal(response.status, 200);
     assert.equal(opened.length, 1);
     const target = new URL(opened[0]);
+    assert.equal(target.searchParams.get('repo'), repo);
     assert.equal(target.searchParams.get('path'), join(repo, 'order.ts'));
     assert.equal(target.searchParams.get('line'), '1');
     assert.equal(target.searchParams.get('column'), '17');

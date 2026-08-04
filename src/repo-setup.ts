@@ -9,7 +9,8 @@ const SHARED_LINE = `${DATA_DIR}/comments.json`;
 const LOCAL_LINE = `${DATA_DIR}/`;
 const STORYTELLER_SKILL = 'diffstory-storyteller';
 const LEGACY_STORYTELLER_SKILL = 'review-tour';
-const SKILLS = [STORYTELLER_SKILL, 'address-review'] as const;
+const RETIRED_REVIEW_SKILL = 'address-review';
+const SKILLS = [STORYTELLER_SKILL] as const;
 
 export interface SkillCandidate {
   path: string;
@@ -133,6 +134,7 @@ export function updateSkills(home: string, sourceRoot = bundledSkillsRoot()): Up
     // The producer skill was renamed in place. Remove the old install so agents
     // do not expose two commands that write the same story artifact.
     rmSync(join(targetRoot, LEGACY_STORYTELLER_SKILL), { recursive: true, force: true });
+    rmSync(join(targetRoot, RETIRED_REVIEW_SKILL), { recursive: true, force: true });
     for (const skill of SKILLS) {
       const source = join(sourceRoot, skill);
       if (!existsSync(source)) continue;

@@ -11,7 +11,7 @@ import {
   getDiff,
   getFileDiff,
   reviewFileIndex,
-  reviewFileIndexSnapshot,
+  reviewChangeIndexSnapshot,
   describeBase,
   readFileRange,
   readWholeFile,
@@ -58,13 +58,12 @@ import {
   commentsForStory,
   addComment,
   deleteComment,
-  setCommentStatus,
-  appendUserMessage,
+  updateComment,
   InvalidCommentStoreError,
   type CommentStoreHealth,
   type NewComment,
 } from './comments.js';
-import { commentsPath, resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
+import { resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
 import {
   isCodeStep,
   type DiffFile,
@@ -75,14 +74,12 @@ import {
 import {
   availableAgents,
   streamAgent,
-  addressPrompt,
   storyPrompt,
   agentPreflight,
   selectAvailableAgent,
   normalizeStoryMode,
   normalizeCodexRunOptions,
   summarizeAgentFailure,
-  resumedCodexTaskMatches,
   storyRepairPrompt,
   type StoryRepairAction,
   type Agent,
@@ -111,18 +108,9 @@ import { recallStorySelection, recordStorySelection } from './story-selection.js
 import { listDirs } from './fs-browse.js';
 import { deleteStory, diffFingerprint, hasStories, listStories, listStoryMetadata, storyIdForPath, storyPathForId } from './stories.js';
 import { homedir } from 'node:os';
-import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createAloudReader, type AloudReader } from './aloud-client.js';
-import {
-  codexTaskBinary,
-  listCodexStoryModels,
-  listCodexTasks,
-  nameCodexTask,
-  validCodexThreadId,
-} from './codex-tasks.js';
-import { codexDesktopAvailable, sendCodexDesktopTurn } from './codex-desktop.js';
+import { listCodexStoryModels } from './codex-tasks.js';
 import { LiveEventHub, storyFileFingerprint } from './live.js';
 import { reviewStateSummary } from './review-state.js';
 import {
@@ -197,7 +185,7 @@ export function serve(opts: ServeOptions): Server {
       const storyLabel = `${storyCount} ${storyCount === 1 ? 'story' : 'stories'}`;
       console.log(`\n  ${APP_BRAND} review ready → ${url}`);
       console.log(`  reviewing ${storyLabel} in ${join(session.repo, DATA_DIR)}`);
-      console.log(`  comments send to the agent when submitted; Review actions can resend open comments.\n`);
+      console.log(`  comments can be copied directly or queued in Review → Comments.\n`);
     }
     console.log(`  Ctrl-C to stop.\n`);
     if (opts.open) openBrowser(url);
@@ -490,13 +478,6 @@ function handle(
         return sendJson(res, 200, { ok: true });
       });
     }
-    if (method === 'GET' && url.pathname === '/api/codex/tasks') {
-      if (!session.repo) return noRepo(res);
-      listCodexTasks(session.repo)
-        .then((tasks) => sendJson(res, 200, { tasks }))
-        .catch((error) => sendJson(res, 502, { error: (error as Error).message }));
-      return;
-    }
     if (method === 'GET' && url.pathname === '/api/codex/models') {
       listCodexStoryModels()
         .then((models) => sendJson(res, 200, { models }))
@@ -730,31 +711,11 @@ function handle(
         }
       });
     }
-    if (method === 'POST' && url.pathname === '/api/address') {
-      return readBody(req, res, (body) => runAddress(res, session, body));
-    }
     if (method === 'POST' && url.pathname === '/api/generate') {
       return readBody(req, res, (body) => runGenerate(res, session, body));
     }
     if (method === 'POST' && url.pathname === '/api/story/repair') {
       return readBody(req, res, (body) => runStoryRepair(res, session, body));
-    }
-    if (method === 'POST' && url.pathname.startsWith('/api/comments/') && url.pathname.endsWith('/message')) {
-      const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
-      const repo = lease?.repo ?? session.repo;
-      if (!repo) return noRepo(res);
-      const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length, -'/message'.length));
-      return readBody(req, res, (body) => {
-        try {
-          const { text } = JSON.parse(body || '{}') as { text?: string };
-          const updated = appendUserMessage(repo, id, text ?? '');
-          if (updated) sendJson(res, 200, updated);
-          else sendJson(res, 404, { error: 'no such comment' });
-        } catch (e) {
-          sendCommentMutationError(res, e);
-        }
-      });
     }
     if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
       const lease = optionalRequestLease(session, url);
@@ -764,8 +725,8 @@ function handle(
       const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
       return readBody(req, res, (body) => {
         try {
-          const { status } = JSON.parse(body || '{}') as { status?: string };
-          const updated = setCommentStatus(repo, id, status ?? '');
+          const input = JSON.parse(body || '{}') as { type?: string; body?: string };
+          const updated = updateComment(repo, id, input);
           if (updated) {
             sendJson(res, 200, updated);
           }
@@ -1067,8 +1028,7 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
   let base = resolveBase(repo, session.base ?? tour.base);
   let head = session.head ?? tour.head;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const before = reviewSourceMetadataFingerprint(repo, base, head);
-    const indexSnapshot = reviewFileIndexSnapshot(repo, base, head);
+    const indexSnapshot = reviewChangeIndexSnapshot(repo, base, head);
     let fileIndex = indexSnapshot.fileIndex;
     if (
       !sessionHasScope &&
@@ -1081,25 +1041,16 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
       head = 'HEAD';
       continue;
     }
-    const confirmedFingerprint = reviewSourceMetadataFingerprint(repo, base, head);
-    if (confirmedFingerprint === before) {
-      const changeFingerprint = diffFingerprint(JSON.stringify({
-        base,
-        head: head ?? 'working-tree',
-        source: confirmedFingerprint,
-        files: fileIndex.map((file) => [file.path, file.reviewHash]),
-      }));
-      return {
-        tour,
-        base,
-        head,
-        fileIndex,
-        changeFingerprint,
-        sourceFingerprint: confirmedFingerprint,
-        stagedWorktreeDivergentFiles: indexSnapshot.stagedWorktreeDivergentFiles,
-        excludedFiles: indexSnapshot.excludedFiles,
-      };
-    }
+    return {
+      tour,
+      base,
+      head,
+      fileIndex,
+      changeFingerprint: indexSnapshot.changeFingerprint,
+      sourceFingerprint: indexSnapshot.sourceFingerprint,
+      stagedWorktreeDivergentFiles: indexSnapshot.stagedWorktreeDivergentFiles,
+      excludedFiles: indexSnapshot.excludedFiles,
+    };
   }
   throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
 }
@@ -1808,21 +1759,6 @@ function renderContextResponse(page: LeasedReviewPage, params: URLSearchParams):
   return renderContextRows(rows, layout, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
 }
 
-/** Raw `git diff` text for the current review scope — used to detect agent code edits. */
-function currentDiff(session: Session): string {
-  try {
-    if (!session.repo) return '';
-    const repo = session.repo;
-    if (session.selectedStory === null) {
-      return getDiff(repo, resolveBase(repo, session.base), session.head);
-    }
-    const tour = loadTour(selectedStoryPath(session));
-    return reviewDiff(repo, session, tour).diff;
-  } catch {
-    return '';
-  }
-}
-
 function nowMs(): number {
   return Date.now();
 }
@@ -2089,273 +2025,9 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     });
 }
 
-/** Hand an existing task to its live Desktop owner when that transport exists. */
-function sendAddressToCodexDesktop(
-  res: ServerResponse,
-  context: RunContext,
-  title: string,
-  threadId: string,
-  prompt: string,
-): void {
-  agentBusy = true;
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  let seq = 0;
-  const send = (event: ProgressEvent) => {
-    if (!res.destroyed) res.write(`${JSON.stringify({ seq: seq++, ...event })}\n`);
-  };
-
-  send(runStarted('address', title));
-  send(contextEvent(context));
-  send(phaseEvent('resolving_context'));
-  send(phaseEvent('preparing_prompt'));
-  send(phaseEvent('starting_agent', 'Sending to the selected ChatGPT task'));
-
-  sendCodexDesktopTurn(threadId, prompt)
-    .then(() => {
-      send({ type: 'activity', kind: 'task', label: `Sent to live ChatGPT task · …${threadId.slice(-8)}` });
-      send(doneEvent('complete', {
-        codexThreadId: threadId,
-        messageSent: true,
-        delivery: 'desktop',
-      }));
-    })
-    .catch((error) => {
-      send(errorEvent(
-        'execution',
-        'Could not reach the selected task in ChatGPT',
-        error instanceof Error ? error.message : String(error),
-      ));
-      send(doneEvent('failed', { codexThreadId: threadId, messageSent: false }));
-    })
-    .finally(() => {
-      res.end();
-      agentBusy = false;
-    });
-}
-
-interface AddressRepoContext {
-  runRepo: string;
-  historical: boolean;
-  cleanup?: () => void;
-}
-
-function addressRepoContext(repo: string, head?: string): AddressRepoContext {
-  if (!head) return { runRepo: repo, historical: false };
-  const resolvedHead = resolveCommit(repo, head);
-  const currentHead = resolveCommit(repo, 'HEAD');
-  if (resolvedHead && currentHead && resolvedHead === currentHead && !isDirty(repo)) {
-    return { runRepo: repo, historical: false };
-  }
-
-  const dir = mkdtempSync(join(tmpdir(), 'diffstory-address-'));
-  execFileSync('git', ['worktree', 'add', '--detach', '--quiet', dir, head], {
-    cwd: repo,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  copyDiffstoryData(repo, dir);
-
-  return {
-    runRepo: dir,
-    historical: true,
-    cleanup: () => {
-      copyCommentsBack(dir, repo);
-      try {
-        execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: repo, stdio: 'ignore' });
-      } catch {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
-  };
-}
-
-function copyDiffstoryData(fromRepo: string, toRepo: string): void {
-  const from = join(fromRepo, DATA_DIR);
-  if (!existsSync(from)) return;
-  cpSync(from, join(toRepo, DATA_DIR), { recursive: true, force: true });
-}
-
-function copyCommentsBack(fromRepo: string, toRepo: string): void {
-  const from = commentsPath(fromRepo);
-  if (!existsSync(from)) return;
-  const to = commentsPath(toRepo);
-  mkdirSync(dirname(to), { recursive: true });
-  cpSync(from, to, { force: true });
-}
-
 function stableDiffRef(repo: string, ref: string | undefined): string | undefined {
   if (!ref) return undefined;
   return resolveCommit(repo, ref) ?? ref;
-}
-
-/** Drive the user's agent to address review comments, streaming progress NDJSON. */
-function runAddress(res: ServerResponse, session: Session, body: string): void {
-  let input: {
-    commentIds?: string[];
-    all?: boolean;
-    agent?: string;
-    codexThreadId?: unknown;
-    codexTaskLabel?: unknown;
-    newCodexTask?: unknown;
-  };
-  try {
-    input = JSON.parse(body || '{}');
-  } catch {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
-  }
-  const target: string[] | 'all' = input.all
-    ? 'all'
-    : Array.isArray(input.commentIds)
-      ? input.commentIds
-      : [];
-  if (target !== 'all' && target.length === 0) {
-    return sendJson(res, 400, errorEvent('preflight', 'No comments specified', 'Pick at least one comment to address.'));
-  }
-
-  const agents = availableAgents();
-  const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
-  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
-  const selected = selectAvailableAgent(input.agent, agents, pre.agent);
-  if (!selected.ok) return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
-  const agent = selected.agent;
-  const codexThreadId = validCodexThreadId(input.codexThreadId) ? input.codexThreadId : undefined;
-  const codexTaskLabel = typeof input.codexTaskLabel === 'string'
-    ? input.codexTaskLabel.replace(/\s+/g, ' ').trim().slice(0, 100)
-    : undefined;
-  if (agent === 'codex' && input.codexThreadId !== undefined && !codexThreadId) {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid Codex task', 'Choose a Codex task from the task picker.'));
-  }
-  const useNewCodexTask = agent === 'codex' && input.newCodexTask === true;
-  const agentOptions: AgentRunOptions | undefined = useNewCodexTask
-    ? { codex: { binary: codexTaskBinary(), json: true } }
-    : codexThreadId
-      ? { codex: { binary: codexTaskBinary(), threadId: codexThreadId, json: true } }
-      : undefined;
-  const repo = session.repo as string;
-
-  const feedback = loadCommentsWithHealth(repo);
-  if (feedback.health.status === 'invalid') {
-    return sendJson(res, 409, {
-      ...errorEvent(
-        'preflight',
-        'Feedback file needs repair',
-        `${feedback.health.message} ${feedback.health.recovery}`,
-      ),
-      feedbackHealth: feedback.health,
-    });
-  }
-  const comments = feedback.comments;
-  const openComments = comments.filter((comment) => comment.status === 'open');
-  const openCount = openComments.length;
-  const targetCount = target === 'all' ? openCount : target.length;
-  const targetIds = target === 'all'
-    ? openComments.map((comment) => comment.id)
-    : target;
-  const targetSet = new Set(targetIds);
-  const reviewMessages = comments
-    .filter((comment) => targetSet.has(comment.id))
-    .map((comment) => {
-      const latestUserTurn = [...(comment.turns ?? [])].reverse().find((turn) => turn.role === 'user');
-      return { id: comment.id, text: latestUserTurn?.text || comment.body };
-    });
-  const title =
-    target === 'all'
-      ? `Addressing ${targetCount} open ${targetCount === 1 ? 'comment' : 'comments'}`
-      : `Addressing ${targetCount} ${targetCount === 1 ? 'comment' : 'comments'}`;
-
-  const before = currentDiff(session);
-  // The diff's two sides, resolved exactly as the review page rendered them, so the
-  // agent grounds its answers in both — not just the tree it has checked out. `head`
-  // is set only for two-ref comparisons; otherwise the current side is the working
-  // tree. Falls back to single-sided if no story.
-  let base: string | undefined;
-  let head: string | undefined;
-  try {
-    const tour = loadTour(selectedStoryPath(session));
-    ({ base, head } = reviewDiff(repo, session, tour));
-  } catch {
-    /* no story/tour yet — addressPrompt degrades to its prior single-sided form */
-  }
-  let addressCtx: AddressRepoContext;
-  try {
-    addressCtx = addressRepoContext(repo, head);
-  } catch (e) {
-    return sendJson(res, 500, errorEvent('preflight', 'Could not prepare historical checkout', (e as Error).message));
-  }
-  // A resumed Codex task keeps its original cwd. For a pinned historical diff,
-  // keep it in the live repo and enforce read-only source behavior in the prompt
-  // instead of pretending the resumed task moved into our temporary worktree.
-  const resumedHistoricalTask = !!codexThreadId && addressCtx.historical;
-  if (resumedHistoricalTask) {
-    addressCtx.cleanup?.();
-    addressCtx = { runRepo: repo, historical: true };
-  }
-  const prompt = addressPrompt(target, base, head, {
-    historicalCheckout: addressCtx.historical,
-    originalRepo: addressCtx.historical ? repo : undefined,
-    resumedCodexTask: resumedHistoricalTask,
-    reviewMessages,
-  });
-  const runContext: RunContext = {
-    repoName: basename(repo), repoPath: repo, workflow: 'address',
-    agent, targetCount,
-    ...(codexThreadId ? { taskMode: 'resume', taskLabel: codexTaskLabel || 'Selected Codex task', taskId: codexThreadId } : {}),
-    ...(agent === 'codex' && input.newCodexTask === true ? { taskMode: 'new' } : {}),
-  };
-  if (agent === 'codex' && codexThreadId && codexDesktopAvailable()) {
-    sendAddressToCodexDesktop(res, runContext, title, codexThreadId, prompt);
-    return;
-  }
-  runWorkflow(res, addressCtx.runRepo, {
-    workflow: 'address',
-    title,
-    agent,
-    prompt,
-    agentOptions,
-    context: runContext,
-    // For address, the output is code: any non-read write to a non-JSON file.
-    isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && !ev.target.endsWith('.json'),
-    finish: (r) => {
-      const codeChanged = currentDiff(session) !== before;
-      const events: ProgressEvent[] = [];
-      let status: RunStatus = 'complete';
-      if (r.failure === 'startup') {
-        events.push(agentFailureEvent(r));
-        status = 'failed';
-      } else if (!r.ok) {
-        events.push(agentFailureEvent(r));
-        status = 'failed';
-      } else if (!resumedCodexTaskMatches(codexThreadId, r.threadId)) {
-        events.push(errorEvent(
-          'execution',
-          'Codex did not resume the selected task',
-          r.threadId
-            ? 'Codex connected to a different task. Re-select the intended task and try again.'
-            : 'Codex did not confirm the selected task id. Re-select the intended task and try again.',
-          `Expected ${codexThreadId}; received ${r.threadId || 'no task id'}.`,
-        ));
-        status = 'failed';
-      } else if (!codeChanged && !addressCtx.historical) {
-        events.push(warningEvent('No files changed', 'The agent answered without editing code.'));
-      }
-      if (status === 'complete' && agent === 'codex' && input.newCodexTask === true && r.threadId) {
-        void nameCodexTask(r.threadId, `diffStory review · ${basename(repo)}`).catch(() => {
-          // Naming is presentation-only; the persisted id still keeps continuity.
-        });
-      }
-      return {
-        status,
-        result: {
-          codeChanged,
-          ...(agent === 'codex' && r.threadId ? { codexThreadId: r.threadId } : {}),
-        },
-        events,
-      };
-    },
-    cleanup: addressCtx.cleanup,
-    fileScope: { repoPath: addressCtx.runRepo, changedFiles: [] },
-  });
 }
 
 /**
@@ -2876,6 +2548,7 @@ export function vscodeNavigationUrl(repo: string, file: string, line: number, co
     return null;
   }
   const url = new URL(`vscode://${VSCODE_BRIDGE_ID}/navigate`);
+  url.searchParams.set('repo', root);
   url.searchParams.set('path', target);
   url.searchParams.set('line', String(line));
   url.searchParams.set('column', String(column));

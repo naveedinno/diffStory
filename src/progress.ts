@@ -12,7 +12,7 @@ export type Phase =
 export type ErrorStage =
   | 'preflight' | 'startup' | 'execution' | 'validation' | 'output_missing';
 
-export type Workflow = 'guided_review' | 'detailed_audit' | 'address';
+export type Workflow = 'guided_review' | 'detailed_audit';
 export type FileAction = 'read' | 'edit' | 'write';
 export type ActivityKind = 'narration' | 'search' | 'plan' | 'web' | 'task' | 'other';
 export type RunStatus = 'complete' | 'failed' | 'stopped';
@@ -29,9 +29,6 @@ export interface RunContext {
   base?: string;
   head?: string;
   targetCount?: number;
-  taskMode?: 'new' | 'resume';
-  taskLabel?: string;
-  taskId?: string;
 }
 
 export type ProgressEvent =

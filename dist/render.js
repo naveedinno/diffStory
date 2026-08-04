@@ -9,7 +9,6 @@ import { themeBootstrapScript, themeControl } from './theme.js';
 import { buildReviewModel } from './view-model.js';
 import { intraLineMap } from './intra-line.js';
 import { renderSplitRow, renderUnifiedRow, renderHunkGap } from './diff-render.js';
-import { normalizeComment } from './comments.js';
 import { readWholeFile } from './git.js';
 function exactScopeFacts(model, excludedFiles) {
     return excludedFiles.reduce((facts, file) => ({
@@ -25,27 +24,11 @@ function exactScopeFacts(model, excludedFiles) {
     });
 }
 const FLAVOR_LABEL = {
-    change: 'Change request',
+    change: 'Fix request',
     question: 'Question',
-    nit: 'Nit',
+    nit: 'Note',
 };
-const FLAVOR_ICON = { change: '◆', question: '?', nit: '○' };
-const STATUS_LABEL = {
-    open: 'Open',
-    addressed: 'Needs verification',
-    resolved: 'Resolved',
-};
-const SEVERITY_LABEL = {
-    blocking: 'Blocking',
-    concern: 'Concern',
-    nit: 'Minor',
-};
-function commentSeverity(comment) {
-    if (comment.severity === 'blocking' || comment.severity === 'concern' || comment.severity === 'nit') {
-        return comment.severity;
-    }
-    return comment.type === 'nit' ? 'nit' : comment.type === 'change' ? 'blocking' : 'concern';
-}
+const FLAVOR_ICON = { change: '!', question: '?', nit: '·' };
 function commentSide(c) {
     return c.side === 'left' ? 'left' : 'right';
 }
@@ -56,12 +39,6 @@ function jsonForDataScript(value) {
         .replace(/>/g, '\\u003e')
         .replace(/\u2028/g, '\\u2028')
         .replace(/\u2029/g, '\\u2029');
-}
-function threadForTargets(targets, comments) {
-    const here = comments.filter((c) => targets.some((t) => t && commentSide(c) === t.side && c.file === t.file && c.line === t.line));
-    if (!here.length)
-        return '';
-    return `<div class="ds-thread">${here.map(commentHtml).join('')}</div>`;
 }
 export function renderPage(input) {
     const { repo, tour, files, baseLabel, comments, headRef } = input;
@@ -98,9 +75,9 @@ export function renderPage(input) {
     // Navigation is 0-based with the Overview as index 0, so step i lands at i + 1.
     // Every [data-goto-step] target (file chips, trust drawer) reads from this map.
     const stepIndexById = new Map(model.steps.map((s, i) => [s.id, i + 1]));
-    const openCount = comments.filter((c) => c.status !== 'resolved').length;
-    const blockingOpenCount = comments.filter((comment) => comment.status !== 'resolved' && commentSeverity(comment) === 'blocking').length;
-    const sendableCount = comments.filter((c) => c.status === 'open').length;
+    const queuedComments = comments.filter((comment) => comment.status === 'open');
+    const openCount = queuedComments.length;
+    const blockingOpenCount = queuedComments.filter((comment) => comment.type === 'change').length;
     const uncoveredCount = model.trust.uncovered.length;
     const focusedStory = !!tour.storyScope?.excludedFiles?.length;
     const feedbackHealthy = reviewState.feedbackHealth?.status !== 'invalid';
@@ -160,10 +137,10 @@ export function renderPage(input) {
                             : `<span class="ds-check">✓</span><span>${focusedStory ? 'Story covers its selected scope' : 'Story covers the rendered diff'}${excludedFiles.length ? ` · <b>${excludedFiles.length}</b> excluded ${plural(excludedFiles.length, 'file')} to inspect` : ''}</span><span class="ds-review-row-arrow">›</span>`}</button>`
         : '';
     // The Review tab is the only entrance to the review page, so it carries the
-    // signal the retired chip used to: the open-note count and one flag that says
+    // signal the retired chip used to: the queued-comment count and one flag that says
     // something on that page needs a decision. refreshCount() rebuilds this label
     // client-side from the same facts, so the two must stay in step.
-    const reviewTabLabel = `Review, ${openCount} unresolved ${plural(openCount, 'note')}${!feedbackHealthy
+    const reviewTabLabel = `Review, ${openCount} queued ${plural(openCount, 'comment')}${!feedbackHealthy
         ? ', feedback file needs repair'
         : indexDivergentFiles.length
             ? `, ${indexDivergentFiles.length} staged and working-tree ${plural(indexDivergentFiles.length, 'version')} differ`
@@ -321,11 +298,10 @@ ${BRAND_HEAD_LINKS}
       ${reviewPanel({
         repo,
         headRef,
-        comments,
+        comments: queuedComments,
         model,
         routeBase,
         openCount,
-        sendableCount,
         feedbackHealthy,
         feedbackRecovery,
         trustPill,
@@ -341,13 +317,11 @@ ${BRAND_HEAD_LINKS}
 ${driftDrawer(storyDrift)}
 ${commandPalette()}
 <div class="ds-selection-menu" data-selection-menu role="menu" hidden>
-  <button type="button" role="menuitem" data-selection-action="question">Ask</button>
-  <button type="button" role="menuitem" data-selection-action="change">Ask for change</button>
-  <button type="button" role="menuitem" data-selection-action="nit">Nit</button>
+  <button type="button" role="menuitem" data-selection-comment>Comment selected code</button>
 </div>
 <div class="ds-toast" id="ds-toast" role="status" aria-live="polite" aria-atomic="true" aria-relevant="additions text"></div>
 <noscript><div class="ds-empty">diffStory needs JavaScript to drive the review.</div></noscript>
-<script type="application/json" id="ds-initial-comments">${jsonForDataScript(comments)}</script>
+<script type="application/json" id="ds-initial-comments">${jsonForDataScript(queuedComments)}</script>
 <script>${progressPanelScript()}</script>
 <script>${PAGE_JS}</script>
 </body>
@@ -1185,7 +1159,7 @@ function storyUnifiedHead(s) {
     const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
     return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ''}</div>`;
 }
-function storyUnifiedRow(row, s, comments, blockIndex, intra) {
+function storyUnifiedRow(row, s, _comments, blockIndex, intra) {
     const target = row.type === 'del' && row.oldNo !== undefined
         ? { side: 'left', file: s.oldFile, line: row.oldNo }
         : row.newNo !== undefined
@@ -1197,7 +1171,7 @@ function storyUnifiedRow(row, s, comments, blockIndex, intra) {
     const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
     const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
     const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
-    return rowHtml + threadForTargets([target], comments);
+    return rowHtml;
 }
 function diffInner(s, comments) {
     if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
@@ -1265,7 +1239,7 @@ function diffHead(s) {
     </span>
   </div>`;
 }
-function sbsRow(row, s, comments, blockIndex, intra) {
+function sbsRow(row, s, _comments, blockIndex, intra) {
     const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
     const leftTarget = !s.context && (paired || !s.newFile) && row.oldNo !== undefined
         ? { side: 'left', file: paired?.before.file ?? s.oldFile, line: row.oldNo }
@@ -1280,7 +1254,7 @@ function sbsRow(row, s, comments, blockIndex, intra) {
         sides: intra?.get(row),
         moveTokens: rowMoveTokens(row, s),
     });
-    return rowHtml + threadForTargets([leftTarget, rightTarget], comments);
+    return rowHtml;
 }
 function rowMoveTokens(row, s) {
     const tokens = [];
@@ -1309,71 +1283,6 @@ function rowInFocusRange(row, s, [start, end]) {
     if (row.newNo !== undefined)
         return row.newNo >= start && row.newNo <= end;
     return s.kind === 'changed' && row.type === 'del' && start === 0 && end === 0;
-}
-function turnHtml(t) {
-    if (t.role === 'user') {
-        return `<div class="ds-comment-body ds-turn ds-turn-user ds-md">${renderMarkdown(t.text)}</div>`;
-    }
-    return `<div class="ds-reply ds-turn">
-        <span class="ds-reply-av">◈</span>
-        <div class="ds-reply-main">
-          <div class="ds-reply-who"><span class="ds-reply-name">${esc(APP_BRAND)}</span><span class="ds-ai-badge">AI</span></div>
-          <div class="ds-reply-body ds-md">${renderMarkdown(t.text)}</div>
-        </div>
-      </div>`;
-}
-export function commentHtml(c0) {
-    const c = normalizeComment(c0);
-    const type = ['change', 'question', 'nit'].includes(c.type)
-        ? c.type
-        : 'change';
-    const turns = c.turns ?? [];
-    const turnsHtml = turns.map(turnHtml).join('');
-    const hasReply = turns.some((t) => t.role === 'ai');
-    const resolved = c.status === 'resolved';
-    const severity = commentSeverity(c);
-    const selectionLabel = commentSide(c) === 'left' ? 'Selected old side' : 'Selected new side';
-    const selectionText = c.selectedText?.replace(/\s+/g, ' ').trim() ?? '';
-    const selectionPreview = selectionText.length > 82 ? `${selectionText.slice(0, 79)}…` : selectionText;
-    const selection = c.selectedText
-        ? `<details class="ds-comment-selection"><summary><span class="ds-comment-selection-label">${selectionLabel}</span><code class="ds-comment-selection-preview">${esc(selectionPreview)}</code><b class="ds-comment-selection-toggle" aria-hidden="true"></b></summary><code class="ds-comment-selection-code">${esc(c.selectedText)}</code></details>`
-        : '';
-    return `<div class="ds-comment status-${c.status}" data-comment-id="${esc(c.id)}" data-status="${c.status}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}" data-comment-severity="${severity}"${hasReply ? ' data-hasreply="1"' : ''}>
-    <div class="ds-comment-card flavor-${type}">
-      <div class="ds-comment-head">
-        <span class="ds-flavor-ico">${FLAVOR_ICON[type]}</span>
-        <span class="ds-flavor-label">${FLAVOR_LABEL[type]}</span>
-        <span class="ds-dot"></span>
-        <span class="ds-comment-author">${esc(authorOf(c))}</span>
-        <span class="ds-severity ds-severity-${severity}">${SEVERITY_LABEL[severity]}</span>
-        <span class="ds-flex"></span>
-        <span class="ds-statusbadge"><span class="ds-dot"></span>${STATUS_LABEL[c.status]}</span>
-        <details class="ds-comment-menu">
-          <summary aria-label="Conversation actions">•••</summary>
-          <div class="ds-comment-menu-pop">
-            <button data-resolve>${resolved ? 'Reopen' : 'Resolve'}</button>
-            <button class="ds-del" data-delete>Delete conversation</button>
-          </div>
-        </details>
-      </div>
-      ${selection}
-      <div class="ds-comment-body ds-md">${renderMarkdown(c.body)}</div>
-      ${turnsHtml}
-      <div class="ds-thread-composer">
-        <textarea class="ds-thread-ta" data-thread-ta aria-label="Reply to ${esc(APP_BRAND)} about ${esc(c.file)}, line ${c.line}" placeholder="Reply to ${esc(APP_BRAND)}…" rows="1"></textarea>
-        <div class="ds-thread-composer-foot">
-          <div class="ds-agent-route"><span class="ds-agent-route-icon" aria-hidden="true">◈</span><span>Agent task</span><strong data-agent-target-name>Choose task</strong><button data-agent-target-select type="button">Change</button></div>
-          <div class="ds-thread-actions">
-            <button class="ds-ghost ds-thread-add" data-thread-add title="Save without sending to the agent">Save</button>
-            <button class="ds-btn ds-btn-solid ds-thread-send" data-thread-send data-agent-target-cta>Choose task &amp; ask</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-function authorOf(_c) {
-    return 'You';
 }
 // ---- all files ----
 function filePanel(f, i, _stepIndexById) {
@@ -1481,30 +1390,44 @@ function anchorLabel(state) {
         return 'Line anchor';
     return 'Anchor current';
 }
-function feedbackCard(repo, headRef, raw) {
-    const c = normalizeComment(raw);
+function feedbackCard(repo, headRef, c) {
     const anchor = commentAnchorState(repo, headRef, c);
-    const latestAgent = [...(c.turns ?? [])].reverse().find((turn) => turn.role === 'ai');
-    const verify = c.status === 'addressed';
-    const severity = commentSeverity(c);
     const currentExcerpt = feedbackCurrentExcerpt(repo, headRef, c, anchor);
-    return `<article class="ds-feedback-card status-${c.status}" data-feedback-card data-feedback-status="${c.status}" data-feedback-anchor="${anchor}" data-comment-id="${esc(c.id)}" data-feedback-severity="${severity}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}">
+    const flavorControls = ['change', 'question', 'nit'].map((type) => `<button type="button" data-edit-flavor="${type}" aria-pressed="${c.type === type}">${FLAVOR_LABEL[type]}</button>`).join('');
+    return `<article class="ds-feedback-card" data-feedback-card data-feedback-anchor="${anchor}" data-comment-id="${esc(c.id)}" data-comment-file="${esc(c.file)}" data-comment-line="${c.line}" data-comment-step="${esc(c.step ?? '')}">
     <div class="ds-feedback-head">
       <span class="ds-flavor-ico">${FLAVOR_ICON[c.type] ?? FLAVOR_ICON.change}</span>
-      <span class="ds-severity ds-severity-${severity}">${SEVERITY_LABEL[severity]}</span>
+      <span class="ds-feedback-type">${FLAVOR_LABEL[c.type] ?? FLAVOR_LABEL.change}</span>
       <span class="ds-feedback-path">${esc(c.file)}<span class="ds-dim">:${c.line}</span></span>
       <span class="ds-flex"></span>
       <span class="ds-anchorbadge is-${anchor}">${anchorLabel(anchor)}</span>
     </div>
     ${c.selectedText ? `<div class="ds-feedback-compare"><div><span>Commented on</span><code class="ds-feedback-selection">${esc(c.selectedText)}</code></div>${currentExcerpt ? `<div><span>${anchor === 'moved' ? 'Current location' : 'Current region'}</span><code class="ds-feedback-selection is-current">${esc(currentExcerpt)}</code></div>` : ''}</div>` : ''}
     <div class="ds-feedback-message ds-md">${renderMarkdown(c.body)}</div>
-    ${latestAgent ? `<div class="ds-feedback-reply ds-md"><span>${esc(APP_BRAND)}</span>${renderMarkdown(latestAgent.text)}</div>` : ''}
+    <div class="ds-queue-edit" data-comment-editor hidden>
+      <div class="ds-queue-edit-types" role="group" aria-label="Comment type">${flavorControls}</div>
+      <textarea data-edit-body rows="3" aria-label="Edit review comment">${esc(c.body)}</textarea>
+      <div class="ds-queue-edit-actions"><button type="button" class="ds-feedback-action" data-edit-cancel>Cancel</button><button type="button" class="ds-btn ds-btn-solid" data-edit-save>Save</button></div>
+    </div>
     <div class="ds-feedback-actions">
-      <button type="button" class="ds-feedback-action" data-goto-comment="${esc(c.id)}">Show in diff</button>
-      ${verify ? `<button type="button" class="ds-feedback-action" data-reopen-comment="${esc(c.id)}">Reopen</button><button type="button" class="ds-btn ds-btn-solid" data-accept-fix="${esc(c.id)}">Accept fix</button>` : ''}
-      ${c.status === 'resolved' ? `<button type="button" class="ds-feedback-action" data-reopen-comment="${esc(c.id)}">Reopen</button>` : ''}
+      <button type="button" class="ds-feedback-action" data-goto-comment="${esc(c.id)}">Go to code</button>
+      <button type="button" class="ds-feedback-action" data-edit-comment="${esc(c.id)}">Edit</button>
+      <button type="button" class="ds-feedback-action ds-danger" data-remove-comment="${esc(c.id)}">Remove</button>
     </div>
   </article>`;
+}
+function feedbackGroups(repo, headRef, comments) {
+    if (!comments.length) {
+        return '<div class="ds-drawer-empty">No queued comments. Select code in the diff and press C.</div>';
+    }
+    const sorted = [...comments].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.createdAt.localeCompare(b.createdAt));
+    const groups = new Map();
+    for (const comment of sorted)
+        groups.set(comment.file, [...(groups.get(comment.file) ?? []), comment]);
+    return [...groups].map(([file, fileComments]) => `<section class="ds-feedback-group" data-feedback-group="${esc(file)}">
+    <div class="ds-feedback-group-head"><code>${esc(file)}</code><span>${fileComments.length} ${plural(fileComments.length, 'comment')}</span></div>
+    ${fileComments.map((comment) => feedbackCard(repo, headRef, comment)).join('')}
+  </section>`).join('');
 }
 function feedbackCurrentExcerpt(repo, headRef, comment, state) {
     if (!comment.selectedText || (state !== 'changed' && state !== 'moved'))
@@ -1521,7 +1444,7 @@ function feedbackCurrentExcerpt(repo, headRef, comment, state) {
 /** The review page's tabs, in the order a reviewer meets them. */
 const REVIEW_TABS = [
     { id: 'coverage', label: 'Coverage' },
-    { id: 'notes', label: 'Notes' },
+    { id: 'notes', label: 'Comments' },
     { id: 'challenge', label: 'Challenge' },
     { id: 'actions', label: 'Actions' },
 ];
@@ -1529,21 +1452,18 @@ const REVIEW_TABS = [
  * The Review view: a full page rather than a popover stacked on two drawers.
  *
  * Everything a reviewer needs to decide lives here — status, coverage evidence,
- * every note with its filters, the challenge pass, and the actions — because a
+ * every queued comment, the challenge pass, and the actions — because a
  * cramped modal was hiding the one signal that says whether the change is safe
  * to accept. Stacking all of it cost the other extreme: a single column so tall
  * that reaching the actions meant scrolling past every unexplained range.
  *
- * So the page is tabbed, and the verdict is not one of the tabs. The unresolved
+ * So the page is tabbed, and the verdict is not one of the tabs. The queued
  * count and the trust pill stay pinned above the tab bar, visible from every
  * panel, because a reviewer reading their notes should not have to scroll back
  * to remember whether the story still covers the diff.
  */
-function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sendableCount, feedbackHealthy, feedbackRecovery, trustPill, stepIndexById, excludedFiles, indexDivergentFiles, storyless, }) {
-    const addressed = comments.filter((comment) => comment.status === 'addressed').length;
-    const cards = comments.length
-        ? comments.map((comment) => feedbackCard(repo, headRef, comment)).join('')
-        : '<div class="ds-drawer-empty">No notes yet.</div>';
+function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, feedbackHealthy, feedbackRecovery, trustPill, stepIndexById, excludedFiles, indexDivergentFiles, storyless, }) {
+    const cards = feedbackGroups(repo, headRef, comments);
     // The coverage tab's flag has no honest value until the lazy coverage check
     // answers, so a pending page ships it empty and the client fills it in. The
     // mark is decorative; the tab's own label is what a screen reader reads, so
@@ -1563,7 +1483,7 @@ function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sen
     }).join('');
     return `<div class="ds-reviewpage" data-review-tab="coverage">
   <div class="ds-reviewsummary" data-review-section="status" tabindex="-1">
-    <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> unresolved ${plural(openCount, 'note')}</span></span>
+    <span class="ds-review-summary-label"><span class="ds-dot ds-dot-amber"></span><span><b>${openCount}</b> queued ${plural(openCount, 'comment')}</span></span>
     ${!feedbackHealthy ? `<div class="ds-feedback-health-alert" role="alert"><strong>Feedback file needs repair</strong><span>${esc(feedbackRecovery)}</span></div>` : ''}
     ${trustPill}
   </div>
@@ -1573,14 +1493,14 @@ function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sen
   </div>
   <div class="ds-reviewpanel" id="ds-reviewpanel-notes" role="tabpanel" aria-labelledby="ds-reviewtab-notes" data-review-panel="notes" tabindex="0" hidden>
   <section class="ds-reviewpage-section" data-review-section="notes" aria-labelledby="ds-reviewpage-notes-h" tabindex="-1">
-    <h2 class="ds-reviewpage-h" id="ds-reviewpage-notes-h">Notes <span class="ds-option-count" data-feedback-count${comments.length ? '' : ' hidden'}>${comments.length}</span>${addressed ? `<span class="ds-reviewpage-sub">${addressed} to verify</span>` : ''}</h2>
-    <div class="ds-feedback-filters" data-feedback-tools role="group" aria-label="Filter notes">
-      <button class="is-active" data-feedback-filter="all" aria-pressed="true">All</button>
-      <button data-feedback-filter="blocking" aria-pressed="false">Blocking</button>
-      <button data-feedback-filter="addressed" aria-pressed="false">Needs verification</button>
-      <button data-feedback-filter="open" aria-pressed="false">Open</button>
-      <button data-feedback-filter="changed" aria-pressed="false">Code changed</button>
-      <button data-feedback-filter="resolved" aria-pressed="false">Resolved</button>
+    <div class="ds-queue-head">
+      <div class="ds-queue-title">
+        <h2 class="ds-reviewpage-h" id="ds-reviewpage-notes-h">Review comments <span class="ds-reviewpage-sub" data-queue-summary${openCount ? '' : ' hidden'}>${openCount} queued</span></h2>
+        <p>Collect comments while you review, then copy the complete queue when you are ready.</p>
+      </div>
+      <div class="ds-queue-actions">
+        <button type="button" class="ds-btn ds-btn-solid" data-copy-comments="queued"${openCount ? '' : ' disabled'}>Copy all</button>
+      </div>
     </div>
     <div class="ds-feedback-list" data-feedback-view="feedback">${cards}</div>
   </section>
@@ -1599,20 +1519,6 @@ function reviewPanel({ repo, headRef, comments, model, routeBase, openCount, sen
         <span class="ds-review-option-title">Saved reviews</span>
         <span class="ds-review-option-desc">Open older review sessions for this repository.</span>
       </a>
-      <button class="ds-review-option ds-agent-target is-empty" data-agent-target-control data-agent-target-select type="button" title="Choose the Codex task that receives review questions">
-        <span class="ds-review-option-title"><span class="ds-agent-target-icon" aria-hidden="true">◈</span> Agent task · <span data-agent-target-name>Choose task</span></span>
-        <span class="ds-review-option-desc">Used only when you send feedback or ask for another pass.</span>
-      </button>
-      <button class="ds-review-option" data-address-all${sendableCount ? '' : ' disabled'} title="Resend every open comment to your agent">
-        <span class="ds-review-option-title">Resend open comments</span>
-        <span class="ds-review-option-desc" data-agent-target-batch>Choose an agent task first.</span>
-      </button>
-      <button class="ds-review-option" data-copy-comments="open"${sendableCount ? '' : ' disabled'} title="Copy open comments as text">
-        <span class="ds-review-option-title">Copy open comments</span>
-      </button>
-      <button class="ds-review-option" data-copy-comments="all"${comments.length ? '' : ' disabled'} title="Copy every comment, including resolved ones and replies">
-        <span class="ds-review-option-title">Copy full review</span>
-      </button>
     </div>
   </section>
   </div>

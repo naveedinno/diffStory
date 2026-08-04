@@ -7,16 +7,7 @@ import {
   codexStoryModelChoices,
   codexTaskBinary,
   listCodexStoryModels,
-  listCodexTasks,
-  nameCodexTask,
-  validCodexThreadId,
 } from '../dist/codex-tasks.js';
-
-test('Codex task ids are constrained to persisted UUIDs', () => {
-  assert.equal(validCodexThreadId('019f5079-f420-7423-8aa8-cf9f6a079e03'), true);
-  assert.equal(validCodexThreadId('--last'), false);
-  assert.equal(validCodexThreadId('not-a-task'), false);
-});
 
 test('configured Codex task runtime overrides platform discovery', () => {
   const before = process.env.DIFFSTORY_CODEX_BINARY;
@@ -26,115 +17,6 @@ test('configured Codex task runtime overrides platform discovery', () => {
   } finally {
     if (before === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
     else process.env.DIFFSTORY_CODEX_BINARY = before;
-  }
-});
-
-test('task discovery speaks app-server JSONL and returns repository chat metadata', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ds-codex-tasks-'));
-  const fake = join(dir, 'codex');
-  writeFileSync(
-    fake,
-    `#!/usr/bin/env node
-let buffer = '';
-process.stdin.on('data', (chunk) => {
-  buffer += chunk.toString();
-  const lines = buffer.split('\\n');
-  buffer = lines.pop() || '';
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const message = JSON.parse(line);
-    if (message.id === 1) {
-      process.stdout.write(JSON.stringify({ id: 1, result: { userAgent: 'fake' } }) + '\\n');
-    }
-    if (message.id === 2) {
-      process.stdout.write(JSON.stringify({
-        id: 2,
-        result: {
-          data: [
-            {
-              id: '019f5079-f420-7423-8aa8-cf9f6a079e03',
-              name: 'Add Codex session selector',
-              preview: 'Keep review questions in the same task.',
-              source: 'vscode',
-              updatedAt: 1783761978
-            },
-            {
-              id: '019f502b-61f5-7f03-a3e4-2b71b778e3a8',
-              name: null,
-              preview: 'Improve the story prompt\\nwith better context.',
-              source: 'cli',
-              updatedAt: 1783761862
-            },
-            {
-              id: '019f5042-9586-7993-8f33-3db3f13163df',
-              name: null,
-              preview: 'Use the diffstory-storyteller skill to generate a story.',
-              source: 'exec',
-              updatedAt: 1783757974
-            }
-          ]
-        }
-      }) + '\\n');
-    }
-  }
-});
-`,
-  );
-  chmodSync(fake, 0o755);
-  try {
-    const tasks = await listCodexTasks('/repo/example', { binary: fake, timeoutMs: 3000 });
-    assert.equal(tasks.length, 2);
-    assert.deepEqual(tasks[0], {
-      id: '019f5079-f420-7423-8aa8-cf9f6a079e03',
-      title: 'Add Codex session selector',
-      preview: 'Keep review questions in the same task.',
-      source: 'Codex Desktop',
-      updatedAt: 1783761978,
-    });
-    assert.equal(tasks[1].title, 'Improve the story prompt with better context.');
-    assert.equal(tasks[1].source, 'Codex CLI');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('new Codex tasks are named through the current app-server contract', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ds-codex-task-name-'));
-  const fake = join(dir, 'codex');
-  writeFileSync(
-    fake,
-    `#!/usr/bin/env node
-let buffer = '';
-process.stdin.on('data', (chunk) => {
-  buffer += chunk.toString();
-  const lines = buffer.split('\\n');
-  buffer = lines.pop() || '';
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const message = JSON.parse(line);
-    if (message.id === 1) process.stdout.write(JSON.stringify({ id: 1, result: {} }) + '\\n');
-    if (message.id === 2) {
-      if (message.method !== 'thread/name/set') {
-        process.stdout.write(JSON.stringify({ id: 2, error: { message: 'wrong method: ' + message.method } }) + '\\n');
-        continue;
-      }
-      if (message.params?.threadId !== '019f5079-f420-7423-8aa8-cf9f6a079e03') process.exit(4);
-      if (message.params?.name !== 'diffStory review · example') process.exit(5);
-      process.stdout.write(JSON.stringify({ id: 2, result: {} }) + '\\n');
-    }
-  }
-});
-`,
-  );
-  chmodSync(fake, 0o755);
-  try {
-    await nameCodexTask(
-      '019f5079-f420-7423-8aa8-cf9f6a079e03',
-      'diffStory review · example',
-      { binary: fake, timeoutMs: 3000 },
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
 });
 

@@ -1,64 +1,14 @@
-// Repository-scoped Codex task discovery. The Desktop app can bundle a newer
-// Codex runtime than the user's PATH, so prefer that binary for both listing and
-// resuming tasks created by Desktop.
+// The Desktop app can bundle a newer Codex runtime than the user's PATH, so use
+// that runtime when reading the live story-generation model catalog.
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 const MAC_DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
-const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function codexTaskBinary() {
     const configured = process.env.DIFFSTORY_CODEX_BINARY?.trim();
     if (configured)
         return configured;
     return existsSync(MAC_DESKTOP_CODEX) ? MAC_DESKTOP_CODEX : 'codex';
 }
-export function validCodexThreadId(value) {
-    return typeof value === 'string' && THREAD_ID.test(value);
-}
-function sourceLabel(source) {
-    if (typeof source === 'string') {
-        if (source === 'vscode')
-            return 'Codex Desktop';
-        if (source === 'appServer')
-            return 'Codex app';
-        if (source === 'exec')
-            return 'Codex exec';
-        if (source === 'cli')
-            return 'Codex CLI';
-    }
-    return 'Codex';
-}
-function firstLine(value) {
-    return typeof value === 'string' ? (value.split(/\r?\n/)[0] ?? '').trim() : '';
-}
-function compact(value, max) {
-    const text = value.replace(/\s+/g, ' ').trim();
-    return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
-}
-function normalizeTask(value) {
-    if (!value || typeof value !== 'object')
-        return null;
-    const raw = value;
-    if (!validCodexThreadId(raw.id))
-        return null;
-    const preview = compact(typeof raw.preview === 'string' ? raw.preview : '', 180);
-    const name = compact(typeof raw.name === 'string' ? raw.name : '', 100);
-    // Unnamed exec tasks are background runs (story generation, one-off probes),
-    // not conversations a reviewer intentionally created or named.
-    if (raw.source === 'exec' && !name)
-        return null;
-    return {
-        id: raw.id,
-        title: name || compact(firstLine(preview), 100) || 'Untitled Codex task',
-        preview,
-        updatedAt: Number.isFinite(raw.updatedAt) ? Number(raw.updatedAt) : 0,
-        source: sourceLabel(raw.source),
-    };
-}
-/**
- * Ask the installed Codex app-server for top-level tasks rooted at `repo`.
- * Subagent source kinds are deliberately omitted: the picker should show the
- * user's chats, not guardian/reviewer helper runs.
- */
 function appServerRequest(binary, method, params, timeoutMs) {
     return new Promise((resolve, reject) => {
         const child = spawn(binary, ['app-server', '--stdio'], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -131,17 +81,6 @@ function appServerRequest(binary, method, params, timeoutMs) {
         });
     });
 }
-export async function listCodexTasks(repo, options = {}) {
-    const result = await appServerRequest(options.binary ?? codexTaskBinary(), 'thread/list', {
-        cwd: repo,
-        limit: 30,
-        sortKey: 'updated_at',
-        sortDirection: 'desc',
-        sourceKinds: ['cli', 'vscode', 'exec', 'appServer', 'unknown'],
-    }, options.timeoutMs ?? 8000);
-    const data = Array.isArray(result?.data) ? result.data : [];
-    return data.map(normalizeTask).filter((task) => task !== null);
-}
 function normalizeCatalogModel(value) {
     if (!value || typeof value !== 'object')
         return null;
@@ -189,12 +128,4 @@ export function codexStoryModelChoices(value) {
 export async function listCodexStoryModels(options = {}) {
     const result = await appServerRequest(options.binary ?? codexTaskBinary(), 'model/list', { includeHidden: false, limit: 100 }, options.timeoutMs ?? 8000);
     return codexStoryModelChoices(result);
-}
-export async function nameCodexTask(threadId, name, options = {}) {
-    if (!validCodexThreadId(threadId))
-        throw new Error('Invalid Codex task id.');
-    const cleanName = compact(name, 100);
-    if (!cleanName)
-        throw new Error('Codex task name is required.');
-    await appServerRequest(options.binary ?? codexTaskBinary(), 'thread/name/set', { threadId, name: cleanName }, options.timeoutMs ?? 8000);
 }

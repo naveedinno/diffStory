@@ -24,7 +24,6 @@ test('markup exposes the plan-centric regions for both variants', () => {
     assert.match(m, new RegExp(`data-variant="${variant}"`));
     assert.match(m, /ds-pp-miles/);
     assert.match(m, /ds-pp-note/);
-    assert.match(m, /data-pp-task-link/);
     assert.doesNotMatch(m, /data-variant="(?:inline|floating)" hidden aria-live=/, 'keeps the frequently changing panel outside the live region');
     // The old noisy regions are gone.
     assert.doesNotMatch(m, /ds-pp-timeline/);
@@ -54,11 +53,7 @@ test('script defines ProgressPanel and handles every event type incl. plan', () 
   assert.ok(s.includes('Recovering the why'));
   assert.ok(s.includes('Designing the reading path'));
   assert.ok(s.includes('Writing the story'));
-  assert.match(s, /selected task/);
-  assert.match(s, /Sending to /);
-  assert.match(s, /els\.repo\.title=ev\.taskId\?\('Codex task '\+ev\.taskId\):''/);
-  assert.match(s, /codex:\/\/threads\/['"]?\+encodeURIComponent\(ev\.taskId\)/);
-  assert.match(s, /Open ['"]?\+\(ev\.taskLabel\|\|'selected Codex task'\)\+' in Codex'/);
+  assert.doesNotMatch(s, /selected Codex task|taskMode|codex:\/\/threads/);
 });
 
 test('elapsed time stays visual while only meaningful lifecycle changes announce', () => {
@@ -107,7 +102,6 @@ test('failed runs show one human error and keep diagnostics collapsed', () => {
   assert.match(css, /@media \(max-width:520px\)\{[\s\S]*\.ds-pp-head\{display:grid/);
   assert.match(css, /\.ds-pp-agent\{[^}]*text-overflow:ellipsis/);
   assert.match(css, /\.ds-pp-repo\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
-  assert.match(css, /\.ds-pp-task-link\{/);
 });
 
 test("'>>' note lines never echo into the mono activity line", () => {

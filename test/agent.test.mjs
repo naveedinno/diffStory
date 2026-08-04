@@ -3,11 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  onPath, storyPrompt, normalizeStoryMode, agentCommand, addressPrompt,
+  onPath, storyPrompt, normalizeStoryMode, agentCommand,
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
   codexErrorMessage, summarizeAgentFailure,
-  codexThreadIdFromOutput,
-  resumedCodexTaskMatches,
   selectAvailableAgent,
   storyRepairPrompt,
 } from '../dist/agent.js';
@@ -374,86 +372,6 @@ test('normalizeCodexRunOptions keeps only supported story-generation options', (
   });
 });
 
-test('addressPrompt targets specific ids via the address-review skill', () => {
-  const p = addressPrompt(['c_a', 'c_b']);
-  assert.ok(p.includes('address-review'));
-  assert.ok(p.includes('diffstory-storyteller'));
-  assert.ok(p.includes('c_a, c_b'));
-  assert.ok(p.includes('.diffstory/comments.json'));
-  assert.ok(p.includes('selected text'));
-  assert.ok(!p.includes('file:line'));
-  assert.ok(p.includes('Do not ask questions'));
-});
-
-test('addressPrompt handles the all-open case', () => {
-  const p = addressPrompt('all');
-  assert.ok(p.includes('every comment whose status is "open"'));
-  assert.ok(p.includes('address-review'));
-});
-
-test('addressPrompt puts the reviewer message first so it is visible in a resumed Codex task', () => {
-  const p = addressPrompt(['c_question'], undefined, undefined, {
-    reviewMessages: [{ id: 'c_question', text: 'are you sure sir?' }],
-  });
-  assert.ok(p.startsWith('are you sure sir?\n\n---\n\n'));
-  assert.ok(p.includes('comments with these ids: c_question'));
-});
-
-test('addressPrompt surfaces every reviewer message in a batch run', () => {
-  const p = addressPrompt('all', undefined, undefined, {
-    reviewMessages: [
-      { id: 'c_one', text: 'why is this nullable?' },
-      { id: 'c_two', text: 'please rename this' },
-    ],
-  });
-  assert.ok(p.startsWith('Review these diffStory messages:'));
-  assert.ok(p.includes('1. why is this nullable? (comment c_one)'));
-  assert.ok(p.includes('2. please rename this (comment c_two)'));
-});
-
-test('addressPrompt grounds answers in both sides when a base ref is given', () => {
-  const p = addressPrompt(['c_a'], 'origin/main');
-  assert.ok(p.includes('origin/main'));               // names the target side
-  assert.ok(p.includes('git show origin/main:'));     // tells it how to read the other side
-  assert.ok(p.includes('git diff origin/main --'));   // and how to see the change itself
-  assert.ok(p.includes('working tree'));              // current side stays the working tree
-  assert.ok(p.includes('side: "left"'));
-  assert.ok(p.includes('side: "right"'));
-});
-
-test('addressPrompt grounds on base..head when both refs are committed', () => {
-  const p = addressPrompt(['c_a'], 'origin/main', 'feature/x');
-  assert.ok(p.includes('git show origin/main:'));        // target side
-  assert.ok(p.includes('git show feature/x:'));          // current side is a ref, not the tree
-  assert.ok(p.includes('git diff origin/main..feature/x --'));
-  assert.ok(!p.includes('working tree'));                // not the working-tree variant
-});
-
-test('addressPrompt can describe a historical temporary checkout', () => {
-  const p = addressPrompt(['c_a'], 'abc123', 'def456', {
-    historicalCheckout: true,
-    originalRepo: '/repo/live',
-  });
-  assert.ok(p.includes('temporary checkout of "def456"'));
-  assert.ok(p.includes('/repo/live'));
-  assert.ok(p.includes('Do not edit source files in this historical checkout'));
-  assert.match(p, /appending a new ai turn/);
-});
-
-test('addressPrompt stays single-sided when no base ref is known', () => {
-  const p = addressPrompt(['c_a']);
-  assert.ok(!p.includes('Two-sided grounding contract'));
-  assert.ok(!p.includes('git show'));
-});
-
-test('addressPrompt tells the agent to append an ai turn, not overwrite a reply', () => {
-  const p = addressPrompt(['c_1'], 'main');
-  assert.match(p, /"turns"/);
-  assert.match(p, /append a new turn/i);
-  assert.match(p, /"role":"ai"/);
-  assert.match(p, /latest "user" message/i);
-});
-
 test('storyRepairPrompt preserves unaffected steps and targets one repair', () => {
   const prompt = storyRepairPrompt({ action: 'split', stepId: 's2', file: 'src/a.ts', base: 'main' });
   assert.match(prompt, /Split story step "s2" in src\/a\.ts/);
@@ -485,21 +403,7 @@ test('streamCommand uses stream-json for claude and exec for codex', () => {
   ]);
 });
 
-test('streamCommand resumes a selected Codex task with the runtime that listed it', () => {
-  const id = '019f5079-f420-7423-8aa8-cf9f6a079e03';
-  assert.deepEqual(
-    streamCommand('codex', 'ADDRESS', undefined, {
-      codex: { binary: '/Applications/ChatGPT.app/Contents/Resources/codex', threadId: id, json: true },
-    }),
-    [
-      '/Applications/ChatGPT.app/Contents/Resources/codex',
-      ['exec', 'resume', '--json', id, 'ADDRESS'],
-    ],
-  );
-});
-
-test('Codex JSONL progress exposes useful events and the persistent task id', () => {
-  const id = '019f5079-f420-7423-8aa8-cf9f6a079e03';
+test('Codex JSONL progress exposes useful story-generation events', () => {
   assert.deepEqual(
     parseCodexStreamLine(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Done.' } })),
     [{ type: 'text', data: 'Done.' }],
@@ -508,17 +412,7 @@ test('Codex JSONL progress exposes useful events and the persistent task id', ()
     parseCodexStreamLine(JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'npm test' } })),
     [{ type: 'command', command: 'npm test', label: '$ npm test' }],
   );
-  assert.equal(
-    codexThreadIdFromOutput(JSON.stringify({ type: 'thread.started', thread_id: id }) + '\n'),
-    id,
-  );
-  assert.deepEqual(
-    parseCodexStreamLine(JSON.stringify({ type: 'thread.started', thread_id: id })),
-    [{ type: 'activity', kind: 'task', label: 'Message added to selected Codex task · …6a079e03' }],
-  );
-  assert.equal(resumedCodexTaskMatches(id, id), true);
-  assert.equal(resumedCodexTaskMatches(id, undefined), false);
-  assert.equal(resumedCodexTaskMatches(id, '019f5079-f420-7423-8aa8-cf9f00000000'), false);
+  assert.deepEqual(parseCodexStreamLine(JSON.stringify({ type: 'thread.started', thread_id: 'unused' })), []);
 });
 
 test('classifyTool maps tools to the most specific progress event', () => {
@@ -905,10 +799,4 @@ test('both authoring prompts pin the HTML format contract', () => {
   }
   const repair = storyRepairPrompt({ action: 'rewrite', base: 'main', stepId: 's1' });
   assert.match(repair, /restricted HTML, never Markdown/);
-});
-
-test('review threads stay Markdown, so the two surfaces do not bleed', () => {
-  const skill = readFileSync(new URL('../skills/address-review/SKILL.md', import.meta.url), 'utf8');
-  assert.match(skill, /Turn text is \*\*Markdown\*\*, not HTML/);
-  assert.match(skill, /comments and replies stay Markdown/);
 });

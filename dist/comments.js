@@ -1,5 +1,5 @@
-// Read/write the reviewer's comments. This is the handoff file the agent consumes
-// during /address-review, so the shape is deliberately stable and human-readable.
+// Read/write the reviewer's queued comments. The shape stays human-readable so
+// Copy all can produce a portable review without coupling comments to an agent.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -16,18 +16,6 @@ export class InvalidCommentStoreError extends Error {
         this.name = 'InvalidCommentStoreError';
         this.health = health;
     }
-}
-/**
- * Back-compat: a legacy single `reply` reads as one `ai` turn so every caller can
- * treat `body` + `turns` as the whole conversation. Non-mutating; leaves `reply` in place.
- */
-export function normalizeComment(c) {
-    if (Array.isArray(c.turns) && c.turns.length)
-        return c;
-    if (typeof c.reply === 'string' && c.reply.trim()) {
-        return { ...c, turns: [{ role: 'ai', text: c.reply, at: c.createdAt }] };
-    }
-    return c;
 }
 export function loadCommentsWithHealth(repo) {
     const path = commentsPath(repo);
@@ -64,7 +52,7 @@ export function loadCommentsWithHealth(repo) {
         }
     }
     return {
-        comments: data.map(normalizeComment),
+        comments: data,
         health: { status: 'healthy', source: 'file' },
         sourceDigest: hashSource(raw),
     };
@@ -109,19 +97,11 @@ export function addComment(repo, input) {
     if (typeof input.file !== 'string' || !input.file)
         throw new Error('comment file is required');
     const type = TYPES.includes(input.type) ? input.type : 'change';
-    const severity = SEVERITIES.includes(input.severity)
-        ? input.severity
-        : type === 'nit'
-            ? 'nit'
-            : type === 'change'
-                ? 'blocking'
-                : 'concern';
     const comment = {
         id: nextId(),
         file: input.file,
         line: Number.isFinite(input.line) ? Math.trunc(input.line) : 0,
         type,
-        severity,
         body: input.body.trim(),
         status: 'open',
         createdAt: new Date().toISOString(),
@@ -164,40 +144,26 @@ export function deleteComment(repo, id) {
     saveComments(repo, next, loaded.sourceDigest);
     return true;
 }
-/**
- * Update a comment's status (the reviewer resolving / reopening a thread).
- * Returns the updated comment, or null if no comment has that id. The agent's
- * `reply` and everything else is preserved.
- */
-export function setCommentStatus(repo, id, status) {
-    if (!STATUSES.includes(status)) {
-        throw new Error(`status must be one of ${STATUSES.join(', ')}`);
+/** Edit the reviewer-owned fields of an already queued comment. */
+export function updateComment(repo, id, input) {
+    if (!input || (input.type === undefined && input.body === undefined)) {
+        throw new Error('comment type or body is required');
     }
     const loaded = writableComments(repo);
     const target = loaded.comments.find((c) => c.id === id);
     if (!target)
         return null;
-    target.status = status;
-    saveComments(repo, loaded.comments, loaded.sourceDigest);
-    return target;
-}
-/**
- * Reviewer follow-up: append a `user` turn to a comment's conversation and reopen the
- * thread so the agent re-engages. Returns the updated comment, or null if no comment has
- * that id. Throws on empty text.
- */
-export function appendUserMessage(repo, id, text) {
-    const body = typeof text === 'string' ? text.trim() : '';
-    if (!body)
-        throw new Error('message text is required');
-    const loaded = writableComments(repo);
-    const target = loaded.comments.find((c) => c.id === id);
-    if (!target)
-        return null;
-    if (!Array.isArray(target.turns))
-        target.turns = [];
-    target.turns.push({ role: 'user', text: body, at: new Date().toISOString() });
-    target.status = 'open';
+    if (input.type !== undefined) {
+        if (!TYPES.includes(input.type))
+            throw new Error(`type must be one of ${TYPES.join(', ')}`);
+        target.type = input.type;
+        delete target.severity;
+    }
+    if (input.body !== undefined) {
+        if (typeof input.body !== 'string' || !input.body.trim())
+            throw new Error('comment body is required');
+        target.body = input.body.trim();
+    }
     saveComments(repo, loaded.comments, loaded.sourceDigest);
     return target;
 }

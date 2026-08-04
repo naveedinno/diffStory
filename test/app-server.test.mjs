@@ -20,7 +20,6 @@ import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { request } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
 import { serve } from '../dist/server.js';
 import { getDiff } from '../dist/git.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
@@ -199,11 +198,8 @@ test('malformed feedback blocks every comment write without losing source bytes'
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ file: 'README.md', line: 1, type: 'change', body: 'x' }),
       }),
-      fetch(`${base}/api/comments/c1/message`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'x' }),
-      }),
       fetch(`${base}/api/comments/c1`, {
-        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }),
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: 'updated' }),
       }),
       fetch(`${base}/api/comments/c1`, { method: 'DELETE' }),
     ];
@@ -668,41 +664,6 @@ test('POST /api/story/repair runs the selected agent and validates the rewritten
   }
 });
 
-async function fakeCodexDesktop(socketPath) {
-  rmSync(socketPath, { force: true });
-  const requests = [];
-  const server = createNetServer((socket) => {
-    let buffered = Buffer.alloc(0);
-    socket.on('data', (chunk) => {
-      buffered = Buffer.concat([buffered, chunk]);
-      while (buffered.length >= 4) {
-        const length = buffered.readUInt32LE(0);
-        if (buffered.length < length + 4) return;
-        const message = JSON.parse(buffered.subarray(4, length + 4).toString('utf8'));
-        buffered = buffered.subarray(length + 4);
-        requests.push(message);
-        const response = message.method === 'initialize'
-          ? {
-              type: 'response', requestId: message.requestId, resultType: 'success',
-              method: 'initialize', handledByClientId: 'router', result: { clientId: 'diffstory-client' },
-            }
-          : {
-              type: 'response', requestId: message.requestId, resultType: 'success',
-              method: message.method, handledByClientId: 'desktop-owner', result: { result: { turn: { id: 'turn-1' } } },
-            };
-        const json = JSON.stringify(response);
-        const frame = Buffer.alloc(4 + Buffer.byteLength(json));
-        frame.writeUInt32LE(Buffer.byteLength(json), 0);
-        frame.write(json, 4);
-        socket.write(frame);
-      }
-    });
-  });
-  server.listen(socketPath);
-  await once(server, 'listening');
-  return { server, requests };
-}
-
 function installFakeCodex(binDir) {
   const path = join(binDir, 'codex');
   writeFileSync(
@@ -710,19 +671,6 @@ function installFakeCodex(binDir) {
     `#!/bin/sh
 printf '\\ncodex edit\\n' >> README.md
 printf '%s\\n' '$ printf codex'
-`,
-  );
-  chmodSync(path, 0o755);
-}
-
-function installFakeResumingCodex(binDir, threadId) {
-  const path = join(binDir, 'codex');
-  writeFileSync(
-    path,
-    `#!/bin/sh
-printf '%s\n' "$@" > codex-args.txt
-printf '\nresumed codex edit\n' >> README.md
-printf '%s\n' '{"type":"thread.started","thread_id":"${threadId}"}'
 `,
   );
   chmodSync(path, 0o755);
@@ -791,7 +739,8 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal(updatedBody.skills.agents.codex.current, true);
     assert.ok(existsSync(join(tmpHome, '.agents', 'skills', 'diffstory-storyteller', 'SKILL.md')));
     assert.ok(existsSync(join(tmpHome, '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md')));
-    assert.ok(existsSync(join(tmpHome, '.codex', 'skills', 'address-review', 'SKILL.md')));
+    assert.ok(existsSync(join(tmpHome, '.codex', 'skills', 'diffstory-storyteller', 'SKILL.md')));
+    assert.equal(existsSync(join(tmpHome, '.codex', 'skills', 'address-review')), false);
 
     const agentsAfter = await (await fetch(`${base}/api/agents`)).json();
     assert.equal(agentsAfter.skills.current, true);
@@ -883,16 +832,13 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.match(genBody.label, /repository/i);
     assert.ok(genBody.detail.length > 0);
 
-    // address without a repo open → 409 with the same structured blocked shape
+    // Comment delivery is intentionally absent: queue or copy are the only actions.
     const addr = await fetch(`${base}/api/address`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ all: true }),
     });
-    assert.equal(addr.status, 409);
-    const addrBody = await addr.json();
-    assert.equal(addrBody.type, 'error');
-    assert.equal(addrBody.stage, 'preflight');
+    assert.equal(addr.status, 404);
   } finally {
     server.close();
     process.env.HOME = realHome;
@@ -901,7 +847,7 @@ test('app server drives picker → open → refs → recent → close', async ()
   }
 });
 
-test('POST /api/comments/:id/message appends a user turn and reopens the thread', async () => {
+test('review comments can be edited, while retired chat and address routes stay gone', async () => {
   const realHome = process.env.HOME;
   const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
   process.env.HOME = tmpHome;
@@ -910,325 +856,43 @@ test('POST /api/comments/:id/message appends a user turn and reopens the thread'
   const { server, base } = await boot(null, tmpHome);
   try {
     await fetch(`${base}/api/repo/open`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path: repo }),
     });
     const created = await (await fetch(`${base}/api/comments`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 1, type: 'question', body: 'why?' }),
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        file: 'README.md', line: 1, type: 'question', body: 'Why?',
+        selectedText: '# test', selection: { startLine: 1, endLine: 1 },
+      }),
     })).json();
 
-    const res = await fetch(`${base}/api/comments/${created.id}/message`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'a follow-up' }),
+    const edited = await fetch(`${base}/api/comments/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'change', body: 'Please fix this.' }),
     });
-    assert.equal(res.status, 200);
-    const updated = await res.json();
+    assert.equal(edited.status, 200);
+    const updated = await edited.json();
+    assert.equal(updated.type, 'change');
+    assert.equal(updated.body, 'Please fix this.');
+    assert.equal(updated.selectedText, '# test');
     assert.equal(updated.status, 'open');
-    assert.equal(updated.turns.at(-1).role, 'user');
-    assert.equal(updated.turns.at(-1).text, 'a follow-up');
 
-    const empty = await fetch(`${base}/api/comments/${created.id}/message`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '  ' }),
-    });
-    assert.equal(empty.status, 400);
-
-    const missing = await fetch(`${base}/api/comments/nope/message`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'x' }),
-    });
-    assert.equal(missing.status, 404);
-  } finally {
-    server.close();
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-    process.env.HOME = realHome;
-  }
-});
-
-test('addressing comments from the raw diff viewer reports code edits so the UI can reload', async () => {
-  const realHome = process.env.HOME;
-  const realPath = process.env.PATH;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
-  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
-  process.env.HOME = tmpHome;
-  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
-  installFakeClaude(fakeBin);
-
-  const repo = gitRepo();
-  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot(null, tmpHome);
-  try {
-    const opened = await fetch(`${base}/api/repo/open`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: repo }),
-    });
-    assert.equal(opened.status, 200);
-
-    const route = `/repo/${encodeURIComponent(basename(repo))}`;
-    const diff = await fetch(`${base}${route}/diff`);
-    assert.equal(diff.status, 200);
-    assert.match(await diff.text(), /data-storyless="1"/);
-
-    const comment = await fetch(`${base}/api/comments`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
-    });
-    assert.equal(comment.status, 201);
-
-    const addr = await fetch(`${base}/api/address`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    assert.equal((await fetch(`${base}/api/comments/${created.id}/message`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'follow up' }),
+    })).status, 404);
+    assert.equal((await fetch(`${base}/api/address`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ all: true }),
-    });
-    assert.equal(addr.status, 200);
-    const done = ndjsonEvents(await addr.text()).find((e) => e.type === 'run_done');
-    assert.equal(done?.status, 'complete');
-    assert.equal(done?.result?.codeChanged, true);
+    })).status, 404);
   } finally {
     server.close();
-    process.env.HOME = realHome;
-    process.env.PATH = realPath;
     rmSync(repo, { recursive: true, force: true });
     rmSync(tmpHome, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
-  }
-});
-
-test('POST /api/address honors the selected agent instead of first PATH match', async () => {
-  const realHome = process.env.HOME;
-  const realPath = process.env.PATH;
-  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
-  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
-  process.env.HOME = tmpHome;
-  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
-  installFakeClaude(fakeBin);
-  installFakeCodex(fakeBin);
-  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
-
-  const repo = gitRepo();
-  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot(null, tmpHome);
-  try {
-    await fetch(`${base}/api/repo/open`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: repo }),
-    });
-    await fetch(`${base}/api/comments`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
-    });
-
-    const addr = await fetch(`${base}/api/address`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ all: true, agent: 'codex' }),
-    });
-    assert.equal(addr.status, 200);
-    const events = ndjsonEvents(await addr.text());
-    assert.equal(events.find((e) => e.type === 'context')?.agent, 'codex');
-    assert.match(readFileSync(join(repo, 'README.md'), 'utf8'), /codex edit/);
-    assert.doesNotMatch(readFileSync(join(repo, 'README.md'), 'utf8'), /agent edit/);
-  } finally {
-    server.close();
     process.env.HOME = realHome;
-    process.env.PATH = realPath;
-    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
-    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
   }
 });
-
-test('POST /api/address sends a visible turn through the selected task live Desktop owner', async () => {
-  const realHome = process.env.HOME;
-  const realPath = process.env.PATH;
-  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
-  const realCodexSocket = process.env.DIFFSTORY_CODEX_IPC_SOCKET;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
-  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
-  const threadId = '019f5079-f420-7423-8aa8-cf9f6a079e03';
-  process.env.HOME = tmpHome;
-  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
-  installFakeResumingCodex(fakeBin, threadId);
-  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
-  const socketPath = join(tmpdir(), `diffstory-codex-${process.pid}-${Date.now()}.sock`);
-  process.env.DIFFSTORY_CODEX_IPC_SOCKET = socketPath;
-  const desktop = await fakeCodexDesktop(socketPath);
-
-  const repo = gitRepo();
-  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot(null, tmpHome);
-  try {
-    await fetch(`${base}/api/repo/open`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: repo }),
-    });
-    const comment = await (await fetch(`${base}/api/comments`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 2, type: 'question', body: 'What is happening?' }),
-    })).json();
-    await fetch(`${base}/api/comments/${comment.id}/message`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'Are you sure?' }),
-    });
-
-    const addr = await fetch(`${base}/api/address`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        all: true, agent: 'codex', codexThreadId: threadId,
-        codexTaskLabel: 'Clarify restated quote handling',
-      }),
-    });
-    assert.equal(addr.status, 200);
-    const events = ndjsonEvents(await addr.text());
-    const context = events.find((event) => event.type === 'context');
-    assert.equal(context?.taskMode, 'resume');
-    assert.equal(context?.taskLabel, 'Clarify restated quote handling');
-    assert.equal(context?.taskId, threadId);
-    assert.ok(events.some((event) => event.type === 'activity' && /Sent to live ChatGPT task/.test(event.label)));
-    const done = events.find((event) => event.type === 'run_done');
-    assert.equal(done?.status, 'complete');
-    assert.equal(done?.result?.codexThreadId, threadId);
-    assert.equal(done?.result?.delivery, 'desktop');
-    assert.equal(existsSync(join(repo, 'codex-args.txt')), false, 'selected tasks never fall back to codex exec resume');
-    const sent = desktop.requests.find((message) => message.method === 'thread-follower-start-turn');
-    assert.equal(sent?.version, 1);
-    assert.equal(sent?.sourceClientId, 'diffstory-client');
-    assert.equal(sent?.params?.conversationId, threadId);
-    const visibleText = sent?.params?.turnStartParams?.input?.[0]?.text;
-    assert.ok(visibleText.indexOf('Are you sure?') === 0, 'latest diffStory message is the visible turn text');
-    assert.ok(visibleText.indexOf('Are you sure?') < visibleText.indexOf('Use the diffStory address-review skill'));
-    assert.equal(visibleText.includes('What is happening?'), false, 'the visible task message uses the latest user turn');
-  } finally {
-    server.close();
-    desktop.server.close();
-    process.env.HOME = realHome;
-    process.env.PATH = realPath;
-    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
-    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
-    if (realCodexSocket === undefined) delete process.env.DIFFSTORY_CODEX_IPC_SOCKET;
-    else process.env.DIFFSTORY_CODEX_IPC_SOCKET = realCodexSocket;
-    rmSync(socketPath, { force: true });
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
-  }
-});
-
-test('POST /api/address resumes the exact selected Codex task when Desktop handoff is unavailable', async () => {
-  const realHome = process.env.HOME;
-  const realPath = process.env.PATH;
-  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
-  const realCodexSocket = process.env.DIFFSTORY_CODEX_IPC_SOCKET;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
-  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
-  const threadId = '019f5079-f420-7423-8aa8-cf9f6a079e03';
-  process.env.HOME = tmpHome;
-  process.env.PATH = `${fakeBin}:${realPath ?? ''}`;
-  installFakeResumingCodex(fakeBin, threadId);
-  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'codex');
-  process.env.DIFFSTORY_CODEX_IPC_SOCKET = join(tmpdir(), `missing-diffstory-codex-${process.pid}-${Date.now()}.sock`);
-
-  const repo = gitRepo();
-  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot(null, tmpHome);
-  try {
-    await fetch(`${base}/api/repo/open`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: repo }),
-    });
-    await fetch(`${base}/api/comments`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 2, type: 'question', body: 'What is happening?' }),
-    });
-
-    const addr = await fetch(`${base}/api/address`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        all: true, agent: 'codex', codexThreadId: threadId,
-        codexTaskLabel: 'Clarify restated quote handling',
-      }),
-    });
-    assert.equal(addr.status, 200);
-    const events = ndjsonEvents(await addr.text());
-    const context = events.find((event) => event.type === 'context');
-    assert.equal(context?.taskMode, 'resume');
-    assert.equal(context?.taskId, threadId);
-    assert.ok(events.some((event) => event.type === 'activity' && /Message added to selected Codex task/.test(event.label)));
-    const done = events.find((event) => event.type === 'run_done');
-    assert.equal(done?.status, 'complete');
-    assert.equal(done?.result?.codexThreadId, threadId);
-    assert.match(readFileSync(join(repo, 'codex-args.txt'), 'utf8'), new RegExp(`^exec\\nresume\\n--json\\n${threadId}\\n`));
-  } finally {
-    server.close();
-    process.env.HOME = realHome;
-    process.env.PATH = realPath;
-    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
-    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
-    if (realCodexSocket === undefined) delete process.env.DIFFSTORY_CODEX_IPC_SOCKET;
-    else process.env.DIFFSTORY_CODEX_IPC_SOCKET = realCodexSocket;
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
-  }
-});
-
-test('POST /api/address rejects a selected agent that is not available', async () => {
-  const realHome = process.env.HOME;
-  const realPath = process.env.PATH;
-  const realCodexBinary = process.env.DIFFSTORY_CODEX_BINARY;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'ds-home-'));
-  const fakeBin = mkdtempSync(join(tmpdir(), 'ds-agent-bin-'));
-  const gitBin = dirname(execFileSync('which', ['git']).toString().trim());
-  process.env.HOME = tmpHome;
-  process.env.PATH = `${fakeBin}:${gitBin}:/usr/bin:/bin:/usr/sbin:/sbin`;
-  process.env.DIFFSTORY_CODEX_BINARY = join(fakeBin, 'missing-codex');
-  installFakeClaude(fakeBin);
-
-  const repo = gitRepo();
-  writeFileSync(join(repo, 'README.md'), '# hi\nraw diff change\n');
-  const { server, base } = await boot(null, tmpHome);
-  try {
-    await fetch(`${base}/api/repo/open`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: repo }),
-    });
-    await fetch(`${base}/api/comments`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ file: 'README.md', line: 2, type: 'change', body: 'Please adjust this line.' }),
-    });
-
-    const addr = await fetch(`${base}/api/address`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ all: true, agent: 'codex' }),
-    });
-    assert.equal(addr.status, 400);
-    const body = await addr.json();
-    assert.equal(body.type, 'error');
-    assert.equal(body.stage, 'preflight');
-    assert.match(body.label, /not available/i);
-    assert.doesNotMatch(readFileSync(join(repo, 'README.md'), 'utf8'), /agent edit/);
-  } finally {
-    server.close();
-    process.env.HOME = realHome;
-    process.env.PATH = realPath;
-    if (realCodexBinary === undefined) delete process.env.DIFFSTORY_CODEX_BINARY;
-    else process.env.DIFFSTORY_CODEX_BINARY = realCodexBinary;
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
-  }
-});
-
 test('the dead /api/diff/fullfile endpoint is gone', async () => {
   const repo = gitRepo();
   const { server, base } = await boot();

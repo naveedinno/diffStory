@@ -134,31 +134,29 @@ test('skillStatus reports per-agent freshness, not just the aggregate', () => {
 test('updateSkills installs bundled skills into agent, Claude, and Codex skill dirs', () => {
   const home = tmp();
   const bundle = join(home, 'bundle', 'skills');
-  for (const name of ['diffstory-storyteller', 'address-review']) {
-    mkdirSync(join(bundle, name), { recursive: true });
-    writeFileSync(join(bundle, name, 'SKILL.md'), `${name} current`);
-  }
+  mkdirSync(join(bundle, 'diffstory-storyteller'), { recursive: true });
+  writeFileSync(join(bundle, 'diffstory-storyteller', 'SKILL.md'), 'diffstory-storyteller current');
   for (const root of ['.agents', '.claude', '.codex']) {
     const retired = join(home, root, 'skills', 'review-tour');
     mkdirSync(retired, { recursive: true });
     writeFileSync(join(retired, 'SKILL.md'), 'retired skill');
+    const retiredReview = join(home, root, 'skills', 'address-review');
+    mkdirSync(retiredReview, { recursive: true });
+    writeFileSync(join(retiredReview, 'SKILL.md'), 'retired review skill');
   }
 
   const result = updateSkills(home, bundle);
 
   assert.deepEqual(result.installed.map((p) => p.replace(home, '<home>')).sort(), [
-    '<home>/.agents/skills/address-review',
     '<home>/.agents/skills/diffstory-storyteller',
-    '<home>/.claude/skills/address-review',
     '<home>/.claude/skills/diffstory-storyteller',
-    '<home>/.codex/skills/address-review',
     '<home>/.codex/skills/diffstory-storyteller',
   ]);
   assert.equal(readFileSync(join(home, '.agents', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'utf8'), 'diffstory-storyteller current');
   assert.equal(readFileSync(join(home, '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md'), 'utf8'), 'diffstory-storyteller current');
-  assert.equal(readFileSync(join(home, '.codex', 'skills', 'address-review', 'SKILL.md'), 'utf8'), 'address-review current');
   for (const root of ['.agents', '.claude', '.codex']) {
     assert.equal(existsSync(join(home, root, 'skills', 'review-tour')), false);
+    assert.equal(existsSync(join(home, root, 'skills', 'address-review')), false);
   }
   const status = skillStatus(home, join(bundle, 'diffstory-storyteller', 'SKILL.md'));
   assert.equal(status.current, true);

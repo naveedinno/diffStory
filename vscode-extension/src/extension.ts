@@ -1,71 +1,64 @@
 import * as vscode from 'vscode';
-import { parseNavigationQuery } from './navigation.js';
+import {
+  clampNavigationPoint,
+  parseNavigationQuery,
+  prepareNavigation,
+  type NavigationRequest,
+} from './navigation.js';
 
-interface NavigationTarget {
-  uri: vscode.Uri;
-  selection: vscode.Range;
+const PENDING_NAVIGATION_KEY = 'diffstory.pendingNavigation';
+const PENDING_NAVIGATION_TTL_MS = 5 * 60 * 1000;
+
+interface PendingNavigation {
+  request: NavigationRequest;
+  requestedAt: number;
 }
 
-function toTarget(location: vscode.Location | vscode.LocationLink): NavigationTarget {
-  if ('targetUri' in location) {
-    return { uri: location.targetUri, selection: location.targetSelectionRange ?? location.targetRange };
-  }
-  return { uri: location.uri, selection: location.range };
-}
-
-function uniqueTargets(locations: readonly (vscode.Location | vscode.LocationLink)[] | undefined): NavigationTarget[] {
-  const targets: NavigationTarget[] = [];
-  const seen = new Set<string>();
-  for (const location of locations ?? []) {
-    const target = toTarget(location);
-    const key = `${target.uri.toString()}#${target.selection.start.line}:${target.selection.start.character}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    targets.push(target);
-  }
-  return targets;
-}
-
-async function providerTargets(
-  command: 'vscode.executeImplementationProvider' | 'vscode.executeDefinitionProvider',
-  source: vscode.Uri,
-  position: vscode.Position,
-): Promise<NavigationTarget[]> {
+async function navigateRequest(request: NavigationRequest): Promise<void> {
   try {
-    const locations = await vscode.commands.executeCommand<readonly (vscode.Location | vscode.LocationLink)[] | undefined>(
-      command,
-      source,
-      position,
-    );
-    return uniqueTargets(locations);
-  } catch {
-    return [];
+    const source = vscode.Uri.file(request.path);
+    const document = await vscode.workspace.openTextDocument(source);
+    const point = clampNavigationPoint(request, document.lineCount, (line) => document.lineAt(line).text.length);
+    const position = new vscode.Position(point.line, point.character);
+    const sourceSelection = new vscode.Range(position, position);
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: true,
+      preserveFocus: false,
+      selection: sourceSelection,
+    });
+    editor.revealRange(sourceSelection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await vscode.window.showErrorMessage(`DiffStory could not open that source location: ${detail}`);
   }
 }
 
-async function chooseTarget(targets: NavigationTarget[], kind: 'implementation' | 'definition'): Promise<NavigationTarget | undefined> {
-  if (targets.length < 2) return targets[0];
-  const selected = await vscode.window.showQuickPick(
-    targets.map((target) => ({
-      label: vscode.workspace.asRelativePath(target.uri, false),
-      description: `line ${target.selection.start.line + 1}`,
-      detail: target.uri.fsPath,
-      target,
-    })),
-    { placeHolder: `Choose ${kind}` },
-  );
-  return selected?.target;
+async function validateRepository(repo: string): Promise<vscode.Uri> {
+  const repository = vscode.Uri.file(repo);
+  const stat = await vscode.workspace.fs.stat(repository);
+  if (!(stat.type & vscode.FileType.Directory)) throw new Error('The reviewed repository folder is unavailable.');
+  await vscode.workspace.fs.stat(vscode.Uri.joinPath(repository, '.git'));
+  return repository;
 }
 
-async function openTarget(target: NavigationTarget): Promise<void> {
-  await vscode.window.showTextDocument(target.uri, {
-    preview: true,
-    preserveFocus: false,
-    selection: target.selection,
-  });
+async function resumePendingNavigation(context: vscode.ExtensionContext): Promise<void> {
+  const pending = context.globalState.get<PendingNavigation>(PENDING_NAVIGATION_KEY);
+  if (!pending) return;
+  if (
+    !pending.request ||
+    !Number.isFinite(pending.requestedAt) ||
+    Date.now() - pending.requestedAt > PENDING_NAVIGATION_TTL_MS
+  ) {
+    await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
+    return;
+  }
+  const source = vscode.Uri.file(pending.request.path);
+  if (!vscode.workspace.getWorkspaceFolder(source)) return;
+  await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
+  await navigateRequest(pending.request);
 }
 
-async function navigate(uri: vscode.Uri): Promise<void> {
+async function navigate(uri: vscode.Uri, context: vscode.ExtensionContext): Promise<void> {
   if (uri.path !== '/navigate') return;
   const request = parseNavigationQuery(uri.query);
   if (!request) {
@@ -74,45 +67,32 @@ async function navigate(uri: vscode.Uri): Promise<void> {
   }
 
   try {
-    const source = vscode.Uri.file(request.path);
-    if (!vscode.workspace.getWorkspaceFolder(source)) {
-      await vscode.window.showErrorMessage('Open the reviewed repository in VS Code before navigating from DiffStory.');
-      return;
-    }
-    const document = await vscode.workspace.openTextDocument(source);
-    const line = Math.min(request.line - 1, Math.max(0, document.lineCount - 1));
-    const character = Math.min(request.column - 1, document.lineAt(line).text.length);
-    const position = new vscode.Position(line, character);
-    const sourceSelection = new vscode.Range(position, position);
-    // Activating the source editor gives installed language extensions the same
-    // context they receive before a normal F12/Cmd-click navigation request.
-    await vscode.window.showTextDocument(document, {
-      preview: true,
-      preserveFocus: false,
-      selection: sourceSelection,
+    const preparation = await prepareNavigation(request, {
+      containsSource: (path) => Boolean(vscode.workspace.getWorkspaceFolder(vscode.Uri.file(path))),
+      persistPending: async (pending) => {
+        await context.globalState.update(PENDING_NAVIGATION_KEY, {
+          request: pending,
+          requestedAt: Date.now(),
+        } satisfies PendingNavigation);
+      },
+      openRepository: async (repo) => {
+        const repository = await validateRepository(repo);
+        await vscode.commands.executeCommand('vscode.openFolder', repository, false);
+      },
     });
-
-    const implementations = await providerTargets('vscode.executeImplementationProvider', source, position);
-    const implementation = await chooseTarget(implementations, 'implementation');
-    if (implementation) {
-      await openTarget(implementation);
-      return;
-    }
-
-    const definitions = await providerTargets('vscode.executeDefinitionProvider', source, position);
-    const definition = await chooseTarget(definitions, 'definition');
-    if (definition) {
-      await openTarget(definition);
-      return;
-    }
-
-    await vscode.window.showInformationMessage('No implementation or definition was reported; opened the clicked symbol instead.');
+    if (preparation === 'ready') await navigateRequest(request);
+    else await resumePendingNavigation(context);
   } catch (error) {
+    await context.globalState.update(PENDING_NAVIGATION_KEY, undefined);
     const detail = error instanceof Error ? error.message : String(error);
-    await vscode.window.showErrorMessage(`DiffStory could not open that symbol: ${detail}`);
+    await vscode.window.showErrorMessage(`DiffStory could not open the reviewed repository: ${detail}`);
   }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: navigate }));
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({ handleUri: (uri) => navigate(uri, context) }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => { void resumePendingNavigation(context); }),
+  );
+  void resumePendingNavigation(context);
 }

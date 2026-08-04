@@ -34,9 +34,6 @@ export function progressPanelStyles(): string {
 .ds-pp-sub{padding:9px 14px 2px;display:flex;align-items:flex-start;gap:10px}
 .ds-pp-repo{flex:1;min-width:0;font-size:11.5px;color:var(--pp-muted);font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
 .ds-pp-repo:empty{display:none}
-.ds-pp-task-link{flex:none;margin-left:auto;font-size:11.5px;font-weight:600;color:var(--pp-blue);text-decoration:none;white-space:nowrap}
-.ds-pp-task-link:hover{text-decoration:underline}.ds-pp-task-link:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pp-blue) 12%,transparent);border-radius:3px}
-.ds-pp-task-link[hidden]{display:none}
 .ds-pp-plan{list-style:none;margin:0;padding:6px 14px 4px;overflow:auto;flex:1;min-height:40px}
 .ds-pp-plan:empty{display:none}
 .ds-pp-step{display:flex;align-items:baseline;gap:10px;padding:4px 0;font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:11px;line-height:1.55}
@@ -135,7 +132,7 @@ export function progressPanelMarkup(variant: 'inline' | 'floating'): string {
     <button class="ds-pp-stop" data-pp-stop hidden>Stop</button>
     <button class="ds-pp-close" data-pp-close hidden>Close</button>
   </div>
-  <div class="ds-pp-sub"><span class="ds-pp-repo"></span><a class="ds-pp-task-link" data-pp-task-link hidden>Open in Codex ↗</a></div>
+  <div class="ds-pp-sub"><span class="ds-pp-repo"></span></div>
   <ol class="ds-pp-miles" hidden></ol>
   <div class="ds-pp-note" hidden></div>
   <ol class="ds-pp-plan"></ol>
@@ -161,12 +158,12 @@ function ProgressPanel(root, opts){
     announcer:q('.ds-pp-announcer'),
     details:q('.ds-pp-details'), raw:q('.ds-pp-raw'), foot:q('.ds-pp-foot'),
     error:q('.ds-pp-error'), errorTitle:q('.ds-pp-error-title'), errorDetail:q('.ds-pp-error-detail'),
-    stop:q('[data-pp-stop]'), close:q('[data-pp-close]'), taskLink:q('[data-pp-task-link]'),
+    stop:q('[data-pp-stop]'), close:q('[data-pp-close]'),
     miles:q('.ds-pp-miles'), note:q('.ds-pp-note')
   };
-  var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review',address:'Addressing comments'};
-  var DONE={guided_review:'Review ready',detailed_audit:'Review ready',address:'Comments addressed'};
-  var FAIL={guided_review:'Generation failed',detailed_audit:'Generation failed',address:"Comments weren't addressed"};
+  var WORK={guided_review:'Writing your review',detailed_audit:'Writing your review'};
+  var DONE={guided_review:'Review ready',detailed_audit:'Review ready'};
+  var FAIL={guided_review:'Generation failed',detailed_audit:'Generation failed'};
   var MILES={
     guided_review:[
       {label:'Preparing',phases:['idle','preflight','resolving_context','preparing_prompt','starting_agent','agent_running']},
@@ -175,12 +172,6 @@ function ProgressPanel(root, opts){
       {label:'Writing the story',phases:['writing_output']},
       {label:'Checking the result',phases:['validating_output','applying_results']},
       {label:'Ready',phases:['complete']}
-    ],
-    address:[
-      {label:'Preparing',phases:['idle','preflight','resolving_context','preparing_prompt','starting_agent','agent_running']},
-      {label:'Working the comments',phases:['reading_changes','recovering_why','designing_path','writing_output','applying_results']},
-      {label:'Checking',phases:['validating_output']},
-      {label:'Done',phases:['complete']}
     ]
   };
   MILES.detailed_audit=MILES.guided_review;
@@ -265,13 +256,11 @@ function ProgressPanel(root, opts){
     var c=root.className.replace(/\\s*\\bis-finished\\b/g,'');
     root.className=on?(c+' is-finished'):c;
   }
-  function agentChip(agent,model,taskMode){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent'; if(taskMode==='resume')a+=' · selected task';else if(taskMode==='new')a+=' · new task';return model?(a+' · '+model):a; }
+  function agentChip(agent,model){ var a=agent?(agent.charAt(0).toUpperCase()+agent.slice(1)):'Agent';return model?(a+' · '+model):a; }
   function repoLine(ev){
     var p=ev.repoName||'';
     if(ev.base){ p+=' · '+ev.base+' → '+(ev.head||'working tree'); }
     if(typeof ev.targetCount==='number'){ p+=' · '+ev.targetCount+' '+(ev.targetCount===1?'comment':'comments'); }
-    if(ev.taskMode==='resume')p+=' · Sending to '+(ev.taskLabel||'selected Codex task');
-    else if(ev.taskMode==='new')p+=' · Starting a new Codex task';
     return p;
   }
   function start(){
@@ -281,7 +270,6 @@ function ProgressPanel(root, opts){
     if(els.announcer)els.announcer.textContent='';
     if(els.miles){els.miles.textContent='';els.miles.hidden=true;}
     if(els.note){els.note.textContent='';els.note.hidden=true;}
-    if(els.taskLink){els.taskLink.hidden=true;els.taskLink.removeAttribute('href');}
     if(els.spin)els.spin.hidden=false;
     if(els.stop)els.stop.hidden=false;
     if(els.close)els.close.hidden=true;
@@ -310,14 +298,9 @@ function ProgressPanel(root, opts){
         miles=MILES[workflow]||null; mileIdx=miles?0:-1; if(miles)renderMiles();
         curState='Working'; setLive('Working',0); announce(workTitle); break;
       case 'context':
-        if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model,ev.taskMode);
-        if(els.repo){els.repo.textContent=repoLine(ev);els.repo.title=ev.taskId?('Codex task '+ev.taskId):'';}
-        if(els.taskLink){
-          var canOpen=ev.taskMode==='resume'&&typeof ev.taskId==='string'&&ev.taskId;
-          els.taskLink.hidden=!canOpen;
-          if(canOpen){els.taskLink.href='codex://threads/'+encodeURIComponent(ev.taskId);els.taskLink.setAttribute('aria-label','Open '+(ev.taskLabel||'selected Codex task')+' in Codex');}
-          else els.taskLink.removeAttribute('href');
-        } break;
+        if(els.agent)els.agent.textContent=agentChip(ev.agent,ev.model);
+        if(els.repo){els.repo.textContent=repoLine(ev);els.repo.removeAttribute('title');}
+        break;
       case 'phase':
         advanceMiles(ev.phase);
         if(ev.phase==='validating_output'||ev.phase==='applying_results'){

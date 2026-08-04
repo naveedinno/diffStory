@@ -40,7 +40,6 @@ test('DiffStory is UI-only and distributed skills never direct users to a CLI', 
   const pkg = JSON.parse(read('package.json'));
   const readme = read('README.md');
   const storyteller = read('skills/diffstory-storyteller/SKILL.md');
-  const addressReview = read('skills/address-review/SKILL.md');
 
   assert.equal(pkg.bin, undefined);
   assert.equal(exists('src/cli.ts'), false);
@@ -48,8 +47,8 @@ test('DiffStory is UI-only and distributed skills never direct users to a CLI', 
   assert.equal(exists('scripts/install.sh'), false);
   assert.doesNotMatch(readme, /npm i -g @naveedinno\/diffstory/);
   assert.match(storyteller, /diffStory is UI-only/);
-  assert.match(addressReview, /diffStory is UI-only/);
-  assert.doesNotMatch(`${storyteller}\n${addressReview}`, /diffstory check|diffstory --/);
+  assert.equal(exists('skills/address-review/SKILL.md'), false);
+  assert.doesNotMatch(storyteller, /diffstory check|diffstory --/);
 });
 
 test('release build contains a self-contained Mermaid ESM browser bundle', () => {

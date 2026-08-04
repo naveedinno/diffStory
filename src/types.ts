@@ -261,12 +261,12 @@ export interface Tour {
 }
 
 export type CommentType = 'change' | 'question' | 'nit';
-/** Review impact is separate from tone: a question can still block approval. */
+/** Legacy impact field retained only so older comments.json files remain readable. */
 export type CommentSeverity = 'blocking' | 'concern' | 'nit';
 export type CommentStatus = 'open' | 'addressed' | 'resolved';
 export type CommentSide = 'left' | 'right';
 
-/** One message in a review-thread conversation: the reviewer (`user`) or the AI. */
+/** Legacy conversation data retained for backwards-compatible file parsing. */
 export interface Turn {
   role: 'user' | 'ai';
   text: string;
@@ -306,7 +306,7 @@ export interface Comment {
   /** Selected-side line range and optional columns. */
   selection?: CommentSelection;
   type: CommentType;
-  /** Reviewer-assigned impact used by readiness and feedback filters. */
+  /** Legacy field; new comments use their type without a second severity axis. */
   severity?: CommentSeverity;
   body: string;
   status: CommentStatus;
@@ -318,9 +318,9 @@ export interface Comment {
   anchorHash?: string;
   /** ISO timestamp; set by the server. */
   createdAt: string;
-  /** Filled in by the AI during /address-review. */
+  /** Legacy AI field; preserved on disk but not used by the review UI. */
   reply?: string;
-  /** Ordered follow-up conversation after `body`. Absent on legacy single-reply comments. */
+  /** Legacy conversation field; preserved on disk but not used by the review UI. */
   turns?: Turn[];
 }
 

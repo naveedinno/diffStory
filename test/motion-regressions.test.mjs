@@ -112,7 +112,7 @@ test('reduced motion keeps status feedback but removes movement and pulses', () 
   assert.match(PAGE_JS, /function prefersReducedMotion\(\)/);
   assert.match(PAGE_CSS, /\.ds-toast\{animation:none!important;transform:translateX\(-50%\);transition:opacity 200ms ease\}/);
   assert.match(PAGE_CSS, /\.ds-readhead-fill\{transition:none!important\}/);
-  assert.match(PAGE_CSS, /\.ds-agent-target\.is-busy \.ds-agent-target-icon[^}]*animation:none!important/);
+  assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading \.ds-readaloud-ico,\.ds-composer\{animation:none!important\}/);
   assert.doesNotMatch(PAGE_CSS, /ds-voice-card/);
   assert.match(PAGE_CSS, /\.ds-live-banner\{transition:none!important\}/);
   assert.match(DIFF_CSS, /\.ds-row\.is-voice-focus[^}]*animation:none!important;filter:none!important/);
@@ -133,7 +133,7 @@ test('drawers share an interruptible spatial lifecycle', () => {
   assert.match(PAGE_JS, /prefersReducedMotion\(\)\?200:250/);
 });
 
-test('reading progress uses a composited scale and comment traversal is instant', () => {
+test('reading progress uses a composited scale and comment surfaces are instant', () => {
   const fill = ruleBody(PAGE_CSS, '.ds-readhead-fill');
   assert.match(fill, /width:100%/);
   assert.match(fill, /transform:scaleX\(0\)/);
@@ -141,6 +141,6 @@ test('reading progress uses a composited scale and comment traversal is instant'
   assert.match(fill, /transition:transform var\(--motion-duration-progress\) var\(--motion-ease-in-out\)/);
   assert.match(PAGE_JS, /pf\.style\.transform='scaleX\('\+ratio\+'\)'/);
   assert.doesNotMatch(PAGE_JS, /ds-progress-fill[^\n]*style\.width|pf\.style\.width/);
-  assert.doesNotMatch(ruleBody(PAGE_CSS, '.ds-thread.is-open'), /animation|transition/);
-  assert.doesNotMatch(ruleBody(PAGE_CSS, '.ds-comment'), /animation|transition/);
+  assert.doesNotMatch(ruleBody(PAGE_CSS, '.ds-composer'), /animation|transition/);
+  assert.doesNotMatch(ruleBody(PAGE_CSS, '.ds-feedback-card'), /animation|transition/);
 });

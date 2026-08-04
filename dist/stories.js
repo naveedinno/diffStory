@@ -106,7 +106,6 @@ function storySummary(repo, id, liveEvidence) {
                 additions: 0,
                 deletions: 0,
                 openComments: 0,
-                addressedComments: 0,
             };
         return {
             id,
@@ -153,7 +152,6 @@ function storySummary(repo, id, liveEvidence) {
             additions: 0,
             deletions: 0,
             openComments: 0,
-            addressedComments: 0,
             liveEvidence,
         };
     }
@@ -171,7 +169,6 @@ function storySession(repo, base, head, expected, snapshot, snapshotBinding) {
         additions: 0,
         deletions: 0,
         openComments: 0,
-        addressedComments: 0,
     };
     try {
         const resolvedBase = resolveBase(repo, base);
@@ -203,7 +200,6 @@ function storySession(repo, base, head, expected, snapshot, snapshotBinding) {
             additions,
             deletions,
             openComments: comments.filter((comment) => comment.status === 'open').length,
-            addressedComments: comments.filter((comment) => comment.status === 'addressed').length,
         };
     }
     catch {

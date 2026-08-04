@@ -128,65 +128,6 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Keep each note to one short, concrete sentence. These lines are shown live in the review UI, so no filler and no markdown.\n\n` +
         `Do not ask questions. Generate it directly.`);
 }
-export function addressPrompt(target, base, head, opts = {}) {
-    const scope = target === 'all'
-        ? 'every comment whose status is "open"'
-        : `the comments with these ids: ${target.join(', ')}`;
-    // The "current" side is a committed ref (head) or the live working tree.
-    const curName = head ? `"${head}" (the current side)` : 'the current working tree (this side)';
-    const curRead = head
-        ? `read the current side with "git show ${head}:<file>"`
-        : 'read the working-tree version directly';
-    const diffCmd = head ? `git diff ${base}..${head} -- <file>` : `git diff ${base} -- <file>`;
-    const grounding = base
-        ? `Two-sided grounding contract — this review IS a diff; never answer from one side:\n` +
-            `- The change under review is "${base}" (the target side) compared against ${curName}. A comment can be about something added, removed, or moved between the two.\n` +
-            `- Each comment may include side: "left" for the target/old side or side: "right" for the current/new side. Use that side to locate the selected text first, then still inspect the opposite side before answering.\n` +
-            `- Before you reply to any comment, inspect BOTH sides of its selected text location: ${curRead}, and read the target side with "git show ${base}:<file>". Run "${diffCmd}" to see exactly what changed around that selected snippet.\n` +
-            `- Never say a symbol, field, or branch "doesn't exist", "isn't here yet", or "lives elsewhere" based on one side alone — that is the failure this contract exists to prevent. Check the other side and the diff first.\n` +
-            `- Do not invent branch names, commit hashes, or history. If the two sides don't settle it, say what they show and stop — no guessing.\n\n`
-        : '';
-    const historical = opts.historicalCheckout && head && opts.resumedCodexTask
-        ? `Pinned historical review contract:\n` +
-            `- This resumed Codex task stays in the live repository, but the reviewed current side is the pinned commit "${head}", not today's working tree.\n` +
-            `- Do not edit source files. Read the reviewed code with "git show ${head}:<file>" and the exact change with "git diff ${base}..${head} -- <file>".\n` +
-            `- You may update ${DATA_DIR}/comments.json in the live repository so the review conversation receives your answer.\n` +
-            `- For change or nit requests, append a new ai turn with the exact file/function and change you recommend instead of modifying the live branch.\n\n`
-        : opts.historicalCheckout && head
-            ? `Historical checkout contract:\n` +
-                `- You are running in a temporary checkout of "${head}" so code reads match the story's post-change side, even if the live repository has moved on.\n` +
-                (opts.originalRepo ? `- The live repository is ${opts.originalRepo}; use it only as identity context, not as the code state under review.\n` : '') +
-                `- Do not edit source files in this historical checkout. For change or nit requests, answer by appending a new ai turn (per the Conversation contract below) with the exact file/function and change you recommend instead of modifying the live branch.\n` +
-                `- For questions, answer from this checkout plus the explicit base/head diff above.\n\n`
-            : '';
-    const actionRules = opts.historicalCheckout
-        ? `Act by type for each one:\n` +
-            `- change → do not edit source files; answer concretely by appending a new ai turn with the exact change you would make on the live branch.\n` +
-            `- question → read both sides of the selected text location, then answer concretely by appending a new ai turn.\n` +
-            `- nit → answer with the small adjustment by appending a new ai turn; do not edit source files in the temporary checkout.\n\n`
-        : `Act by type for each one:\n` +
-            `- change → make the requested edit; if you genuinely disagree, leave "status" as "open" and make your case by appending an ai turn.\n` +
-            `- question → read both sides of the selected text location, then answer concretely by appending a new ai turn.\n` +
-            `- nit → apply it if quick and reasonable; otherwise explain the trade-off by appending a new ai turn.\n\n`;
-    const reviewMessages = (opts.reviewMessages ?? []).filter((message) => message.text.trim());
-    const visibleRequest = reviewMessages.length === 1
-        ? `${reviewMessages[0].text.trim()}\n\n---\n\n`
-        : reviewMessages.length > 1
-            ? `Review these diffStory messages:\n\n${reviewMessages.map((message, index) => `${index + 1}. ${message.text.trim()} (comment ${message.id})`).join('\n\n')}\n\n---\n\n`
-            : '';
-    return (visibleRequest +
-        `Use the diffStory address-review skill to address ${scope} in ${DATA_DIR}/comments.json.\n\n` +
-        grounding +
-        historical +
-        actionRules +
-        `Conversation contract:\n` +
-        `- Each comment is a conversation. Its "body" is the reviewer's first message, followed by "turns" — an ordered list of {"role":"user"|"ai","text","at"} messages (a legacy comment may instead have a single "reply" string; treat it as the first ai turn).\n` +
-        `- Read the whole thread and answer the latest "user" message in that context.\n\n` +
-        `For every comment you handle: append a new turn {"role":"ai","text":"<your specific answer — name the function or file you changed, or give your answer>","at":"<ISO 8601 timestamp>"} to its "turns" array (create the array if it is absent). Never overwrite "body" or an existing turn. Then set "status" to "addressed". Preserve every other field and never delete a comment.\n\n` +
-        `If your edits moved code, re-run the diffstory-storyteller skill so ${DATA_DIR}/story.json line ranges ` +
-        `stay correct and the coverage gate stays clean.\n\n` +
-        `Do not ask questions. Make the changes directly.`);
-}
 /** A narrow story edit: preserve the good walkthrough and repair only one weak stop. */
 export function storyRepairPrompt(input) {
     const target = input.stepId
@@ -239,34 +180,22 @@ export function normalizeCodexRunOptions(input) {
     return { sandbox, provider, profile, config };
 }
 function codexArgs(prompt, model, opts = {}) {
-    const args = opts.threadId ? ['exec', 'resume'] : ['exec'];
+    const args = ['exec'];
     const sandbox = opts.sandbox ?? 'full-auto';
-    // `exec resume` inherits the task's cwd and permission settings. Its CLI does
-    // not accept the normal --sandbox/--profile/provider flags, so only apply
-    // those when creating a new task.
-    if (!opts.threadId) {
-        if (sandbox === 'full-auto')
-            args.push('--full-auto');
-        else if (sandbox === 'danger-full-access')
-            args.push('--dangerously-bypass-approvals-and-sandbox');
-        else
-            args.push('--sandbox', sandbox);
-        if (opts.provider === 'lmstudio' || opts.provider === 'ollama')
-            args.push('--oss', '--local-provider', opts.provider);
-        if (opts.profile)
-            args.push('--profile', opts.profile);
-    }
-    else if (sandbox === 'danger-full-access') {
+    if (sandbox === 'full-auto')
+        args.push('--full-auto');
+    else if (sandbox === 'danger-full-access')
         args.push('--dangerously-bypass-approvals-and-sandbox');
-    }
+    else
+        args.push('--sandbox', sandbox);
+    if (opts.provider === 'lmstudio' || opts.provider === 'ollama')
+        args.push('--oss', '--local-provider', opts.provider);
+    if (opts.profile)
+        args.push('--profile', opts.profile);
     for (const cfg of opts.config ?? [])
         args.push('-c', cfg);
     if (model)
         args.push('--model', model);
-    if (opts.json)
-        args.push('--json');
-    if (opts.threadId)
-        args.push(opts.threadId);
     args.push(prompt);
     return args;
 }
@@ -301,7 +230,7 @@ export function runAgent(agent, repo, prompt, model, options = {}) {
         child.on('close', (code) => resolve({ ok: code === 0, output }));
     });
 }
-// ---- live address loop: stream the agent's output to the review page ----
+// ---- live story-generation progress ----
 /** The streaming command + args for an agent. Flags verified against each CLI's --help. */
 export function streamCommand(agent, prompt, model, options = {}) {
     if (agent === 'claude') {
@@ -456,10 +385,6 @@ export function parseCodexStreamLine(line) {
         return [];
     try {
         const event = JSON.parse(s);
-        const threadId = event?.thread_id ?? event?.threadId;
-        if (event?.type === 'thread.started' && typeof threadId === 'string') {
-            return [activityEvent('task', `Message added to selected Codex task · …${threadId.slice(-8)}`)];
-        }
         const item = event?.item;
         if (event?.type !== 'item.completed' || !item)
             return [];
@@ -482,26 +407,6 @@ export function parseCodexStreamLine(line) {
     if (m)
         return [commandEvent(m[1])];
     return [textEvent(s)];
-}
-/** A resumed run is only continuous when Codex reports the selected task id back. */
-export function resumedCodexTaskMatches(expected, actual) {
-    return !expected || expected === actual;
-}
-export function codexThreadIdFromOutput(output) {
-    for (const line of output.split('\n')) {
-        if (!line.trim().startsWith('{'))
-            continue;
-        try {
-            const event = JSON.parse(line);
-            const id = event?.thread_id ?? event?.threadId;
-            if (event?.type === 'thread.started' && typeof id === 'string')
-                return id;
-        }
-        catch {
-            // Ignore non-JSON output mixed into the stream.
-        }
-    }
-    return undefined;
 }
 function lineParser(agent) {
     return agent === 'claude' ? parseClaudeStreamLine : parseCodexStreamLine;
@@ -537,8 +442,7 @@ export function streamAgent(agent, repo, prompt, onEvent, model, signal, options
             if (buf)
                 for (const e of parse(buf))
                     onEvent(e); // flush the last partial line
-            const threadId = agent === 'codex' ? codexThreadIdFromOutput(output) : undefined;
-            resolve(code === 0 ? { ok: true, output, threadId } : { ok: false, output, failure: 'execution', threadId });
+            resolve(code === 0 ? { ok: true, output } : { ok: false, output, failure: 'execution' });
         });
     });
 }
