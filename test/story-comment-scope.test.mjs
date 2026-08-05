@@ -147,7 +147,7 @@ test('comments written before stories were separable stay visible in every story
   }
 });
 
-test('the chosen story is remembered and resumed after a restart', async () => {
+test('opening a repo shows story history even when a prior story is remembered', async () => {
   const repo = repoWithTwoScopedStories();
   const home = mkdtempSync(join(tmpdir(), 'ds-scope-home-'));
   const first = await boot(repo, home);
@@ -158,8 +158,8 @@ test('the chosen story is remembered and resumed after a restart', async () => {
     first.server.close();
   }
 
-  // A fresh server process, same home: opening the repo resumes beta rather than the
-  // first story in the list.
+  // A fresh server process, same home: choosing the repository still opens its
+  // history. The remembered story must never bypass the explicit story list.
   const second = await boot(null, home);
   try {
     const opened = await fetch(`${second.base}/api/repo/open`, {
@@ -168,10 +168,16 @@ test('the chosen story is remembered and resumed after a restart', async () => {
       body: JSON.stringify({ path: repo }),
     });
     assert.equal(opened.status, 200);
-    assert.match((await opened.json()).route, /\/review$/, 'lands back in the review, not the picker');
+    const openedState = await opened.json();
+    assert.equal(openedState.route, `${route(repo)}/stories`);
 
+    const history = await fetch(`${second.base}${openedState.route}`);
+    assert.equal(history.status, 200);
+    assert.match(await history.text(), /Review history/);
+
+    await selectStory(second.base, repo, 'stories/beta.json');
     const posted = await postComment(second.base, 'b.txt', 'after restart');
-    assert.equal(posted.story, 'stories/beta.json', 'the resumed story owns new feedback');
+    assert.equal(posted.story, 'stories/beta.json', 'an explicitly opened story owns new feedback');
   } finally {
     second.server.close();
     rmSync(repo, { recursive: true, force: true });

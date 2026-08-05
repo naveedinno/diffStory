@@ -13,14 +13,19 @@ const NAMED_STORIES_DIR = 'stories';
 export function listStories(repo) {
     return storyIds(repo)
         .map((id) => storySummary(repo, id, true))
-        .filter((s) => s !== null);
+        .filter((s) => s !== null)
+        .sort(newestStoryFirst);
 }
 /** Story cards for navigation. Authored metadata remains exact, while live
  * diff/drift evidence waits until the story itself is opened. */
 export function listStoryMetadata(repo) {
     return storyIds(repo)
         .map((id) => storySummary(repo, id, false))
-        .filter((s) => s !== null);
+        .filter((s) => s !== null)
+        .sort(newestStoryFirst);
+}
+function newestStoryFirst(a, b) {
+    return b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 }
 /** Resolve a story id from listStories() back to a real path, or null if it is not known. */
 export function storyPathForId(repo, id) {

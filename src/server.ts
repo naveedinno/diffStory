@@ -396,6 +396,14 @@ function handle(
     }
     const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
     if (repoScreen === 'stories') {
+      // Reaching review history is the explicit "close story" transition. Keep
+      // the persisted resume target aligned with the page the reviewer chose;
+      // otherwise Home -> repo silently jumps back into the story they just
+      // closed, which makes rapid navigation feel like it ignored them.
+      const wasInsideStory = !session.chooseStory || typeof session.selectedStory === 'string';
+      session.chooseStory = true;
+      session.selectedStory = undefined;
+      if (wasInsideStory) recordStorySelection(home, session.repo as string, null, nowMs());
       return sendHtml(res, storyChooser(session, url.searchParams.get('evidence') === 'refresh'));
     }
     if (repoScreen === 'change') {
@@ -416,8 +424,9 @@ function handle(
       return redirect(res, repoRoute(session.repo, 'stories'));
     }
     if (method === 'GET' && url.pathname === '/repos') {
-      if (session.repo) liveHub.closeRepo(session.repo);
-      closeSession(session);
+      // Home is a picker view, not a repository-close command. Keeping the
+      // active session and its page leases alive makes browser Back/Forward
+      // reliable; POST /api/repo/close remains the explicit close transition.
       return sendHtml(res, pickerStub(home));
     }
     if (method === 'GET' && url.pathname === '/change') {
@@ -505,7 +514,6 @@ function handle(
         }
         if (session.repo && session.repo !== path) liveHub.closeRepo(session.repo);
         openSession(session, path);
-        restoreStorySelection(session, home);
         const previous = loadRecents(home).find((entry) => entry.path === path);
         const repoState = {
           path,

@@ -127,7 +127,7 @@ test('repository and story navigation do not synchronously repeat Git inspection
     process.env.PATH = `${bin}:${realPath}`;
     await navigate('close story', `${repoRoute}/stories`, undefined, /Review history/);
     await navigate('open story', `${repoRoute}/review?story=story.json`, undefined, /Home navigation fixture/);
-    await navigate('close repository', '/repos', undefined, /Add repository/);
+    await navigate('visit home', '/repos', undefined, /Add repository/);
     await navigate(
       'open repository',
       '/api/repo/open',
@@ -154,5 +154,86 @@ test('repository and story navigation do not synchronously repeat Git inspection
     rmSync(repo, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
     rmSync(bin, { recursive: true, force: true });
+  }
+});
+
+test('closing a story keeps the next repository entry on review history', async () => {
+  const repo = storyRepo();
+  const home = mkdtempSync(join(tmpdir(), 'ds-close-story-home-'));
+  const server = serve({ repo: null, port: 0, open: false, homeOverride: home });
+  await once(server, 'listening');
+  const origin = `http://localhost:${server.address().port}`;
+  const repoRoute = `/repo/${encodeURIComponent(basename(repo))}`;
+
+  async function openRepository() {
+    const response = await fetch(`${origin}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    assert.equal(response.status, 200);
+    return response.json();
+  }
+
+  try {
+    assert.equal((await openRepository()).route, `${repoRoute}/stories`);
+
+    const review = await fetch(`${origin}${repoRoute}/review?story=story.json`);
+    assert.equal(review.status, 200);
+    assert.match(await review.text(), /Home navigation fixture/);
+
+    const history = await fetch(`${origin}${repoRoute}/stories`);
+    assert.equal(history.status, 200);
+    assert.match(await history.text(), /Review history/);
+
+    const homeResponse = await fetch(`${origin}/repos`);
+    assert.equal(homeResponse.status, 200);
+    assert.match(await homeResponse.text(), /Add repository/);
+
+    assert.equal(
+      (await openRepository()).route,
+      `${repoRoute}/stories`,
+      'after the reviewer closes a story, opening its repository should return to review history',
+    );
+  } finally {
+    server.close();
+    await once(server, 'close');
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('visiting home does not strand a review restored from browser history', async () => {
+  const repo = storyRepo();
+  const home = mkdtempSync(join(tmpdir(), 'ds-browser-history-home-'));
+  const server = serve({ repo, port: 0, open: false, homeOverride: home });
+  await once(server, 'listening');
+  const origin = `http://localhost:${server.address().port}`;
+  const repoRoute = `/repo/${encodeURIComponent(basename(repo))}`;
+
+  try {
+    const review = await fetch(`${origin}${repoRoute}/review?story=story.json`);
+    assert.equal(review.status, 200);
+    const html = await review.text();
+    const token = html.match(/data-review-page-token="([^"]+)"/)?.[1];
+    assert.ok(token, 'review page receives a lease for its lazy requests');
+
+    const picker = await fetch(`${origin}/repos`);
+    assert.equal(picker.status, 200);
+    assert.match(await picker.text(), /Add repository/);
+
+    const restoredPageState = await fetch(
+      `${origin}/api/review-state?page=${encodeURIComponent(token)}`,
+    );
+    assert.equal(
+      restoredPageState.status,
+      200,
+      'a review restored by browser Back should keep working after the picker was visited',
+    );
+  } finally {
+    server.close();
+    await once(server, 'close');
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   }
 });

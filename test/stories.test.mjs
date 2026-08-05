@@ -1,10 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteStory, diffFingerprint, listStories, storyIdForPath, storyPathForId } from '../dist/stories.js';
+import {
+  deleteStory,
+  diffFingerprint,
+  listStories,
+  listStoryMetadata,
+  storyIdForPath,
+  storyPathForId,
+} from '../dist/stories.js';
 import { getDiff } from '../dist/git.js';
 import { captureStorySnapshot } from '../dist/story-drift.js';
 
@@ -36,6 +43,12 @@ function writeStory(repo, rel, title, extra = {}) {
   );
 }
 
+function byId(stories, id) {
+  const story = stories.find((candidate) => candidate.id === id);
+  assert.ok(story, `expected ${id} in the story list`);
+  return story;
+}
+
 test('listStories discovers primary, legacy, and named stories', () => {
   const repo = tmp();
   writeStory(repo, 'story.json', 'Primary story');
@@ -45,19 +58,37 @@ test('listStories discovers primary, legacy, and named stories', () => {
   writeFileSync(join(repo, '.diffstory', 'comments.json'), '[]');
 
   const stories = listStories(repo);
-  assert.deepEqual(stories.map((s) => s.id), [
-    'story.json',
+  assert.deepEqual(stories.map((s) => s.id).sort(), [
     'review-tour.json',
+    'story.json',
     'stories/liquidation.json',
     'stories/payments/monthly.json',
-  ]);
-  assert.deepEqual(stories.map((s) => s.title), [
-    'Primary story',
-    'Legacy story',
-    'Liquidation story',
-    'Monthly story',
-  ]);
+  ].sort());
+  assert.equal(byId(stories, 'story.json').title, 'Primary story');
+  assert.equal(byId(stories, 'review-tour.json').title, 'Legacy story');
+  assert.equal(byId(stories, 'stories/liquidation.json').title, 'Liquidation story');
+  assert.equal(byId(stories, 'stories/payments/monthly.json').title, 'Monthly story');
   assert.equal(stories.every((s) => s.valid), true);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test('story lists are newest first in both navigation and refreshed projections', () => {
+  const repo = tmp();
+  writeStory(repo, 'story.json', 'Oldest story');
+  writeStory(repo, 'stories/middle.json', 'Middle story');
+  writeStory(repo, 'stories/newest.json', 'Newest story');
+
+  const oldest = new Date('2026-08-01T10:00:00Z');
+  const middle = new Date('2026-08-02T10:00:00Z');
+  const newest = new Date('2026-08-03T10:00:00Z');
+  utimesSync(join(repo, '.diffstory', 'story.json'), oldest, oldest);
+  utimesSync(join(repo, '.diffstory', 'stories', 'middle.json'), middle, middle);
+  utimesSync(join(repo, '.diffstory', 'stories', 'newest.json'), newest, newest);
+
+  const expected = ['stories/newest.json', 'stories/middle.json', 'story.json'];
+  assert.deepEqual(listStoryMetadata(repo).map((story) => story.id), expected);
+  assert.deepEqual(listStories(repo).map((story) => story.id), expected);
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -68,12 +99,14 @@ test('listStories explains whether a story covers working tree or a ref range', 
   writeStory(repo, 'stories/range.json', 'Branch range', { base: 'main', head: 'feature/liquidation' });
 
   const stories = listStories(repo);
-  assert.equal(stories[0].scope.label, 'Working tree vs HEAD');
-  assert.equal(stories[0].scope.command, 'git diff HEAD --');
-  assert.match(stories[0].scope.description, /current working tree/);
-  assert.equal(stories[1].scope.label, 'main..feature/liquidation');
-  assert.equal(stories[1].scope.command, 'git diff main..feature/liquidation --');
-  assert.match(stories[1].scope.description, /does not include uncommitted/);
+  const workingTree = byId(stories, 'story.json');
+  const range = byId(stories, 'stories/range.json');
+  assert.equal(workingTree.scope.label, 'Working tree vs HEAD');
+  assert.equal(workingTree.scope.command, 'git diff HEAD --');
+  assert.match(workingTree.scope.description, /current working tree/);
+  assert.equal(range.scope.label, 'main..feature/liquidation');
+  assert.equal(range.scope.command, 'git diff main..feature/liquidation --');
+  assert.match(range.scope.description, /does not include uncommitted/);
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -85,9 +118,9 @@ test('listStories exposes the story generation mode', () => {
   writeStory(repo, 'stories/deep.json', 'Detailed work', { mode: 'detailed' });
 
   const stories = listStories(repo);
-  assert.equal(stories[0].mode, 'guided');
-  assert.equal(stories[1].mode, 'brief');
-  assert.equal(stories[2].mode, 'detailed');
+  assert.equal(byId(stories, 'story.json').mode, 'guided');
+  assert.equal(byId(stories, 'stories/brief.json').mode, 'brief');
+  assert.equal(byId(stories, 'stories/deep.json').mode, 'detailed');
 
   rmSync(repo, { recursive: true, force: true });
 });
@@ -149,18 +182,20 @@ test('listStories calls a legacy story current only on an exact fingerprint and 
   writeStory(repo, 'stories/old.json', 'Old review', { base: 'HEAD' });
 
   let stories = listStories(repo);
-  assert.equal(stories[0].freshness, 'current');
-  assert.equal(stories[0].current, true);
-  assert.equal(stories[0].liveFiles, 1);
-  assert.equal(stories[0].additions, 1);
-  assert.equal(stories[0].deletions, 1);
-  assert.equal(stories[0].openComments, 0);
-  assert.equal(stories[1].freshness, 'unverified');
+  let exact = byId(stories, 'story.json');
+  assert.equal(exact.freshness, 'current');
+  assert.equal(exact.current, true);
+  assert.equal(exact.liveFiles, 1);
+  assert.equal(exact.additions, 1);
+  assert.equal(exact.deletions, 1);
+  assert.equal(exact.openComments, 0);
+  assert.equal(byId(stories, 'stories/old.json').freshness, 'unverified');
 
   writeFileSync(join(repo, 'a.txt'), 'three\n');
   stories = listStories(repo);
-  assert.equal(stories[0].freshness, 'unverified');
-  assert.equal(stories[0].current, false);
+  exact = byId(stories, 'story.json');
+  assert.equal(exact.freshness, 'unverified');
+  assert.equal(exact.current, false);
 
   rmSync(repo, { recursive: true, force: true });
 });

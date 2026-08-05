@@ -55,7 +55,8 @@ const NAMED_STORIES_DIR = 'stories';
 export function listStories(repo: string): StorySummary[] {
   return storyIds(repo)
     .map((id) => storySummary(repo, id, true))
-    .filter((s): s is StorySummary => s !== null);
+    .filter((s): s is StorySummary => s !== null)
+    .sort(newestStoryFirst);
 }
 
 /** Story cards for navigation. Authored metadata remains exact, while live
@@ -63,7 +64,12 @@ export function listStories(repo: string): StorySummary[] {
 export function listStoryMetadata(repo: string): StorySummary[] {
   return storyIds(repo)
     .map((id) => storySummary(repo, id, false))
-    .filter((s): s is StorySummary => s !== null);
+    .filter((s): s is StorySummary => s !== null)
+    .sort(newestStoryFirst);
+}
+
+function newestStoryFirst(a: StorySummary, b: StorySummary): number {
+  return b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 }
 
 /** Resolve a story id from listStories() back to a real path, or null if it is not known. */
