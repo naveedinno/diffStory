@@ -4,7 +4,7 @@
 // Self-contained; all server values escaped.
 import { APP_BRAND } from './config.js';
 import { navBar, navStyles } from './nav.js';
-import { BRAND_HEAD_LINKS, brandChangeScopeThreadSvg } from './brand.js';
+import { BRAND_HEAD_LINKS } from './brand.js';
 import { sharedTokens, themeBootstrapScript, threadAtmosphereStyles } from './theme.js';
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -13,7 +13,6 @@ function esc(s) {
 // is rendered from the working tree at request time, so editing code and hitting
 // this re-reads the tree and rebuilds the diff + counts in one shot.
 const REFRESH_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>`;
-const PAGE_THREAD = brandChangeScopeThreadSvg();
 function totals(sum) {
     return sum.files.reduce((acc, f) => ({ added: acc.added + (f.added ?? 0), removed: acc.removed + (f.removed ?? 0) }), { added: 0, removed: 0 });
 }
@@ -130,7 +129,6 @@ export function renderChangePage(sum, opts) {
         </span>
       </div>`
         : `<div class="scope-current scope-current-single" aria-label="Selected review scope">
-        <span class="scope-current-mark" aria-hidden="true"></span>
         <span class="scur"><span>${scopeSummaryLabel}</span><b title="${esc(label)}">${esc(label)}</b></span>
       </div>`;
     const cardBody = sum.hasChanges
@@ -159,45 +157,46 @@ ${threadAtmosphereStyles()}
 ${navStyles()}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
-.wrap{max-width:960px;margin:0 auto;padding:30px 24px 40px;position:relative;isolation:isolate}
-.wrap>.ds-thread-layer{top:-34px;bottom:auto;height:240px;opacity:.78}
-.wrap>*:not(.ds-thread-layer){position:relative;z-index:1}
-.review-path{display:flex;align-items:center;margin:0 0 26px;color:var(--l3);font-family:var(--font-mono);font-size:10.5px;font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}.review-path>b{flex:1;height:2px;max-width:90px;margin:0 16px;background:var(--thread-dim);opacity:.5}.review-path>span+b:first-of-type{background:linear-gradient(90deg,var(--thread),var(--thread-dim));opacity:1}.review-path span{display:flex;align-items:center;gap:9px;white-space:nowrap}.review-path i{font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:var(--tracking-numeral);line-height:1;font-style:normal;color:var(--numeral-dim)}.review-path .active{color:var(--accent)}.review-path .active i{color:var(--accent)}
-.lede{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin:4px 0 18px}
+.wrap{max-width:960px;margin:0 auto;padding:24px 24px 40px}
+.session-head{margin-bottom:18px}
+.lede{display:flex;align-items:center;justify-content:space-between;gap:32px;margin:0}
 .eyebrow{margin:0 0 7px;color:var(--blue);font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:var(--tracking-kicker);text-transform:uppercase}
 .lede h1{font-family:var(--font-display);font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 .lede p{color:var(--l2);font-size:14px;margin:8px 0 0;line-height:1.45;max-width:62ch}
-.scope-metrics{display:flex;align-items:center;gap:10px;flex:none;font-size:12.5px;color:var(--l2)}
-.metric{display:flex;flex-direction:column;gap:2px;min-width:80px;padding:9px 11px;border:1px solid var(--line-soft);border-radius:var(--radius-lg);background:var(--fill-1)}
+.scope-metrics{display:flex;align-items:center;flex:none;font-size:12.5px;color:var(--l2)}
+.metric{display:flex;flex-direction:column;gap:3px;min-width:76px;padding:3px 14px;border-left:1px solid var(--line-soft)}
+.metric:first-child{border-left:0}
 .metric b{font-family:var(--font-display);font-size:18px;line-height:1;color:var(--label);font-variant-numeric:tabular-nums}
 .metric span{white-space:nowrap}
+.review-path{display:flex;align-items:center;margin:18px 0 0;padding:10px 0;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);color:var(--l3);font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
+.review-path>b{flex:1;height:1px;min-width:18px;margin:0 13px;background:var(--line-soft)}
+.review-path>span+b:first-of-type{background:linear-gradient(90deg,var(--accent-line),var(--line-soft))}
+.review-path span{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.review-path i{font-family:var(--font-display);font-size:14px;font-weight:700;letter-spacing:var(--tracking-numeral);line-height:1;font-style:normal;color:var(--numeral-dim)}
+.review-path .active{color:var(--accent)}
+.review-path .active i{color:var(--accent)}
 .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
 .card{background:var(--surface-2);border:1px solid transparent;border-radius:var(--radius-island);overflow:hidden}
 .scope-card{grid-column:1;padding:16px;overflow:visible}
 .scope{display:flex;flex-direction:column;font-size:13px;color:var(--l2)}
 .scope-current{display:grid;align-items:stretch;margin-top:12px}
-.scope-current-single{grid-template-columns:3px minmax(0,1fr);align-items:center;gap:12px;min-height:58px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg))}
+.scope-current-single{grid-template-columns:minmax(0,1fr);align-items:center;min-height:58px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg))}
 .scope-current-split{grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:10px}
 #comparePanel:not([hidden]) + .scope-current-split{display:none}
-.scope-current-mark{align-self:stretch;border-radius:999px;background:var(--blue)}
 .scur{display:flex;min-width:0;flex-direction:column;gap:4px}
 .scur span{font-family:var(--font-mono);font-size:10.5px;color:var(--l3);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
 .scur b{display:block;min-width:0;color:var(--label);font-size:16px;line-height:1.2;font-weight:700;letter-spacing:-.012em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.scope-side{position:relative;display:flex;min-width:0;min-height:64px;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg));overflow:hidden}
-.scope-side:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--blue)}
+.scope-side{display:flex;min-width:0;min-height:64px;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border:1px solid var(--sep);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--blue) 5%,var(--subbg));overflow:hidden}
 .scope-side-label{font-family:var(--font-mono);font-size:10.5px;color:var(--l3);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-kicker)}
 .scope-side-label i{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;margin-left:5px}
 .scope-side b{display:block;min-width:0;color:var(--label);font-size:15px;line-height:1.2;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .scope-current-arrow{align-self:center;display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--sep);border-radius:999px;background:var(--subbg);color:var(--l3);font-size:16px}
 .sopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:100%}
-.sopt{position:relative;display:flex;flex-direction:column;gap:4px;min-height:64px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:1px solid transparent;cursor:pointer;padding:10px 12px;border-radius:var(--radius-lg);text-decoration:none;white-space:normal;transition:background-color var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,transform var(--motion-duration-press) var(--motion-ease-out),box-shadow var(--motion-duration-fast) ease}
-.sopt:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:transparent}
+.sopt{display:flex;flex-direction:column;gap:4px;min-height:64px;font:inherit;text-align:left;color:var(--l2);background:var(--subbg);border:1px solid transparent;cursor:pointer;padding:10px 12px;border-radius:var(--radius-lg);text-decoration:none;white-space:normal;transition:background-color var(--motion-duration-fast) ease,border-color var(--motion-duration-fast) ease,transform var(--motion-duration-press) var(--motion-ease-out),box-shadow var(--motion-duration-fast) ease}
 .sopt:hover,.sopt.is-open{color:var(--label);border-color:var(--hair);background:var(--fill)}
 .sopt.is-open:not(.on){border-color:color-mix(in srgb,var(--blue) 30%,var(--hair));background:color-mix(in srgb,var(--blue) 8%,var(--elev))}
-.sopt.is-open:not(.on):before{background:color-mix(in srgb,var(--blue) 55%,transparent)}
 .sopt.on{background:var(--accent-soft);color:var(--label);font-weight:600;border-color:var(--accent-line)}
 .sopt:focus-visible,.openreview:focus-visible,.generated summary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
-.sopt.on:before{background:var(--blue)}
 .sopt:active{transform:scale(.985)}
 .sopt-k{font-size:13px;font-weight:700;color:var(--label);line-height:1.2}
 .sopt-t{font-size:11.5px;line-height:1.3;color:var(--l2)}
@@ -261,30 +260,31 @@ body{background:var(--bg);color:var(--label);min-height:100vh;font-family:var(--
 .empty-recheck:focus-visible,.empty-history:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 @media (prefers-reduced-motion:no-preference){.refpicker:not([hidden]){animation:change-picker-in var(--motion-duration-ui) var(--motion-ease-out) backwards}@keyframes change-picker-in{from{opacity:0;clip-path:inset(0 0 100% round 10px);transform:translateY(-4px) scale(.985)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
 @media (prefers-reduced-motion:reduce){.sopt,.openreview{transition:none}.sopt:active,.openreview:active{transform:none}}
-@media (prefers-contrast:more){.card,.sopt,.refpanel,.refpanel input,.refpanel[data-panel="compare"] .refrow,.cmparrow,.scope-current-single,.scope-side,.scope-current-arrow,.notice,.metric{border-color:var(--label)}}
+@media (prefers-contrast:more){.card,.sopt,.refpanel,.refpanel input,.refpanel[data-panel="compare"] .refrow,.cmparrow,.scope-current-single,.scope-side,.scope-current-arrow,.notice,.metric,.review-path{border-color:var(--label)}}
 @media (max-width:1080px){.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:980px){.scope-card,.file-card{grid-column:1}.sopts{grid-template-columns:repeat(2,minmax(0,1fr))}.scope-metrics{display:none}}
 @media (max-width:700px){.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}.cmparrow{display:none}.refpanel[data-panel="compare"] .refrow{min-height:72px}}
-@media (max-width:600px){.wrap{padding:20px 14px 26px}.wrap>.ds-thread-layer{top:-51px}.review-path{display:flex;width:100%}.review-path>b{flex:1;min-width:12px;max-width:none;margin:0 10px}.review-path span{flex:none;gap:0;font-size:0}.review-path .active{gap:7px;font-size:10.5px}.review-path i{font-size:16px}.lede{display:block;margin-bottom:16px}.lede h1{font-size:28px}.lede p{font-size:14px}.scope-card{padding:14px}.scope-current-single{min-height:54px;padding:9px 11px}.scope-current-split{grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:7px}.scope-side{min-height:60px;padding:9px 10px}.scope-side b{font-size:13px}.scope-current-arrow{width:24px;height:24px;font-size:14px}.sopts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.sopt{min-height:44px;justify-content:center;text-align:center;padding:8px 6px}.sopt-k{font-size:12px}.sopt-t{display:none}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
+@media (max-width:600px){.wrap{padding:20px 14px 26px}.session-head{margin-bottom:16px}.lede{display:block}.lede h1{font-size:28px}.lede p{font-size:14px}.review-path{width:100%;margin-top:16px;padding:9px 0}.review-path>b{flex:1;min-width:10px;margin:0 7px}.review-path span{flex:none;gap:0;font-size:0}.review-path .active{gap:7px;font-size:10.5px}.review-path i{font-size:13px}.scope-card{padding:14px}.scope-current-single{min-height:54px;padding:9px 11px}.scope-current-split{grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:7px}.scope-side{min-height:60px;padding:9px 10px}.scope-side b{font-size:13px}.scope-current-arrow{width:24px;height:24px;font-size:14px}.sopts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.sopt{min-height:44px;justify-content:center;text-align:center;padding:8px 6px}.sopt-k{font-size:12px}.sopt-t{display:none}.files{max-height:58vh}.bar{width:34px}.fc{min-width:70px}.frow{gap:9px;padding:9px 13px}.fdir{max-width:48%}.openreview{width:100%;justify-content:center;margin-left:0}}
 @media (max-width:480px){.reload-label{display:none}.nv-history{padding-left:9px;padding-right:9px}}
 </style></head>
 <body class="ds-map-bg">
 ${nav}
-<main class="wrap ds-thread-host">
-  <div class="ds-thread-layer" data-thread-compact="hide">${PAGE_THREAD}</div>
-  <div class="review-path" role="list" aria-label="Review workflow"><span class="active" role="listitem" aria-current="step"><i>01</i>Scope</span><b aria-hidden="true"></b><span role="listitem"><i>02</i>Read</span><b aria-hidden="true"></b><span role="listitem"><i>03</i>Resolve</span><b aria-hidden="true"></b><span role="listitem"><i>04</i>Decide</span></div>
-  <div class="lede">
-    <div>
-      <p class="eyebrow">Review session</p>
-      <h1>Choose what to review</h1>
-      <p>Set the exact git scope, confirm the changed files, then start with the real diff. A guided story stays optional.</p>
+<main class="wrap">
+  <header class="session-head">
+    <div class="lede">
+      <div>
+        <p class="eyebrow">Review session</p>
+        <h1>Choose what to review</h1>
+        <p>Set the exact git scope, confirm the changed files, then start with the real diff. A guided story stays optional.</p>
+      </div>
+      <div class="scope-metrics" aria-label="Current scope summary">
+        <span class="metric"><b>${sum.totalChanged}</b><span>${sum.totalChanged === 1 ? 'file' : 'files'}</span></span>
+        <span class="metric"><b class="add">+${total.added}</b><span>added</span></span>
+        <span class="metric"><b class="del">−${total.removed}</b><span>removed</span></span>
+      </div>
     </div>
-    <div class="scope-metrics" aria-label="Current scope summary">
-      <span class="metric"><b>${sum.totalChanged}</b><span>${sum.totalChanged === 1 ? 'file' : 'files'}</span></span>
-      <span class="metric"><b class="add">+${total.added}</b><span>added</span></span>
-      <span class="metric"><b class="del">−${total.removed}</b><span>removed</span></span>
-    </div>
-  </div>
+    <div class="review-path" role="list" aria-label="Review workflow"><span class="active" role="listitem" aria-current="step"><i>01</i>Scope</span><b aria-hidden="true"></b><span role="listitem"><i>02</i>Read</span><b aria-hidden="true"></b><span role="listitem"><i>03</i>Resolve</span><b aria-hidden="true"></b><span role="listitem"><i>04</i>Decide</span></div>
+  </header>
   ${notice}
   <div class="layout">
     <section class="card scope-card" aria-label="Review scope">

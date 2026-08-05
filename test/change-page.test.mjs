@@ -834,12 +834,12 @@ test('change page draws from the shared --app-* tokens', () => {
   assert.match(html, /--elev:var\(--app-elev\)/);
 });
 
-test('change page routes its Thread Path through content-free bands', () => {
+test('change page keeps the session heading primary and the workflow stepper secondary', () => {
   const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.match(html, /class="ds-atmosphere-thread ds-scope-thread" viewBox="0 0 900 240"/);
-  assert.match(html, /d="M-30 38H870c26 0 26 62 0 62H10c-26 0-26 126 0 126H930"/);
-  assert.match(html, /\.wrap>\.ds-thread-layer\{top:-34px;bottom:auto;height:240px;opacity:\.78\}/);
-  assert.match(html, /max-width:600px\)\{\.wrap\{[^}]+\}\.wrap>\.ds-thread-layer\{top:-51px\}/);
+  assert.match(html, /<header class="session-head">[\s\S]*?<div class="lede">[\s\S]*?<div class="review-path"/);
+  assert.match(html, /\.review-path\{[^}]*border-top:1px solid var\(--line-soft\);border-bottom:1px solid var\(--line-soft\)/);
+  assert.doesNotMatch(html, /ds-scope-thread|class="ds-thread-layer"/);
+  assert.doesNotMatch(html, /scope-current-mark|\.scope-side:before|\.sopt:before/, 'does not decorate selected cards with partial-edge accent strips');
 });
 
 test('change page keeps ref navigation stable while preserving anchored picker motion', () => {

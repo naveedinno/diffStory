@@ -157,8 +157,9 @@ test('front-door pages apply the saved theme before CSS and expose one selector'
   }
   for (const html of [picker, change]) {
     assert.match(html, /<body class="ds-map-bg"/);
-    assert.match(html, /class="(?:ds-thread-layer|hero-thread ds-atmosphere-thread)"/, 'renders the shared Thread Path atmosphere');
   }
+  assert.match(picker, /class="hero-thread ds-atmosphere-thread"/, 'keeps the Thread Path atmosphere on the repository picker');
+  assert.doesNotMatch(change, /class="ds-thread-layer"/, 'keeps the scope header free of ornamental thread furniture');
   assert.doesNotMatch(history, /ds-thread-layer/, 'keeps review history free of ornamental thread furniture');
   assert.equal((navBar().match(/class="ds-theme-toggle"/g) || []).length, 1);
 });

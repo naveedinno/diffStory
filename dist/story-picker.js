@@ -49,7 +49,6 @@ function storyRow(s, now, routeBase, index) {
     const summary = esc(s.valid ? narrativeText(s.summary) || 'No summary yet.' : s.error || 'This story file could not be read.');
     return (`<article class="story-row state-${state.cls}${s.valid ? '' : ' row-bad'}">` +
         `<a class="row-main" href="${href}">` +
-        `<span class="state-rail" aria-hidden="true"></span>` +
         `<span class="row-num" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>` +
         `<span class="row-body">` +
         `<span class="row-head"><span class="row-title">${esc(title)}</span><span class="badge">${state.label}</span></span>` +
@@ -132,7 +131,6 @@ h2{font-family:var(--font-display);font-size:16px;line-height:1.1;font-weight:60
 .row-main{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:14px;min-height:132px;padding:15px 19px;border:0;border-radius:0;background:transparent;color:inherit;text-decoration:none;transition:background-color var(--motion-duration-fast) ease}
 .row-main:hover{background:var(--fill-1)}
 .row-main:active{background:var(--fill-2)}
-.state-rail{position:absolute;inset:0 auto 0 0;width:3px;background:var(--l3)}.state-ready .state-rail{background:var(--green)}.state-feedback .state-rail{background:var(--blue)}.state-warn .state-rail{background:var(--amber)}.state-bad .state-rail{background:var(--red)}
 .row-num{align-self:start;padding-top:2px;color:var(--numeral);font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:-.01em}
 .row-main:focus-visible,.row-del:focus-visible,.start-review:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .row-main:focus-visible{box-shadow:inset 0 0 0 3px var(--accent-soft)}

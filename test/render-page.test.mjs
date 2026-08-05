@@ -205,8 +205,10 @@ test('rail step numbers stay stable after visiting steps', () => {
 test('story sidebar uses a compact reading rail with one clear active marker', () => {
   const html = renderPage({ repo: process.cwd(), tour, files, baseLabel: 'main', comments: [] });
   assert.match(html, /\.ds-stepcard\{[^}]*grid-template-columns:42px minmax\(0,1fr\)/);
-  assert.match(html, /\.ds-stepcard::after\{[^}]*width:3px[^}]*background:transparent/);
-  assert.match(html, /\.ds-stepcard\.is-active::after\{background:var\(--accent-blue\)\}/);
+  assert.doesNotMatch(html, /\.ds-stepcard::after|\.ds-stepcard\.is-active::after/, 'active walkthrough cards use their full surface instead of a partial-edge strip');
+  assert.match(html, /\.ds-fileitem\.is-active\{[^}]*box-shadow:inset 0 0 0 1px var\(--accent-line\)/, 'active files use a complete outline');
+  assert.match(html, /\.ds-differror\{[^}]*border:1px solid color-mix/, 'error banners use a complete outline');
+  assert.doesNotMatch(html, /\.ds-differror\{[^}]*border-left/, 'error banners do not use a partial-edge strip');
   assert.match(html, /\.ds-readhead\{[^}]*border:0[^}]*background:transparent/);
   assert.match(html, /\.ds-viewtoggle\{[^}]*padding:3px[^}]*border:0/);
 });
@@ -1595,7 +1597,7 @@ test('story viewport controls visible code while highlights control narration fo
   assert.match(html, /data-line="5"[^>]*data-step="s1"[^>]*data-step-focus="0"/);
   assert.doesNotMatch(html, /data-line="2"[^>]*data-step="s1"[^>]*data-step-focus=/);
   assert.doesNotMatch(html, /data-step-camera=/);
-  assert.match(html, /\.ds-row\.is-story-focus\{[^}]*inset 3px 0 0 var\(--accent-blue\)/);
+  assert.match(html, /\.ds-row\.is-story-focus\{box-shadow:none\}/);
   assert.doesNotMatch(html, /\.ds-step\.is-code-step\.is-story-active[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /<span class="ds-difthint"[^>]*>Active beat at full strength<\/span>/i);
 
@@ -2533,7 +2535,7 @@ test('story steps stay in focus mode and expose explicit beat navigation', () =>
   assert.match(html, /data-rail-current>1 \/ 2<\/span>/);
   assert.match(html, /data-beat-move="-1"/);
   assert.doesNotMatch(html, /Active beat at full strength|<span class="ds-difthint"/);
-  assert.match(html, /\.ds-row\.is-story-focus\{[^}]*inset 3px 0 0 var\(--accent-blue\)/);
+  assert.match(html, /\.ds-row\.is-story-focus\{box-shadow:none\}/);
   assert.doesNotMatch(html, /\.ds-row:not\(\.is-story-focus\)[^}]*opacity:\.46/);
   assert.doesNotMatch(html, /outside this beat/);
   assert.doesNotMatch(html, /data-step-camera|is-story-camera|cameraGroups/);

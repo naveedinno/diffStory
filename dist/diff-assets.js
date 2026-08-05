@@ -95,22 +95,22 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-hunkgap{padding:2px 14px;background:var(--gutter);color:var(--faint);font-size:11px;font-family:var(--mono);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .ds-row{display:flex;position:relative;border-bottom:1px solid rgba(255,255,255,0.025);min-height:24px}
 .ds-row[data-review-row]:focus-visible,.ds-urow[data-review-row]:focus-visible{outline:none;box-shadow:inset 0 0 0 3px var(--accent-soft);z-index:3}
-.ds-row.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue)}
+.ds-row.is-story-focus{box-shadow:none}
 .ds-row.is-story-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
 .ds-row.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
-.ds-urow.is-story-focus{box-shadow:inset 3px 0 0 var(--accent-blue);background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
+.ds-urow.is-story-focus{box-shadow:none;background-image:linear-gradient(90deg,var(--accent-soft),transparent)}
 .ds-urow.is-story-focus .ds-no{color:var(--accent-blue);font-weight:700}
 /* Keep surrounding evidence at full text opacity. Focus is marked without
-   boxing each row: one accent rail, tinted cells, and an emphasized line number. */
+   decorative edge rails: use a quiet tint and an emphasized line number. */
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus){box-shadow:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-cell:not(.ds-cell-empty){background-image:none}
 .ds-step.is-voice-active .ds-row.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus){box-shadow:none;background-image:none}
 .ds-step.is-voice-active .ds-urow.is-story-focus:not(.is-voice-focus) .ds-no{color:var(--dim2);font-weight:400}
-.ds-row.is-voice-focus{box-shadow:inset 3px 0 0 var(--md-primary)}
+.ds-row.is-voice-focus{box-shadow:none}
 .ds-row.is-voice-focus .ds-cell:not(.ds-cell-empty){background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-row.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
-.ds-urow.is-voice-focus{position:relative;box-shadow:inset 3px 0 0 var(--md-primary);background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
+.ds-urow.is-voice-focus{position:relative;box-shadow:none;background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
 .ds-cell-single{flex:1}
@@ -118,7 +118,7 @@ export const DIFF_CSS = `.ds-diffscroll{flex:1;min-width:0;min-height:180px;over
 .ds-cell-del{background:rgba(224,68,94,0.14);box-shadow:inset 3px 0 0 var(--del-rail)}
 .ds-cell-paired{box-shadow:none}
 .ds-diffbody-paired-flow .ds-cell-l.ds-cell-paired{background:var(--panel3)}
-.ds-cell-untoured{background:var(--amber-soft);box-shadow:inset 3px 0 0 var(--amber)}
+.ds-cell-untoured{background:var(--amber-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--amber) 62%,transparent)}
 .ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:var(--fill-1)}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
@@ -130,8 +130,8 @@ body.ds-resizing{cursor:col-resize}
 body.ds-resizing .ds-code,body.ds-resizing .ds-no{user-select:none}
 body.ds-selecting-right .ds-code[data-comment-side="left"],
 body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:none;user-select:none}
-/* Line numbers stay right-aligned and tabular so focus can be shown by the
-   continuous row rail without adding a second icon lane to every code row. */
+/* Line numbers stay right-aligned and tabular so focus remains clear without
+   adding a decorative rail or a second icon lane to every code row. */
 .ds-no{width:54px;flex:none;display:flex;align-items:flex-start;justify-content:flex-end;text-align:right;padding:3px 8px 3px 12px;color:var(--dim2);background:var(--gutter);border-right:1px solid var(--diff-rule);user-select:none;font-variant-numeric:tabular-nums}
 .ds-sign{width:12px;flex:none;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
 .ds-sign-add{color:var(--diff-add-text)}
@@ -143,7 +143,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-urow{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,0.025);min-height:23px}
 .ds-urow.ds-row-add{background:rgba(18,150,111,0.12);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-urow.ds-row-del{background:rgba(224,68,94,0.12);box-shadow:inset 3px 0 0 var(--del-rail)}
-.ds-urow.is-untoured{background:var(--amber-soft);border-left:2px solid var(--amber)}
+.ds-urow.is-untoured{background:var(--amber-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--amber) 62%,transparent)}
 .ds-urow .ds-no{width:56px}
 .ds-urow .ds-code{padding:2px 12px 2px 7px}
 .ds-urow .ds-no,.ds-urow .ds-sign{padding-top:2px;padding-bottom:2px}
@@ -160,7 +160,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-viewed-toggle.is-active{border-color:rgba(48,209,88,.28);background:rgba(48,209,88,.08);color:var(--diff-add-text)}
 .ds-viewed-toggle,.ds-fileitem-viewed{--ds-reviewed-check-fg:var(--on-green,#00250c)}
 .ds-viewed-toggle.is-active .ds-viewed-toggle-icon{border-color:var(--add);background:var(--add);color:var(--ds-reviewed-check-fg)}
-.ds-row.is-change-jump,.ds-urow.is-change-jump{box-shadow:inset 3px 0 0 var(--accent-blue)}
+.ds-row.is-change-jump,.ds-urow.is-change-jump{box-shadow:inset 0 0 0 1px var(--accent-blue)}
 /* syntax highlighting — the line background still marks add/del */
 .ds-code .tk-k{color:var(--tk-k)}
 .ds-code .tk-t{color:var(--tk-t)}
@@ -176,7 +176,7 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-cell-del .changed,.ds-urow.ds-row-del .changed{background:rgba(224,68,94,0.36);box-shadow:0 0 0 1px rgba(224,68,94,0.36)}
 .ds-diffnote{padding:14px 16px;color:var(--muted);font-family:var(--sans);font-size:13px}
 .ds-diffnote-soft{color:var(--dim2);font-size:12px;border-bottom:1px solid var(--line-soft)}
-.ds-differror{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-left:3px solid var(--del);background:var(--del-bg)}
+.ds-differror{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid color-mix(in srgb,var(--del) 34%,var(--diff-rule));background:var(--del-bg)}
 .ds-differror-title{color:var(--text);font-weight:700}
 .ds-differror-detail{color:var(--muted)}
 .ds-diffretry{min-height:32px;padding:5px 13px;border:1px solid transparent;border-radius:var(--radius-pill);background:var(--fill-2);color:var(--text);font:inherit;font-weight:700;cursor:pointer}

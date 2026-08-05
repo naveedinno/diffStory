@@ -32,6 +32,7 @@ test('compact session cards preserve trust and review facts on mobile', () => {
   assert.match(html, /<b>2<\/b> queued comments/);
   assert.doesNotMatch(html, /session-facts>span:nth-child/);
   assert.match(html, /\.story-row\{position:relative;display:block;border:1px solid transparent[^}]*border-radius:var\(--radius-island\)[^}]*background:var\(--surface-2\)[^}]*overflow:hidden/);
+  assert.doesNotMatch(html, /state-rail/, 'uses the status badge instead of a partial-edge status strip');
   assert.match(html, /\.row-main\{[^}]*padding:15px 19px[^}]*background:transparent/, 'lets the action column use the full card width');
   assert.match(html, /\.row-del\{position:absolute;z-index:2;top:13px;right:13px;width:34px;height:34px[^}]*background:transparent/);
   assert.match(html, /\.row-del::after\{content:"";position:absolute;inset:-4px\}/);

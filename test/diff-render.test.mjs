@@ -101,17 +101,17 @@ test('semantic diff text uses dedicated accessible ink tokens in every diff mode
   assert.match(cssRuleBody(DIFF_CSS, '.ds-code-del'), /color:var\(--diff-del-text\)/);
 });
 
-test('story focus keeps every code row readable without boxing each focused row', () => {
+test('story focus keeps every code row readable without partial-edge rails', () => {
   assert.doesNotMatch(DIFF_CSS, /\.ds-step\.is-code-step\.is-story-active[^{]*\{[^}]*opacity:/);
 
   const splitFocus = cssRuleBody(DIFF_CSS, '.ds-row.is-story-focus');
-  assert.match(splitFocus, /inset 3px 0 0 var\(--accent-blue\)/);
-  assert.doesNotMatch(splitFocus, /inset 0 -?1px 0 var\(--accent-line\)/);
+  assert.match(splitFocus, /box-shadow:none/);
+  assert.doesNotMatch(splitFocus, /inset [1-9][^;]* 0 0/);
   assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-story-focus .ds-cell:not(.ds-cell-empty)'), /background-image:linear-gradient/);
 
   const unifiedFocus = cssRuleBody(DIFF_CSS, '.ds-urow.is-story-focus');
-  assert.match(unifiedFocus, /inset 3px 0 0 var\(--accent-blue\)/);
-  assert.doesNotMatch(unifiedFocus, /inset 0 -?1px 0 var\(--accent-line\)/);
+  assert.match(unifiedFocus, /box-shadow:none/);
+  assert.doesNotMatch(unifiedFocus, /inset [1-9][^;]* 0 0/);
   assert.match(unifiedFocus, /background-image:linear-gradient/);
 });
 
@@ -121,8 +121,15 @@ test('split placeholders and reading focus use one quiet visual signal', () => {
   assert.doesNotMatch(emptyCell, /gradient|image/);
 
   assert.doesNotMatch(DIFF_CSS, /\.ds-(?:u?row)\.is-voice-focus::before/);
-  assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /inset 3px 0 0 var\(--md-primary\)/);
-  assert.match(cssRuleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /inset 3px 0 0 var\(--md-primary\)/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /box-shadow:none/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-urow.is-voice-focus'), /box-shadow:none/);
+});
+
+test('review status cues avoid cropped one-edge borders', () => {
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-cell-untoured'), /inset 0 0 0 1px/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-urow.is-untoured'), /inset 0 0 0 1px/);
+  assert.doesNotMatch(cssRuleBody(DIFF_CSS, '.ds-urow.is-untoured'), /border-left/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-change-jump,.ds-urow.is-change-jump'), /inset 0 0 0 1px/);
 });
 
 test('bare hunk gap matches the legacy markup exactly', () => {

@@ -47,7 +47,7 @@ test('workspace handoffs are interruptible and scoped to the changing surface', 
 });
 
 test('change navigation uses one stable marker without keyframes or cleanup timers', () => {
-  assert.match(DIFF_CSS, /\.ds-row\.is-change-jump,\.ds-urow\.is-change-jump\{box-shadow:inset 3px 0 0 var\(--accent-blue\)\}/);
+  assert.match(DIFF_CSS, /\.ds-row\.is-change-jump,\.ds-urow\.is-change-jump\{box-shadow:inset 0 0 0 1px var\(--accent-blue\)\}/);
   assert.doesNotMatch(DIFF_CSS, /dsChangeJump/);
   assert.match(DIFF_JS, /\$all\('\.ds-row-add,\.ds-row-del',holder\)\.forEach\(function\(r\)\{r\.classList\.remove\('is-change-jump'\);r\.removeAttribute\('aria-current'\);\}\)/);
   assert.doesNotMatch(DIFF_JS, /setTimeout\([^\n]*is-change-jump|1300/);
