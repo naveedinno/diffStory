@@ -12,7 +12,7 @@ export function progressPanelStyles() {
 .ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b;--pp-text:#eef1f5;--pp-muted:#98a2b3;--pp-faint:#98a2b3;
   --pp-line:rgba(190,205,225,.12);--pp-blue:#3fb2ff;--pp-warn:#ffb224;--pp-err:#ff6b62;--pp-ok:#3ddc97;
   font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:var(--pp-text);
-  background:var(--pp-bg);border:1px solid var(--pp-line);border-radius:16px;overflow:hidden;letter-spacing:-.01em}
+  background:var(--pp-bg);border:1px solid var(--pp-line);border-radius:var(--radius-island,26px);overflow:hidden;letter-spacing:-.01em}
 @media (prefers-color-scheme:dark){.ds-pp{--pp-bg:#14171c;--pp-elev:#1e232b}}
 @media (prefers-color-scheme:light){.ds-pp{--pp-bg:#181b20;--pp-elev:#242a32;--pp-muted:#a6b0bf;--pp-faint:#a6b0bf}}
 .ds-pp[data-variant="floating"]{position:fixed;right:18px;bottom:18px;width:min(460px,calc(100vw - 36px));max-height:min(72vh,580px);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5);z-index:50}
@@ -27,7 +27,7 @@ export function progressPanelStyles() {
   max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-pp-agent:empty{display:none}
 .ds-pp-flex{flex:1}
-.ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:500;color:var(--pp-text);background:transparent;border:1px solid var(--pp-line);border-radius:7px;padding:5px 11px;cursor:pointer}
+.ds-pp-stop,.ds-pp-close{font:inherit;font-size:12px;font-weight:600;color:var(--pp-text);background:var(--fill-1,rgba(190,205,225,.07));border:1px solid transparent;border-radius:var(--radius-pill,999px);padding:6px 13px;cursor:pointer}
 .ds-pp-stop[hidden],.ds-pp-close[hidden]{display:none}
 .ds-pp-stop:focus-visible,.ds-pp-close:focus-visible,.ds-pp-foot button:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pp-blue) 12%,transparent)}
 .ds-pp-sub{padding:9px 14px 2px;display:flex;align-items:flex-start;gap:10px}
@@ -75,9 +75,9 @@ export function progressPanelStyles() {
 .ds-pp-foot{padding:10px 14px;border-top:1px solid var(--pp-line);font-size:12px;color:var(--pp-text);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .ds-pp-foot[hidden]{display:none}
 .ds-pp-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:600;color:#06121c;background:var(--pp-blue);border:none;border-radius:9px;padding:6px 11px;cursor:pointer}
+.ds-pp-foot .ds-pp-reload{font:inherit;font-size:12px;font-weight:600;color:#06121c;background:var(--pp-blue);border:none;border-radius:var(--radius-pill,999px);padding:7px 13px;cursor:pointer}
 .ds-pp-foot .ds-pp-secondary{font:inherit;font-size:12px;font-weight:600;color:var(--pp-text);background:transparent;
-  border:1px solid var(--pp-line);border-radius:9px;padding:6px 11px;cursor:pointer}
+  border:1px solid transparent;border-radius:var(--radius-pill,999px);padding:7px 13px;cursor:pointer}
 /* The milestone row is the thread made structural: a 2px line through small nodes,
    accent up to the live position, dim beyond — the 3b narrated-loading treatment. */
 .ds-pp-miles{list-style:none;display:flex;align-items:flex-start;margin:0;padding:12px 14px 2px}

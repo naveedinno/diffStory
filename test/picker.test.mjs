@@ -44,7 +44,7 @@ test('skill recovery stays visible without outranking the repository action', ()
   assert.ok(html.indexOf('id="quickAddBtn"') < html.indexOf('id="skillWarn"'), 'places repository selection before optional setup recovery');
   assert.match(html, /id="skillWarnText"[^>]+role="status"[^>]+aria-live="polite"[^>]+aria-atomic="true"/, 'announces asynchronous skill recovery state without interrupting');
   assert.match(html, /\.launchwarn\{[^}]*border-top:1px solid var\(--sep\)[^}]*background:transparent[^}]*color:var\(--label2\)/);
-  assert.match(html, /\.skillfix\{[^}]*color:var\(--label2\)[^}]*background:transparent[^}]*border:1px solid var\(--hairline\)/);
+  assert.match(html, /\.skillfix\{[^}]*color:var\(--label2\)[^}]*background:var\(--fill-1\)[^}]*border:1px solid transparent[^}]*border-radius:var\(--radius-pill\)/);
   assert.match(html, /id="skillUpdateBtn"[^>]*>Update skills<\/button>/, 'keeps a direct recovery action available');
 });
 

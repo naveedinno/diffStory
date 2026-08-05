@@ -30,15 +30,15 @@ export function themeControl(): string {
 export function themeControlStyles(): string {
   return `
 .ds-theme-wrap{position:relative;display:inline-flex;align-items:center;flex:none}
-.ds-theme-toggle{position:relative;width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--nv-bd,var(--line,var(--hairline,var(--app-hair))));border-radius:var(--radius);background:var(--nv-fill,var(--fill-1,var(--hover,var(--app-fill))));color:var(--nv-mut,var(--muted,var(--label2,var(--app-l2))));font:inherit;cursor:pointer}
+.ds-theme-toggle{position:relative;width:34px;height:34px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--radius-pill);background:var(--nv-fill,var(--fill-2,var(--hover,var(--app-fill))));color:var(--nv-mut,var(--muted,var(--label2,var(--app-l2))));font:inherit;cursor:pointer}
 .ds-theme-toggle::after{content:"";position:absolute;inset:-6px}
 .ds-theme-toggle:hover,.ds-theme-toggle[aria-expanded="true"]{background:var(--nv-fill2,var(--fill-2,var(--hover,var(--app-fill))));color:var(--nv-fg,var(--text,var(--label,var(--app-label))))}
 .ds-theme-toggle:focus-visible,.ds-theme-menu button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .ds-theme-toggle>span{width:17px;height:17px;display:grid;place-items:center}.ds-theme-toggle>span[hidden]{display:none}
 .ds-theme-toggle svg,.ds-theme-choice-icon svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
-.ds-theme-menu{position:absolute;top:calc(100% + 7px);right:0;z-index:100;width:154px;padding:5px;border:1px solid var(--nv-bd,var(--line,var(--hairline,var(--app-hair))));border-radius:var(--radius-lg);background:var(--nv-bg,var(--panel2,var(--sheet,var(--app-elev))));box-shadow:var(--shadow);transform-origin:calc(100% - 16px) -7px}
+.ds-theme-menu{position:absolute;top:calc(100% + 7px);right:0;z-index:100;width:154px;padding:6px;border:1px solid var(--nv-bd-soft,var(--line-soft,var(--hairline,var(--app-hair))));border-radius:var(--radius-lg);background:var(--nv-bg,var(--panel2,var(--sheet,var(--app-elev))));box-shadow:var(--shadow);transform-origin:calc(100% - 17px) -7px}
 .ds-theme-menu[hidden]{display:none}
-.ds-theme-menu button{width:100%;height:34px;display:grid;grid-template-columns:18px minmax(0,1fr) 14px;align-items:center;gap:8px;padding:0 9px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--nv-fg,var(--text,var(--label,var(--app-label))));font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.ds-theme-menu button{width:100%;height:36px;display:grid;grid-template-columns:18px minmax(0,1fr) 14px;align-items:center;gap:8px;padding:0 10px;border:0;border-radius:var(--radius);background:transparent;color:var(--nv-fg,var(--text,var(--label,var(--app-label))));font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
 .ds-theme-menu button:hover,.ds-theme-menu button:focus-visible{background:var(--nv-fill,var(--fill-2,var(--hover,var(--app-fill))))}
 .ds-theme-choice-icon{width:16px;height:16px;color:var(--nv-mut,var(--muted,var(--label2,var(--app-l2))))}
 .ds-theme-check{color:var(--nv-blue,var(--accent,var(--blue,var(--app-blue))));font-weight:700;opacity:0}.ds-theme-menu button[aria-checked="true"] .ds-theme-check{opacity:1}
@@ -146,8 +146,8 @@ export function sharedTokens(): string {
      on elevated surfaces (the owner asked to keep AA); don't "sync" it back down. */
   --text:#eef1f5;--text-2:#98a2b3;--text-3:#8792a2;
   /* lines + fills (cool alpha neutrals) */
-  --line:rgba(190,205,225,.14);--line-soft:rgba(190,205,225,.09);
-  --fill-1:rgba(190,205,225,.05);--fill-2:rgba(190,205,225,.08);--fill-3:rgba(190,205,225,.12);
+  --line:rgba(190,205,225,.11);--line-soft:rgba(190,205,225,.065);
+  --fill-1:rgba(190,205,225,.07);--fill-2:rgba(190,205,225,.12);--fill-3:rgba(190,205,225,.18);
   /* signal accent */
   --accent:#3fb2ff;--accent-hi:#7adfff;--on-accent:#06121c;--accent-soft:rgba(63,178,255,.12);--accent-line:rgba(63,178,255,.3);
   /* semantic: evidence + state */
@@ -168,9 +168,9 @@ export function sharedTokens(): string {
   --font-display:'Space Grotesk','IBM Plex Sans',sans-serif;
   --text-xs:10px;--text-sm:11px;--text-md:12.5px;--text-base:13px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;--text-numeral:26px;--text-numeral-lg:56px;
   --tracking-kicker:.14em;--tracking-tight:-.02em;--tracking-numeral:-.03em;--leading-tight:1.25;--leading-body:1.55;
-  /* spacing + radii (4px base; controls 6/9/12 harmonize with 16px islands) */
+  /* spacing + radii: soft islands, tonal controls, and full-pill actions. */
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-8:32px;--sp-10:40px;
-  --radius-sm:6px;--radius:9px;--radius-lg:12px;--radius-island:16px;--rail-width:316px;--control-h:32px;--control-h-lg:38px;--hairline-w:1px;
+  --radius-sm:8px;--radius:12px;--radius-lg:18px;--radius-island:26px;--radius-pill:999px;--rail-width:316px;--control-h:34px;--control-h-lg:40px;--hairline-w:1px;
   /* motion (carried over verbatim) */
   --motion-ease-out:cubic-bezier(0.23,1,0.32,1);--motion-ease-in-out:cubic-bezier(0.77,0,0.175,1);--motion-ease-drawer:cubic-bezier(0.32,0.72,0,1);
   --motion-duration-press:120ms;--motion-duration-fast:150ms;--motion-duration-ui:200ms;--motion-duration-progress:250ms;--motion-duration-spatial:340ms;
@@ -181,8 +181,8 @@ export function sharedTokens(): string {
 :root[data-theme="light"]{color-scheme:light;
   --bg:#edf0f4;--surface:#ffffff;--surface-2:#eef1f5;--surface-3:#e5eaf1;
   --text:#14171c;--text-2:#5c6675;--text-3:#5f6976;
-  --line:rgba(20,30,45,.15);--line-soft:rgba(20,30,45,.08);
-  --fill-1:rgba(20,30,45,.035);--fill-2:rgba(20,30,45,.06);--fill-3:rgba(20,30,45,.1);
+  --line:rgba(20,30,45,.12);--line-soft:rgba(20,30,45,.065);
+  --fill-1:rgba(20,30,45,.045);--fill-2:rgba(20,30,45,.075);--fill-3:rgba(20,30,45,.12);
   --accent:#0072d6;--accent-hi:#0086f0;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
   /* Rails and fills keep the Signal semantic hues; the darker ink variants
      give small diff text AA contrast on header, split, and unified tints. */

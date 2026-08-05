@@ -79,6 +79,16 @@ test('theme palettes use a resolved data attribute instead of an OS-only media q
   assert.doesNotMatch(navCss, /prefers-color-scheme/);
 });
 
+test('shared geometry gives every surface soft islands and pill controls', () => {
+  const tokens = sharedTokens();
+  const navCss = navStyles();
+
+  assert.match(tokens, /--radius-sm:8px;--radius:12px;--radius-lg:18px;--radius-island:26px;--radius-pill:999px/);
+  assert.match(tokens, /--control-h:34px;--control-h-lg:40px/);
+  assert.match(navCss, /\.ds-nav\{[^}]*border-radius:var\(--radius-island\)/);
+  assert.match(navCss, /\.nv-act,\.nv-pri\{[^}]*border-radius:var\(--radius-pill\)/);
+});
+
 test('light semantic diff ink stays WCAG AA on header, split, and unified surfaces', () => {
   const tokens = sharedTokens();
   const light = cssBlock(tokens, ':root[data-theme="light"]');

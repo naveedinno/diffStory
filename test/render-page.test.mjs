@@ -274,6 +274,11 @@ test('story text cannot take over the diff viewport when read aloud is off', () 
   assert.match(html, /\.ds-step\.is-code-step\{[^}]*display:flex[^}]*flex-direction:column[^}]*overflow:hidden/);
   assert.match(html, /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*flex:1[^}]*min-height:180px/s);
   assert.match(html, /\.ds-beatdock-note \.ds-beat-text\{[^}]*-webkit-line-clamp:2/);
+  assert.match(
+    html,
+    /@media \(max-width:620px\)\{[\s\S]*?\.ds-beatdock-note \.ds-beat-text\{display:block;overflow:visible;-webkit-line-clamp:unset\}/,
+    'compact review keeps the complete active narration available',
+  );
 });
 
 test('the final session layout cannot re-enable horizontal story or diff scrolling', () => {
@@ -531,7 +536,7 @@ test('review interaction regressions keep hidden states, note actions, and resum
   // up with the chrome above them.
   assert.match(html, /#ds-view-tour>:not\(\.ds-dock\):not\(\.ds-filmthread\):not\(\[hidden\]\)\{[^}]*width:100%;max-width:none;margin:0/);
   assert.match(html, /#ds-view-tour:not\(\[hidden\]\)\{[^}]*gap:8px/);
-  assert.match(html, /\.ds-dock\{[^}]*width:100%;min-width:0;max-width:100%;margin:0[^}]*border-radius:16px/);
+  assert.match(html, /\.ds-dock\{[^}]*width:100%;min-width:0;max-width:100%;margin:0[^}]*border-radius:var\(--radius-island\)[^}]*background:var\(--surface-2\)/);
   assert.match(html, /reviewPositionReady=true;restoreReviewPosition\(\);/);
   assert.match(html, /<script type="application\/json" id="ds-initial-comments">[^<]*const orders = \[\];/);
 });
@@ -559,7 +564,7 @@ test('filmstrip navigation names review steps by purpose instead of implementati
   assert.match(html, /\.ds-filmthread-line\{[^}]*top:40px;height:1px;opacity:\.82/);
   assert.match(html, /\.ds-filmthread-scroll\{[^}]*scrollbar-width:none\}\.ds-filmthread-scroll::-webkit-scrollbar\{display:none\}/);
   assert.match(html, /\.ds-filmthread-nodes\{[^}]*justify-content:space-between[^}]*gap:4px[^}]*min-width:100%/);
-  assert.match(html, /\.ds-filmnode-num\{[^}]*width:28px;min-width:28px;height:28px;min-height:28px[^}]*color:color-mix\(in srgb,var\(--text-2\) 72%,var\(--numeral-dim\)\)[^}]*transform:translateY\(var\(--ds-dock-lift\)\) scale\(var\(--ds-dock-scale\)\)/);
+  assert.match(html, /\.ds-filmnode-num\{[^}]*width:30px;min-width:30px;height:30px;min-height:30px[^}]*border-radius:var\(--radius-pill\)[^}]*color:color-mix\(in srgb,var\(--text-2\) 72%,var\(--numeral-dim\)\)[^}]*transform:translateY\(var\(--ds-dock-lift\)\) scale\(var\(--ds-dock-scale\)\)/);
   assert.match(html, /\.ds-filmnode:is\(:hover,:focus-visible\)\{--ds-dock-scale:1\.24;--ds-dock-lift:-5px\}/);
   assert.match(html, /\.ds-filmnode:has\(\+\.ds-filmnode:is\(:hover,:focus-visible\)\)[^}]*--ds-dock-scale:1\.09/);
   assert.match(html, /\.ds-filmthread-tooltip\{[^}]*bottom:calc\(100% \+ 5px\)[^}]*width:max-content[^}]*max-width:min\(520px[^}]*max-height:none;overflow:visible[^}]*text-wrap:pretty;white-space:normal;overflow-wrap:anywhere[\s\S]*?\.ds-filmthread-tooltip\.is-visible\{opacity:1/);

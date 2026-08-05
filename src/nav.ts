@@ -84,9 +84,9 @@ a.nv-crumb:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .nv-crumb.nv-cur{color:var(--nv-fg);font-weight:600;cursor:default}
 .nv-sep{color:var(--nv-dim);font-size:13px;flex:none;opacity:.7}
 .nv-spacer{flex:1 1 auto;min-width:8px}
-.nv-act,.nv-pri{display:inline-flex;align-items:center;gap:6px;flex:none;height:var(--control-h);padding:0 13px;border-radius:var(--radius);
+.nv-act,.nv-pri{display:inline-flex;align-items:center;gap:6px;flex:none;height:var(--control-h);padding:0 14px;border-radius:var(--radius-pill);
   font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap;letter-spacing:-.01em}
-.nv-act{color:var(--nv-fg);background:var(--nv-fill);border:1px solid var(--nv-bd)}
+.nv-act{color:var(--nv-fg);background:var(--nv-fill);border:1px solid transparent}
 .nv-act:hover{background:var(--nv-fill2)}
 .nv-pri{color:var(--on-accent);background:var(--nv-blue);border:1px solid transparent;font-weight:600}
 .nv-pri:hover{background:var(--nv-blue2)}
