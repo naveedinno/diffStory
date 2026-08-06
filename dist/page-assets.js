@@ -2200,6 +2200,9 @@ const PAGE_JS_HEAD = `
   // How many beats of the step under the cursor to warm ahead of a play. Matches
   // the daemon's own prepare depth; it clamps anything larger.
   var ALOUD_PREPARE_BEATS=4;
+  // Step selection is also a browsing gesture. Wait until the reviewer has
+  // actually settled before asking Aloud to generate anything in the background.
+  var ALOUD_PREPARE_DWELL_MS=1000;
   // Long enough that a normal pause/resume always answers first, short enough
   // that a wedged one hands the control back while the reviewer is still looking
   // at it. aloudControl never rejects, so this only fires on a genuine stall.
@@ -2222,7 +2225,7 @@ const PAGE_JS_HEAD = `
       aloudPrepareTimer=0;
       var panel=stepPanels&&stepPanels[stepIndex];if(!panel)return;
       if(panel.hasAttribute('data-step-lazy')){
-        loadStoryStep(stepIndex,function(ok){if(ok)prepareStepNarration(stepIndex);});
+        loadStoryStep(stepIndex,function(ok){if(ok&&prepareRequest===aloudPrepareRequest)prepareStepNarration(stepIndex);});
         return;
       }
       var units=stepSpeechUnits(panel),chunks=[];
@@ -2247,7 +2250,7 @@ const PAGE_JS_HEAD = `
       }).catch(function(){
         // Preparation is opportunistic. Play owns the user-visible error path.
       });
-    },120);
+    },ALOUD_PREPARE_DWELL_MS);
   }
   function aloudControl(action,silent){
     return aloudFetch('control',{action:action}).catch(function(err){if(!silent)toast(err.message||'Aloud is unavailable.','error');});

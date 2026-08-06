@@ -2900,6 +2900,83 @@ test('narration preparation identity follows the active Aloud settings', () => {
   assert.notEqual(aloudPreparationIdentity(base), aloudPreparationIdentity({ ...base, mode: 'fast' }));
 });
 
+test('narration preparation waits for a one-second step dwell', () => {
+  let now = 0;
+  let nextTimer = 1;
+  const timers = new Map();
+  const fetches = [];
+  const context = {
+    stepPanels: [
+      null,
+      { id: 'one', hasAttribute: () => false },
+      { id: 'two', hasAttribute: () => false },
+    ],
+    aloudIntent: 'off',
+    aloudActive: false,
+    speechLoadingLabel: '',
+    aloudPrepareRequest: 0,
+    aloudPrepareTimer: 0,
+    aloudPreparedText: '',
+    ALOUD_PREPARE_BEATS: 4,
+    setTimeout(callback, delay) {
+      const id = nextTimer++;
+      timers.set(id, { callback, at: now + delay });
+      return id;
+    },
+    clearTimeout(id) {
+      timers.delete(id);
+    },
+    stepSpeechUnits(panel) {
+      return [{ text: panel.id }];
+    },
+    splitSpeechUnit(text) {
+      return [text];
+    },
+    loadStoryStep() {
+      assert.fail('loaded steps must not enter the lazy-loading path');
+    },
+    aloudFetch(path) {
+      fetches.push(path);
+      return Promise.resolve({
+        service: 'aloud-speech-daemon',
+        protocolVersion: 2,
+        engine: 'kokoro',
+        voice: 'af_sarah',
+        rate: 1,
+        mode: 'auto',
+      });
+    },
+  };
+  const dwellDeclaration = /var ALOUD_PREPARE_DWELL_MS=\d+;/.exec(PAGE_JS)?.[0];
+  assert.ok(dwellDeclaration, 'the rendered client must declare its preparation dwell');
+  const advance = (milliseconds) => {
+    now += milliseconds;
+    for (;;) {
+      const due = [...timers.entries()]
+        .filter(([, timer]) => timer.at <= now)
+        .sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) return;
+      timers.delete(due[0]);
+      due[1].callback();
+    }
+  };
+  vm.runInNewContext(
+    `${dwellDeclaration}\n${clientFunction('function aloudPreparationIdentity(status){')}\n${clientFunction('function prepareStepNarration(stepIndex){')}\nthis.prepareStepNarration=prepareStepNarration;`,
+    context,
+  );
+
+  context.prepareStepNarration(1);
+  advance(500);
+  assert.deepEqual(fetches, [], 'quickly leaving a step must not start voice generation');
+
+  context.prepareStepNarration(2);
+  advance(999);
+  assert.deepEqual(fetches, [], 'generation must remain silent until the new step has dwelled for one second');
+
+  advance(1);
+  assert.deepEqual(fetches, ['status'], 'the currently selected step may prepare after the dwell');
+});
+
 test('Play waits for the selected lazy step instead of jumping to a loaded step', () => {
   const loadCalls = [];
   const speakCalls = [];
