@@ -1,5 +1,5 @@
-// Integration test: feedback is scoped to the story it was left against, and the
-// chosen story survives a restart. Run with: npm test
+// Integration test: feedback and the saved reading position are scoped to the story
+// they belong to, and the chosen story survives a restart. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -84,6 +84,47 @@ async function listComments(base) {
   assert.equal(res.status, 200);
   return res.json();
 }
+
+test('each story in one review scope keeps its own saved reading position', async () => {
+  const repo = repoWithTwoScopedStories();
+  const home = mkdtempSync(join(tmpdir(), 'ds-scope-home-'));
+  const { server, base } = await boot(repo, home);
+  const openStory = async (id) => {
+    const res = await fetch(`${base}${route(repo)}/review?story=${encodeURIComponent(id)}`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    return {
+      scope: (/data-review-scope="([^"]*)"/.exec(html) || [])[1],
+      story: (/data-story-key="([^"]*)"/.exec(html) || [])[1],
+    };
+  };
+  try {
+    const alpha = await openStory('stories/alpha.json');
+    const beta = await openStory('stories/beta.json');
+
+    // Both stories describe the same working tree, so scope alone cannot tell them apart.
+    assert.equal(alpha.scope, beta.scope, 'both stories review the same base..head scope');
+    assert.ok(alpha.story, 'the page names the story its reading position belongs to');
+    assert.notEqual(
+      alpha.story,
+      beta.story,
+      'a step saved while reading one story must not restore into the other',
+    );
+
+    // Reopening the same story must land in the same slot, or resuming never works.
+    assert.deepEqual(await openStory('stories/alpha.json'), alpha);
+
+    // Regenerating a story rewrites its steps: step 3 is no longer the same step.
+    writeStory(repo, 'stories/alpha.json', 'Alpha concern, retold', 'a.txt', ['a.txt']);
+    const retold = await openStory('stories/alpha.json');
+    assert.equal(retold.scope, alpha.scope);
+    assert.notEqual(retold.story, alpha.story, 'a rewritten story starts from its own beginning');
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
 
 test('feedback filed on one story is invisible to the other', async () => {
   const repo = repoWithTwoScopedStories();

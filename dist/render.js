@@ -174,7 +174,7 @@ ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(pageTitle)}</title>
 <style>${PAGE_CSS}${progressPanelStyles()}</style>
 </head>
-<body class="ds-map-bg${storyless ? '' : ' ds-overview-active'}"${storyless ? ' data-storyless="1"' : ''} data-read-view="tour" data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
+<body class="ds-map-bg${storyless ? '' : ' ds-overview-active'}"${storyless ? ' data-storyless="1"' : ''} data-read-view="tour" data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(reviewState.scopeKey)}" data-story-key="${esc(input.storyKey ?? '')}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(input.reviewPageToken ?? '')}">
 <header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>
   <div class="ds-reviewchrome-rail">
     <div class="ds-reviewchrome-nav">

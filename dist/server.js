@@ -863,6 +863,7 @@ function diffScreen(session, params) {
         storyless: true,
         reviewState,
         reviewPageToken: pageLease.token,
+        storyKey: pageLease.storyIdentity,
         stagedWorktreeDivergentFiles: data.stagedWorktreeDivergentFiles,
         excludedFiles: data.excludedFiles,
     });
@@ -1025,6 +1026,7 @@ function renderReview(session) {
         comments: commentsForStory(loadComments(repo), activeStoryId(session, pageLease)),
         reviewState,
         reviewPageToken: pageLease.token,
+        storyKey: pageLease.storyIdentity,
         storyDrift,
         stagedWorktreeDivergentFiles: data.stagedWorktreeDivergentFiles,
         excludedFiles: data.excludedFiles,

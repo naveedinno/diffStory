@@ -51,6 +51,12 @@ export interface RenderInput {
   reviewState?: ReviewStateSummary;
   /** Opaque server-issued identity for lazy requests from this exact page. */
   reviewPageToken?: string;
+  /**
+   * Identity of the story on screen, stable while its steps are. Several stories —
+   * and every regeneration of one — share a single base..head scope, so the scope
+   * key alone cannot say whose saved reading position a page is allowed to resume.
+   */
+  storyKey?: string;
   /** Whether this story was generated for the exact diff currently on screen. */
   storyFreshness?: 'current' | 'stale' | 'unverified';
   /** Scope-aware changes observed after the story baseline was captured. */
@@ -275,7 +281,7 @@ ${BRAND_HEAD_LINKS}
 </head>
 <body class="ds-map-bg${storyless ? '' : ' ds-overview-active'}"${storyless ? ' data-storyless="1"' : ''} data-read-view="tour" data-story-freshness="${storyFreshness}" data-feedback-health="${feedbackHealthy ? 'healthy' : 'invalid'}"${focusedStory ? ' data-story-scope="focused"' : ''} data-repo="${esc(repo)}" data-viewed-scope="${esc(`${repo}|${reviewState.scopeKey || baseLabel}|full`)}" data-review-scope="${esc(
     reviewState.scopeKey,
-  )}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(
+  )}" data-story-key="${esc(input.storyKey ?? '')}" data-current-diff-hash="${esc(reviewState.currentDiffHash)}" data-review-page-token="${esc(
     input.reviewPageToken ?? '',
   )}">
 <header class="ds-reviewchrome${storyless ? '' : ' is-storyful'}" data-review-chrome${storyless ? ' data-storyless-chrome' : ' data-story-chrome'}>

@@ -2571,7 +2571,11 @@ const PAGE_JS_HEAD = `
   function selectFileByPath(file){
     for(var k=0;k<filePanels.length;k++){if(filePanels[k].getAttribute('data-file')===file){selectFile(k);return;}}
   }
-  function reviewUiKey(){return 'ds-review-ui:'+(document.body.getAttribute('data-review-scope')||document.body.getAttribute('data-viewed-scope')||'');}
+  // Several stories — and every rewrite of one — share a single base..head scope, so a
+  // position saved under the scope alone replays into whichever story is opened next,
+  // dropping the reader mid-way through a story they have not begun. The story identity
+  // keeps each one's slot to itself.
+  function reviewUiKey(){return 'ds-review-ui:'+(document.body.getAttribute('data-review-scope')||document.body.getAttribute('data-viewed-scope')||'')+':'+(document.body.getAttribute('data-story-key')||'');}
   function currentReviewPosition(){
     var view=currentView();
     var panel=view==='files'?filePanels[selectedFile]:stepPanels[active];

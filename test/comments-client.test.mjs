@@ -150,6 +150,9 @@ test('the review-comment feature contains no AI delivery or conversation machine
 test('file filters, resume state, and generic review dialogs remain local', () => {
   assert.match(PAGE_JS, /function applyFileFilters\(/);
   assert.match(PAGE_JS, /function restoreReviewPosition\(/);
+  // The saved position is restored on load, so its key must name the story it was
+  // saved in — scope alone is shared by every story over one base..head range.
+  assert.match(PAGE_JS, /function reviewUiKey\(\)\{return 'ds-review-ui:'[\s\S]*?data-story-key/);
   assert.match(PAGE_JS, /modalStack=\[\],modalBackgroundSnapshots=\[\]/);
   assert.match(PAGE_JS, /commandReturnFocus/);
   assert.match(PAGE_JS, /var modalRoot=topModalRoot\(\)/);
