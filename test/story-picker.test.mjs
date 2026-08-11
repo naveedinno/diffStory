@@ -23,6 +23,13 @@
 // the populated and empty states, both evidence modes, the delete confirmation
 // including Escape and focus restore, and the theme menu were each observed in a
 // real browser.
+//
+// The beUI adoption pass was driven the same way, and two of its results are
+// only visible in a browser and so are recorded here: StatefulButton's baked-in
+// `aria-live` reads back as `off` in the rendered DOM while this dialog's own
+// `role="alert"` survives, and the scope chip's accessibility description is
+// byte-identical to the one the `title` attribute used to produce — measured
+// through Chrome's own accessibility tree, both ways, on the same live page.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -55,6 +62,14 @@ const removeDialog = read('surfaces/stories/RemoveStoryDialog.tsx');
 const emptyHistory = read('surfaces/stories/EmptyHistory.tsx');
 const format = read('surfaces/stories/format.ts');
 const storiesSource = [storiesApp, storyRow, storyState, removeDialog, emptyHistory, format].join('\n');
+
+// Read a vendored beUI file as code. This surface now leans on three
+// properties of the vendored components rather than re-implementing them —
+// Button gating its press on reduced motion, ActionSwapText not animating on
+// mount, StatefulButton carrying the live region quiet.ts exists to strip. A
+// re-vendor that drops one of those is a silent behaviour change here, so the
+// properties are asserted at the source rather than assumed.
+const vendored = (relative) => stripComments(readRaw(`vendor/beui/${relative}`));
 
 const PAYLOAD_BLOCK = /<script type="application\/json" id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/;
 
@@ -407,7 +422,10 @@ test('unverified evidence is never dressed up as measured evidence', () => {
   // The refresh is a URL, so the expensive view is linkable, bookmarkable, and
   // reversible with Back.
   assert.match(storiesApp, /href=\{`\$\{routeBase\}\/stories\?evidence=refresh`\}/);
-  assert.match(storiesApp, /title="Recompute live diff and drift evidence for every saved review"/);
+  // The explanation moved from a `title` attribute onto beUI's Tooltip, which
+  // also opens on keyboard focus. The wording is the contract, not the vehicle.
+  assert.match(storiesApp, /content="Recompute live diff and drift evidence for every saved review"/);
+  assert.ok(!/title="Recompute/.test(storiesApp), 'and does not also fire the native tooltip on top of it');
 });
 
 test('review history keeps its numbering, its facts, and its one Start review', () => {
@@ -457,6 +475,13 @@ test('a destructive delete still asks first, and asks accessibly', () => {
   // A failure reports in place instead of tearing the context down with an
   // alert(), and the confirm button comes back.
   assert.match(removeDialog, /role="alert"/);
+  // The dialog has exactly one thing that may speak. beUI's StatefulButton
+  // ships a second `aria-live` around its own label, so the subtree is quieted
+  // after every render and the dialog's announcer is spared by name — the
+  // `keep` escape hatch in client/shared/quiet.ts. Without it the surface would
+  // strip its own alert along with the vendored one.
+  assert.match(removeDialog, /useQuietSubtree\(dialog, \{ keep: "\[data-remove-error\]" \}\)/);
+  assert.match(removeDialog, /data-remove-error\n/, 'and the announcer carries the hook the keep selector matches');
   assert.match(storiesApp, /setError\(failureMessage\(cause, "Could not remove story\."\)\)/);
   assert.ok(!/window\.(confirm|alert)\s*\(/.test(storiesSource), 'no blocking native dialogs');
   // The remove control is a sibling of the row link, and its handler is bound
@@ -467,6 +492,43 @@ test('a destructive delete still asks first, and asks accessibly', () => {
   assert.match(storyRow, /aria-busy=\{busy \|\| undefined\}/);
   assert.match(storyRow, /onClick=\{\(\) => onRemove\(story\)\}/);
   assert.ok(!/(?:event|e)\.target\s*\.\s*closest\s*\(/.test(storiesSource), 'no delegated target resolution');
+  // Wrapping the control in beUI's Tooltip must not move the handler off it:
+  // the onClick has to sit on the element the reviewer presses, inside the
+  // <Tooltip> rather than on it. Assert the nesting, not just the presence.
+  const removeControl = storyRow.slice(storyRow.lastIndexOf('<Tooltip'), storyRow.lastIndexOf('</Tooltip>'));
+  assert.match(
+    removeControl,
+    /<Button[\s\S]*onClick=\{\(\) => onRemove\(story\)\}/,
+    'the tooltip wraps the button; the button owns the click',
+  );
+  // The confirm is a real state machine now, and "Removing…" is a state rather
+  // than a ternary on a label. The dialog must not close itself on failure.
+  assert.match(removeDialog, /state=\{busy \? "loading" : error \? "error" : "idle"\}/);
+  assert.match(removeDialog, /loadingText="Removing…"/);
+});
+
+test('the vendored controls this surface leans on still behave the way it assumes', () => {
+  // Three properties are load-bearing here and live in files this surface must
+  // never edit, so they are checked at the source instead. A re-vendor that
+  // drops one is a behaviour change on this page that nothing else would catch.
+  const button = vendored('motion/button/base.tsx');
+  assert.match(
+    button,
+    /whileTap=\{reduce \? undefined : \{ scale: pressScale \}\}/,
+    'the press scale is skipped under prefers-reduced-motion — which is why the row no longer needs a CSS override for it',
+  );
+  const actionSwap = vendored('motion/action-swap.tsx');
+  const swapText = actionSwap.slice(
+    actionSwap.indexOf('export function ActionSwapText'),
+    actionSwap.indexOf('export function ActionSwapIcon'),
+  );
+  assert.ok(swapText.includes('<AnimatePresence'), 'found ActionSwapText');
+  assert.ok(
+    !/<AnimatePresence(?![^>]*initial=\{false\})/.test(swapText),
+    'ActionSwapText never animates on mount; it is chosen over a ticker precisely because every visit to this page is a fresh navigation',
+  );
+  const stateful = vendored('motion/button/stateful.tsx');
+  assert.match(stateful, /aria-live="polite"/, 'StatefulButton is a live-region carrier, so the dialog must keep quieting it');
 });
 
 test('the delete response is not quietly adopted as the page state', () => {
@@ -499,8 +561,26 @@ test('the nav bar keeps the way home and the way back to the change', () => {
 test('review history keeps its accessibility contracts', () => {
   assert.match(storiesApp, /aria-labelledby="saved-reviews-title"/);
   assert.match(storiesApp, /id="saved-reviews-title"/);
-  assert.match(storyRow, /title=\{story\.scope\.command \|\| undefined\}/, 'the chip exposes the raw git command');
-  assert.match(storyRow, /title="Remove story"/);
+  // Both `title` attributes became beUI tooltips, which the card's
+  // `overflow: hidden` makes worth the trade — the vendored one portals to
+  // document.body instead of being clipped on three sides.
+  assert.match(storyRow, /content=\{scope\.command\}/, 'the chip exposes the raw git command');
+  assert.match(
+    storyRow,
+    /if \(!scope\.command\) return chip;/,
+    'and a scope with no command opens no bubble at all, exactly as the attribute did',
+  );
+  assert.match(storyRow, /content="Remove story"/);
+  assert.ok(!/\stitle=["{]/.test(storyRow), 'no native tooltip fires a second time on top of the styled one');
+  // A tooltip only supplies `aria-describedby` while it is open, and the chip
+  // is not focusable, so it only ever opens on hover. Measured in Chrome, the
+  // `title` this replaced put the command on the chip's accessibility node
+  // permanently — `aria-description` is what keeps that true, and unlike a
+  // visually hidden span it stays out of the row link's name-from-contents.
+  assert.match(storyRow, /aria-description=\{scope\.command \|\| undefined\}/);
+  // The delete control keeps a real name of its own, so losing `title` there
+  // costs a reader nothing.
+  assert.match(storyRow, /aria-label=\{`Remove \$\{title\}`\}/);
   // The card clips its own overflow, so an outset focus ring would be cut off.
   assert.match(storyRow, /focus-visible:shadow-\[inset_0_0_0_3px_var\(--accent-soft\)\]/);
   assert.match(storyRow, /focus-within:border-accent-line/);
@@ -522,7 +602,17 @@ test('review history uses the shared spatial tier with no per-row stagger', () =
   assert.match(sharedCss, /animation: ds-reveal-up var\(--motion-duration-spatial\) var\(--motion-ease-out\) backwards;/);
   // Reduced motion also drops the row's own hover/press transitions.
   assert.match(storyRow, /motion-reduce:transition-none/);
-  assert.match(storyRow, /motion-reduce:active:transform-none/);
+  // The delete control's press used to be a CSS `:active` transform with a
+  // `motion-reduce:active:transform-none` override beside it. It is beUI's
+  // Button now, so the press is a Motion `whileTap` and the override would be
+  // cancelling a rule that no longer exists. The reduced-motion guarantee did
+  // not move — it went into the component, which is asserted directly in "the
+  // vendored controls this surface leans on".
+  assert.match(storyRow, /pressScale=\{0\.97\}/, 'and the press stays .97, not beUI\'s springier .93');
+  assert.ok(
+    !/active:scale-\[/.test(storyRow),
+    'one press implementation, not a CSS transform racing an inline one',
+  );
   // The header stays free of ornamental thread furniture.
   assert.ok(!/ThreadBackdrop|ds-atmosphere-thread/.test(storiesSource), 'no decorative thread in the history header');
   assert.ok(!/state-rail/.test(storiesSource), 'the status badge replaced the partial-edge status strip');
@@ -578,6 +668,11 @@ test('the built bundle actually ships the review-history behaviour', (t) => {
     return;
   }
   const js = readFileSync(bundle, 'utf8');
+  // esbuild writes non-ASCII as \uXXXX escapes, so "Removing…" is not in the
+  // file as the characters a reader sees. Decode before looking for prose, or
+  // this layer silently stops covering every string with a curly quote, an
+  // ellipsis or a minus sign in it — of which this surface has several.
+  const prose = js.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
   assert.ok(js.includes('/api/stories'), 'bundle calls the delete endpoint');
   assert.ok(js.includes('evidence=refresh'), 'bundle keeps the live-evidence refresh link');
   for (const text of [
@@ -601,10 +696,15 @@ test('the built bundle actually ships the review-history behaviour', (t) => {
     'Remove this review?',
     'from this repo?',
     'Could not remove story.',
+    // The confirm's three states, which are a component contract now rather
+    // than a ternary on a label.
+    'Remove story',
+    'Removing…',
+    'Try again',
     'Refresh evidence',
     'code stops',
   ]) {
-    assert.ok(js.includes(text), `bundle should contain ${JSON.stringify(text)}`);
+    assert.ok(prose.includes(text), `bundle should contain ${JSON.stringify(text)}`);
   }
 
   // Code splitting is on, so everything `client/shared/` owns — React, Motion,

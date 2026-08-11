@@ -11,6 +11,13 @@
 //     event arrives; this re-renders once a second regardless. Keeping the timer
 //     in its own component keeps that tick from re-rendering the plan list, the
 //     milestone thread and the raw log 60 times a run.
+//
+// beUI's `agents/loading-states/agent-progress` is the vendored component that
+// pairs a label with an elapsed clock, and it is not used: it ticks every 100 ms
+// (ten renders a second, against this one), prints tenths of a second, and hides
+// the number from assistive technology behind a static `role="status"` label.
+// `elapsedLabel()` is also on this surface's exported contract, so its format is
+// not ours alone to change.
 
 import { useEffect, useState } from "react";
 import { elapsedLabel } from "./state";

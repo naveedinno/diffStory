@@ -19,6 +19,15 @@
 // stylesheet had three `doesNotMatch` assertions guarding it. The only motion
 // on the surface is the ref listbox's entrance and the press feedback on
 // controls.
+//
+// That is also why this file imports no beUI at all. `AnimatedNumber` and
+// `NumberTicker` animate on mount unconditionally (`fromRef.current = 0`,
+// `initial={{ y: 0 }}`), so the ledger below would count up from zero on every
+// scope change — and every scope change here is a full page load. The obvious
+// alternative, `ActionSwapText`, is for a value that changes in place, and
+// nothing on this surface does: the ledger is rendered from the payload and the
+// payload only ever arrives with the document. A static number is the honest
+// one. `scroll-reveal` and `text-reveal` are out for the same reason.
 
 import { Fragment } from "react";
 import { Nav, navActionClass } from "../../shared/nav";

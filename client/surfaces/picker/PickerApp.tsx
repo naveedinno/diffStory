@@ -20,11 +20,12 @@ import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { PickerPayload, RecentRow } from "../../../src/payloads";
 import { Button } from "../../vendor/beui/motion/button/base";
+import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import { failureMessage, requestJson } from "../../shared/api";
 import { cn } from "../../shared/cn";
 import { FolderBrowser, type FolderBrowserHandle } from "./FolderBrowser";
 import { Hero } from "./Hero";
-import { RecentRepos } from "./RecentRepos";
+import { RecentRepos, TOOLTIP_SURFACE } from "./RecentRepos";
 import { SkillBanner } from "./SkillBanner";
 import { fallbackRepoRoute } from "./format";
 
@@ -96,20 +97,24 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
             <h2 className="m-0 font-display text-2xl leading-[1.1] font-bold tracking-[-.02em] max-[480px]:text-[21px]">
               Repositories
             </h2>
-            {/* Icon-only below 760px; the accessible name has to survive that. */}
-            <Button
-              type="button"
-              // The UI atlas clicks this by id to capture the modal frames.
-              id="quickAddBtn"
-              aria-label="Add repository"
-              title="Add repository"
-              pressScale={0.97}
-              onClick={(event) => browser.current?.open(event.currentTarget as HTMLElement)}
-              className="h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-3.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-hi max-[760px]:w-[var(--control-h)] max-[760px]:px-0"
-            >
-              <Plus className="h-[15px] w-[15px]" strokeWidth={2} />
-              <span className="max-[760px]:hidden">Add repository</span>
-            </Button>
+            {/* Icon-only below 760px; the accessible name has to survive that.
+                The beUI Tooltip replaces the `title` this used to carry: it also
+                shows on keyboard focus, which `title` never did, and it is the
+                narrow width where the button is icon-only that needs it most. */}
+            <Tooltip content="Add repository" side="left" className={TOOLTIP_SURFACE} wrapperClassName="flex-none">
+              <Button
+                type="button"
+                // The UI atlas clicks this by id to capture the modal frames.
+                id="quickAddBtn"
+                aria-label="Add repository"
+                pressScale={0.97}
+                onClick={(event) => browser.current?.open(event.currentTarget as HTMLElement)}
+                className="h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-3.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-hi max-[760px]:w-[var(--control-h)] max-[760px]:px-0"
+              >
+                <Plus className="h-[15px] w-[15px]" strokeWidth={2} />
+                <span className="max-[760px]:hidden">Add repository</span>
+              </Button>
+            </Tooltip>
           </div>
 
           <RecentRepos

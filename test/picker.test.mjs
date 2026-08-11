@@ -328,11 +328,64 @@ test('the folder browser keeps its combobox/listbox accessibility contract', () 
   assert.match(folderBrowser, /aria-selected=\{index === activeIndex\}/);
   assert.match(folderBrowser, /aria-current="location"/, 'the current breadcrumb segment is not a link');
   assert.match(folderBrowser, /className="ds-sr-only" role="status" aria-live="polite"/);
-  // The clear button leaves the tab ring as well as the layout when empty.
-  assert.match(folderBrowser, /aria-label="Clear folder filter"\s+hidden=\{!hasFilter\}/);
-  assert.match(folderBrowser, /hasFilter \? "grid" : "hidden"/);
+  // The clear control leaves the tab ring as well as the layout when empty.
+  //
+  // CHANGED with the beUI adoption. It used to be `hidden={!hasFilter}` plus a
+  // `hasFilter ? "grid" : "hidden"` class, because a `grid` utility would
+  // out-cascade Preflight's `[hidden]` rule. The control now lives in the
+  // vendored Input's `rightIcon` slot, and that slot styles descendant buttons
+  // with `[&_button]:grid` — specificity (0,1,1), which beats BOTH `[hidden]`
+  // and a `hidden` utility, so a hidden-but-present button would have been
+  // un-hidden by the component. Not rendering it is the stronger guarantee
+  // anyway: out of the layout, the tab ring and the accessibility tree at once.
+  // The assertions below fail if it comes back unconditionally.
+  assert.match(folderBrowser, /rightIcon=\{\s*hasFilter \? \(/, 'the clear control renders only when there is a filter');
+  assert.match(folderBrowser, /aria-label="Clear folder filter"/);
+  assert.match(folderBrowser, /\) : null\s*\}/, 'and nothing at all otherwise — not a hidden button in the tab ring');
   // The combobox reports collapsed as soon as closing starts, not 210ms later.
   assert.match(folderBrowser, /const expanded = modal\.phase === "opening" \|\| modal\.phase === "open";/);
+});
+
+test('the folder sheet stays on its own choreography rather than a library dialog', () => {
+  // At-risk #5 again, from the other direction. `use-modal.ts` implements six
+  // things: the rAF, the 210ms hold, re-entrancy guards, inert + aria-hidden on
+  // the background, the tabindex!=='-1' focus trap, and focus restore. Every
+  // beUI overlay implements roughly one of them, so adopting one here would read
+  // as an upgrade and be a regression. This is the guard on that decision.
+  assert.match(folderBrowser, /useModalChoreography\(\{/);
+  for (const overlay of ['bottom-sheet', 'drawer', 'center-morph-modal', 'morphing-modal', 'command-palette']) {
+    assert.ok(
+      !pickerSource.includes(`vendor/beui/motion/${overlay}`),
+      `${overlay} would replace the modal choreography this surface is test-locked on`,
+    );
+  }
+  // Options are plain <button>s on purpose: Motion's press gesture writes
+  // tabindex onto motion.button (see the repair in use-modal.ts), and
+  // tabindex="-1" here is the only thing keeping the folder list out of the
+  // dialog's tab ring. The option block must not become a beUI <Button>.
+  const option = /<button\s+key=\{entry\.path\}[\s\S]*?<\/button>/.exec(folderBrowser)?.[0] ?? '';
+  assert.ok(option, 'the folder rows are still rendered by a literal <button>');
+  assert.match(option, /role="option"/);
+  assert.match(option, /tabIndex=\{-1\}/);
+});
+
+test('every live-region carrier this surface adopts is quieted at the wrapper', () => {
+  // `motion/input` bakes in role="alert" and `motion/loader` role="status" —
+  // both listed in client/vendor/beui/README.md. Never edit the vendored file;
+  // strip it in a layout effect instead. Proven in Chrome by reading aria-live
+  // and role back out of the rendered sheet (see the accompanying report).
+  assert.match(folderBrowser, /import \{ useQuietSubtree \} from "\.\.\/\.\.\/shared\/quiet";/);
+  assert.match(
+    folderBrowser,
+    /useQuietSubtree\(sheet, \{ keep: "\.ds-sr-only" \}\);/,
+    'the sheet is quieted, but the surface keeps its own single announcer',
+  );
+  assert.match(recentRepos, /import \{ useQuietSubtree \} from "\.\.\/\.\.\/shared\/quiet";/);
+  assert.match(recentRepos, /useQuietSubtree\(root\);/);
+  // And the picker's own status paragraph is deliberately NOT inside either
+  // quieted subtree — it is the one thing on this surface that must announce.
+  assert.match(pickerApp, /className=\{cn\("ds-sr-only".*\)\}\s*role="status"/s);
+  assert.ok(!/useQuietSubtree/.test(pickerApp), 'PickerApp owns the announcer, so it quiets nothing');
 });
 
 test('the picker keeps its status wording, its ordering, and its sr-only feedback', () => {
@@ -348,6 +401,23 @@ test('the picker keeps its status wording, its ordering, and its sr-only feedbac
   assert.match(skillBanner, /Story-generation skill was not found in ~\/\.agents, ~\/\.claude, or ~\/\.codex/);
   assert.match(skillBanner, /Could not update skills\. Run scripts\/install-skills\.sh/);
   assert.match(skillBanner, /role="status" aria-live="polite" aria-atomic="true"/);
+  // The install branch shimmers its own sentence, because it is the only state
+  // here with no other progress signal. Two constraints on that:
+  //  - it is movement, so reduced motion opts out;
+  //  - the keyframes <style> stays OUTSIDE the region. `motion/text-shimmer.tsx`
+  //    renders it as a sibling of the shimmering text, and with the text inside
+  //    a role="status" aria-atomic="true" region that put a stylesheet into the
+  //    region's own content — read back in Chrome as "@keyframes beui-text-…".
+  assert.match(skillBanner, /const shimmering = Boolean\(override\?\.busy\) && !reduce;/);
+  assert.ok(
+    skillBanner.indexOf('<style>{TEXT_SHIMMER_KEYFRAMES}</style>') <
+      skillBanner.indexOf('role="status" aria-live="polite" aria-atomic="true"'),
+    'the shimmer keyframes are emitted outside the announced region',
+  );
+  assert.ok(
+    !/vendor\/beui\/motion\/text-shimmer/.test(skillBanner),
+    'the component would put its <style> back inside the region — the primitives are adopted instead',
+  );
   // Feedback is screen-reader-only, and it stays that way.
   assert.match(pickerApp, /className=\{cn\("ds-sr-only".*\)\}\s*role="status"/s);
   assert.match(pickerApp, /Removed from recent repositories\./);
@@ -364,7 +434,25 @@ test('the recents list keeps its numbering, its one status pill, and its per-row
   assert.match(recentRepos, /missing\.map\(\(row, i\) => rowFor\(row, available\.length \+ i\)\)/);
   assert.match(recentRepos, /String\(index \+ 1\)\.padStart\(2, "0"\)/);
   // Pluralisation of the unavailable count, recomputed from the live list.
-  assert.match(recentRepos, /\{missing\.length\} unavailable \{plural\(missing\.length, "workspace", "workspaces"\)\}/);
+  //
+  // CHANGED with the beUI adoption: the bare `{missing.length}` is now a
+  // NumberTicker, which rolls the digit when a row is removed. Both halves still
+  // have to read the live array — a ticker fed a stale prop, or a plural fixed
+  // at render, is exactly the bug the original assertion was guarding.
+  assert.match(recentRepos, /<NumberTicker value=\{missing\.length\}/);
+  assert.match(recentRepos, /\{" unavailable "\}\s*\{plural\(missing\.length, "workspace", "workspaces"\)\}/);
+  // The disclosure is a beUI accordion now, not <details>, because a native
+  // disclosure cannot animate its own height. What must survive is that the
+  // missing rows are its content and nothing else moved into it.
+  assert.match(recentRepos, /<BouncyAccordion/);
+  assert.ok(!/<details/.test(recentRepos), 'the disclosure was replaced, not doubled up');
+  // Per-row actions hang off the row wrapper, never off the card button:
+  // ContextMenuTrigger clones aria-haspopup="menu" + aria-expanded onto its
+  // child, and on the card those would describe a button that actually
+  // navigates. On a plain <div> they are ignored, which is the point.
+  assert.match(recentRepos, /<ContextMenuTrigger>\s*<div/);
+  assert.match(recentRepos, /<ContextMenuItem className=\{cn\(MENU_ITEM, "text-text"\)\} onSelect=\{\(\) => onOpen\(row\.path\)\}>/);
+  assert.match(recentRepos, /onSelect=\{\(\) => onRemove\(row\.path\)\}/);
   // Exactly one status pill exists. Tour status was removed on purpose.
   assert.match(recentRepos, /Missing\s*<\/AnimatedBadge>/);
   assert.ok(!/hasTour \?/.test(recentRepos), 'tour status is an internal concept and stays off this surface');
@@ -378,6 +466,20 @@ test('the recents list keeps its numbering, its one status pill, and its per-row
     !/(?:event|e)\.target\s*\.\s*closest\s*\(/.test(recentRepos),
     'does not depend on a nested WebKit event target',
   );
+  // Row spacing is the container's job, not the row's. ContextMenu wraps every
+  // row in a `display:contents` provider, and a margin on a box that generates
+  // no box is dropped — `space-y-*` here would silently collapse the stack.
+  assert.ok(!/space-y-/.test(recentRepos), 'sibling margins do not survive a display:contents wrapper');
+  // And both stacks name the track explicitly. An implicit `auto` track is
+  // floored at the item's min-content width; below 480px a row's min-content
+  // beats the viewport, the track grew, and the absolutely-positioned remove
+  // control went off screen. Every row container here has to be shrinkable.
+  assert.equal(
+    (recentRepos.match(/grid grid-cols-\[minmax\(0,1fr\)\] gap-2/g) ?? []).length,
+    2,
+    'both the top-level stack and the disclosure stack use a shrinkable track',
+  );
+  assert.ok(!/className="grid gap-2/.test(recentRepos), 'an auto track overflows the viewport at 390px');
   // The empty state, rebuilt whenever the list empties out.
   assert.match(recentRepos, /No repositories yet/);
   assert.match(recentRepos, /it reads the working tree directly, nothing is uploaded/);
@@ -475,6 +577,9 @@ test('the built bundle actually ships the picker behaviour', (t) => {
     'review-tour was renamed to diffstory-storyteller',
     'Add repository',
     'unavailable ',
+    // The per-row context menu, which has no other entry point in the DOM.
+    'Open repository',
+    'Actions for ',
   ]) {
     assert.ok(js.includes(text), `bundle should contain ${JSON.stringify(text)}`);
   }

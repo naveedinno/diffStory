@@ -16,10 +16,23 @@
 //   - focus lands on Cancel, not on the destructive action;
 //   - a failed delete reports inside the dialog and leaves it open, instead of
 //     an `alert()` that dismisses the context along with itself.
+//
+// The destructive button is beUI's `StatefulButton`, which is a real
+// idle → loading → error machine instead of a ternary on a label: it brings the
+// spinner, `aria-busy`, and a label that becomes "Try again" once the delete has
+// failed. It is also one of the twenty vendored components that ship a live
+// region — an `aria-live="polite"` wrapper around its own label — so it is
+// quieted here with `useQuietSubtree`. That is not a formality: this dialog
+// already has an assertive announcer for the failure, and leaving the button's
+// polite one in place would announce the reason and the button's new label as
+// two separate events for the same failure. The error paragraph is passed to
+// `keep`, which is exactly the case that option exists for.
 
 import { useEffect, useRef } from "react";
 import { Button } from "../../vendor/beui/motion/button/base";
+import { StatefulButton } from "../../vendor/beui/motion/button/stateful";
 import { cn } from "../../shared/cn";
+import { useQuietSubtree } from "../../shared/quiet";
 import { useModalChoreography } from "../../shared/use-modal";
 
 export interface RemoveStoryDialogProps {
@@ -45,6 +58,11 @@ export function RemoveStoryDialog({
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const modal = useModalChoreography({ dialog, background, onClose: onCancel });
+
+  // Strips the live region StatefulButton bakes into its label wrapper, after
+  // every render, before paint. `keep` spares this dialog's own announcer —
+  // the one node in here that is supposed to speak.
+  useQuietSubtree(dialog, { keep: "[data-remove-error]" });
 
   // Focus waits for `is-shown`, and this is not a nicety. Between the "opening"
   // phase and the rAF that adds the class, `.ds-scrim` is still
@@ -106,6 +124,7 @@ export function RemoveStoryDialog({
         {/* Assertive, because it answers an action the reviewer just took and
             the buttons below it have already come back to life. */}
         <p
+          data-remove-error
           className={cn("mt-2.5 mb-0 text-[12.5px] leading-[1.45] text-del", !error && "hidden")}
           role="alert"
         >
@@ -123,15 +142,20 @@ export function RemoveStoryDialog({
           >
             Cancel
           </Button>
-          <Button
+          <StatefulButton
             type="button"
+            state={busy ? "loading" : error ? "error" : "idle"}
+            loadingText="Removing…"
+            // The dialog stays open on failure and the reason is already on
+            // screen above; what the button owes the reviewer is the next move.
+            errorText="Try again"
             pressScale={0.97}
             disabled={busy}
             onClick={onConfirm}
             className="h-[var(--control-h)] rounded-full bg-del-soft px-3.5 text-[12.5px] font-semibold text-del hover:bg-del hover:text-on-accent disabled:opacity-55"
           >
-            {busy ? "Removing…" : "Remove story"}
-          </Button>
+            Remove story
+          </StatefulButton>
         </div>
       </div>
     </div>

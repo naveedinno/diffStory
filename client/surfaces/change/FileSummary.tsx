@@ -13,8 +13,31 @@
 //     selectors for this surface (`scripts/capture-ui-atlas.mjs`). A capture
 //     only counts as coverage if it can find a real row, so those three class
 //     names are part of the contract even though the styling is utilities.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+//   - `BouncyAccordion` replaces the `<details>` around generated output, for
+//     the same reason it replaced one in the repo picker: `<details>` cannot
+//     animate its own height, so the list used to appear instantly under a
+//     header that had just rotated a chevron smoothly. It renders closed with
+//     `initial={false}`, so nothing about it animates on arrival — which is the
+//     rule this whole surface is built around. Its content wrapper hardcodes
+//     `px-5 pb-5`; the rows have to sit flush against the panel edge like the
+//     primary ones, and because the measured element is the padded one, the
+//     negative margins are also what keep the animated height honest.
+//   - `AnimatedBadge` carries "working tree clean". That line is a status and
+//     was drawn as one with a `✓` text glyph, which renders at a different
+//     weight in every font on the fallback chain; the badge draws a real Check.
+//     `AnimatePresence initial={false}` inside it means it does not roll in on
+//     load, which on a surface where every change is a navigation matters more
+//     than the roll would have been worth.
+//   - Nothing here uses `motion/table/`. See the note on `Inventory`.
+//   - No `useQuietSubtree`: neither of these two carries a live region, and the
+//     one component on this surface that does is quieted where it is imported.
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { AnimatedBadge } from "../../vendor/beui/motion/animated-badge";
+import { BouncyAccordion } from "../../vendor/beui/motion/bouncy-accordion";
 import { Button, ButtonLink } from "../../vendor/beui/motion/button/base";
 import { cn } from "../../shared/cn";
 import type { ChangeFileView } from "../../../src/payloads";
@@ -73,7 +96,16 @@ function EmptyState({ routeBase }: { routeBase: string }) {
   return (
     <div className="overflow-hidden rounded-[var(--radius-island)] border border-transparent bg-surface-2 contrast-more:border-text">
       <div className="px-4 pt-[34px] pb-[38px] text-center text-sm text-text-2">
-        <p className="m-0 mb-3 font-mono text-[11px] text-add">✓ working tree clean</p>
+        <p className="m-0 mb-3">
+          <AnimatedBadge
+            status="success"
+            size="sm"
+            icon={<Check strokeWidth={2.4} aria-hidden="true" />}
+            className="h-auto gap-1 rounded-[var(--radius-sm)] border-0 bg-add-soft px-2 py-0.5 font-mono text-[11px] font-medium text-add"
+          >
+            working tree clean
+          </AnimatedBadge>
+        </p>
         <h2 className="empty-title m-0 mb-2 font-display text-[19px] font-bold tracking-[var(--tracking-tight)] text-text">
           Nothing to review
         </h2>
@@ -118,6 +150,19 @@ export function FileSummary({ files, routeBase, diffHref }: FileSummaryProps) {
   );
 }
 
+/**
+ * Why this is not beUI's `motion/table/`.
+ *
+ * That component is a data grid: it wants a column model and brings sorting,
+ * resizing, drag-reorder, row selection and a per-column menu, none of which
+ * this list has any use for — a changed-file inventory has one meaningful
+ * order, the one git reported, and nothing to select. It also renders a single
+ * virtualised body, and this list is deliberately two bodies: the files a human
+ * will read, then a disclosure holding the generated output that must still
+ * count toward the ledger and the CTA. The virtualiser is the one thing worth
+ * envying on a diff with hundreds of files, and it is available separately
+ * (`@tanstack/react-virtual` is already a dependency) if that ever bites.
+ */
 function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: string }) {
   const total = totals(files);
   const primary = files.filter((file) => !generatedOutput(file.path));
@@ -156,20 +201,51 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
           <FileRow key={file.path} file={file} />
         ))}
         {generated.length ? (
-          <details className="group border-t border-line-soft">
-            <summary className="flex cursor-pointer list-none items-center justify-between bg-fill-1 px-[15px] py-[11px] text-xs font-semibold text-text-2 [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]">
-              <span>Generated output</span>
-              <span>
-                {generated.length} {plural(generated.length, "file", "files")}{" "}
-                <i className="ml-1.5 inline-block text-text-3 not-italic group-open:rotate-180">⌄</i>
-              </span>
-            </summary>
-            <div>
-              {generated.map((file) => (
-                <FileRow key={file.path} file={file} inset />
-              ))}
-            </div>
-          </details>
+          <BouncyAccordion
+            className="border-t border-line-soft"
+            items={[
+              {
+                id: "generated",
+                title: (
+                  <span className="flex items-center justify-between gap-3">
+                    <span>Generated output</span>
+                    <span className="font-normal text-text-3">
+                      {generated.length} {plural(generated.length, "file", "files")}
+                    </span>
+                  </span>
+                ),
+                description: (
+                  <div>
+                    {generated.map((file) => (
+                      <FileRow key={file.path} file={file} inset />
+                    ))}
+                  </div>
+                ),
+              },
+            ]}
+            classNames={{
+              // The vendored row ANIMATES a 28px corner radius onto itself as an
+              // inline style, which a plain utility cannot outrank — and a
+              // rounded block floating inside a flush file list is not what this
+              // is. `!` is what beats an inline style that carries no `!` of its
+              // own. Measured in Chrome: 28px before, 0px after.
+              item: "rounded-none! bg-fill-1",
+              // `outline-none` is baked into the vendored trigger, so the focus
+              // ring has to come back from here or the control has none at all.
+              trigger: cn(
+                "min-h-0 gap-3 px-[15px] py-[11px] hover:bg-fill-2",
+                "focus-visible:bg-fill-2 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+              ),
+              title: "overflow-visible text-xs font-semibold text-ellipsis text-text-2",
+              chevron: "h-4 w-4 text-text-3",
+              content: "bg-surface-2",
+              // The vendored content wrapper hardcodes `px-5 pb-5`; these rows
+              // have to sit flush like the primary ones above. The measured
+              // element is the padded one, so `-mb-5` is also what keeps the
+              // animated height honest.
+              description: "-mx-5 -mb-5 text-[unset] leading-[unset] text-text",
+            }}
+          />
         ) : null}
       </div>
     </div>

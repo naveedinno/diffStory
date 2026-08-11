@@ -87,7 +87,11 @@ export interface ProgressState {
   /** What the live row actually prints, quiet-suffix included. */
   liveText: string;
   liveTone: LiveTone;
-  /** "3 of 8 done", or "". */
+  /**
+   * "3 of 8 done", or "". The panel's live row renders the same fact from
+   * `planDone`/`planTotal` so the leading digit can roll; this stays the plain
+   * string form, which is what a non-React host reads.
+   */
   liveCount: string;
   startedAt: number;
   /** Drives the one-second elapsed tick. */
@@ -173,6 +177,23 @@ export function elapsedLabel(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/**
+ * Everything after the plan counter's leading number: `" of 8 done"`.
+ *
+ * Split out because the panel renders that number through beUI's `NumberTicker`
+ * so the digit rolls, and a rolling digit cannot live inside a pre-formatted
+ * string. The suffix therefore has exactly one definition, used both by
+ * `planCountLabel()` below (which fills `state.liveCount`) and by the live row.
+ */
+export function planCountSuffix(total: number): string {
+  return ` of ${total} done`;
+}
+
+/** `"3 of 8 done"`. The plain-string form of the same fact. */
+export function planCountLabel(done: number, total: number): string {
+  return `${done}${planCountSuffix(total)}`;
 }
 
 export function agentChip(agent?: string, model?: string): string {
@@ -289,7 +310,7 @@ function renderPlan(state: ProgressState, items: PlanItem[] | undefined): Progre
     // A fresh plan owns the activity line: the previous step's "now" text
     // described work that is finished.
     current: "",
-    liveCount: `${done} of ${items.length} done`,
+    liveCount: planCountLabel(done, items.length),
   };
 }
 

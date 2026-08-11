@@ -14,6 +14,12 @@
 // looking at and Back returns you to the cheap view. There is no
 // `history.pushState` anywhere in this codebase and this surface adds none.
 //
+// beUI carries the chrome: `ButtonLink` for the one primary action,
+// `ActionSwapRollText` for the two counts a delete changes in place, and
+// `Tooltip` for the refresh link's explanation. What it deliberately does NOT
+// carry is the page's shape — see the report for the list of components that
+// were looked at and left alone, and why.
+//
 // The only runtime call is `DELETE /api/stories`. Its response carries a fresh
 // live-evidence `stories` array, which this page deliberately does NOT adopt:
 // swallowing it would silently upgrade a metadata-only page to live evidence
@@ -22,6 +28,9 @@
 // and more honest.
 
 import { useRef, useState } from "react";
+import { ActionSwapRollText } from "../../vendor/beui/motion/action-swap-roll";
+import { ButtonLink } from "../../vendor/beui/motion/button/base";
+import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import type { StoriesPayload, StoryRowView } from "../../../src/payloads";
 import { failureMessage, requestJson } from "../../shared/api";
 import { cn } from "../../shared/cn";
@@ -85,13 +94,20 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
           home="/repos"
           crumbs={[{ label: repoName, href: `${routeBase}/change` }, { label: "Review history" }]}
           right={
-            <a
-              className={navActionClass}
-              href={`${routeBase}/stories?evidence=refresh`}
-              title="Recompute live diff and drift evidence for every saved review"
+            // The explanation was a `title`, which never appears on keyboard
+            // focus — and this link is the one control on the page whose cost
+            // you want to know before you click it. beUI's tooltip opens on
+            // focus as well as hover.
+            <Tooltip
+              content="Recompute live diff and drift evidence for every saved review"
+              side="bottom"
+              wrapperClassName="flex-none"
+              className="max-w-[min(44ch,90vw)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 text-[11.5px] whitespace-normal text-text shadow-signal"
             >
-              Refresh evidence
-            </a>
+              <a className={navActionClass} href={`${routeBase}/stories?evidence=refresh`}>
+                Refresh evidence
+              </a>
+            </Tooltip>
           }
         />
 
@@ -106,16 +122,22 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                 {/* Exactly one "Start review" exists on this page, and it lives
                     with the title rather than in the empty state — the empty
                     state must not become the only way to start. */}
-                <a
+                {/* beUI's ButtonLink, so the page's one primary action has the
+                    same press spring as every other control in the app. It had
+                    no press feedback at all before — only a colour fade. The
+                    scale is .97 rather than beUI's .93 for the same reason the
+                    row's delete control overrides it. */}
+                <ButtonLink
                   href={`${routeBase}/change`}
+                  pressScale={0.97}
                   className={cn(
-                    "inline-flex h-[var(--control-h-lg)] items-center rounded-full bg-accent px-4",
+                    "h-[var(--control-h-lg)] rounded-full bg-accent px-4",
                     "text-[13.5px] font-semibold text-on-accent no-underline hover:bg-accent-hi",
                     "transition-colors duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none",
                   )}
                 >
                   Start review
-                </a>
+                </ButtonLink>
               </div>
               <p className="mt-[7px] mb-0 max-w-[58ch] text-[13.5px] leading-[1.45] text-text-2">
                 Resume a saved review when you need its scope or its notes.
@@ -126,10 +148,18 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                 aria-label="Review history status"
                 className="flex items-center gap-3.5 text-[12px] whitespace-nowrap text-text-2 max-[560px]:mt-3.5"
               >
-                <span>
-                  <b className="text-text tabular-nums">{openNotes}</b>{" "}
-                  {openNotes === 1 ? "review has" : "reviews have"} open notes
-                </span>
+                {/* Removing a story with open notes changes this count while
+                    the page stays put, and beUI's ActionSwapText is the one
+                    swap primitive here that does NOT animate on mount
+                    (`AnimatePresence initial={false}`) — so the count rolls
+                    when it actually changes and stays still on load. A ticker
+                    would count up from zero on every navigation. */}
+                <ActionSwapRollText value={`notes-${openNotes}`}>
+                  <span>
+                    <b className="text-text tabular-nums">{openNotes}</b>{" "}
+                    {openNotes === 1 ? "review has" : "reviews have"} open notes
+                  </span>
+                </ActionSwapRollText>
               </span>
             ) : null}
           </header>
@@ -141,7 +171,11 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                   id="saved-reviews-title"
                   className="m-0 font-display text-[16px] leading-[1.1] font-semibold tracking-[-.012em]"
                 >
-                  {stories.length} saved {stories.length === 1 ? "review" : "reviews"}
+                  {/* Same swap, same reason: a delete renumbers this heading in
+                      place, and the roll is what says so. */}
+                  <ActionSwapRollText value={`saved-${stories.length}`} className="align-baseline">
+                    {stories.length} saved {stories.length === 1 ? "review" : "reviews"}
+                  </ActionSwapRollText>
                 </h2>
               </div>
               <div id="storyList" className="grid gap-3">

@@ -114,6 +114,52 @@ const COLOR_ALIASES = [
   ['border-soft', 'line-soft'],
 ];
 
+// shadcn-compatible names, pointed at Signal values.
+//
+// The vendored beUI tree (client/vendor/beui) is written against shadcn's
+// variable names. Without these entries `text-foreground`, `bg-card`,
+// `bg-primary`, `text-destructive` and `ring-ring` are undefined theme keys, and
+// Tailwind v4 emits *nothing* for an undefined key. Mostly that only means a
+// component renders unstyled — but several pair those utilities with
+// `outline-none` (`motion/bouncy-accordion`'s trigger, `motion/context-menu`'s
+// items), so the silent failure mode is a component with no focus indication at
+// all. Supplying the names is what makes a vendored component keyboard-safe by
+// default instead of only after a call site remembers to repaint it.
+//
+// `accent` is deliberately absent. shadcn means a quiet hover fill by it, Signal
+// means signal blue, and --color-accent is already bound to Signal's — with ~20
+// live call sites across client/surfaces relying on that (`bg-accent`,
+// `text-accent`, `bg-accent-soft`, `hover:bg-accent-hi`). Re-pointing it to a
+// grey would repaint every one of them, so the Signal meaning wins and the
+// collision is left standing. `accent-foreground` IS mapped, because that makes
+// `bg-accent text-accent-foreground` resolve to blue-with-legible-ink, which is
+// exactly the pairing those call sites already hand-write as
+// `bg-accent text-on-accent`.
+//
+// --on-accent is the ink that sits on a saturated fill, and it inverts with the
+// theme (#06121c dark / #ffffff light) on the same axis as --accent and --del.
+// That is why it serves as the foreground for primary AND destructive: both
+// fills are light-on-dark in the dark theme and dark-on-light in the light one.
+const SHADCN_ALIASES = [
+  ['foreground', 'text'],
+  ['background', 'bg'],
+  ['card', 'surface'],
+  ['card-foreground', 'text'],
+  ['popover', 'surface-2'],
+  ['popover-foreground', 'text'],
+  ['primary', 'accent'],
+  ['primary-foreground', 'on-accent'],
+  ['secondary', 'fill-2'],
+  ['secondary-foreground', 'text'],
+  ['muted', 'fill-1'],
+  ['muted-foreground', 'text-2'],
+  ['accent-foreground', 'on-accent'],
+  ['destructive', 'del'],
+  ['destructive-foreground', 'on-accent'],
+  ['input', 'line'],
+  ['ring', 'accent-line'],
+];
+
 // Tokens inlined as literals rather than var() references: their Tailwind
 // namespace uses the *same* custom-property name as src/theme.ts does
 // (--font-sans, --text-lg, --tracking-tight, --leading-tight …), so a var()
@@ -147,6 +193,12 @@ function themeBlock(dark) {
     push(`--color-${token}`, `var(--${token})`);
   }
   for (const [alias, token] of COLOR_ALIASES) {
+    must(dark, token);
+    push(`--color-${alias}`, `var(--${token})`);
+  }
+
+  section('color — shadcn names the vendored beUI tree expects, on Signal values');
+  for (const [alias, token] of SHADCN_ALIASES) {
     must(dark, token);
     push(`--color-${alias}`, `var(--${token})`);
   }

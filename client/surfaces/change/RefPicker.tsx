@@ -21,16 +21,22 @@
 // An arrow press while the listbox is closed opens it and stops there, so the
 // first ArrowDown never also moves the selection.
 //
-// Why not beUI's `motion/popover.tsx` or `motion/select.tsx`: both own their own
-// placement, and the placement here is a specified behaviour (see `placePicker`
-// in `./refs.ts`) down to the 7px offset and the 12px viewport margins, with a
-// flip-above rule. beUI supplies the entrance instead — the clip-path reveal is
-// a Motion animation rather than the vanilla `@keyframes change-picker-in`,
-// with the same 200ms and the same Signal easing curve.
+// Why not beUI's `motion/popover.tsx`, `motion/select.tsx` or
+// `motion/select-morph.tsx`: all three own their own placement, and the
+// placement here is a specified behaviour (see `placePicker` in `./refs.ts`)
+// down to the 7px offset and the 12px viewport margins, with a flip-above rule.
+// More decisively, the only key any of the three binds is Escape — none of them
+// implements arrow movement, Home/End or `aria-activedescendant` at all, so
+// adopting one would not change the clamp, it would delete it. beUI supplies
+// the entrance instead — the clip-path reveal is a Motion animation rather than
+// the vanilla `@keyframes change-picker-in`, with the same 200ms and the same
+// Signal easing curve — and a `Loader` for the one row that is not an option.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { Loader } from "../../vendor/beui/motion/loader";
 import { cn } from "../../shared/cn";
+import { useQuietSubtree } from "../../shared/quiet";
 import {
   defaultIndex,
   filterOptions,
@@ -342,6 +348,11 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
 export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose }: ListboxProps) {
   const reduce = useReducedMotion();
   const shown = { opacity: 1, clipPath: "inset(0px round 10px)", y: 0, scale: 1 };
+  // `Loader` bakes in `role="status"`, and a live region inside a `role="option"`
+  // inside a `role="listbox"` is both noise and broken structure. The card also
+  // quiets this subtree — the listbox is a DOM descendant of it despite being
+  // `position: fixed` — but the hook belongs where the carrier is imported.
+  useQuietSubtree(ref);
 
   return (
     <motion.div
@@ -389,8 +400,11 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
           >
             <span className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-text">{row.label}</span>
             <span className="col-start-1 min-w-0 truncate text-[11.5px] text-text-2">{row.meta}</span>
+            {/* The placeholder row has no value and no kind, so the tag column
+                is free for a spinner: the row then reads as work in progress
+                rather than as a ref you could pick called "Loading refs…". */}
             <span className="col-start-2 row-start-1 row-span-2 self-center text-[10.5px] font-bold tracking-[.05em] text-text-3 uppercase">
-              {row.kind}
+              {row.value ? row.kind : <Loader variant="spinner" size={13} label="" className="text-text-3" />}
             </span>
           </button>
         ))

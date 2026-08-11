@@ -17,13 +17,62 @@
 //
 // The only status pill that exists is `Missing`. Tour status was removed on
 // purpose ("an internal concept that confused users"); do not put it back.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+// The theme bridge maps Signal's palette onto Tailwind, but it does NOT define
+// the shadcn variable names beUI reaches for (`foreground`, `background`,
+// `card`, `primary`, `destructive`, `muted`, `ring`). Those utilities compile to
+// nothing, so every colour a vendored component wants has to be supplied here —
+// including focus indication, because several of them also set `outline-none`.
+//
+//   - `Button` drives press feedback from Motion's spring rather than a CSS
+//     `active:scale`, and gates it on `useReducedMotion()` internally, which is
+//     what plans 010/011 asked for. Its `SIZE_CLASS` pins a height on every
+//     variant, so each call site passes `h-auto`. The full-width card also
+//     passes `whileHover={undefined}`: a 2% lift on a wide surface reads as a
+//     lurch, for the same reason plan 011 rejected a 3% dip there.
+//   - `ContextMenu` hangs off the row wrapper `<div>`, never off the card
+//     button. `ContextMenuTrigger` clones `aria-haspopup="menu"` and
+//     `aria-expanded` onto its child; on the card button those would announce a
+//     menu button, which is a lie — activating it opens the repository. Neither
+//     attribute is global ARIA, so on a plain `<div>` they are ignored, while
+//     `contextmenu`, touch long-press and Shift+F10 still reach the handler by
+//     bubbling up from whichever control in the row has focus.
+//   - `BouncyAccordion` replaces `<details>`, which cannot animate its own
+//     height. Its content wrapper hardcodes `px-5 pb-5`; the description cancels
+//     that with negative margins, and because the measured element is the padded
+//     one, `-mb-5` is also what keeps the animated height honest.
+//   - `useQuietSubtree` covers the whole stack because `Loader` bakes in
+//     `role="status"`. A spinner that announces itself once per removed row is
+//     noise on top of the picker's real status paragraph, which lives in
+//     `PickerApp` and is deliberately left alone.
 
-import { Fragment, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Folder, GitBranch, Trash2 } from "lucide-react";
+import { Fragment, useRef, type ReactNode } from "react";
+import { ChevronRight, Folder, GitBranch, Trash2 } from "lucide-react";
 import { AnimatedBadge } from "../../vendor/beui/motion/animated-badge";
+import { BouncyAccordion } from "../../vendor/beui/motion/bouncy-accordion";
+import { Button } from "../../vendor/beui/motion/button/base";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../../vendor/beui/motion/context-menu";
+import { Loader } from "../../vendor/beui/motion/loader";
+import { NumberTicker } from "../../vendor/beui/motion/number-ticker";
+import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import type { RecentRow } from "../../../src/payloads";
 import { cn } from "../../shared/cn";
+import { useQuietSubtree } from "../../shared/quiet";
 import { plural, prettyPath, relativeTime } from "./format";
+
+/** Signal colours for the portalled tooltip bubble, which has none of its own. */
+export const TOOLTIP_SURFACE =
+  "max-w-[min(90vw,560px)] rounded-[var(--radius-sm)] border-line bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
+
+/** Menu rows are focused programmatically, so `:focus` — not `:focus-visible`. */
+const MENU_ITEM = "focus:bg-fill-2 focus:outline-none";
 
 interface RowProps {
   row: RecentRow;
@@ -37,6 +86,25 @@ interface RowProps {
 }
 
 function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  // ContextMenu restores focus to its trigger on Escape, and this trigger is a
+  // <div> — `.focus()` on a non-focusable element is a silent no-op, so a
+  // keyboard user who opened the menu with Shift+F10 was landing on <body>.
+  // Verified in Chrome; the same class of bug as the sheet's onOpen focus.
+  // Captured only when focus was inside the row, so a right-click with the
+  // mouse (activeElement === body) does not yank focus anywhere on close.
+  const restore = useRef<HTMLElement | null>(null);
+  const onMenuOpenChange = (open: boolean) => {
+    const active = document.activeElement as HTMLElement | null;
+    if (open) restore.current = active && rowRef.current?.contains(active) ? active : null;
+    else {
+      // Only when the menu still owns focus. Closing because the user clicked
+      // something else must not drag focus back onto the row.
+      if (active?.closest("[data-context-menu-portal]")) restore.current?.focus?.();
+      restore.current = null;
+    }
+  };
+
   // Branch · N changed files · relative time, with the dot separators dropped
   // for whatever is absent. A repo whose folder is gone shows only the time.
   const meta: ReactNode[] = [];
@@ -54,107 +122,154 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
   meta.push(<span key="time">{relativeTime(row.lastOpened, now)}</span>);
 
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[minmax(0,1fr)_44px] items-stretch gap-2",
-        "max-[480px]:relative max-[480px]:block",
-        !row.isGit && "opacity-[.68]",
-      )}
-    >
-      {/* `data-repo-card` is the UI-atlas evidence selector for this surface —
-          a capture only counts as coverage if it can find a real row. */}
-      <button
-        type="button"
-        data-repo-card
-        onClick={() => onOpen(row.path)}
-        className={cn(
-          "flex w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-left",
-          "transition-[transform,background-color,border-color] duration-[var(--motion-duration-fast)] ease-out",
-          // .98 rather than a deeper dip: this card is full-width, and 3% on a
-          // wide element reads as buckling. Matches nav.tsx's large-surface value.
-          "hover:border-line hover:bg-fill-1 active:scale-[.98]",
-          // Reduced motion keeps the colour feedback and drops only the movement.
-          "motion-reduce:transition-[background-color,border-color] motion-reduce:active:transform-none",
-          "contrast-more:border-text",
-          "max-[480px]:pr-[54px]",
-        )}
-      >
-        <span
-          aria-hidden="true"
+    <ContextMenu onOpenChange={onMenuOpenChange}>
+      <ContextMenuTrigger>
+        <div
+          ref={rowRef}
           className={cn(
-            "w-5 flex-none text-right font-mono text-xs font-semibold tracking-[-.01em] max-[480px]:hidden",
-            row.isGit ? "text-[var(--numeral)]" : "text-[var(--numeral-dim)]",
+            "grid grid-cols-[minmax(0,1fr)_44px] items-stretch gap-2",
+            "max-[480px]:relative max-[480px]:block",
+            !row.isGit && "opacity-[.68]",
           )}
         >
-          {String(index + 1).padStart(2, "0")}
-        </span>
-        <span
-          className={cn(
-            "grid h-[38px] w-[38px] flex-none place-items-center rounded-[var(--radius-lg)]",
-            row.isGit ? "bg-accent-soft text-accent" : "bg-fill-3 text-text-2",
-          )}
-        >
-          <Folder className="h-5 w-5" strokeWidth={1.7} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-semibold tracking-[-.012em]">{row.name}</span>
-            {row.isGit ? null : (
-              <AnimatedBadge
-                status="danger"
-                size="sm"
-                showIcon={false}
-                className="h-auto flex-none rounded-[var(--radius-sm)] border-0 bg-del-soft px-2 py-0.5 text-[11px] font-semibold text-del"
-              >
-                Missing
-              </AnimatedBadge>
+          {/* `data-repo-card` is the UI-atlas evidence selector for this surface —
+              a capture only counts as coverage if it can find a real row. */}
+          <Button
+            type="button"
+            data-repo-card
+            pressScale={0.98}
+            whileHover={undefined}
+            onClick={() => onOpen(row.path)}
+            className={cn(
+              "flex h-auto w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-left",
+              "transition-[background-color,border-color] duration-[var(--motion-duration-fast)] ease-out",
+              "hover:border-line hover:bg-fill-1",
+              "contrast-more:border-text",
+              "max-[480px]:pr-[54px]",
             )}
-          </span>
-          <span className="truncate font-mono text-xs text-text-2" title={row.path}>
-            {prettyPath(row.path, home)}
-          </span>
-          <span className="mt-px flex flex-wrap items-center gap-[7px] font-mono text-[11px] text-text-2">
-            {meta.map((node, i) => (
-              <Fragment key={i}>
-                {i > 0 ? (
-                  <span className="text-text-3 opacity-60" aria-hidden="true">
-                    ·
-                  </span>
-                ) : null}
-                {node}
-              </Fragment>
-            ))}
-          </span>
-        </span>
-        <span className="flex flex-none text-text-3 opacity-55" aria-hidden="true">
-          <ChevronRight className="h-4 w-4" strokeWidth={2} />
-        </span>
-      </button>
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "w-5 flex-none text-right font-mono text-xs font-semibold tracking-[-.01em] max-[480px]:hidden",
+                row.isGit ? "text-[var(--numeral)]" : "text-[var(--numeral-dim)]",
+              )}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span
+              className={cn(
+                "grid h-[38px] w-[38px] flex-none place-items-center rounded-[var(--radius-lg)]",
+                row.isGit ? "bg-accent-soft text-accent" : "bg-fill-3 text-text-2",
+              )}
+            >
+              <Folder className="h-5 w-5" strokeWidth={1.7} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <span className="flex items-center gap-2">
+                <span className="truncate text-[15px] font-semibold tracking-[-.012em]">{row.name}</span>
+                {row.isGit ? null : (
+                  <AnimatedBadge
+                    status="danger"
+                    size="sm"
+                    showIcon={false}
+                    className="h-auto flex-none rounded-[var(--radius-sm)] border-0 bg-del-soft px-2 py-0.5 text-[11px] font-semibold text-del"
+                  >
+                    Missing
+                  </AnimatedBadge>
+                )}
+              </span>
+              {/* The `title` this replaces was never in the accessibility tree:
+                  the card's name comes from its text content, so the full path
+                  was always a hover-only affordance. It still is — just legible,
+                  and without the second-long native delay. */}
+              <Tooltip
+                content={row.path}
+                side="bottom"
+                delay={350}
+                className={TOOLTIP_SURFACE}
+                wrapperClassName="min-w-0 max-w-full"
+              >
+                <span className="block min-w-0 truncate font-mono text-xs text-text-2">
+                  {prettyPath(row.path, home)}
+                </span>
+              </Tooltip>
+              <span className="mt-px flex flex-wrap items-center gap-[7px] font-mono text-[11px] text-text-2">
+                {meta.map((node, i) => (
+                  <Fragment key={i}>
+                    {i > 0 ? (
+                      <span className="text-text-3 opacity-60" aria-hidden="true">
+                        ·
+                      </span>
+                    ) : null}
+                    {node}
+                  </Fragment>
+                ))}
+              </span>
+            </span>
+            <span className="flex flex-none text-text-3 opacity-55" aria-hidden="true">
+              <ChevronRight className="h-4 w-4" strokeWidth={2} />
+            </span>
+          </Button>
 
-      <button
-        type="button"
-        disabled={busy}
-        aria-busy={busy || undefined}
-        title="Remove from recent repositories"
-        aria-label={`Remove ${row.name} from recent repositories`}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onRemove(row.path);
-        }}
-        className={cn(
-          "flex w-11 items-center justify-center rounded-[var(--radius-island)] border border-transparent bg-surface-2 text-text-3",
-          "transition-colors duration-[var(--motion-duration-fast)] hover:bg-del-soft hover:text-del disabled:opacity-55",
-          "contrast-more:border-text",
-          // Compact layout: the control overlays the card's reserved right
-          // gutter, with a -5px inset hit-slop so it stays thumb-sized.
-          "max-[480px]:absolute max-[480px]:top-3 max-[480px]:right-3 max-[480px]:z-[2] max-[480px]:h-[34px] max-[480px]:w-[34px]",
-          "max-[480px]:after:absolute max-[480px]:after:-inset-[5px] max-[480px]:after:content-['']",
-        )}
+          {/* The tooltip's anchor span becomes the 44px grid cell, so the compact
+              overlay geometry moves onto it — the button keeps its own size and
+              hit-slop, which is what ≤480px is TEST-LOCKED on. */}
+          <Tooltip
+            content="Remove from recent repositories"
+            side="left"
+            className={TOOLTIP_SURFACE}
+            wrapperClassName="w-11 items-stretch max-[480px]:absolute max-[480px]:top-3 max-[480px]:right-3 max-[480px]:z-[2] max-[480px]:w-[34px]"
+          >
+            <Button
+              type="button"
+              size="icon"
+              pressScale={0.97}
+              disabled={busy}
+              aria-busy={busy || undefined}
+              aria-label={`Remove ${row.name} from recent repositories`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onRemove(row.path);
+              }}
+              className={cn(
+                "relative flex h-auto w-full items-center justify-center rounded-[var(--radius-island)] border border-transparent bg-surface-2 text-text-3",
+                "transition-colors duration-[var(--motion-duration-fast)] hover:bg-del-soft hover:text-del disabled:opacity-55",
+                "contrast-more:border-text",
+                // Compact layout: the control overlays the card's reserved right
+                // gutter, with a -5px inset hit-slop so it stays thumb-sized.
+                "max-[480px]:h-[34px] max-[480px]:w-[34px]",
+                "max-[480px]:after:absolute max-[480px]:after:-inset-[5px] max-[480px]:after:content-['']",
+              )}
+            >
+              {busy ? (
+                <Loader variant="spinner" size={15} label="" />
+              ) : (
+                <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.9} />
+              )}
+            </Button>
+          </Tooltip>
+        </div>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent
+        ariaLabel={`Actions for ${row.name}`}
+        className="min-w-52 rounded-[var(--radius-lg)] border-line bg-surface-3 p-1.5 shadow-[var(--shadow)]"
       >
-        <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.9} />
-      </button>
-    </div>
+        <ContextMenuItem className={cn(MENU_ITEM, "text-text")} onSelect={() => onOpen(row.path)}>
+          Open repository
+        </ContextMenuItem>
+        <ContextMenuItem
+          tone="destructive"
+          disabled={busy}
+          className={cn(MENU_ITEM, "text-del focus:bg-del-soft")}
+          onSelect={() => onRemove(row.path)}
+        >
+          Remove from recent repositories
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -185,7 +300,8 @@ export interface RecentReposProps {
 }
 
 export function RecentRepos({ recents, home, now, removing, onOpen, onRemove }: RecentReposProps) {
-  if (!recents.length) return <EmptyRecents />;
+  const root = useRef<HTMLDivElement>(null);
+  useQuietSubtree(root);
 
   const available = recents.filter((row) => row.isGit);
   const missing = recents.filter((row) => !row.isGit);
@@ -203,24 +319,60 @@ export function RecentRepos({ recents, home, now, removing, onOpen, onRemove }: 
     />
   );
 
+  // `grid gap-2` rather than `space-y-2`: ContextMenu wraps every row in a
+  // `display:contents` provider, and a margin on a box that generates no box is
+  // dropped. Grid gaps belong to the container, so they survive it.
+  //
+  // The explicit `minmax(0,1fr)` is not decoration. An implicit `auto` track is
+  // floored at the item's min-content width, and below 480px a row's min-content
+  // exceeds the 358px viewport — the track grew, the row overflowed, and the
+  // remove control (absolutely positioned at the row's right edge) went off
+  // screen entirely. Caught by the UI atlas, not by any DOM assertion.
   return (
-    <div className="space-y-2">
+    <div ref={root} className={recents.length ? "grid grid-cols-[minmax(0,1fr)] gap-2" : undefined}>
+      {recents.length ? null : <EmptyRecents />}
       {available.map((row, i) => rowFor(row, i))}
       {missing.length ? (
-        <details className="group mt-3 border-t border-line-soft pt-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between px-[3px] py-2 text-xs font-semibold text-text-3 [&::-webkit-details-marker]:hidden">
-            <span>
-              {missing.length} unavailable {plural(missing.length, "workspace", "workspaces")}
-            </span>
-            <ChevronDown
-              className="h-3.5 w-3.5 transition-transform duration-[var(--motion-duration-fast)] group-open:rotate-180 motion-reduce:transition-none"
-              aria-hidden="true"
-            />
-          </summary>
-          <div className="grid gap-2 pt-0.5">
-            {missing.map((row, i) => rowFor(row, available.length + i))}
-          </div>
-        </details>
+        <BouncyAccordion
+          className="mt-3 border-t border-line-soft pt-2"
+          items={[
+            {
+              id: "unavailable",
+              title: (
+                <>
+                  <NumberTicker value={missing.length} duration={0.5} startOnView={false} className="align-middle" />
+                  {" unavailable "}
+                  {plural(missing.length, "workspace", "workspaces")}
+                </>
+              ),
+              description: (
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-2 pt-0.5">
+                  {missing.map((row, i) => rowFor(row, available.length + i))}
+                </div>
+              ),
+            },
+          ]}
+          classNames={{
+            item: "overflow-visible bg-transparent",
+            trigger: cn(
+              "min-h-0 gap-2 px-[3px] py-2",
+              // `outline-none` is baked into the vendored trigger, so the focus
+              // ring has to come back from here or the control has none at all.
+              "focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+            ),
+            // Deliberately NOT a flex container. The ticker is one word in a
+            // sentence, and flexbox strips the leading and trailing space from
+            // an anonymous text item — "2unavailable workspaces". Inline flow
+            // keeps the spaces; `overflow-visible` undoes the vendored
+            // `truncate` so the rolling digit is not clipped vertically.
+            title: "overflow-visible text-xs font-semibold text-text-3",
+            chevron: "h-3.5 w-3.5 text-text-3",
+            // The vendored content wrapper hardcodes `px-5 pb-5`. The rows have to
+            // line up with the available ones above, and the measured element is
+            // the padded one, so `-mb-5` is also what keeps the height honest.
+            description: "-mx-5 -mb-5 text-[unset] leading-[unset] text-text",
+          }}
+        />
       ) : null}
     </div>
   );

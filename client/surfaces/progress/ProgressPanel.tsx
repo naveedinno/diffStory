@@ -24,15 +24,53 @@
 // here rather than borrowed from the Signal tokens — the panel must not flip
 // when the host does. Radii, the tonal fill and the pill shape ARE borrowed, so
 // it still belongs to the same family.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+// This surface is the awkward one for beUI, because almost everything in the
+// vendored `agents/` set ships a live region and the contract above says there
+// may be exactly one. Four components are used; the rest were judged worse than
+// what they would replace and the reasons are recorded next to each candidate.
+//
+//   - `Loader` (motion/loader) is the header spinner. It is the only adopted
+//     component that speaks: it bakes in `role="status"` and an `sr-only`
+//     label. Two independent things silence it — the `aria-hidden` wrapper
+//     (which is exactly the semantics the hand-rolled ring had) and
+//     `useQuietSubtree` below, which strips the role so a live region cannot
+//     announce even if an AT ignores `aria-hidden` on an ancestor. Its own
+//     `label` is emptied so no stray "Loading" text sits in front of the title.
+//     What it buys over three Tailwind utilities: a real reduced-motion state.
+//     The hand-rolled ring froze into a solid blue circle that read as a "done"
+//     mark; `Loader` keeps a calm opacity pulse instead.
+//   - `ActionSwapText` (motion/action-swap) carries the lifecycle headline.
+//     The title changes about three times a run — "Preparing…" → "Writing your
+//     review" → "Review ready" — and used to hard-cut. It now blur-swaps while
+//     the pill morphs to the new width. `max-w-full` is added because the
+//     component pins an explicit measured width and the ≤520px head grid gives
+//     the title a `minmax(0,1fr)` cell it must not blow out of.
+//   - `NumberTicker` (motion/number-ticker) rolls the plan counter's leading
+//     digit. `startOnView={false}`: the component's default arms itself on an
+//     IntersectionObserver, and this panel is either on screen or unmounted.
+//   - `ActivityText` wraps `TextShimmer`; see that file for the two traps.
+//
+// `Button` writes `tabindex` onto `motion.button`, which matters where
+// `tabIndex={-1}` is load-bearing. Nothing here is, so the two chrome buttons
+// use it directly — they only need their Signal-free colours supplied,
+// focus ring included, because the component sets `outline-none`.
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { ActionSwapText } from "../../vendor/beui/motion/action-swap";
 import { Button } from "../../vendor/beui/motion/button/base";
+import { Loader } from "../../vendor/beui/motion/loader";
+import { NumberTicker } from "../../vendor/beui/motion/number-ticker";
 import { cn } from "../../shared/cn";
+import { useQuietSubtree } from "../../shared/quiet";
+import { ActivityText } from "./ActivityText";
 import { Elapsed } from "./Elapsed";
 import { Milestones } from "./Milestones";
 import { PlanList } from "./PlanList";
-import type { ProgressVariant } from "./state";
+import { planCountSuffix, type ProgressVariant } from "./state";
 import type { ProgressRun } from "./use-progress-run";
 
 // Dark by default; the light branch only lightens, never inverts.
@@ -88,6 +126,12 @@ export interface ProgressPanelProps {
 export function ProgressPanel({ run, variant = "floating", foot, className }: ProgressPanelProps) {
   const { state } = run;
   const reduce = useReducedMotion();
+  const root = useRef<HTMLDivElement>(null);
+
+  // Strip the live region beUI's `Loader` bakes in, and spare the two this
+  // panel owns deliberately: the single announcer, and the error card, which is
+  // the one thing a user genuinely must hear and appears once, at the end.
+  useQuietSubtree(root, { keep: "[data-pp-announcer], [data-pp-error]" });
 
   const stage = variant === "stage";
   // The standalone activity line is the fallback for runs with no plan; once a
@@ -105,6 +149,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
       {state.open ? (
         <motion.div
       key="progress-panel"
+      ref={root}
       // The full transform string, not motion's x/y/scale shorthands: those are
       // not hardware-accelerated, and this panel animates in while an agent is
       // streaming NDJSON into it — precisely when the main thread is busiest.
@@ -158,25 +203,33 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         )}
       >
         {state.spinning ? (
+          // `aria-hidden` is the semantics the hand-rolled ring had, and it is
+          // also the first of the two things that keep Loader's baked-in
+          // `role="status"` from ever speaking. The second is useQuietSubtree.
           <span
             aria-hidden="true"
-            className={cn(
-              "h-[13px] w-[13px] flex-none animate-spin rounded-full border-2 [animation-duration:0.7s]",
-              "border-[var(--pp-line)] border-t-[var(--pp-blue)]",
-              "motion-reduce:animate-none motion-reduce:border-[var(--pp-blue)]",
-              "max-[520px]:col-start-1 max-[520px]:row-start-1",
-            )}
-          />
+            className="flex flex-none max-[520px]:col-start-1 max-[520px]:row-start-1"
+          >
+            <Loader
+              variant="spinner"
+              size={13}
+              speed={0.7}
+              label=""
+              className="text-[var(--pp-blue)]"
+            />
+          </span>
         ) : null}
         <span
           data-pp-title=""
           className={cn(
-            "font-mono text-[10.5px] font-medium tracking-[0.14em] text-[var(--pp-blue)] uppercase",
+            "min-w-0 font-mono text-[10.5px] font-medium tracking-[0.14em] text-[var(--pp-blue)] uppercase",
             stage && "text-[11.5px]",
             "max-[520px]:col-start-2 max-[520px]:row-start-1 max-[520px]:self-center",
           )}
         >
-          {state.title}
+          <ActionSwapText value={state.title} animation="blur" className="max-w-full">
+            {state.title}
+          </ActionSwapText>
         </span>
         {state.agent ? (
           <span
@@ -239,11 +292,14 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
       <PlanList state={state} />
 
       {showNowLine ? (
-        <div
-          data-pp-now=""
-          className="min-h-6 flex-1 overflow-auto px-3.5 py-2 font-mono text-[12.5px] break-words text-[var(--pp-muted)]"
-        >
-          {state.current}
+        <div data-pp-now="" className="min-h-6 flex-1 overflow-auto px-3.5 py-2">
+          <ActivityText
+            live={!state.finished}
+            tone="muted"
+            className="font-mono text-[12.5px] break-words"
+          >
+            {state.current}
+          </ActivityText>
         </div>
       ) : null}
 
@@ -266,8 +322,26 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         />
         <span data-pp-live-text="">{state.liveText}</span>
         <Elapsed startedAt={state.startedAt} running={state.running} />
+        {/*
+          `state.liveCount` is the same fact as a plain string, and stays on the
+          state for hosts that read it. Rendering from the two numbers is what
+          lets the leading digit roll instead of jumping; `planCountSuffix` keeps
+          the wording in one place.
+        */}
         <span data-pp-live-count="" className="ml-auto">
-          {state.liveCount}
+          {state.hasPlan ? (
+            <>
+              <NumberTicker
+                value={state.planDone}
+                startOnView={false}
+                duration={0.45}
+                stagger={0}
+              />
+              {planCountSuffix(state.planTotal)}
+            </>
+          ) : (
+            state.liveCount
+          )}
         </span>
       </div>
 
@@ -305,10 +379,16 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
       ) : null}
 
       {/*
-        Raw agent output, revealed only on failure and never auto-opened. A
-        native <details> keeps the keyboard behaviour free and matches the
-        vanilla panel; beUI's AgentDisclosure would have traded that for a
-        button + animated region, which is a behaviour change, not a port.
+        Raw agent output, revealed only on failure and never auto-opened. Still
+        a native <details>, and the beUI adoption pass re-judged that rather
+        than inheriting it. `AgentDisclosure` is a bare animated <div>: it
+        supplies no trigger, so adopting it means hand-writing a button with
+        `aria-expanded`/`aria-controls` to replace semantics <summary> gives for
+        free, and losing find-in-page's ability to open a collapsed <details>.
+        What it returns is a 0.22s clip-path wipe over a `<pre>` that can hold
+        200 kB of stdout, with the height snapping open underneath it anyway
+        (`openHeight` defaults to `auto`, which motion cannot tween). Worse on
+        both sides of the trade.
       */}
       {state.showDetails ? (
         <details className="border-t border-[var(--pp-line)] px-3.5 pt-2 pb-2.5">

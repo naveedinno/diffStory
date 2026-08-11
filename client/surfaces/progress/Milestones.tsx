@@ -11,6 +11,17 @@
 // through the panel's single live region, by `advanceMilestones` in state.ts.
 // The strip itself carries no live-region semantics; only the dots, which are
 // pure decoration, are hidden.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+// `agents/agent-activity/` is the vendored component nearest this one by name,
+// and it answers a different question. It is a vertical, scrolling, collapsible
+// log of what the agent *did* — one row per tool call, search or thought,
+// growing without bound. This is a fixed six-node horizontal rail answering
+// "how far through is this", built from phases the app emits rather than from
+// agent chatter, and the whole run always fits. Swapping one for the other
+// would delete the panel's only honest progress indicator, not restyle it.
+// Its `role="status"` was never the blocker.
 
 import { cn } from "../../shared/cn";
 import { milestoneTone, type ProgressState } from "./state";

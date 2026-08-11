@@ -466,9 +466,70 @@ test('the surface does not animate its own arrival', () => {
   assert.match(refPicker, /clipPath: "inset\(0px 0px 100% round 10px\)", y: -4, scale: 0\.985/);
   assert.match(refPicker, /transition=\{open && !reduce \? \{ duration: 0\.2, ease: EASE_SIGNAL_OUT \} : \{ duration: 0 \}\}/);
   assert.match(refPicker, /const reduce = useReducedMotion\(\);/, 'and it steps instead of animating under reduced motion');
-  // Press feedback keeps the vanilla scales and drops under reduced motion.
+  // Press feedback keeps the vanilla scale and drops under reduced motion.
+  // This used to be `/active:scale-\[\.985\]|max-\[600px\]/`, which the second
+  // alternative satisfied on every version of this file — including the one
+  // where the segments listed `transform` in their transition and then never
+  // changed a transform, so there was no press feedback at all. The scale now
+  // comes from Motion's gesture, which gates itself on `useReducedMotion()`.
   assert.match(scopeCard, /motion-reduce:transition-none motion-reduce:active:transform-none/);
-  assert.match(scopeCard, /active:scale-\[\.985\]|max-\[600px\]/);
+  assert.match(scopeCard, /const SEGMENT_PRESS = 0\.985;/);
+  assert.equal(
+    (scopeCard.match(/pressScale=\{SEGMENT_PRESS\}/g) ?? []).length,
+    3,
+    'all three segments press, not just the two that are buttons',
+  );
+  // And none of them lifts on hover: three tiles side by side scaling up 2% is
+  // the "lurch" the repo picker's full-width card rejected, at three times over.
+  assert.equal((scopeCard.match(/whileHover=\{undefined\}/g) ?? []).length, 4);
+});
+
+test('the beUI segments do not inherit beUI geometry', () => {
+  // `SIZE_CLASS` pins `h-10` on every Button variant, and tailwind-merge treats
+  // `h` and `min-h` as different groups — without `h-auto` the 64px scope tile
+  // silently becomes a 40px pill. Its base class also centres content, which on
+  // a `flex-col` tile centres both labels away from the left edge.
+  assert.match(scopeCard, /const SEGMENT_BASE = cn\(\s*\n?\s*"flex h-auto min-h-16 [^"]*items-stretch justify-start/);
+  // The vendored colour classes name variables this app does not define, so the
+  // segment supplies its own — including the focus ring, because the component
+  // ships `focus-visible` styling that resolves to nothing.
+  assert.match(scopeCard, /focus-visible:outline-none focus-visible:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/);
+});
+
+test('the vendored ref field keeps a focus ring of its own', () => {
+  // beUI's Input draws focus with `ring-2 ring-ring/40` and `border-foreground/40`,
+  // and neither `--color-ring` nor `--color-foreground` exists in this app's
+  // theme bridge — those utilities compile to nothing at all. The ring has to be
+  // rebuilt from the one thing the component does publish, `data-state`.
+  assert.match(
+    scopeCard,
+    /data-\[state=focused\]:border-accent-line data-\[state=focused\]:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/,
+  );
+  assert.ok(!/ring-ring|border-foreground/.test(scopeCard), 'and not from a variable that does not exist');
+  // All three fields are the same field.
+  assert.equal((scopeCard.match(/classNames=\{FIELD_CLASSNAMES\}/g) ?? []).length, 3);
+  // The picker's `value` still arrives as a string, because that is what the
+  // component hands back — the old handler read `event.target.value` and this
+  // one must not silently start committing `[object Object]`.
+  assert.match(scopeCard, /onChange: \(next: string\) => \{\s*picker\.open\(kind, next\);\s*commit\(next, 700\);/);
+});
+
+test('every live-region carrier this surface adopts is quieted', () => {
+  // `Input` bakes in a `role="alert"` and `Loader` a `role="status"`. Importing
+  // the hook is not the same as covering the node, so assert the ref each hook
+  // is given actually wraps the carrier: the card element for the fields, the
+  // listbox element for its spinner, and a `display: contents` box for the
+  // reload control, which lives in the nav rather than in the card.
+  assert.match(scopeCard, /vendor\/beui\/motion\/input/);
+  assert.match(scopeCard, /vendor\/beui\/motion\/loader/);
+  assert.match(scopeCard, /const card = useRef<HTMLElement>\(null\);\s*useQuietSubtree\(card\);/);
+  assert.match(scopeCard, /<section\s*\n?\s*ref=\{card\}/);
+  assert.match(scopeCard, /const root = useRef<HTMLSpanElement>\(null\);\s*useQuietSubtree\(root\);/);
+  assert.match(scopeCard, /<span ref=\{root\} className="contents">/);
+  assert.match(refPicker, /useQuietSubtree\(ref\);/);
+  // The listbox spinner replaces the kind tag on the placeholder row only — a
+  // spinner on a real ref would claim work that is not happening.
+  assert.match(refPicker, /\{row\.value \? row\.kind : <Loader variant="spinner" size=\{13\} label="" /);
 });
 
 test('the file inventory keeps its reading order, its generated split, and its counts', () => {
@@ -489,10 +550,55 @@ test('the file inventory keeps its reading order, its generated split, and its c
   assert.match(fileSummary, /className="file-card min-w-0"/);
   assert.match(fileSummary, /"frow flex items-center/);
   assert.match(fileSummary, /className="empty-title/);
+  // Generated output is still a disclosure, still collapsed, still counted.
+  assert.match(fileSummary, /id: "generated"/);
+  assert.match(fileSummary, /<span>Generated output<\/span>/);
+  assert.match(fileSummary, /\{generated\.length\} \{plural\(generated\.length, "file", "files"\)\}/);
+  assert.ok(!/defaultValue=/.test(fileSummary), 'and it does not arrive open');
+  // The vendored accordion animates a 28px corner radius onto its row as an
+  // inline style. Dropping the `!` leaves a rounded island sitting in the middle
+  // of a flush file list, and no ordinary utility can outrank an inline style.
+  assert.match(fileSummary, /item: "rounded-none! /);
+});
+
+test('the scope picker declines the vendored components that would change what it means', () => {
+  // Each of these was considered and rejected on behaviour, not on taste; the
+  // reasons are written down at the site that would have used them. An import
+  // is what would undo that, so an import is what this guards.
+  for (const declined of [
+    'motion/table',
+    'motion/tabs',
+    'motion/morphing-tabs',
+    'motion/expandable-tabs',
+    'motion/select',
+    'motion/select-morph',
+    'motion/popover',
+    'motion/number-ticker',
+    'motion/animated-number',
+    'motion/scroll-reveal',
+    'motion/text-reveal',
+    'agents/file-diff',
+  ]) {
+    assert.ok(!changeSource.includes(`vendor/beui/${declined}`), `${declined} was declined on purpose`);
+  }
+  // The reasoning survives in prose, which the stripped source cannot see — so
+  // read the raw files for it and fail if a rewrite quietly drops the record.
+  const prose = ['ScopeCard.tsx', 'RefPicker.tsx', 'FileSummary.tsx', 'ChangeApp.tsx']
+    .map((file) => readRaw(`surfaces/change/${file}`))
+    .join('\n');
+  assert.match(prose, /role="tablist"/, 'why the segments are not tabs');
+  assert.match(prose, /the only key any of the three binds is Escape/, 'why the combobox is not a Select');
+  assert.match(prose, /motion\/table\//, 'why the inventory is not a data grid');
 });
 
 test('the empty working tree keeps its honest, non-error copy', () => {
-  assert.match(fileSummary, /✓ working tree clean/);
+  // The tick used to be a `✓` glyph in the copy; it is now the badge's own
+  // Check icon. Same tone, same words, same success colour — assert all three
+  // rather than the string that happens to hold them.
+  assert.match(fileSummary, /status="success"/);
+  assert.match(fileSummary, /icon=\{<Check /);
+  assert.match(fileSummary, /bg-add-soft[^"]*text-add/, 'the clean tree reads as success, never as an error');
+  assert.match(fileSummary, /working tree clean/);
   assert.match(fileSummary, /Nothing to review/);
   assert.match(fileSummary, /Pick another scope above, or make a change\. When your agent writes code, the changes appear here\./);
   assert.match(fileSummary, /Re-check/);
@@ -531,7 +637,13 @@ test('the nav keeps the wordmark, the breadcrumb, and the two page actions', () 
   assert.match(changeApp, /href=\{`\$\{routeBase\}\/stories`\}/);
   assert.match(changeApp, />\s*History\s*</);
   assert.match(scopeCard, /aria-label="Reload current scope"/);
-  assert.match(scopeCard, /title="Re-read the working tree and rebuild the diff"/);
+  // The reload hint used to be a `title`, which is a permanent accessible
+  // DESCRIPTION. A tooltip only supplies `aria-describedby` while its bubble is
+  // open, so the description has to be restored explicitly or it exists for
+  // exactly as long as the pointer hovers.
+  assert.match(scopeCard, /const RELOAD_HINT = "Re-read the working tree and rebuild the diff";/);
+  assert.match(scopeCard, /<Tooltip content=\{RELOAD_HINT\}/);
+  assert.match(scopeCard, /aria-description=\{RELOAD_HINT\}/, 'the hover-only bubble is not the whole story');
   assert.match(scopeCard, /max-\[480px\]:hidden">Reload<\/span>/, 'the reload label goes away on a phone, the icon does not');
   // The shared bar itself.
   assert.match(nav, /title="Home — your repositories"\s*\n?\s*aria-label="Home"/);

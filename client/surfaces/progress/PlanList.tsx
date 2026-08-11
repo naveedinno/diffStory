@@ -1,19 +1,37 @@
 // The agent's OWN plan, from its TodoWrite calls — the centrepiece of the panel.
 //
-// beUI ships `agents/todo-list.tsx`, which is visually exactly this component
-// and was the obvious thing to reach for. It is NOT used here, for one concrete
-// reason: it renders `<ol aria-live="polite">`. A plan re-render happens on
-// every TodoWrite the agent makes, and each one would read the entire list
-// aloud. The vanilla panel's whole accessibility design is that only lifecycle
-// milestones speak. So the list is rebuilt here, keeping beUI's spacing and
-// status vocabulary but none of its live region.
-//
 // The "what's happening now" line is nested INSIDE the active step rather than
 // living in its own row. That is deliberate: it binds the churn of file and
 // command events to the one plan item they belong to, instead of leaving a
 // free-floating line that looks like it describes the whole run.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+// `agents/todo-list.tsx` is visually almost exactly this component and is the
+// obvious thing to reach for. It is still not used, and the live region is no
+// longer the reason — `useQuietSubtree` would strip the `aria-live="polite"` it
+// puts on its `<ol>`. Four things it does that this list must not:
+//
+//   1. Every item title is `truncate`d. Plan items come from the agent's own
+//      TodoWrite calls and are full sentences ("Design a reading path across
+//      the spending-limit change"); this list wraps them, and eliding two
+//      thirds of a three-item plan is a loss of the panel's main content.
+//   2. There is nowhere to nest the activity line. `TodoList`'s only per-item
+//      slot beside the title is `detail`, a `shrink-0` trailing cell, and the
+//      title itself sits inside the truncating span under a strikethrough
+//      overlay. `[data-pp-plan] [data-pp-step-now]` is a UI-atlas hook and,
+//      more importantly, the binding described above.
+//   3. It owns collapse state — `collapseOnComplete` folds the plan away the
+//      moment the run lands, which is when a user is most likely to read it —
+//      and adds a header row whose "3/8" restates the live row's counter.
+//   4. It scroll-anchors to the bottom on every item-count change, with
+//      `behavior: "smooth"`, inside a panel that already scrolls.
+//
+// So the list stays hand-built, keeping beUI's spacing and status vocabulary.
+// The nested activity line does adopt `TextShimmer`, via `ActivityText`.
 
 import { cn } from "../../shared/cn";
+import { ActivityText } from "./ActivityText";
 import type { ProgressState } from "./state";
 
 const MARK = "flex-none w-3.5 text-left text-[11px] leading-[inherit]";
@@ -65,11 +83,14 @@ export function PlanList({ state }: { state: ProgressState }) {
               </span>
               {item?.text || ""}
               {active && state.current ? (
-                <span
-                  data-pp-step-now=""
-                  className="mt-0.5 block font-mono text-[11.5px] break-words text-[var(--pp-faint)]"
-                >
-                  {state.current}
+                <span data-pp-step-now="" className="mt-0.5 block">
+                  <ActivityText
+                    live={!state.finished}
+                    tone="faint"
+                    className="font-mono text-[11.5px] break-words"
+                  >
+                    {state.current}
+                  </ActivityText>
                 </span>
               ) : null}
             </span>

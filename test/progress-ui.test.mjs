@@ -54,10 +54,11 @@ const panel = read('surfaces/progress/ProgressPanel.tsx');
 const planList = read('surfaces/progress/PlanList.tsx');
 const milestones = read('surfaces/progress/Milestones.tsx');
 const elapsed = read('surfaces/progress/Elapsed.tsx');
+const activity = read('surfaces/progress/ActivityText.tsx');
 const barrel = read('surfaces/progress/index.ts');
 const entry = read('entry/progress.tsx');
 
-const markup = [panel, planList, milestones, elapsed].join('\n');
+const markup = [panel, planList, milestones, elapsed, activity].join('\n');
 const surface = [state, hook, stream, markup, barrel, entry].join('\n');
 
 const protocol = readFileSync(new URL('../src/progress.ts', import.meta.url), 'utf8');
@@ -226,33 +227,75 @@ test('only lifecycle changes announce — activity, heartbeats and text stay sil
   assert.ok(!/announcement:/.test(markup), 'the components render the announcement, they never set it');
 });
 
-test('the vendored components that ship their own live region are not used', () => {
-  // beUI's agent components were the design doc's suggestion for this panel and
-  // every one of them bakes in a live region — `todo-list` would have read the
-  // whole plan aloud on each update. That is why the plan list, milestone thread
-  // and spinner are hand-built here.
+test('the vendored components that would wrap content in a live region stay out', () => {
+  // beUI's agent set was the design doc's suggestion for this panel and almost
+  // every member of it bakes in a live region. `useQuietSubtree` now makes that
+  // survivable — the header spinner is a quieted `Loader` — so the ones below
+  // are excluded on their own merits, not because they speak. Each reason is
+  // written down beside the code that declined it: `todo-list` in PlanList.tsx,
+  // `agent-activity` in Milestones.tsx, `agent-progress` in Elapsed.tsx,
+  // `agent-disclosure` at the <details> in ProgressPanel.tsx.
   //
-  // This used to assert against the vendored files themselves. They were pruned
-  // once the rewrite finished (74 files → the 6 the app imports), so the record
-  // of what carried a live region now lives in `client/vendor/beui/README.md`
-  // and the tree is held to an allowlist by `test/vendor-beui.test.mjs`. What is
-  // still worth asserting here is local: this panel imports nothing that speaks.
+  // What they share is that they wrap the panel's *content*. A quieted content
+  // wrapper is one `useQuietSubtree` regression away from reading a whole plan,
+  // or a 200 kB stdout log, aloud on every update — whereas the spinner has no
+  // content to read.
   const rejected = [
     'agents/todo-list',
     'agents/agent-activity',
     'agents/loading-states/agent-progress',
     'agents/loading-states/reasoning-text',
+    'agents/streaming-response',
+    'agents/tool-result',
+    'agents/code-block',
+    'agents/agent-disclosure',
     'motion/dynamic-island',
-    'motion/loader',
+    'motion/button/stateful',
   ];
   for (const specifier of rejected) {
-    assert.ok(
-      !surface.includes(`vendor/beui/${specifier}`),
-      `${specifier} would add a second live region to the panel`,
-    );
+    assert.ok(!surface.includes(`vendor/beui/${specifier}`), `${specifier} was declined`);
   }
-  // What IS used from beUI: the button, and nothing that speaks.
-  assert.match(panel, /import \{ Button \} from "\.\.\/\.\.\/vendor\/beui\/motion\/button\/base";/);
+  // What IS used from beUI, and nothing else.
+  const imported = [...surface.matchAll(/vendor\/beui\/([\w/-]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual([...new Set(imported)], [
+    'motion/action-swap',
+    'motion/button/base',
+    'motion/loader',
+    'motion/number-ticker',
+    'motion/text-shimmer',
+  ]);
+});
+
+test('the one adopted component that speaks is silenced two ways', () => {
+  // `Loader` bakes in `role="status"` plus an sr-only label, which is right for
+  // a page-level spinner and wrong inside a panel that may hold exactly one
+  // announcer. Neither mechanism below is redundant: `aria-hidden` is the
+  // semantics the hand-rolled ring had and covers the sr-only text, while the
+  // quiet pass strips the role itself, because `aria-hidden` on an ancestor is
+  // not a guarantee that a descendant live region stays quiet.
+  assert.match(panel, /<span\s+aria-hidden="true"\s+className="flex flex-none[^"]*"\s*>\s*<Loader/);
+  assert.match(panel, /label=""/, 'an empty label keeps stray "Loading" text out of the header');
+
+  // The quiet pass, and the two live regions it must NOT take away.
+  assert.match(panel, /useQuietSubtree\(root, \{ keep: "\[data-pp-announcer\], \[data-pp-error\]" \}\)/);
+  assert.match(panel, /data-pp-announcer=""/);
+  assert.match(panel, /data-pp-error=""/);
+  assert.match(panel, /ref=\{root\}/, 'the quiet pass must cover the whole panel, not a fragment of it');
+
+  // The shimmer has no reduced-motion path of its own — it animates from an
+  // inline style, which a `motion-reduce:` utility cannot override — so this
+  // surface must not render it at all there.
+  assert.match(activity, /const reduce = useReducedMotion\(\);/);
+  assert.match(activity, /if \(!live \|\| reduce\) \{/);
+  // Its gradient reads two variables the Signal bridge does not define. Undefined
+  // stops make the gradient invalid, which leaves transparent text on nothing.
+  assert.match(activity, /\[--muted-foreground:var\(--pp-muted\)\] \[--foreground:var\(--pp-text\)\]/);
+  assert.match(activity, /\[--muted-foreground:var\(--pp-faint\)\] \[--foreground:var\(--pp-text\)\]/);
+
+  // The ticker's default arms itself on an IntersectionObserver; this panel is
+  // either on screen or unmounted, so a count that never rolled would be a bug
+  // nobody saw.
+  assert.match(panel, /startOnView=\{false\}/);
 });
 
 test("'>>' note lines never echo into the activity line", () => {
@@ -262,8 +305,14 @@ test("'>>' note lines never echo into the activity line", () => {
   assert.ok(state.includes('line.indexOf(">>") !== 0'), 'the text handler must skip note lines');
   const text = switchArm('text');
   // The guard only matters when there is no plan, and it must sit AFTER the raw
-  // log append — the note still belongs in the technical details.
-  assert.ok(text.indexOf('appendRaw(state, event.data') < text.indexOf('indexOf(">>")'));
+  // log append — the note still belongs in the technical details. Both halves
+  // are located before they are compared: `-1 < n` is true, so an ordering
+  // assertion on its own would be satisfied by the append simply disappearing.
+  const appendAt = text.indexOf('appendRaw(state, event.data');
+  const guardAt = text.indexOf('indexOf(">>")');
+  assert.ok(appendAt >= 0, 'the text arm must still capture raw stdout');
+  assert.ok(guardAt >= 0, 'the text arm must still guard against echoing note lines');
+  assert.ok(appendAt < guardAt, 'the capture happens first; only the echo is suppressed');
   assert.match(text, /if \(next\.hasPlan\) return next;/);
   assert.match(text, /if \(line && line\.indexOf\(">>"\) !== 0\) return setCurrent\(next, line\);/);
 });
@@ -294,8 +343,14 @@ test('the panel keeps all five of its states', () => {
   // The milestone pulse freezes once a run lands, in every state.
   assert.match(state, /finished: true/);
   assert.match(milestones, /!state\.finished &&\n?\s*"animate-pulse/);
-  // Reduced motion removes every one of the three pulses and the spinner.
-  assert.equal(countOf(markup, 'motion-reduce:animate-none'), 4);
+  // Reduced motion removes all three CSS pulses. The spinner used to be a
+  // fourth: it is now beUI's `Loader`, which reads the preference itself and
+  // trades the rotation for a calm opacity pulse rather than freezing into a
+  // solid ring that reads like a completion mark.
+  assert.equal(countOf(markup, 'motion-reduce:animate-none'), 3);
+  assert.ok(!/animate-spin/.test(markup), 'the hand-rolled spinner is gone, not duplicated');
+  // And the shimmer, whose reduced-motion path is "do not render it".
+  assert.match(activity, /return <span className=\{cn\(className, rest\)\}>\{children\}<\/span>;/);
 });
 
 test('the stage variant and the elapsed clock survive the port', () => {
@@ -341,11 +396,35 @@ test('the built bundle ships the panel behaviour', (t) => {
   // itself into a shared `chunk-*.js` and leaves `progress.js` as little more
   // than the imperative bridge. "Did this string survive the build" is a
   // question about the entry AND its chunks.
-  const js = readdirSync(dir)
-    .filter((file) => file === 'progress.js' || (file.startsWith('chunk-') && file.endsWith('.js')))
-    .map((file) => readFileSync(new URL(file, dir), 'utf8'))
-    .join('\n')
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  //
+  // Follow the entry's own import graph rather than globbing every chunk in the
+  // directory. Chunks are shared: once two OTHER surfaces adopt the same
+  // vendored component, esbuild hoists it into a chunk this entry never loads,
+  // and a directory-wide count would attribute another surface's `role="alert"`
+  // to this panel. The counts below are meaningless unless the text being
+  // counted is exactly what a browser fetches for `progress.js`.
+  const reachable = new Set();
+  const walk = (file) => {
+    if (reachable.has(file)) return '';
+    reachable.add(file);
+    const source = readFileSync(new URL(file, dir), 'utf8');
+    const chunks = [...source.matchAll(/["'.]\/(chunk-[A-Za-z0-9]+\.js)["']/g)].map((m) => m[1]);
+    return [source, ...chunks.map(walk)].join('\n');
+  };
+  const js = walk('progress.js').replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+    String.fromCharCode(Number.parseInt(hex, 16)),
+  );
+  // esbuild escapes non-ASCII, so the decode above is what keeps "…" and the
+  // curly quote in "Couldn't finish" covered rather than silently unasserted.
+  assert.ok(js.includes('…'), 'the \\uXXXX decode must actually be doing something');
+  assert.ok(reachable.size >= 2, 'progress.js should still be split against a shared chunk');
+  // And the walk must be a walk: if it ever reached everything in dist/, it
+  // would be the directory glob again, wearing a graph costume.
+  const allChunks = readdirSync(dir).filter((f) => f.startsWith('chunk-') && f.endsWith('.js'));
+  assert.ok(
+    allChunks.some((file) => !reachable.has(file)),
+    'other surfaces have chunks this entry does not load; the walk should exclude them',
+  );
 
   // Every user-facing string, including the branches a user only reaches when
   // something has gone wrong — the easiest to lose and the hardest to notice.
@@ -379,10 +458,21 @@ test('the built bundle ships the panel behaviour', (t) => {
   // one opted-out timer, one alert.
   assert.equal(countOf(js, '"aria-live":"polite"'), 1);
   assert.equal(countOf(js, '"aria-live":"off"'), 1);
-  assert.equal(countOf(js, 'role:"status"'), 1);
   assert.equal(countOf(js, 'role:"timer"'), 1);
   assert.equal(countOf(js, 'role:"alert"'), 1);
   assert.ok(!js.includes('"aria-live":"assertive"'), 'nothing in this panel interrupts');
+
+  // Two `role="status"` literals now reach these chunks: the panel's announcer,
+  // and the one beUI's `Loader` writes. The second is removed from the DOM
+  // during the layout effect after every commit, so it never becomes a live
+  // region — which is why the quieting code has to ship too. A third would mean
+  // something new got in; go and read what it announces.
+  assert.equal(countOf(js, 'role:"status"'), 2);
+  assert.ok(
+    js.includes('setAttribute("aria-live","off")'),
+    'the quieting must survive minification, or the Loader above starts speaking',
+  );
+  assert.ok(js.includes('[data-pp-announcer], [data-pp-error]'), 'and it must still spare these two');
 
   // The `>>` guard, in shipped code.
   assert.ok(js.includes('indexOf(">>")'), 'the echo guard must survive minification');

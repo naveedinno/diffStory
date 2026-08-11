@@ -22,13 +22,49 @@
 //
 // Activating a row branches on `isGit`: a repository opens (and navigates away),
 // anything else descends into it.
+//
+// ── beUI adoption notes ──────────────────────────────────────────────────────
+//
+// The sheet itself is NOT a beUI dialog and is not going to become one. The
+// surface inventory ranks this choreography at-risk #5, and `use-modal.ts`
+// implements the whole of it: a rAF before `.is-shown`, a 210 ms close hold
+// (0 ms under reduced motion), re-entrancy guards, `inert` + `aria-hidden` on
+// `#pickerMain`, the `tabindex !== "-1"` focus trap, and focus restore to the
+// trigger. `bottom-sheet`, `drawer`, `center-morph-modal` and `command-palette`
+// each implement roughly one of those six and silently drop the rest.
+//
+// What is adopted:
+//
+//   - `Input` for the filter field. Every ARIA attribute rides through its
+//     `...rest` spread, so the combobox contract is unchanged; the wrapper
+//     supplies the Signal colours and shrinks the 44 px pill to 34 px, and its
+//     `data-state="focused"` is what drives the accent border now.
+//     The clear control lives in the `rightIcon` slot and is rendered
+//     conditionally rather than `hidden`: the slot styles descendant buttons
+//     with `[&_button]:grid`, which out-specifies both `[hidden]` and a `hidden`
+//     utility, so a hidden-but-present button would have been un-hidden by the
+//     component. Not rendering it is also a stronger guarantee than `hidden` —
+//     out of the layout, the tab ring and the accessibility tree at once.
+//   - `Loader` for the loading row, and `Tooltip` on the icon-only close.
+//   - `Button` for the chrome buttons. Options stay plain `<button>`: Motion's
+//     press gesture writes `tabindex` onto `motion.button` (see the repair note
+//     in `use-modal.ts`), and `tabindex="-1"` on these options is the single
+//     thing keeping the folder list out of the dialog's tab ring.
+//   - `useQuietSubtree` over the sheet, because `Input` bakes in a `role="alert"`
+//     error message and `Loader` a `role="status"`. `keep` spares this surface's
+//     one deliberate announcer — the sr-only folder count below the field.
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ChevronRight, Folder, Search, X } from "lucide-react";
 import { Button } from "../../vendor/beui/motion/button/base";
+import { Input } from "../../vendor/beui/motion/input";
+import { Loader } from "../../vendor/beui/motion/loader";
+import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import { requestJson } from "../../shared/api";
 import { cn } from "../../shared/cn";
+import { useQuietSubtree } from "../../shared/quiet";
 import { useModalChoreography } from "../../shared/use-modal";
+import { TOOLTIP_SURFACE } from "./RecentRepos";
 import { plural } from "./format";
 
 interface FsEntry {
@@ -65,6 +101,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
   ref,
 ) {
   const scrim = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
@@ -76,6 +113,10 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
   // Guards a stale listing from overwriting a newer one when a slow parent
   // directory resolves after a fast child.
   const browseId = useRef(0);
+
+  // Strip the live regions the vendored Input and Loader bake in, but keep the
+  // one this surface owns — see the adoption note at the top of the file.
+  useQuietSubtree(sheet, { keep: ".ds-sr-only" });
 
   const entries = view.kind === "ready" ? view.listing.entries : [];
   const trimmed = query.trim();
@@ -232,17 +273,24 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
         if (event.target === scrim.current) modal.close();
       }}
     >
-      <div className="ds-sheet flex max-h-[76vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[var(--radius-island)] border border-line-soft bg-surface-3 shadow-[var(--shadow)] contrast-more:border-text">
+      <div
+        ref={sheet}
+        className="ds-sheet flex max-h-[76vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[var(--radius-island)] border border-line-soft bg-surface-3 shadow-[var(--shadow)] contrast-more:border-text"
+      >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4 py-3.5">
           <span className="flex-1 text-[15px] font-semibold">Choose a repository</span>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => modal.close()}
-            className="relative grid h-[30px] w-[30px] place-items-center rounded-full bg-fill-3 text-text-2 transition-colors hover:bg-fill-2 hover:text-text after:absolute after:-inset-2 after:content-['']"
-          >
-            <X className="h-4 w-4" strokeWidth={1.9} />
-          </button>
+          <Tooltip content="Close" side="left" className={TOOLTIP_SURFACE}>
+            <Button
+              type="button"
+              size="icon"
+              pressScale={0.97}
+              aria-label="Close"
+              onClick={() => modal.close()}
+              className="relative h-[30px] w-[30px] rounded-full bg-fill-3 text-text-2 transition-colors hover:bg-fill-2 hover:text-text after:absolute after:-inset-2 after:content-['']"
+            >
+              <X className="h-4 w-4" strokeWidth={1.9} />
+            </Button>
+          </Tooltip>
         </div>
 
         <div className="flex flex-wrap items-center gap-0.5 border-b border-line-soft px-4 py-[9px] text-[12.5px] text-text-2">
@@ -258,68 +306,75 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
                   {crumb.label}
                 </span>
               ) : (
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  pressScale={0.97}
+                  whileHover={undefined}
                   onClick={() => browse(crumb.path)}
-                  className="rounded-[var(--radius-sm)] px-[5px] py-0.5 text-accent hover:bg-fill-2"
+                  className="h-auto rounded-[var(--radius-sm)] px-[5px] py-0.5 text-[inherit] font-normal text-accent hover:bg-fill-2"
                 >
                   {crumb.label}
-                </button>
+                </Button>
               )}
             </span>
           ))}
         </div>
 
         <div className="border-b border-line-soft px-4 py-2.5">
-          <div className="relative flex items-center">
-            <span className="pointer-events-none absolute left-[11px] flex text-text-3" aria-hidden="true">
-              <Search className="h-4 w-4" strokeWidth={1.8} />
-            </span>
-            <input
-              ref={search}
-              type="search"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-haspopup="listbox"
-              aria-expanded={expanded}
-              aria-controls="fslist"
-              aria-label="Filter folders in this location"
-              aria-activedescendant={activeIndex >= 0 ? `fs-entry-${activeIndex}` : undefined}
-              placeholder="Filter folders"
-              autoComplete="off"
-              spellCheck={false}
-              value={query}
-              onChange={(event) => onSearchChange(event.target.value)}
-              onKeyDown={onSearchKeyDown}
-              className={cn(
-                "h-[34px] w-full rounded-full border border-line bg-bg pr-[34px] pl-[35px] text-[13px] text-text outline-none",
+          <Input
+            ref={search}
+            type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={expanded}
+            aria-controls="fslist"
+            aria-label="Filter folders in this location"
+            aria-activedescendant={activeIndex >= 0 ? `fs-entry-${activeIndex}` : undefined}
+            placeholder="Filter folders"
+            autoComplete="off"
+            spellCheck={false}
+            value={query}
+            onChange={onSearchChange}
+            onKeyDown={onSearchKeyDown}
+            leftIcon={<Search className="h-4 w-4" strokeWidth={1.8} />}
+            rightIcon={
+              hasFilter ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  pressScale={0.97}
+                  aria-label="Clear folder filter"
+                  onClick={() => {
+                    setQuery("");
+                    setSelected(-1);
+                    search.current?.focus();
+                  }}
+                  className="relative h-[23px] w-[23px] rounded-[var(--radius-sm)] bg-fill-3 text-text-2 hover:bg-fill-2 after:absolute after:-inset-2.5 after:content-['']"
+                >
+                  <X className="h-3 w-3" strokeWidth={2} />
+                </Button>
+              ) : null
+            }
+            classNames={{
+              // `overflow-visible` matters: the clear button's -10px hit-slop is
+              // an ::after box that the vendored `overflow-hidden` would clip.
+              field: cn(
+                "h-[34px] overflow-visible rounded-full border-line bg-bg ring-0",
                 "transition-[box-shadow,border-color] duration-[var(--motion-duration-fast)]",
-                "placeholder:text-text-3 focus:border-accent-line",
-                "contrast-more:border-text",
+                "data-[state=focused]:border-accent-line contrast-more:border-text",
+              ),
+              input: cn(
+                "pl-[35px] text-[13px] leading-[34px] text-text",
+                hasFilter ? "pr-[34px]" : "pr-3.5",
+                "placeholder:text-text-3",
                 "[&::-webkit-search-cancel-button]:appearance-none",
-              )}
-            />
-            {/* `hidden` as well as visually gone: an invisible-but-focusable
-                clear button would sit in the modal's tab ring. */}
-            <button
-              type="button"
-              aria-label="Clear folder filter"
-              hidden={!hasFilter}
-              onClick={() => {
-                setQuery("");
-                setSelected(-1);
-                search.current?.focus();
-              }}
-              className={cn(
-                "absolute right-1.5 h-[23px] w-[23px] place-items-center rounded-[var(--radius-sm)] bg-fill-3 text-text-2 hover:bg-fill-2 after:absolute after:-inset-2.5 after:content-['']",
-                // `display` has to be driven by a class as well as the attribute:
-                // a `grid` utility would out-cascade Preflight's [hidden] rule.
-                hasFilter ? "grid" : "hidden",
-              )}
-            >
-              <X className="h-3 w-3" strokeWidth={2} />
-            </button>
-          </div>
+              ),
+              leftIcon: "left-[11px] text-text-3",
+              rightIcon: "right-1.5 [&_button]:size-[23px] [&_svg]:h-3 [&_svg]:w-3",
+            }}
+          />
           <span className="ds-sr-only" role="status" aria-live="polite">
             {status}
           </span>
@@ -327,7 +382,10 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
 
         <div ref={list} id="fslist" role="listbox" aria-label="Folders in this location" className="min-h-[120px] flex-1 overflow-y-auto p-1.5">
           {view.kind === "loading" ? (
-            <div className="p-[26px] text-center text-[13px] text-text-3">Loading…</div>
+            <div className="flex flex-col items-center gap-2.5 p-[26px] text-center text-[13px] text-text-3">
+              <Loader variant="dots" size={20} label="" />
+              <span>Loading…</span>
+            </div>
           ) : view.kind === "error" ? (
             <div className="p-[26px] text-center text-[13px] text-text-3">{READ_ERROR}</div>
           ) : filtered.length === 0 ? (
