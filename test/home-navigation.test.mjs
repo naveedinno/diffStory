@@ -12,7 +12,6 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { performance } from 'node:perf_hooks';
 import { serve } from '../dist/server.js';
 import { saveRecents } from '../dist/recents.js';
 
@@ -52,11 +51,13 @@ test('the logo returns from an open repository to home without waiting for repo 
   const realPath = process.env.PATH;
   const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
   const gitWrapper = join(bin, 'git');
+  const gitLog = join(bin, 'git.log');
   writeFileSync(
     gitWrapper,
-    `#!/bin/sh\nsleep 0.15\nexec "${realGit.replaceAll('"', '\\"')}" "$@"\n`,
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${gitLog.replaceAll('"', '\\"')}"\nexec "${realGit.replaceAll('"', '\\"')}" "$@"\n`,
   );
   chmodSync(gitWrapper, 0o755);
+  writeFileSync(gitLog, '');
   saveRecents(home, [{ path: repo, lastOpened: Date.now() }]);
 
   const server = serve({ repo, port: 0, open: false, homeOverride: home });
@@ -70,16 +71,19 @@ test('the logo returns from an open repository to home without waiting for repo 
     assert.match(reviewHistory, /class="nv-brand" href="\/repos"/, 'repository logo points at home');
 
     process.env.PATH = `${bin}:${realPath}`;
-    const started = performance.now();
     const response = await fetch(`${origin}/repos`);
     const html = await response.text();
-    const elapsedMs = performance.now() - started;
+    const gitCommands = readFileSync(gitLog, 'utf8').split('\n').filter(Boolean);
 
     assert.equal(response.status, 200);
     assert.match(html, /Add repository/);
-    assert.ok(
-      elapsedMs < 300,
-      `logo-to-home navigation took ${Math.round(elapsedMs)}ms because it waited for repository inspection`,
+    // Home is a picker view, so following the logo must not inspect the open
+    // repository at all. Judging that by the Git commands the navigation issued
+    // — rather than by how long it took — keeps the test immune to machine load.
+    assert.deepEqual(
+      gitCommands,
+      [],
+      'logo-to-home navigation waited for repository inspection',
     );
   } finally {
     process.env.PATH = realPath;
@@ -101,7 +105,7 @@ test('repository and story navigation do not synchronously repeat Git inspection
   const gitLog = join(bin, 'git.log');
   writeFileSync(
     gitWrapper,
-    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${gitLog.replaceAll('"', '\\"')}"\ncase "$1" in diff|status) sleep 0.08;; esac\nexec "${realGit.replaceAll('"', '\\"')}" "$@"\n`,
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${gitLog.replaceAll('"', '\\"')}"\nexec "${realGit.replaceAll('"', '\\"')}" "$@"\n`,
   );
   chmodSync(gitWrapper, 0o755);
   saveRecents(home, [{ path: repo, lastOpened: Date.now() }]);
@@ -110,24 +114,39 @@ test('repository and story navigation do not synchronously repeat Git inspection
   await once(server, 'listening');
   const origin = `http://localhost:${server.address().port}`;
   const repoRoute = `/repo/${encodeURIComponent(basename(repo))}`;
-  const timings = [];
+  // `git diff` and `git status` are the working-tree inspection this test guards;
+  // everything else the server shells out for (rev-parse, ls-files, hash-object)
+  // is cheap bookkeeping.
+  const inspects = /^(?:diff|status)\b/;
+  const navigations = [];
 
-  async function navigate(name, path, init, expected) {
+  // Each navigation is judged by the Git commands it actually issued, read from
+  // the shim's log, rather than by how long it took. Wall-clock thresholds are a
+  // race: under load a legitimate navigation crosses them and the test misfires.
+  async function navigate(name, path, init, expected, inspectionBudget) {
     writeFileSync(gitLog, '');
-    const started = performance.now();
     const response = await fetch(`${origin}${path}`, init);
     const body = await response.text();
     const gitCommands = readFileSync(gitLog, 'utf8').split('\n').filter(Boolean);
-    timings.push({ name, elapsedMs: performance.now() - started, gitCommands });
+    navigations.push({
+      name,
+      inspectionBudget,
+      inspections: gitCommands.filter((command) => inspects.test(command)),
+      gitCommands,
+    });
     assert.equal(response.status, 200, `${name} returns a successful page`);
     assert.match(body, expected, `${name} reaches its destination`);
   }
 
   try {
     process.env.PATH = `${bin}:${realPath}`;
-    await navigate('close story', `${repoRoute}/stories`, undefined, /Review history/);
-    await navigate('open story', `${repoRoute}/review?story=story.json`, undefined, /Home navigation fixture/);
-    await navigate('visit home', '/repos', undefined, /Add repository/);
+    // Review history, home, and reopening a repository are pure navigation: they
+    // must reach their destination without inspecting the working tree at all.
+    await navigate('close story', `${repoRoute}/stories`, undefined, /Review history/, 0);
+    // Rendering a story is the one navigation allowed to inspect, and only once
+    // — a synchronous repeat would roughly double the commands it issues.
+    await navigate('open story', `${repoRoute}/review?story=story.json`, undefined, /Home navigation fixture/, 8);
+    await navigate('visit home', '/repos', undefined, /Add repository/, 0);
     await navigate(
       'open repository',
       '/api/repo/open',
@@ -137,15 +156,18 @@ test('repository and story navigation do not synchronously repeat Git inspection
         body: JSON.stringify({ path: repo }),
       },
       /"route":"\/repo\//,
+      0,
     );
 
-    const slow = timings.filter(
-      ({ elapsedMs, gitCommands }) => elapsedMs >= 2_000 || gitCommands.length > 20,
+    const repeated = navigations.filter(
+      ({ inspections, inspectionBudget, gitCommands }) =>
+        inspections.length > inspectionBudget || gitCommands.length > 20,
     );
     assert.deepEqual(
-      slow,
+      repeated.map(({ name, inspections, inspectionBudget, gitCommands }) =>
+        `${name} ran ${inspections.length} inspection command(s) of ${gitCommands.length} Git command(s), budget ${inspectionBudget}: ${inspections.join(' | ')}`),
       [],
-      `navigation waited for repeated Git inspection: ${slow.map(({ name, elapsedMs, gitCommands }) => `${name}=${Math.round(elapsedMs)}ms (${gitCommands.length} Git commands)`).join(', ')}`,
+      'navigation repeated Git inspection',
     );
   } finally {
     process.env.PATH = realPath;
