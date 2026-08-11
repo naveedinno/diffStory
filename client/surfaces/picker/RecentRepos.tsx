@@ -134,14 +134,24 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
         >
           {/* `data-repo-card` is the UI-atlas evidence selector for this surface —
               a capture only counts as coverage if it can find a real row. */}
+          {/* `variant="ghost"` is load-bearing, not cosmetic. The default
+              variant is `primary`, whose class pair is
+              `bg-primary text-primary-foreground`. `bg-surface-2` below
+              out-merges the background — same tailwind-merge key — but nothing
+              here sets a text colour, so `text-primary-foreground`
+              (= --on-accent) survived and painted the repo name #fff on a
+              #eef1f5 card in light theme: 1.06:1, unreadable. Ghost carries no
+              background and a muted foreground, both of which the classes below
+              legitimately override. */}
           <Button
             type="button"
+            variant="ghost"
             data-repo-card
             pressScale={0.98}
             whileHover={undefined}
             onClick={() => onOpen(row.path)}
             className={cn(
-              "flex h-auto w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-left",
+              "flex h-auto w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-left text-text",
               "transition-[background-color,border-color] duration-[var(--motion-duration-fast)] ease-out",
               "hover:border-line hover:bg-fill-1",
               "contrast-more:border-text",
@@ -173,7 +183,7 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
                     status="danger"
                     size="sm"
                     showIcon={false}
-                    className="h-auto flex-none rounded-[var(--radius-sm)] border-0 bg-del-soft px-2 py-0.5 text-[11px] font-semibold text-del"
+                    className="h-auto flex-none rounded-[var(--radius-sm)] border-0 bg-del-soft px-2 py-0.5 text-[11px] font-semibold text-diff-del-text"
                   >
                     Missing
                   </AnimatedBadge>
@@ -358,7 +368,7 @@ export function RecentRepos({ recents, home, now, removing, onOpen, onRemove }: 
               "min-h-0 gap-2 px-[3px] py-2",
               // `outline-none` is baked into the vendored trigger, so the focus
               // ring has to come back from here or the control has none at all.
-              "focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+              "focus-visible:shadow-[var(--shadow-focus)]",
             ),
             // Deliberately NOT a flex container. The ticker is one word in a
             // sentence, and flexbox strips the leading and trailing space from

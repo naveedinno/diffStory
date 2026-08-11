@@ -493,7 +493,10 @@ test('the beUI segments do not inherit beUI geometry', () => {
   // The vendored colour classes name variables this app does not define, so the
   // segment supplies its own — including the focus ring, because the component
   // ships `focus-visible` styling that resolves to nothing.
-  assert.match(scopeCard, /focus-visible:outline-none focus-visible:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/);
+  // `--shadow-focus` rather than a spelled-out ring: the app-wide indicator was
+  // a bare `0 0 0 3px var(--accent-soft)` wash measuring ~1.24:1, so it is now a
+  // solid --accent core plus that wash, defined once in the theme bridge.
+  assert.match(scopeCard, /focus-visible:outline-none focus-visible:shadow-\[var\(--shadow-focus\)\]/);
 });
 
 test('the vendored ref field keeps a focus ring of its own', () => {
@@ -503,7 +506,7 @@ test('the vendored ref field keeps a focus ring of its own', () => {
   // rebuilt from the one thing the component does publish, `data-state`.
   assert.match(
     scopeCard,
-    /data-\[state=focused\]:border-accent-line data-\[state=focused\]:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/,
+    /data-\[state=focused\]:border-accent-line data-\[state=focused\]:shadow-\[var\(--shadow-focus\)\]/,
   );
   assert.ok(!/ring-ring|border-foreground/.test(scopeCard), 'and not from a variable that does not exist');
   // All three fields are the same field.
@@ -597,7 +600,13 @@ test('the empty working tree keeps its honest, non-error copy', () => {
   // rather than the string that happens to hold them.
   assert.match(fileSummary, /status="success"/);
   assert.match(fileSummary, /icon=\{<Check /);
-  assert.match(fileSummary, /bg-add-soft[^"]*text-add/, 'the clean tree reads as success, never as an error');
+  // `--add` is the rail-and-fill hue; `--diff-add-text` is the same semantic
+  // green tuned to carry AA as small ink on a pale `--add-soft` badge (it is
+  // `var(--add)` in dark, so only light theme moves). Either spelling satisfies
+  // this assertion — what it is guarding is the tone, not the token name. The
+  // one thing that must never appear here is a `del` colour.
+  assert.match(fileSummary, /bg-add-soft[^"]*text-(add|diff-add-text)\b/, 'the clean tree reads as success, never as an error');
+  assert.doesNotMatch(fileSummary, /bg-add-soft[^"]*text-(del|diff-del-text)\b/, 'and never as a failure');
   assert.match(fileSummary, /working tree clean/);
   assert.match(fileSummary, /Nothing to review/);
   assert.match(fileSummary, /Pick another scope above, or make a change\. When your agent writes code, the changes appear here\./);

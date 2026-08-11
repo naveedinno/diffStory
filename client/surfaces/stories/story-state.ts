@@ -85,15 +85,35 @@ export function storyState(story: StoryRowView, liveEvidence: boolean): StorySta
  * `light:` Tailwind variant is that same `[data-theme="light"]` selector, so the
  * aliases are inlined here rather than reintroduced as custom properties.
  */
+/**
+ * `--story-blue-ink`: the Resume pill and the "In review" badge share it.
+ *
+ * `#005cae` used to be spelled here as a literal, twice. It is now
+ * `--accent-text` in `src/theme.ts` — the same shape as `--diff-add-text` —
+ * because this surface was not the only place that needed it: the nav crumb,
+ * the change page's stage rail and the picker's wordmark all paint Signal blue
+ * as small text, and all four read 4.20:1 in light before the token existed.
+ */
+export const BLUE_INK = "text-accent-text";
+/** `--story-green-ink`: the `+N` additions fact. */
+export const GREEN_INK = "text-add light:text-diff-add-text";
+/**
+ * `--story-red-ink`: the `−N` deletions fact and the `bad` badge.
+ *
+ * The mirror of GREEN_INK, and it was missing. Every tone in BADGE_CLASS below
+ * carries a `light:` override because the light theme's rail hues (`--add`,
+ * `--del`) are tuned for bars and fills, not for 11 px numerals — `src/theme.ts`
+ * ships `--diff-add-text` / `--diff-del-text` as the AA-safe ink for exactly
+ * that. Additions had the override and deletions did not, so `−N` and the `bad`
+ * badge sat at 4.28:1 in light while `+N` beside them sat at 5.47:1. In dark
+ * both tokens alias the rail hue, so this is a no-op there.
+ */
+export const RED_INK = "text-del light:text-diff-del-text";
+
 export const BADGE_CLASS: Record<StoryTone, string> = {
-  bad: "text-del bg-del-soft",
+  bad: `${RED_INK} bg-del-soft`,
   saved: "text-text-2 bg-fill-2",
-  feedback: "text-accent light:text-[#005cae] bg-accent-soft",
+  feedback: `${BLUE_INK} bg-accent-soft`,
   warn: "text-amber light:text-[#875200] bg-amber-soft",
   ready: "text-add light:text-diff-add-text bg-add-soft",
 };
-
-/** `--story-blue-ink`: the Resume pill and the "In review" badge share it. */
-export const BLUE_INK = "text-accent light:text-[#005cae]";
-/** `--story-green-ink`: the `+N` additions fact. */
-export const GREEN_INK = "text-add light:text-diff-add-text";

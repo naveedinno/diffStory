@@ -306,13 +306,25 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
                   {crumb.label}
                 </span>
               ) : (
+                /* `variant="ghost"`: without it the default `primary` variant
+                   paints `bg-primary` under `text-accent`, and accent-on-accent
+                   is a 1:1 contrast ratio — the crumb labels were literally
+                   invisible in both themes. Nothing in the className below sets
+                   a background, so there was no tailwind-merge key to displace
+                   it. `hover:text-accent-text` re-pins the colour ghost would
+                   otherwise hand to `hover:text-foreground`.
+
+                   The ink is `--accent-text`, not `--accent`: these crumbs are
+                   10 px, and plain Signal blue on the sheet reads 3.97:1 in
+                   light. In dark the two tokens are the same value. */
                 <Button
                   type="button"
+                  variant="ghost"
                   size="sm"
                   pressScale={0.97}
                   whileHover={undefined}
                   onClick={() => browse(crumb.path)}
-                  className="h-auto rounded-[var(--radius-sm)] px-[5px] py-0.5 text-[inherit] font-normal text-accent hover:bg-fill-2"
+                  className="h-auto rounded-[var(--radius-sm)] px-[5px] py-0.5 text-[inherit] font-normal text-accent-text hover:bg-fill-2 hover:text-accent-text"
                 >
                   {crumb.label}
                 </Button>
@@ -414,7 +426,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
                 </span>
                 <span className="min-w-0 flex-1 truncate text-left text-sm">{entry.name}</span>
                 {entry.isGit ? (
-                  <span className="rounded-[var(--radius-sm)] bg-add-soft px-[7px] py-px text-[11px] font-semibold text-add">repo</span>
+                  <span className="rounded-[var(--radius-sm)] bg-add-soft px-[7px] py-px text-[11px] font-semibold text-diff-add-text">repo</span>
                 ) : (
                   <span className="flex flex-none text-text-3 opacity-50" aria-hidden="true">
                     <ChevronRight className="h-4 w-4" strokeWidth={2} />
@@ -434,7 +446,18 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
             onClick={() => {
               if (currentIsGit) onOpenRepo(current);
             }}
-            className="h-[var(--control-h-lg)] flex-none rounded-full bg-accent px-4 text-[13px] font-semibold text-on-accent hover:bg-accent-hi disabled:opacity-40"
+            // The disabled label is not a label, it is the reason — "Not a git
+            // repo" is the sheet's whole answer to "why can't I pick this?".
+            // Fading an accent pill to 40% put that sentence at 2.35:1, the
+            // least legible text on the surface, which is backwards. Disabled
+            // therefore drops the accent entirely and becomes a full-opacity
+            // neutral pill: ~5:1 in both themes, and greyed-out reads as
+            // unavailable more honestly than a washed-out blue anyway.
+            className={cn(
+              "h-[var(--control-h-lg)] flex-none rounded-full px-4 text-[13px] font-semibold",
+              "bg-accent text-on-accent hover:bg-accent-hi",
+              "disabled:bg-fill-2 disabled:text-text-2 disabled:opacity-100",
+            )}
           >
             {currentIsGit ? "Open this folder" : "Not a git repo"}
           </Button>

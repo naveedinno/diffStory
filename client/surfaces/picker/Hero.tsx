@@ -25,7 +25,7 @@ export function Hero() {
             <span className="font-normal text-text-2">diff</span>
             <span className="font-bold text-text">Story</span>
           </h1>
-          <span className="font-mono text-[9.5px] tracking-[.22em] text-accent uppercase">
+          <span className="font-mono text-[9.5px] tracking-[.22em] text-accent-text uppercase">
             the story of this change
           </span>
         </span>

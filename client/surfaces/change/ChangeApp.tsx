@@ -47,10 +47,15 @@ const STAGES: [string, string][] = [
 function Metric({ value, label, tone }: { value: string; label: string; tone?: "add" | "del" }) {
   return (
     <span className="flex min-w-[76px] flex-col gap-[3px] border-l border-line-soft px-3.5 py-[3px] first:border-l-0 contrast-more:border-text">
+      {/* `--diff-*-text`, not `--add`/`--del`: those two are the rail-and-fill
+          hues, and the light theme deliberately ships darker ink variants for
+          small text (see the comment above the light block in src/theme.ts).
+          Using the rail hue here read at 3.83:1 in light; the ink variant reads
+          5.47:1. In dark the two tokens are the same value, so nothing moves. */}
       <b
         className={cn(
           "font-display text-lg leading-none font-bold tabular-nums",
-          tone === "add" ? "text-add" : tone === "del" ? "text-del" : "text-text",
+          tone === "add" ? "text-diff-add-text" : tone === "del" ? "text-diff-del-text" : "text-text",
         )}
       >
         {value}
@@ -89,13 +94,21 @@ function ReviewPath() {
               aria-current={active ? "step" : undefined}
               className={cn(
                 "flex items-center gap-2 whitespace-nowrap",
-                active ? "text-accent max-[600px]:gap-[7px] max-[600px]:text-[10.5px]" : "max-[600px]:flex-none max-[600px]:gap-0 max-[600px]:text-[0px]",
+                active ? "text-accent-text max-[600px]:gap-[7px] max-[600px]:text-[10.5px]" : "max-[600px]:flex-none max-[600px]:gap-0 max-[600px]:text-[0px]",
               )}
             >
+              {/* An upcoming stage inherits the row's --text-3 rather than
+                  taking --numeral-dim. That token is tuned for the review
+                  page's decorative step numerals, and on this rail it read
+                  1.42:1 in light / 1.93:1 in dark — while the LABEL beside it
+                  sat at --text-3 and was perfectly legible. Numeral and label
+                  are one wayfinding unit ("02 READ"); below 600px the label is
+                  collapsed to text-[0px] and the numeral is the only marker
+                  left, so it is the half that cannot afford to be invisible. */}
               <i
                 className={cn(
                   "font-display text-sm leading-none font-bold tracking-[var(--tracking-numeral)] not-italic max-[600px]:text-[13px]",
-                  active ? "text-accent" : "text-[var(--numeral-dim)]",
+                  active && "text-accent-text",
                 )}
               >
                 {numeral}
@@ -133,7 +146,7 @@ export function ChangeApp({ payload }: { payload: ChangePayload }) {
         <header className="mb-[18px] max-[600px]:mb-4">
           <div className="m-0 flex items-center justify-between gap-8 max-[600px]:block">
             <div>
-              <p className="m-0 mb-[7px] font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-accent uppercase">
+              <p className="m-0 mb-[7px] font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-accent-text uppercase">
                 Review session
               </p>
               <h1 className="m-0 font-display text-[26px] font-bold tracking-[-.02em] max-[600px]:text-[28px]">

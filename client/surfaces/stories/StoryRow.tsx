@@ -33,7 +33,7 @@ import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import type { StoryRowView } from "../../../src/payloads";
 import { cn } from "../../shared/cn";
 import { plural, relativeTime } from "./format";
-import { BADGE_CLASS, BLUE_INK, GREEN_INK, storyState, type StoryTone } from "./story-state";
+import { BADGE_CLASS, BLUE_INK, GREEN_INK, RED_INK, storyState, type StoryTone } from "./story-state";
 
 /** beUI's semantic status, so the badge picks the icon-free variant it knows. */
 const BADGE_STATUS: Record<StoryTone, AnimatedBadgeStatus> = {
@@ -134,7 +134,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           "hover:bg-fill-1 active:bg-fill-2",
           // Inset, because the card clips overflow and an outset ring would be
           // cut off on three sides.
-          "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
+          "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus-inset)]",
           "motion-reduce:transition-none",
           "max-[760px]:grid-cols-[24px_minmax(0,1fr)] max-[760px]:gap-3 max-[760px]:px-[19px] max-[760px]:pt-4 max-[760px]:pb-[15px]",
         )}
@@ -169,7 +169,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           <span
             className={cn(
               "line-clamp-2 text-[13.5px] leading-[1.42]",
-              story.valid ? "text-text-2" : "text-del",
+              story.valid ? "text-text-2" : RED_INK,
             )}
           >
             {summary}
@@ -182,7 +182,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
             {liveEvidence ? (
               <Fact>
                 <b className={cn("tabular-nums", GREEN_INK)}>+{story.additions}</b>{" "}
-                <b className="ml-[3px] text-del tabular-nums">−{story.deletions}</b>
+                <b className={cn("ml-[3px] tabular-nums", RED_INK)}>−{story.deletions}</b>
               </Fact>
             ) : null}
             <Fact>
@@ -234,7 +234,13 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
             // The nudge is behind hover:hover — a touch device fires a false
             // hover on tap, so without the gate the chevron jumps on every tap.
             // That gate also makes a motion-reduce override redundant here.
-            className="h-3.5 w-3.5 transition-transform duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none [@media(hover:hover)and(pointer:fine)]:group-hover:translate-x-0.5"
+            //
+            // The `_` separators are required: they are how Tailwind spells a
+            // space inside an arbitrary variant. Written without them the
+            // variant emitted `@media (hover:hover)and(pointer:fine)`, which is
+            // not a valid media query — Lightning CSS warned and dropped the
+            // rule from app.css entirely, so the nudge never fired anywhere.
+            className="h-3.5 w-3.5 transition-transform duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none [@media_(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0.5"
             strokeWidth={2}
           />
         </span>

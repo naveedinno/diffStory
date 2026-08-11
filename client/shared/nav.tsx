@@ -35,7 +35,7 @@ export interface Crumb {
 const NAV_ACTION_BASE =
   "inline-flex flex-none items-center gap-1.5 h-[var(--control-h)] px-3.5 rounded-full text-[12.5px] font-semibold tracking-[-.01em] whitespace-nowrap no-underline cursor-pointer border border-transparent " +
   "transition-[background-color,transform,box-shadow] duration-[var(--motion-duration-press)] ease-out " +
-  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] " +
+  "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)] " +
   "motion-reduce:transition-none motion-reduce:active:transform-none contrast-more:border-text";
 
 export const navActionClass = cn(
@@ -74,7 +74,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
           "-ml-[7px] inline-flex flex-none items-center gap-2 rounded-[var(--radius)] px-[7px] py-[5px] text-text no-underline",
           "transition-[background-color,transform,box-shadow] duration-[var(--motion-duration-press)] ease-out",
           "hover:bg-fill-2 active:scale-[.98]",
-          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+          "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
           "motion-reduce:transition-none motion-reduce:active:transform-none",
         )}
       >
@@ -108,7 +108,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
                       href={crumb.href}
                       className={cn(
                         shape,
-                        "text-accent no-underline hover:bg-fill-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                        "text-accent-text no-underline hover:bg-fill-2 focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
                       )}
                     >
                       {crumb.label}

@@ -581,8 +581,10 @@ test('review history keeps its accessibility contracts', () => {
   // The delete control keeps a real name of its own, so losing `title` there
   // costs a reader nothing.
   assert.match(storyRow, /aria-label=\{`Remove \$\{title\}`\}/);
-  // The card clips its own overflow, so an outset focus ring would be cut off.
-  assert.match(storyRow, /focus-visible:shadow-\[inset_0_0_0_3px_var\(--accent-soft\)\]/);
+  // The card clips its own overflow, so an outset focus ring would be cut off —
+  // hence the inset half of the shared `--shadow-focus` pair, which carries a
+  // solid --accent core the old `--accent-soft`-only wash did not (~1.24:1).
+  assert.match(storyRow, /focus-visible:shadow-\[var\(--shadow-focus-inset\)\]/);
   assert.match(storyRow, /focus-within:border-accent-line/);
   assert.match(storyRow, /contrast-more:border-text/);
   assert.match(storiesApp, /className="ds-sr-only" role="status"/);

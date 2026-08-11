@@ -244,9 +244,16 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
           </span>
         ) : null}
         <span aria-hidden="true" className="flex-1 max-[520px]:hidden" />
+        {/* `pressScale` is not optional here even though beUI supplies a default.
+            Its default is 0.93, which is outside the 0.95–0.98 band plan 011
+            settled on and well past the 0.97 every other surface passes
+            explicitly — leaving it unset made these two the most aggressive
+            press in the app, on the one panel that appears while an agent is
+            already working. */}
         {state.showStop ? (
           <Button
             data-pp-stop=""
+            pressScale={0.97}
             onClick={run.requestStop}
             className={cn(ACTION, "max-[520px]:col-start-3 max-[520px]:row-start-1 max-[520px]:row-span-2")}
           >
@@ -256,6 +263,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         {state.showClose ? (
           <Button
             data-pp-close=""
+            pressScale={0.97}
             onClick={run.requestClose}
             className={cn(ACTION, "max-[520px]:col-start-3 max-[520px]:row-start-1 max-[520px]:row-span-2")}
           >

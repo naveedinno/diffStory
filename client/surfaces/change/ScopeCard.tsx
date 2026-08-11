@@ -90,7 +90,7 @@ const SEGMENT_BASE = cn(
   // that beUI's base/size classes bake into every Button.
   "flex h-auto min-h-16 cursor-pointer flex-col items-stretch justify-start gap-1 rounded-[var(--radius-lg)] border border-transparent px-3 py-2.5 text-left no-underline",
   "transition-[background-color,border-color,transform,box-shadow] duration-[var(--motion-duration-fast)] ease-out",
-  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+  "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
   "motion-reduce:transition-none motion-reduce:active:transform-none",
   "max-[600px]:min-h-[44px] max-[600px]:justify-center max-[600px]:px-1.5 max-[600px]:py-2 max-[600px]:text-center",
 );
@@ -125,7 +125,7 @@ const FIELD_CLASSNAMES: InputClassNames = {
   field: cn(
     "h-[var(--control-h-lg)] min-w-0 rounded-[var(--radius)] border-line bg-surface",
     "hover:border-text-3",
-    "data-[state=focused]:border-accent-line data-[state=focused]:shadow-[0_0_0_3px_var(--accent-soft)]",
+    "data-[state=focused]:border-accent-line data-[state=focused]:shadow-[var(--shadow-focus)]",
     "contrast-more:border-text",
   ),
   input: "text-[13px] text-text placeholder:text-text-3",
@@ -137,7 +137,13 @@ const SUMMARY_TILE = cn(
   "bg-[color-mix(in_srgb,var(--accent)_5%,var(--fill-1))] contrast-more:border-text",
 );
 
-const KICKER = "font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase";
+// All three kickers live inside SUMMARY_TILE, whose fill is accent-tinted. On
+// that tint --text-3 lands at 4.26:1 (light) / 4.34:1 (dark) — the only AA miss
+// left on this page, and it misses in both themes because the tile is the thing
+// moving, not the ink. --accent-text is the tuned small-text blue (it is plain
+// --accent in dark, #005cae in light), so the label reaches 5.09:1 / 5.92:1 and
+// reads as belonging to the tile rather than sitting on it by accident.
+const KICKER = "font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-accent-text uppercase";
 
 function Arrow({ className }: { className?: string }) {
   return (
@@ -407,7 +413,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         <label
           className={cn(
             "relative flex min-h-[72px] min-w-0 flex-col justify-center gap-1.5 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 px-2.5 py-2 text-[12.5px] text-text-2",
-            "focus-within:border-accent-line focus-within:shadow-[0_0_0_3px_var(--accent-soft)] contrast-more:border-text",
+            "focus-within:border-accent-line focus-within:shadow-[var(--shadow-focus)] contrast-more:border-text",
           )}
         >
           <span className="font-semibold text-text-2">
@@ -424,7 +430,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         <label
           className={cn(
             "relative flex min-h-[72px] min-w-0 flex-col justify-center gap-1.5 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 px-2.5 py-2 text-[12.5px] text-text-2",
-            "focus-within:border-accent-line focus-within:shadow-[0_0_0_3px_var(--accent-soft)] contrast-more:border-text",
+            "focus-within:border-accent-line focus-within:shadow-[var(--shadow-focus)] contrast-more:border-text",
           )}
         >
           <span className="font-semibold text-text-2">

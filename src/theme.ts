@@ -33,7 +33,7 @@ export function themeControlStyles(): string {
 .ds-theme-toggle{position:relative;width:34px;height:34px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--radius-pill);background:var(--nv-fill,var(--fill-2,var(--hover,var(--app-fill))));color:var(--nv-mut,var(--muted,var(--label2,var(--app-l2))));font:inherit;cursor:pointer}
 .ds-theme-toggle::after{content:"";position:absolute;inset:-6px}
 .ds-theme-toggle:hover,.ds-theme-toggle[aria-expanded="true"]{background:var(--nv-fill2,var(--fill-2,var(--hover,var(--app-fill))));color:var(--nv-fg,var(--text,var(--label,var(--app-label))))}
-.ds-theme-toggle:focus-visible,.ds-theme-menu button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-theme-toggle:focus-visible,.ds-theme-menu button:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
 .ds-theme-toggle>span{width:17px;height:17px;display:grid;place-items:center}.ds-theme-toggle>span[hidden]{display:none}
 .ds-theme-toggle svg,.ds-theme-choice-icon svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
 .ds-theme-menu{position:absolute;top:calc(100% + 7px);right:0;z-index:100;width:154px;padding:6px;border:1px solid var(--nv-bd-soft,var(--line-soft,var(--hairline,var(--app-hair))));border-radius:var(--radius-lg);background:var(--nv-bg,var(--panel2,var(--sheet,var(--app-elev))));box-shadow:var(--shadow);transform-origin:calc(100% - 17px) -7px}
@@ -150,6 +150,7 @@ export function sharedTokens(): string {
   --fill-1:rgba(190,205,225,.07);--fill-2:rgba(190,205,225,.12);--fill-3:rgba(190,205,225,.18);
   /* signal accent */
   --accent:#3fb2ff;--accent-hi:#7adfff;--on-accent:#06121c;--accent-soft:rgba(63,178,255,.12);--accent-line:rgba(63,178,255,.3);
+  --accent-text:var(--accent);
   /* semantic: evidence + state */
   --add:#3ddc97;--diff-add-text:var(--add);--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--diff-del-text:var(--del);--del-soft:rgba(255,107,98,.12);
   --amber:#ffb224;--amber-soft:rgba(255,178,36,.14);--on-amber:#241600;
@@ -184,6 +185,11 @@ export function sharedTokens(): string {
   --line:rgba(20,30,45,.12);--line-soft:rgba(20,30,45,.065);
   --fill-1:rgba(20,30,45,.045);--fill-2:rgba(20,30,45,.075);--fill-3:rgba(20,30,45,.12);
   --accent:#0072d6;--accent-hi:#0086f0;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
+  /* Signal blue as a FILL is fine at #0072d6 (white ink on it reads 4.8:1). As
+     small INK on --bg it reads 4.20:1 — under AA — and this palette uses blue
+     for exactly that: stage kickers, eyebrows, "Resume review", "In review".
+     Same split as --add/--del below, so it gets the same shape of answer. */
+  --accent-text:#005cae;
   /* Rails and fills keep the Signal semantic hues; the darker ink variants
      give small diff text AA contrast on header, split, and unified tints. */
   --add:#178a52;--diff-add-text:#116f43;--add-soft:rgba(23,138,82,.1);--del:#d2372e;--diff-del-text:#b52f2a;--del-soft:rgba(210,55,46,.09);

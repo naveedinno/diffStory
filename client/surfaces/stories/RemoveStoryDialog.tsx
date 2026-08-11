@@ -125,7 +125,7 @@ export function RemoveStoryDialog({
             the buttons below it have already come back to life. */}
         <p
           data-remove-error
-          className={cn("mt-2.5 mb-0 text-[12.5px] leading-[1.45] text-del", !error && "hidden")}
+          className={cn("mt-2.5 mb-0 text-[12.5px] leading-[1.45] text-diff-del-text", !error && "hidden")}
           role="alert"
         >
           {error ?? ""}
@@ -152,7 +152,7 @@ export function RemoveStoryDialog({
             pressScale={0.97}
             disabled={busy}
             onClick={onConfirm}
-            className="h-[var(--control-h)] rounded-full bg-del-soft px-3.5 text-[12.5px] font-semibold text-del hover:bg-del hover:text-on-accent disabled:opacity-55"
+            className="h-[var(--control-h)] rounded-full bg-del-soft px-3.5 text-[12.5px] font-semibold text-diff-del-text hover:bg-del hover:text-on-accent disabled:opacity-55"
           >
             Remove story
           </StatefulButton>

@@ -81,8 +81,11 @@ function FileRow({ file, inset }: { file: ChangeFileView; inset?: boolean }) {
           <span className="text-text-3">binary / metadata</span>
         ) : file.added || file.removed ? (
           <>
-            {file.added ? <span className="text-add">+{file.added}</span> : null}
-            {file.removed ? <span className="ml-1.5 text-del">−{file.removed}</span> : null}
+            {/* Ink variants, not the rail hues — these are 10 px numerals on a
+                light card, which is exactly the case `--diff-add-text` and
+                `--diff-del-text` exist for. Identical to `--add`/`--del` in dark. */}
+            {file.added ? <span className="text-diff-add-text">+{file.added}</span> : null}
+            {file.removed ? <span className="ml-1.5 text-diff-del-text">−{file.removed}</span> : null}
           </>
         ) : (
           <span className="text-text-3">metadata</span>
@@ -101,7 +104,7 @@ function EmptyState({ routeBase }: { routeBase: string }) {
             status="success"
             size="sm"
             icon={<Check strokeWidth={2.4} aria-hidden="true" />}
-            className="h-auto gap-1 rounded-[var(--radius-sm)] border-0 bg-add-soft px-2 py-0.5 font-mono text-[11px] font-medium text-add"
+            className="h-auto gap-1 rounded-[var(--radius-sm)] border-0 bg-add-soft px-2 py-0.5 font-mono text-[11px] font-medium text-diff-add-text"
           >
             working tree clean
           </AnimatedBadge>
@@ -178,8 +181,8 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
           {generated.length ? <span className="text-text-3"> · {generated.length} generated</span> : null}
         </span>
         <span className="inline-flex gap-[9px] font-mono text-[12.5px]">
-          <span className="text-add">+{total.added}</span>
-          <span className="text-del">−{total.removed}</span>
+          <span className="text-diff-add-text">+{total.added}</span>
+          <span className="text-diff-del-text">−{total.removed}</span>
         </span>
         <ButtonLink
           href={diffHref}
@@ -234,7 +237,7 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
               // ring has to come back from here or the control has none at all.
               trigger: cn(
                 "min-h-0 gap-3 px-[15px] py-[11px] hover:bg-fill-2",
-                "focus-visible:bg-fill-2 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                "focus-visible:bg-fill-2 focus-visible:shadow-[var(--shadow-focus)]",
               ),
               title: "overflow-visible text-xs font-semibold text-ellipsis text-text-2",
               chevron: "h-4 w-4 text-text-3",

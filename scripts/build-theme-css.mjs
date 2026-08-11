@@ -94,6 +94,7 @@ const COLOR_TOKENS = [
   'line', 'line-soft',
   'fill-1', 'fill-2', 'fill-3',
   'accent', 'accent-hi', 'on-accent', 'accent-soft', 'accent-line', 'accent-glow',
+  'accent-text',
   'add', 'diff-add-text', 'add-soft', 'add-bg',
   'del', 'diff-del-text', 'del-soft', 'del-bg',
   'amber', 'amber-soft', 'on-amber',
@@ -229,7 +230,18 @@ function themeBlock(dark) {
   push('--shadow-lg', '0 4px 10px var(--shadow-umbra), 0 14px 34px var(--shadow-penumbra)');
   push('--shadow-xl', '0 8px 18px var(--shadow-umbra), 0 26px 60px var(--shadow-penumbra)');
   push('--shadow-signal', 'var(--shadow)');
-  push('--shadow-focus', '0 0 0 3px var(--accent-soft)');
+  // The focus ring is the one shadow that is not decoration — WCAG 1.4.11 wants
+  // 3:1 against what surrounds it. `0 0 0 3px var(--accent-soft)` alone was the
+  // whole indicator app-wide, and --accent-soft is a 10–12% wash: composited it
+  // measures ~1.24:1 on --surface. Keyboard focus was, in practice, invisible.
+  //
+  // So the ring is now two rings: a solid 2px --accent core that carries the
+  // contrast (7.9:1 dark, 4.3:1 light) and the original soft wash pushed out to
+  // 5px, which keeps the Signal glow the surfaces were designed around.
+  push('--shadow-focus', '0 0 0 2px var(--accent), 0 0 0 5px var(--accent-soft)');
+  // Same ring for controls that must draw it inside their own box (full-bleed
+  // rows, where an outer ring would be clipped by the scroll container).
+  push('--shadow-focus-inset', 'inset 0 0 0 2px var(--accent), inset 0 0 0 5px var(--accent-soft)');
 
   section('easing — Signal motion curves + beUI extras');
   push('--ease-out', must(dark, 'motion-ease-out'));
