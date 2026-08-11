@@ -33,7 +33,7 @@ import { parseUnifiedDiff } from './diff.js';
 import type { ReviewExclusionMetadata } from './noise.js';
 import { computeCoverage } from './coverage.js';
 import {
-  renderPage,
+  renderReviewShell,
   renderFullFile,
   renderSplitHunks,
   renderUnifiedHunks,
@@ -44,9 +44,11 @@ import {
   type StoryDriftView,
 } from './render.js';
 import { esc } from './diff-render.js';
-import { renderPicker } from './picker.js';
-import { renderChangePage } from './change-page.js';
-import { renderStoryPicker } from './story-picker.js';
+import { renderShell } from './shell.js';
+import type { PickerPayload } from './payloads.js';
+import type { StoriesPayload, StoryRowView } from './payloads.js';
+import type { ChangePayload } from './payloads.js';
+import { narrativeText } from './narrative.js';
 import { summarizeChange } from './change-view.js';
 import { resolveScope, type Scope } from './scope.js';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -314,7 +316,9 @@ function setLocalResponseHeaders(res: ServerResponse): void {
     "img-src 'self' data:",
     "media-src 'self' blob:",
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'unsafe-inline'",
+    // 'self' is required for the client stylesheet served from /assets/client;
+    // 'unsafe-inline' still covers the inline styling the vanilla pages emit.
+    "style-src 'self' 'unsafe-inline'",
   ].join('; '));
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -360,6 +364,9 @@ function handle(
     }
     if (method === 'GET' && url.pathname.startsWith('/assets/fonts/')) {
       return sendFontAsset(res, basename(url.pathname));
+    }
+    if (method === 'GET' && url.pathname.startsWith('/assets/client/')) {
+      return sendClientAsset(res, basename(url.pathname));
     }
     if (method === 'GET' && url.pathname === '/api/events') {
       const lease = optionalRequestLease(session, url);
@@ -482,7 +489,7 @@ function handle(
         const editorUrl = vscodeNavigationUrl(page.repo, file, line, column);
         if (!editorUrl) return sendJson(res, 400, { error: 'That file path cannot be opened safely.' });
         if (!openExternal(editorUrl)) {
-          return sendJson(res, 503, { error: 'VS Code could not be opened. Install VS Code and the DiffStory navigation bridge.' });
+          return sendJson(res, 503, { error: 'VS Code could not be opened. Install VS Code to jump to source from a review.' });
         }
         return sendJson(res, 200, { ok: true });
       });
@@ -768,17 +775,78 @@ function handle(
   }
 }
 
+/**
+ * The repository picker shell.
+ *
+ * The whole route is `recentRowsForPicker(home)` plus two scalars, and it must
+ * stay that cheap — Home is reachable from every page, and re-inspecting every
+ * remembered repository here is what made it slow before (see the note on
+ * `recentRowsForPicker`). `now` is the server clock: relative times like
+ * "7 min ago" are computed against it in the browser so a skewed client clock
+ * cannot invent a repository opened in the future.
+ *
+ * `ds-map-bg` is on <body> rather than in the React tree so the dot field is
+ * painted with the first frame, before the bundle has parsed.
+ */
 function pickerStub(home: string): string {
-  return renderPicker(recentRowsForPicker(home), home, Date.now());
+  return renderShell<PickerPayload>({
+    surface: 'picker',
+    title: 'pick a repo',
+    bodyClass: 'ds-map-bg',
+    payload: { recents: recentRowsForPicker(home), home, now: Date.now() },
+  });
 }
 
+/**
+ * Review history — the saved-review list for the open repository.
+ *
+ * The `refreshEvidence` split is the whole performance story of this route and
+ * is easy to lose. `listStoryMetadata()` reads the story files and nothing else:
+ * it reports `freshness: 'unverified'` and zeroes for additions/deletions/open
+ * comments, which is what makes reaching this page (every repo open lands here)
+ * independent of repository size. `listStories()` rebuilds the diff and the
+ * drift report for EVERY saved story, and only `?evidence=refresh` asks for it.
+ * The flag travels in the payload so the UI can say "Saved" instead of dressing
+ * unverified zeroes up as facts.
+ *
+ * `narrativeText()` runs here rather than in the browser: the authored title and
+ * summary are narrative markup, this page renders plain text end to end, and
+ * projecting server-side keeps `narrative.ts` out of the client bundle.
+ */
 function storyChooser(session: Session, refreshEvidence = false): string {
   const repo = session.repo as string;
-  return renderStoryPicker({
-    repoName: basename(repo),
-    routeBase: repoRouteBase(repo),
-    stories: refreshEvidence ? listStories(repo) : listStoryMetadata(repo),
-    now: Date.now(),
+  const summaries = refreshEvidence ? listStories(repo) : listStoryMetadata(repo);
+  const stories: StoryRowView[] = summaries.map((s) => ({
+    id: s.id,
+    title: narrativeText(s.title),
+    summary: narrativeText(s.summary),
+    ...(s.valid ? {} : { error: s.error }),
+    valid: s.valid,
+    updatedAt: s.updatedAt,
+    steps: s.steps,
+    primers: s.primers,
+    files: s.files,
+    freshness: s.freshness,
+    inStoryDrift: s.inStoryDrift,
+    outsideStoryDrift: s.outsideStoryDrift,
+    liveFiles: s.liveFiles,
+    additions: s.additions,
+    deletions: s.deletions,
+    openComments: s.openComments,
+    scope: { label: s.scope.label, command: s.scope.command },
+  }));
+  const repoName = basename(repo);
+  return renderShell<StoriesPayload>({
+    surface: 'stories',
+    title: `${repoName} review history`,
+    bodyClass: 'ds-map-bg',
+    payload: {
+      repoName,
+      routeBase: repoRouteBase(repo),
+      stories,
+      liveEvidence: refreshEvidence,
+      now: Date.now(),
+    },
   });
 }
 
@@ -887,18 +955,36 @@ function changeScreen(session: Session, params: URLSearchParams, notice?: string
   return renderChange(session, scope, notice);
 }
 
-/** The "Your change" scope picker: choose what to diff, then open it in the
- *  review viewer (the "Open diff viewer" CTA). */
+/**
+ * The "Your change" scope picker: choose what to diff, then open it in the
+ * review viewer (the "Review N files" CTA).
+ *
+ * Also the review route's error surface — `reviewScreen()` reaches here with a
+ * `notice` when a story is missing or will not parse, and that string is the
+ * only explanation the reviewer gets. It travels in the payload; the React
+ * surface renders it above the scope controls.
+ *
+ * `scope.base` / `scope.head` are what the session was just set to, so the
+ * payload carries the RESOLVED pair rather than the raw query. That is what the
+ * `/diff` link has to repeat for the viewer to diff the same two revs.
+ */
 function renderChange(session: Session, scope: Scope, notice?: string): string {
   const repo = session.repo as string;
-  return renderChangePage(summarizeChange(repo, session.base, session.head), {
-    repoName: basename(repo),
-    routeBase: repoRouteBase(repo),
-    base: session.base,
-    head: session.head,
-    scopeLabel: scope.label,
-    active: scope.active,
-    notice,
+  const summary = summarizeChange(repo, session.base, session.head);
+  return renderShell<ChangePayload>({
+    surface: 'change',
+    title: 'choose review scope',
+    bodyClass: 'ds-map-bg',
+    payload: {
+      repoName: basename(repo),
+      routeBase: repoRouteBase(repo),
+      base: scope.base,
+      ...(scope.head ? { head: scope.head } : {}),
+      scopeLabel: scope.label,
+      active: scope.active,
+      files: summary.files,
+      ...(notice ? { notice } : {}),
+    },
   });
 }
 
@@ -940,7 +1026,7 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     true,
     reviewPageRaceSignature(pageLease, data.sourceFingerprint),
   );
-  return renderPage({
+  return renderReviewShell({
     repo,
     tour,
     files: [],
@@ -1168,7 +1254,7 @@ function renderReview(session: Session): string {
     false,
     reviewPageRaceSignature(pageLease, data.sourceFingerprint),
   );
-  return renderPage({
+  return renderReviewShell({
     repo,
     routeBase: repoRouteBase(repo),
     repoName: basename(repo),
@@ -2519,9 +2605,55 @@ function sendFontAsset(res: ServerResponse, name: string): void {
   createReadStream(asset).pipe(res);
 }
 
+const CLIENT_ASSET_DIR = new URL('./client/', import.meta.url);
+const CLIENT_ASSET_TYPES = new Map<string, string>([
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.map', 'application/json; charset=utf-8'],
+]);
+
+/**
+ * Serve a React surface bundle or the compiled stylesheet from dist/client.
+ *
+ * The filenames are not content-hashed, so these must not be cached the way the
+ * immutable font files are — a stale bundle after a rebuild would be silent and
+ * baffling. `no-cache` still allows revalidation, so warm loads stay cheap.
+ */
+function sendClientAsset(res: ServerResponse, name: string): void {
+  // Reject traversal and nested paths outright: this directory is flat.
+  if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith('.')) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const type = CLIENT_ASSET_TYPES.get(name.slice(name.lastIndexOf('.')));
+  if (!type) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const asset = new URL(name, CLIENT_ASSET_DIR);
+  if (!existsSync(asset)) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  const stat = statSync(asset);
+  res.statusCode = 200;
+  res.setHeader('Content-Type', type);
+  res.setHeader('Content-Length', String(stat.size));
+  res.setHeader('Cache-Control', 'no-cache');
+  createReadStream(asset).pipe(res);
+}
+
 function sendHtml(res: ServerResponse, html: string, status = 200): void {
   res.statusCode = status;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  // Never cache a page shell. It embeds the review page lease token and the
+  // session's current state, so a cached copy is not merely stale — it hands
+  // back a dead lease. It is also why a rebuilt app could still look unchanged
+  // until a hard reload.
+  res.setHeader('Cache-Control', 'no-store');
   res.end(html);
 }
 
@@ -2544,9 +2676,28 @@ function escapeText(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-const VSCODE_BRIDGE_ID = 'naveedinno.diffstory-vscode';
+/**
+ * Percent-encode an absolute filesystem path for the path portion of a URI.
+ * Separators stay literal so the result still reads as a path; a Windows drive
+ * letter keeps its colon, which VS Code's handler expects.
+ */
+function encodeFsPathForUri(target: string): string {
+  const normalized = target.replace(/\\/g, '/');
+  const rooted = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return rooted
+    .split('/')
+    .map((segment, index) => (index === 1 && /^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
+    .join('/');
+}
 
-/** Build the system URI consumed by the tiny VS Code navigation bridge. */
+/**
+ * Build the system URI that opens a reviewed file at an exact location.
+ *
+ * This uses VS Code's built-in `vscode://file/<path>:<line>:<column>` handler,
+ * so cmd-click navigation works against a stock editor with nothing extra
+ * installed. The path is confined to the reviewed repository before it is
+ * handed to the OS.
+ */
 export function vscodeNavigationUrl(repo: string, file: string, line: number, column: number): string | null {
   if (!file || isAbsolute(file) || !Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
     return null;
@@ -2557,12 +2708,7 @@ export function vscodeNavigationUrl(repo: string, file: string, line: number, co
   if (!fromRoot || fromRoot === '..' || fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(fromRoot)) {
     return null;
   }
-  const url = new URL(`vscode://${VSCODE_BRIDGE_ID}/navigate`);
-  url.searchParams.set('repo', root);
-  url.searchParams.set('path', target);
-  url.searchParams.set('line', String(line));
-  url.searchParams.set('column', String(column));
-  return url.toString();
+  return `vscode://file${encodeFsPathForUri(target)}:${line}:${column}`;
 }
 
 function openExternalUrl(url: string): boolean {

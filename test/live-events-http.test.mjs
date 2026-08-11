@@ -22,7 +22,9 @@ function repoFixture() {
 }
 
 function tokenFrom(html) {
-  const match = html.match(/data-review-page-token="([^"]+)"/);
+  // The page facts travel in the shell's JSON payload now; React stamps them
+  // onto <body> at mount, so the server response no longer carries them.
+  const match = html.match(/"pageToken":"([^"]+)"/);
   assert.ok(match?.[1]);
   return match[1];
 }

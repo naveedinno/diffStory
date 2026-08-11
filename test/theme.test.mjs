@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { navBar, navStyles } from '../dist/nav.js';
-import { renderChangePage } from '../dist/change-page.js';
-import { renderPicker } from '../dist/picker.js';
-import { renderStoryPicker } from '../dist/story-picker.js';
-import { DIFF_CSS } from '../dist/diff-assets.js';
+import { readFileSync } from 'node:fs';
+
+// `src/nav.ts` is gone — the top bar is `client/shared/nav.tsx`, covered by
+// test/change-page.test.mjs. The diff stylesheet is a client file now.
+const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 import { sharedTokens, themeBootstrapScript, themeControl, threadAtmosphereStyles } from '../dist/theme.js';
 
 function cssBlock(css, selector) {
@@ -66,27 +66,25 @@ test('theme control offers persistent System, Light, and Dark choices', () => {
 
 test('theme palettes use a resolved data attribute instead of an OS-only media query', () => {
   const tokens = sharedTokens();
-  const navCss = navStyles();
 
   assert.match(tokens, /:root\{color-scheme:dark;/);
   assert.match(tokens, /--bg:#0a0c0f/);
   assert.match(tokens, /:root\[data-theme="light"\]\{color-scheme:light;/);
   assert.match(tokens, /--bg:#edf0f4/);
-  // Nav vars alias the canonical tokens one-directionally, so they flip with the
-  // canonical light block and need no per-theme literals of their own.
-  assert.match(navCss, /--nv-bg:var\(--surface\)/);
   assert.doesNotMatch(tokens, /prefers-color-scheme/);
-  assert.doesNotMatch(navCss, /prefers-color-scheme/);
+  // The review stylesheet is the last surface CSS that is not utilities; it
+  // must not reintroduce an OS-only palette switch either.
+  assert.doesNotMatch(DIFF_CSS, /prefers-color-scheme/);
 });
 
 test('shared geometry gives every surface soft islands and pill controls', () => {
   const tokens = sharedTokens();
-  const navCss = navStyles();
 
   assert.match(tokens, /--radius-sm:8px;--radius:12px;--radius-lg:18px;--radius-island:26px;--radius-pill:999px/);
   assert.match(tokens, /--control-h:34px;--control-h-lg:40px/);
-  assert.match(navCss, /\.ds-nav\{[^}]*border-radius:var\(--radius-island\)/);
-  assert.match(navCss, /\.nv-act,\.nv-pri\{[^}]*border-radius:var\(--radius-pill\)/);
+  // The bar itself is `client/shared/nav.tsx` now (asserted in
+  // test/change-page.test.mjs); what stays checkable here is that the shared
+  // geometry it consumes still exists.
 });
 
 test('light semantic diff ink stays WCAG AA on header, split, and unified surfaces', () => {
@@ -142,24 +140,20 @@ test('page atmosphere shares one map, thread pulse, compact, and reduced-motion 
 });
 
 test('front-door pages apply the saved theme before CSS and expose one selector', () => {
-  const change = renderChangePage(
-    { base: 'abc', baseLabel: 'main', files: [], totalChanged: 0, hasChanges: false },
-    { repoName: 'demo' },
-  );
-  const picker = renderPicker([], '/Users/test', Date.now());
-  const history = renderStoryPicker({ repoName: 'demo', routeBase: '/repo/demo', stories: [], now: Date.now() });
-  const pages = [picker, change, history];
-
-  for (const html of pages) {
-    assert.ok(html.indexOf("var key='ds-theme'") < html.indexOf('<style>'), 'resolves the theme before the page stylesheet');
-    assert.equal((html.match(/class="ds-theme-toggle"/g) || []).length, 1);
-    assert.match(html, /meta name="theme-color"[^>]+data-ds-theme-color/);
-  }
-  for (const html of [picker, change]) {
-    assert.match(html, /<body class="ds-map-bg"/);
-  }
-  assert.match(picker, /class="hero-thread ds-atmosphere-thread"/, 'keeps the Thread Path atmosphere on the repository picker');
-  assert.doesNotMatch(change, /class="ds-thread-layer"/, 'keeps the scope header free of ornamental thread furniture');
-  assert.doesNotMatch(history, /ds-thread-layer/, 'keeps review history free of ornamental thread furniture');
-  assert.equal((navBar().match(/class="ds-theme-toggle"/g) || []).length, 1);
+  // All three front doors — the repository picker, review history and the
+  // change/scope page — are React surfaces now and none of them renders its
+  // theme control server-side. Their half of this contract (bootstrap before
+  // the stylesheet, exactly one theme control, one theme-color meta, the
+  // `ds-map-bg` body class, and no ornamental thread furniture on the two that
+  // never had it) is asserted in test/picker.test.mjs,
+  // test/story-picker.test.mjs and test/change-page.test.mjs — against the
+  // shell each route serves, and against the real page in a browser.
+  //
+  // The review page was the last server-rendered theme control and is a React
+  // surface too now, so `src/nav.ts` is gone. What is still assertable here is
+  // that the bootstrap the shell inlines is the ONLY thing that resolves a
+  // theme before paint — everything else reacts to the attribute it sets.
+  const script = themeBootstrapScript();
+  assert.match(script, /data-theme/);
+  assert.equal((script.match(/<script>/g) || []).length, 1);
 });

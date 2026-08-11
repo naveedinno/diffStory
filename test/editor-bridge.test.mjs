@@ -5,20 +5,19 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
+import { readFileSync } from 'node:fs';
+
+// The Cmd/Ctrl-click bridge lives in the ported review engine now.
+const PAGE_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
+const PAGE_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 import { serve, vscodeNavigationUrl } from '../dist/server.js';
 
-test('VS Code bridge URL carries an absolute source location for the installed bridge id', () => {
+test('VS Code URL carries an absolute source location through the built-in file handler', () => {
   const value = vscodeNavigationUrl('/tmp/review repo', 'src/order flow.ts', 42, 17);
-  assert.ok(value);
+  assert.equal(value, 'vscode://file/tmp/review%20repo/src/order%20flow.ts:42:17');
   const url = new URL(value);
   assert.equal(url.protocol, 'vscode:');
-  assert.equal(url.host, 'naveedinno.diffstory-vscode');
-  assert.equal(url.pathname, '/navigate');
-  assert.equal(url.searchParams.get('repo'), '/tmp/review repo');
-  assert.equal(url.searchParams.get('path'), '/tmp/review repo/src/order flow.ts');
-  assert.equal(url.searchParams.get('line'), '42');
-  assert.equal(url.searchParams.get('column'), '17');
+  assert.equal(url.host, 'file');
 });
 
 test('VS Code bridge URL rejects absolute and escaping review paths', () => {
@@ -53,7 +52,13 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
     const review = await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`);
     assert.equal(review.status, 200);
     const html = await review.text();
-    const token = html.match(/data-review-page-token="([^"]+)"/)?.[1];
+    // The page facts travel in the shell's JSON payload now; `<body>` gets them
+    // from React at mount, so the server response no longer carries them as
+    // attributes.
+    const payload = JSON.parse(
+      html.match(/<script type="application\/json" id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/)[1],
+    );
+    const token = payload.pageToken;
     assert.ok(token);
 
     const response = await fetch(`${base}/api/editor/open?page=${encodeURIComponent(token)}`, {
@@ -64,10 +69,9 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
     assert.equal(response.status, 200);
     assert.equal(opened.length, 1);
     const target = new URL(opened[0]);
-    assert.equal(target.searchParams.get('repo'), repo);
-    assert.equal(target.searchParams.get('path'), join(repo, 'order.ts'));
-    assert.equal(target.searchParams.get('line'), '1');
-    assert.equal(target.searchParams.get('column'), '17');
+    assert.equal(target.protocol, 'vscode:');
+    assert.equal(target.host, 'file');
+    assert.equal(decodeURIComponent(target.pathname), `${join(repo, 'order.ts')}:1:17`);
 
     const rejected = await fetch(`${base}/api/editor/open?page=${encodeURIComponent(token)}`, {
       method: 'POST',

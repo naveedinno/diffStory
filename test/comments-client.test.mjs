@@ -2,10 +2,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
+import { readFileSync } from 'node:fs';
+
+// Formerly template strings in `src/page-assets.ts`; the review engine and its
+// stylesheet are real client files now. Same text, same assertions.
+const PAGE_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
+const PAGE_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 
 test('the generated browser client is valid JavaScript', () => {
-  assert.doesNotThrow(() => new vm.Script(PAGE_JS));
+  // It is an ES module now, so parse it as one. esbuild would also catch a
+  // syntax error, but this fails in milliseconds instead of at build time.
+  const body = PAGE_JS.slice(PAGE_JS.indexOf('export function startReviewEngine')).replace('export ', '');
+  assert.doesNotThrow(() => new vm.Script(`(${body})`));
 });
 
 test('comment state is a canonical queue cache independent of lazy diff mounting', () => {

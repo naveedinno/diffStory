@@ -1,851 +1,744 @@
-// Unit tests for the "Your change" screen renderer. Run with: npm test
+// The change / scope picker, after the React rewrite.
+//
+// The old version of this file asserted on the ~40 KB HTML string that
+// `renderChangePage()` built by hand, and on the page script it inlined. Neither
+// exists any more: the route emits a shell plus a JSON payload, and the
+// behaviour lives in `client/surfaces/change/` and ships as
+// `dist/client/change.js`. So the assertions moved, in the same four layers the
+// repo picker's rewrite established (see the header of test/picker.test.mjs):
+//
+//   1. THE ROUTE      — a real server, real requests. What HTML does the change
+//                       route serve, including on the review-failure path that
+//                       lands here?
+//   2. THE PAYLOAD    — the whole initial state: the resolved scope, the file
+//                       projection, the failure notice, and the escaping that
+//                       stops a branch name from closing the script element.
+//   3. THE SOURCE     — the choreography and keyboard invariants that
+//                       `docs/superpowers/specs/surface-inventory.md` §3 ranks
+//                       as at-risk, asserted against the TypeScript that emits
+//                       the DOM rather than against emitted JS text.
+//   4. THE BUNDLE     — every user-facing string and endpoint survives the
+//                       build, so layer 3 is guarding code that actually ships.
+//
+// What layers 3 and 4 cannot do is prove the DOM behaves. That was verified by
+// driving the real page in Chrome (see the report accompanying this rewrite):
+// the populated inventory, the empty state, BOTH review-failure paths, all four
+// combobox shortcuts including the clamp at each end, the reopen-without-moving
+// rule, live filtering, anchored placement, panel disclosure without navigation,
+// theme switching, and desktop/tablet/mobile layout were each observed in a real
+// browser with a clean console. If this surface grows a regression the source
+// text cannot catch, that browser run is what should become a test file — not a
+// weaker string match here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import vm from 'node:vm';
-import { renderChangePage } from '../dist/change-page.js';
+import { once } from 'node:events';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { serve } from '../dist/server.js';
 
-const withChanges = {
-  base: 'abc123',
-  baseLabel: 'main (abc123)',
-  files: [{ path: 'src/api.ts', added: 12, removed: 3 }],
-  totalChanged: 1,
-  hasChanges: true,
-};
+const CLIENT = new URL('../client/', import.meta.url);
+const readRaw = (relative) => readFileSync(new URL(relative, CLIENT), 'utf8');
 
-/** The parsed diff the server hands the change page so it can render the hunks. */
-const diffFiles = [
-  {
-    oldPath: 'src/api.ts',
-    newPath: 'src/api.ts',
-    status: 'modified',
-    hunks: [
-      {
-        oldStart: 1,
-        oldLines: 1,
-        newStart: 1,
-        newLines: 2,
-        lines: [
-          { type: 'ctx', oldNo: 1, newNo: 1, content: 'const a = 1;' },
-          { type: 'add', newNo: 2, content: 'const b = 2;' },
-        ],
-      },
-    ],
-  },
-];
+// Source assertions must read code, not prose. A comment explaining why some
+// API is forbidden otherwise trips the very guard that forbids it. Only
+// whole-line comments are stripped, so a `//` inside a string literal (a URL,
+// say) is left alone.
+const stripComments = (source) =>
+  source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+    .join('\n');
 
-test('renderChangePage shows the change summary, base label, and review-viewer action', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.ok(html.includes('src/api.ts'));
-  assert.ok(!html.includes('class="dv-file"'), 'does not render full diff hunks on the change summary');
-  assert.ok(html.includes('Start review'), 'links into the real review workspace');
-  assert.match(html, /aria-current="step"><i>01<\/i>Scope/, 'exposes the current lifecycle stage to assistive technology');
-  assert.match(html, /<i>02<\/i>Read/, 'makes the full review lifecycle visible before opening the diff');
-  assert.match(html, /\.review-path i\{[^}]*font-family:var\(--font-display\)[^}]*color:var\(--numeral-dim\)/, 'stage markers are Space Grotesk numerals, not circled badges');
-  assert.equal((html.match(/<b aria-hidden="true"><\/b>/g) || []).length, 3, 'renders exactly three explicit connectors');
-  assert.ok(html.includes('id="reloadBtn"') && html.includes('location.reload()'), 'has a wired reload control');
-  assert.ok(html.includes('main (abc123)'));
-  assert.ok(!html.includes('Generate guided review'), 'does not duplicate story generation on the change page');
-  assert.ok(!html.includes('id="storyMode"'), 'story mode picker lives in the review page Story tab');
-  assert.ok(html.includes('Single commit'), 'offers a single-commit scope');
-  assert.ok(html.includes('Compare any refs'), 'offers arbitrary ref comparison');
-  assert.ok(
-    !html.includes('Current branch') && !html.includes('Branch commits') && !html.includes('Cross-branch commits'),
-    'drops the redundant current-branch, branch-commits, and cross-branch cards',
-  );
-  assert.ok(html.includes('id="commitRef"'), 'has a commit picker/input');
-  assert.ok(html.includes('id="cmpBase"') && html.includes('id="cmpHead"'), 'has one rev selector per compare side');
-  assert.ok(!html.includes('id="cmpBaseRef"') && !html.includes('id="cmpHeadRef"'), 'drops the separate branch-vs-commit inputs');
-  assert.ok(html.includes('<span>Source <i>older</i></span>') && html.includes('<span>Target <i>newer</i></span>'), 'labels the sides by meaning, not position');
-  assert.ok(!html.includes('<span>From</span>') && !html.includes('<span>To</span>'), 'does not use from/to labels');
-  assert.ok(!html.includes('id="commitGo"') && !html.includes('Review commit'), 'single-commit scope auto-applies without a button');
-  assert.ok(!html.includes('id="cmpGo"') && !html.includes('Compare refs'), 'compare scope auto-applies without a button');
-  assert.ok(html.includes('data-picker="commit"'), 'uses the custom commit picker');
-  assert.ok(html.includes('data-picker="base"') && html.includes('data-picker="head"'), 'uses one rev picker per compare side');
-  assert.ok(!html.includes('data-picker="side-commit"'), 'no branch-scoped commit-pin pickers');
-  assert.equal((html.match(/role="combobox"/g) || []).length, 3, 'exposes every ref field as a combobox');
-  assert.equal((html.match(/aria-controls="refPicker"/g) || []).length, 3, 'binds every combobox to the shared listbox');
-  assert.equal((html.match(/aria-expanded="false"/g) || []).length >= 5, true, 'starts disclosure and combobox state collapsed');
-  assert.match(html, /id="refPicker" role="listbox" aria-label="Available git references"/);
-  assert.ok(!html.includes('<datalist'), 'does not rely on the native datalist menu');
-  assert.match(html, />History<\/a>/, 'keeps saved review history as a secondary action');
-  assert.doesNotMatch(html, />Review sessions<\/a>/);
-  assert.match(html, /aria-controls="commitPanel" aria-expanded="false"/);
-  assert.match(html, /aria-controls="comparePanel" aria-expanded="false"/);
-  assert.match(html, /\.sopts\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);gap:6px\}/, 'keeps scope filters compact on mobile');
-  assert.match(html, /\.review-path \.active\{gap:7px;font-size:10\.5px\}/, 'keeps the active lifecycle stage named on mobile');
-  const routed = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', diffFiles });
-  assert.ok(routed.includes('href="/repo/demo/change?scope=uncommitted"'), 'scope tabs stay on the repo-named change route');
-  assert.ok(routed.includes("'/repo/demo/change?scope=commit&commit='"), 'single commit stays on the repo-named change route');
-  assert.ok(routed.includes("'/repo/demo/change?base='"), 'auto compare stays on the repo-named change route');
-  assert.ok(routed.includes('href="/repo/demo/diff"'), 'summary opens the repo-named diff viewer');
-});
+const read = (relative) => stripComments(readRaw(relative));
 
-test('ref combobox supports active-descendant keyboard selection and dismissal', async () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs }; this.id = attrs.id || ''; this.children = []; this.listeners = {};
-      this.hidden = !!attrs.hidden; this.style = {}; this.value = attrs.value ?? ''; this.textContent = '';
-      this.className = ''; this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) { return this.attrs[name] ?? null; }
-    setAttribute(name, value) { this.attrs[name] = String(value); }
-    removeAttribute(name) { delete this.attrs[name]; }
-    addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); }
-    appendChild(child) { this.children.push(child); return child; }
-    replaceChildren(...children) { this.children = children; }
-    contains(target) { return target === this || this.children.includes(target); }
-    querySelectorAll(selector) { return selector === '[role="option"]' ? this.children.filter((child) => child.attrs.role === 'option') : []; }
-    dispatchEvent(ev) { (this.listeners[ev.type] || []).forEach((fn) => fn(ev)); }
-    getBoundingClientRect() { return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 }; }
-    get offsetHeight() { return 140; }
-    scrollIntoView() { this.scrolled = true; }
-  }
+const changeApp = read('surfaces/change/ChangeApp.tsx');
+const scopeCard = read('surfaces/change/ScopeCard.tsx');
+const refPicker = read('surfaces/change/RefPicker.tsx');
+const refs = read('surfaces/change/refs.ts');
+const fileSummary = read('surfaces/change/FileSummary.tsx');
+const format = read('surfaces/change/format.ts');
+const nav = read('shared/nav.tsx');
+const changeSource = [changeApp, scopeCard, refPicker, refs, fileSummary, format].join('\n');
 
-  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'HEAD' });
-  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1]).find((candidate) => candidate.includes('function syncActiveOption'));
-  assert.ok(script, 'has the combobox controller');
+const PAYLOAD_BLOCK = /<script type="application\/json" id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/;
 
-  const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const input = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD', 'aria-expanded': 'false' });
-  const panel = new FakeEl({ 'data-panel': 'commit' });
-  const elements = { refPicker: picker, commitRef: input };
-  const context = {
-    console,
-    setTimeout,
-    Event: class Event { constructor(type) { this.type = type; } },
-    fetch: async () => ({ json: async () => ({
-      current: 'main', branches: [], commits: [
-        { sha: 'abc1234', subject: 'First commit' },
-        { sha: 'def5678', subject: 'Second commit' },
-      ],
-    }) }),
-    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=HEAD' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      activeElement: input,
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => selector === '[data-panel]' ? [panel] : selector === '[data-picker]' ? [input] : [],
-      createElement: () => new FakeEl(), addEventListener() {},
-    },
-  };
-  vm.runInNewContext(script, context);
-  input.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(input.attrs['aria-expanded'], 'true');
-  assert.equal(picker.children[0].attrs.role, 'option');
-  assert.equal(picker.children[0].attrs['aria-selected'], 'true');
-  assert.equal(input.attrs['aria-activedescendant'], picker.children[0].id);
-
-  const key = (name) => input.listeners.keydown[0]({ key: name, preventDefault() {}, stopPropagation() {} });
-  key('ArrowDown');
-  assert.equal(picker.children[1].attrs['aria-selected'], 'true');
-  assert.equal(input.attrs['aria-activedescendant'], picker.children[1].id);
-  key('End');
-  assert.equal(input.attrs['aria-activedescendant'], picker.children[2].id);
-  key('Home');
-  assert.equal(input.attrs['aria-activedescendant'], picker.children[0].id);
-  key('End'); key('Enter');
-  assert.equal(input.value, 'def5678');
-  assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=def5678');
-  assert.equal(input.attrs['aria-expanded'], 'false');
-  assert.equal(input.attrs['aria-activedescendant'], undefined);
-
-  context.location.href = '';
-  input.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-  key('Escape');
-  assert.equal(picker.hidden, true);
-  assert.equal(input.attrs['aria-expanded'], 'false');
-
-  input.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-  const outside = new FakeEl({ id: 'afterRefPicker' });
-  context.document.activeElement = outside;
-  input.listeners.focusout[0]({ relatedTarget: outside });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(picker.hidden, true, 'tabbing away closes the listbox');
-  assert.equal(input.attrs['aria-expanded'], 'false');
-  assert.equal(input.attrs['aria-activedescendant'], undefined);
-});
-
-test('renderChangePage keeps generated output out of the primary reading list', () => {
-  const sum = {
-    base: 'HEAD', baseLabel: 'Working tree', totalChanged: 2, hasChanges: true,
-    files: [
-      { path: 'src/app.ts', added: 4, removed: 1 },
-      { path: 'dist/app.js', added: 9, removed: 3 },
-    ],
-  };
-  const html = renderChangePage(sum, { repoName: 'demo' });
-  assert.match(html, /<b>1<\/b> review file <span>· 1 generated<\/span>/);
-  assert.match(html, /<details class="generated"><summary><span>Generated output<\/span><span>1 file/);
-  assert.match(html, /aria-label="Start review of 2 files"/);
-});
-
-test('renderChangePage escapes file paths and shows an empty-change guard', () => {
-  const html = renderChangePage(
-    { base: 'x', baseLabel: 'x', files: [{ path: '<script>x', added: 1, removed: 0 }], totalChanged: 1, hasChanges: true },
-    {
-      repoName: 'd',
-      diffFiles: [
-        {
-          oldPath: '<script>x',
-          newPath: '<script>x',
-          status: 'added',
-          hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: [{ type: 'add', newNo: 1, content: 'x' }] }],
-        },
-      ],
-    },
-  );
-  assert.ok(html.includes('&lt;script&gt;x'));
-  assert.ok(!html.includes('<script>x'));
-
-  const empty = renderChangePage(
-    { base: 'x', baseLabel: 'main', files: [], totalChanged: 0, hasChanges: false },
-    { repoName: 'd' },
-  );
-  assert.ok(empty.toLowerCase().includes('nothing to review'));
-  assert.match(empty, /<h2 class="empty-title">Nothing to review<\/h2>/, 'keeps the empty result concise beneath the exact scope summary');
-  assert.doesNotMatch(empty, /Nothing to review for /, 'does not repeat long refs in the empty-state headline');
-  assert.ok(!empty.includes('Generate guided review'));
-});
-
-test('renderChangePage shows the human scope label and highlights the active segment', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', scopeLabel: 'Uncommitted changes', active: 'uncommitted' });
-  assert.ok(html.includes('Uncommitted changes'), 'shows the human scope label');
-  assert.match(html, /class="scope-current scope-current-single" aria-label="Selected review scope"/, 'presents the active scope in a stable summary row');
-  assert.doesNotMatch(html, /scope-command|git diff /, 'does not expose the raw git command in the product UI');
-  assert.match(html, /\.scur b\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis/, 'keeps long scope names to one stable line');
-  assert.ok(
-    html.indexOf('id="comparePanel"') < html.indexOf('class="scope-current scope-current-single"'),
-    'places the changing scope summary below the controls so the upper layout stays anchored',
-  );
-  assert.ok(html.includes('class="sopt on"'), 'marks the active segment');
-  assert.ok(html.includes('data-panel="commit"'), 'has a dedicated commit panel');
-  assert.ok(html.includes('data-panel="compare"'), 'has a dedicated compare panel');
-  assert.ok(!html.includes('data-panel="cross"') && !html.includes('data-panel="range"'), 'no longer renders the cross/range panels');
-  assert.ok(html.includes('.sopt.is-open'), 'has a distinct panel-open state separate from the selected scope');
-  assert.ok(html.includes("classList.remove('is-open')"), 'opening a panel clears only the open-state marker');
-  assert.ok(html.includes("setAttribute('aria-expanded','false')"), 'keeps disclosure state in sync for assistive technology');
-  assert.ok(html.includes("setAttribute('aria-expanded','true')"), 'announces the open scope panel');
-  assert.ok(!html.includes("classList.remove('on')"), 'opening a picker panel does not lie about the URL-backed selected scope');
-  assert.ok(
-    html.includes('.refpanel,.refpanel[data-panel="commit"],.refpanel[data-panel="compare"]{grid-template-columns:1fr}'),
-    'commit and compare pickers stack on mobile',
-  );
-});
-
-test('compare editor is the primary stable source and target presentation', () => {
-  const html = renderChangePage(withChanges, {
-    repoName: 'demo',
-    active: 'compare',
-    base: 'origin/fix/liquidation-partyb-funding-events',
-    head: 'fix/liquidation-partyb-funding-events',
-  });
-
-  assert.match(html, /class="scope-current scope-current-split" role="group" aria-label="Selected comparison"/);
-  assert.match(html, /class="scope-side" aria-label="Source: origin\/fix\/liquidation-partyb-funding-events"/);
-  assert.match(html, /class="scope-side-label">Source <i>older<\/i>/);
-  assert.match(html, /class="scope-side" aria-label="Target: fix\/liquidation-partyb-funding-events"/);
-  assert.match(html, /class="scope-side-label">Target <i>newer<\/i>/);
-  assert.match(html, /<label class="refrow"><span>Source <i>older<\/i><\/span><input id="cmpBase"/);
-  assert.match(html, /<label class="refrow"><span>Target <i>newer<\/i><\/span><input id="cmpHead"/);
-  assert.match(
-    html,
-    /#comparePanel:not\(\[hidden\]\) \+ \.scope-current-split\{display:none\}/,
-    'hides the duplicate selected-comparison cards while the exact editable refs are visible',
-  );
-  assert.match(
-    html,
-    /\.refpanel\[data-panel="compare"\]\{grid-template-columns:minmax\(0,1fr\) 28px minmax\(0,1fr\);gap:10px;padding:0;border:0;background:transparent\}/,
-    'renders source and target as equal independent editor sections without a nested container',
-  );
-  assert.ok(html.includes('Source → target, any branch or commit'), 'uses one consistent direction vocabulary in the scope control');
-  assert.doesNotMatch(html, /Each side takes anything git does/, 'removes the tutorial-length duplicate hint');
-  assert.doesNotMatch(html, /Branches, tags, or SHAs\. Target may be Working tree\./, 'leaves picker-specific options to the picker instead of repeating them below the fields');
-  assert.match(html, /\.scope-current-split\{grid-template-columns:minmax\(0,1fr\) 28px minmax\(0,1fr\)/);
-  assert.match(html, /\.scope-side b\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis/);
-});
-
-test('compare panel prefills from the active scope and defaults the right side to the working tree', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main' });
-  assert.match(html, /id="cmpBase"[^>]+value="main"/, 'base side shows the resolved base rev');
-  assert.match(html, /id="cmpHead"[^>]+value="Working tree"[^>]+data-worktree="1"/, 'compare side defaults to the working tree');
-
-  const other = renderChangePage(withChanges, { repoName: 'demo', active: 'uncommitted', base: 'HEAD' });
-  assert.match(other, /id="cmpBase"[^>]+value=""/, 'non-compare scopes do not leak bookkeeping revs into the base input');
-});
-
-test('compare panel repopulates both sides straight from base/head after navigation', () => {
-  const html = renderChangePage(withChanges, {
-    repoName: 'demo',
-    active: 'compare',
-    base: '42dbc69',
-    head: 'c4d0151',
-  });
-
-  assert.match(html, /id="cmpBase"[^>]+value="42dbc69"/, 'base side keeps the chosen rev');
-  assert.match(html, /id="cmpHead"[^>]+value="c4d0151"/, 'compare side keeps the chosen rev');
-  assert.doesNotMatch(html, /id="cmpHead"[^>]+data-worktree="1"/, 'an explicit head does not render as worktree');
-});
-
-test('commit picker shows commits when the current value is HEAD', async () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs };
-      this.children = [];
-      this.listeners = {};
-      this.hidden = !!attrs.hidden;
-      this.style = {};
-      this.value = attrs.value ?? '';
-      this.textContent = '';
-      this.className = '';
-      this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) {
-      return this.attrs[name] ?? null;
-    }
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-    }
-    addEventListener(name, fn) {
-      (this.listeners[name] ||= []).push(fn);
-    }
-    appendChild(child) {
-      this.children.push(child);
-      return child;
-    }
-    replaceChildren(...children) {
-      this.children = children;
-    }
-    contains(target) {
-      return target === this || this.children.includes(target);
-    }
-    getBoundingClientRect() {
-      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
-    }
-    get offsetHeight() {
-      return 140;
-    }
-  }
-
-  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'commit', head: 'HEAD' });
-  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1])
-    .find((script) => script.includes('function filteredOptions'));
-  assert.ok(pickerScript, 'has the embedded ref picker script');
-
-  const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const commitInput = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD' });
-  const commitPanel = new FakeEl({ 'data-panel': 'commit' });
-  const elements = { refPicker: picker, commitRef: commitInput };
-  const documentListeners = {};
-  const context = {
-    console,
-    Event: class Event {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-    fetch: async () => ({
-      json: async () => ({
-        current: 'main',
-        branches: [],
-        commits: [
-          { sha: 'abc1234', subject: 'First commit', committedAtLabel: '2026-06-30 14:34', committedAtRelative: '2h ago' },
-          { sha: 'def5678', subject: 'Second commit', committedAtLabel: '2026-06-29 09:12', committedAtRelative: '1d ago' },
-        ],
-      }),
-    }),
-    location: { href: '' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => {
-        if (selector === '[data-panel]') return [commitPanel];
-        if (selector === '[data-picker]') return [commitInput];
-        return [];
-      },
-      createElement: () => new FakeEl(),
-      addEventListener: (name, fn) => {
-        (documentListeners[name] ||= []).push(fn);
-      },
-    },
-  };
-
-  vm.runInNewContext(pickerScript, context);
-  commitInput.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  const values = picker.children.map((row) => row.attrs['data-value']);
-  assert.deepEqual(values.slice(0, 3), ['HEAD', 'abc1234', 'def5678']);
-  const metas = picker.children.map((row) => row.children[1].textContent);
-  assert.equal(metas[1], '2026-06-30 14:34 · 2h ago · First commit');
-  assert.equal(metas[2], '2026-06-29 09:12 · 1d ago · Second commit');
-});
-
-test('picker rows select refs through the normal click path', async () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs };
-      this.children = [];
-      this.listeners = {};
-      this.hidden = !!attrs.hidden;
-      this.style = {};
-      this.value = attrs.value ?? '';
-      this.textContent = '';
-      this.className = '';
-      this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) {
-      return this.attrs[name] ?? null;
-    }
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-    }
-    removeAttribute(name) {
-      delete this.attrs[name];
-    }
-    addEventListener(name, fn) {
-      (this.listeners[name] ||= []).push(fn);
-    }
-    appendChild(child) {
-      this.children.push(child);
-      return child;
-    }
-    replaceChildren(...children) {
-      this.children = children;
-    }
-    contains(target) {
-      return target === this || this.children.includes(target);
-    }
-    dispatchEvent(ev) {
-      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
-    }
-    getBoundingClientRect() {
-      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
-    }
-    get offsetHeight() {
-      return 140;
-    }
-  }
-
-  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'HEAD' });
-  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1])
-    .find((script) => script.includes('function filteredOptions'));
-  assert.ok(pickerScript, 'has the embedded ref picker script');
-
-  const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const commitInput = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'HEAD' });
-  const commitPanel = new FakeEl({ 'data-panel': 'commit' });
-  const elements = { refPicker: picker, commitRef: commitInput };
-  const context = {
-    console,
-    Event: class Event {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-    fetch: async () => ({
-      json: async () => ({
-        current: 'main',
-        branches: [],
-        commits: [
-          { sha: 'abc1234', subject: 'First commit', committedAtLabel: '2026-06-30 14:34' },
-          { sha: 'def5678', subject: 'Second commit', committedAtLabel: '2026-06-29 09:12' },
-        ],
-      }),
-    }),
-    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=HEAD' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => {
-        if (selector === '[data-panel]') return [commitPanel];
-        if (selector === '[data-picker]') return [commitInput];
-        return [];
-      },
-      createElement: () => new FakeEl(),
-      addEventListener() {},
-    },
-  };
-
-  vm.runInNewContext(pickerScript, context);
-  commitInput.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  const row = picker.children.find((child) => child.attrs['data-value'] === 'def5678');
-  assert.ok(row, 'renders the commit row');
-  assert.ok(row.listeners.click?.length, 'picker rows use a click handler for selection');
-  row.listeners.click[0]({ preventDefault() {} });
-
-  assert.equal(commitInput.value, 'def5678');
-assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=def5678');
+/**
+ * A repository with a real two-branch history, so the compare scope resolves to
+ * something a user would recognise instead of to `HEAD`.
+ *
+ * `main` has one file; `feature` adds a second and rewrites the first. The
+ * working tree is left clean, so `?scope=uncommitted` is the honest empty state.
+ */
+function fixtureRepo() {
+  const dir = mkdtempSync(join(tmpdir(), 'diffstory-change-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  writeFileSync(join(dir, 'kept.ts'), 'export const kept = 1;\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+  git('checkout', '-q', '-b', 'feature');
+  writeFileSync(join(dir, 'kept.ts'), 'export const kept = 2;\nexport const extra = 3;\n');
+  writeFileSync(join(dir, 'added.ts'), 'export const added = 1;\n');
+  mkdirSync(join(dir, 'dist'), { recursive: true });
+  writeFileSync(join(dir, 'dist', 'bundle.js'), 'console.log(1);\n');
+  writeFileSync(join(dir, 'package-lock.json'), '{}\n');
+  git('add', '.');
+  git('commit', '-qm', 'feature work');
+  return dir;
 }
-);
 
-test('base rev picker offers branches then commits, without worktree pseudo-rows', async () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs };
-      this.children = [];
-      this.listeners = {};
-      this.hidden = !!attrs.hidden;
-      this.style = {};
-      this.value = attrs.value ?? '';
-      this.textContent = '';
-      this.className = '';
-      this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) {
-      return this.attrs[name] ?? null;
-    }
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-    }
-    addEventListener(name, fn) {
-      (this.listeners[name] ||= []).push(fn);
-    }
-    appendChild(child) {
-      this.children.push(child);
-      return child;
-    }
-    replaceChildren(...children) {
-      this.children = children;
-    }
-    contains(target) {
-      return target === this || this.children.includes(target);
-    }
-    getBoundingClientRect() {
-      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
-    }
-    get offsetHeight() {
-      return 140;
-    }
-  }
-
-  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main' });
-  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1])
-    .find((script) => script.includes('function filteredOptions'));
-  assert.ok(pickerScript, 'has the embedded ref picker script');
-
-  const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: '' });
-  const comparePanel = new FakeEl({ 'data-panel': 'compare' });
-  const elements = { refPicker: picker, cmpBase };
-  const context = {
-    console,
-    Event: class Event {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-    fetch: async () => ({
-      json: async () => ({
-        current: 'HEAD',
-        branches: [
-          { name: 'main', kind: 'local' },
-          { name: 'origin/main', kind: 'remote' },
-          { name: 'origin/feat/scope-selector', kind: 'remote' },
-        ],
-        commits: [
-          { sha: '1ce5906', subject: 'Spec: collapse scope picker' },
-          { sha: '42dbc69', subject: 'Previous scope selector change' },
-        ],
-      }),
-    }),
-    location: { href: '' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => {
-        if (selector === '[data-panel]') return [comparePanel];
-        if (selector === '[data-picker]') return [cmpBase];
-        return [];
+async function withRepo(run) {
+  const repo = fixtureRepo();
+  const home = mkdtempSync(join(tmpdir(), 'diffstory-change-home-'));
+  const server = serve({ repo, port: 0, open: false, homeOverride: home });
+  await once(server, 'listening');
+  try {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const route = `/repo/${encodeURIComponent(basename(repo))}`;
+    await run({
+      repo,
+      origin,
+      route,
+      async page(path = `${route}/change`) {
+        const response = await fetch(origin + path, { redirect: 'manual' });
+        return { response, html: await response.text() };
       },
-      createElement: () => new FakeEl(),
-      addEventListener() {},
-    },
-  };
-
-  vm.runInNewContext(pickerScript, context);
-  cmpBase.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.ok(cmpBase.listeners.click?.length, 'rev inputs reopen the picker on click');
-  const values = picker.children.map((row) => row.attrs['data-value']);
-  assert.deepEqual(values, ['main', 'origin/main', 'origin/feat/scope-selector', '1ce5906', '42dbc69'], 'branches first, then recent commits');
-  assert.ok(!values.includes('__WORKTREE__'), 'the base side cannot be the working tree');
-});
-
-test('compare head picker leads with the working tree, then branches and commits', async () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs };
-      this.children = [];
-      this.listeners = {};
-      this.hidden = !!attrs.hidden;
-      this.style = {};
-      this.value = attrs.value ?? '';
-      this.textContent = '';
-      this.className = '';
-      this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) {
-      return this.attrs[name] ?? null;
-    }
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-    }
-    removeAttribute(name) {
-      delete this.attrs[name];
-    }
-    addEventListener(name, fn) {
-      (this.listeners[name] ||= []).push(fn);
-    }
-    dispatchEvent(ev) {
-      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
-    }
-    appendChild(child) {
-      this.children.push(child);
-      return child;
-    }
-    replaceChildren(...children) {
-      this.children = children;
-    }
-    contains(target) {
-      return target === this || this.children.includes(target);
-    }
-    getBoundingClientRect() {
-      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
-    }
-    get offsetHeight() {
-      return 140;
-    }
-  }
-
-  const html = renderChangePage(withChanges, { repoName: 'demo', active: 'compare', base: 'main', head: 'feature/demo' });
-  const pickerScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1])
-    .find((script) => script.includes('function filteredOptions'));
-  assert.ok(pickerScript, 'has the embedded ref picker script');
-
-  const picker = new FakeEl({ id: 'refPicker', hidden: true });
-  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: 'main' });
-  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'head', value: '' });
-  const comparePanel = new FakeEl({ 'data-panel': 'compare' });
-  const elements = { refPicker: picker, cmpBase, cmpHead };
-  const fetched = [];
-  const context = {
-    console,
-    Event: class Event {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-    fetch: async (url) => {
-      fetched.push(String(url));
-      return {
-        json: async () => ({
-          current: 'main',
-          branches: [{ name: 'main', kind: 'local' }, { name: 'feature/demo', kind: 'local' }],
-          commits: [{ sha: 'all9999', subject: 'All branch commit', committedAtLabel: '2026-06-29 09:12' }],
-        }),
-      };
-    },
-    location: { href: '' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => {
-        if (selector === '[data-panel]') return [comparePanel];
-        if (selector === '[data-picker]') return [cmpBase, cmpHead];
-        return [];
+      payloadOf(html) {
+        const match = PAYLOAD_BLOCK.exec(html);
+        assert.ok(match, 'the shell must embed exactly one __DIFFSTORY_DATA__ block');
+        return JSON.parse(match[1]);
       },
-      createElement: () => new FakeEl(),
-      addEventListener() {},
-    },
-  };
-
-  vm.runInNewContext(pickerScript, context);
-  cmpHead.listeners.focus[0]();
-  await new Promise((resolve) => setImmediate(resolve));
-
-  const values = picker.children.map((row) => row.attrs['data-value']);
-  const labels = picker.children.map((row) => row.children[0].textContent);
-  assert.deepEqual(fetched, ['/api/refs'], 'a single unscoped fetch feeds both sides');
-  assert.equal(values[0], '__WORKTREE__');
-  assert.equal(labels[0], 'Working tree');
-  assert.deepEqual(values.slice(1), ['main', 'feature/demo', 'all9999'], 'branches then recent commits follow the worktree row');
-
-  const worktreeRow = picker.children[0];
-  worktreeRow.listeners.click[0]({ preventDefault() {} });
-  assert.equal(cmpHead.value, 'Working tree');
-  assert.equal(cmpHead.attrs['data-worktree'], '1');
-});
-
-test('scope inputs automatically navigate so the summary refreshes', () => {
-  class FakeEl {
-    constructor(attrs = {}) {
-      this.attrs = { ...attrs };
-      this.children = [];
-      this.listeners = {};
-      this.hidden = !!attrs.hidden;
-      this.style = {};
-      this.value = attrs.value ?? '';
-      this.textContent = '';
-      this.className = '';
-      this.classList = { add() {}, remove() {} };
-    }
-    getAttribute(name) {
-      return this.attrs[name] ?? null;
-    }
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-    }
-    removeAttribute(name) {
-      delete this.attrs[name];
-    }
-    addEventListener(name, fn) {
-      (this.listeners[name] ||= []).push(fn);
-    }
-    dispatchEvent(ev) {
-      (this.listeners[ev.type] || []).forEach((fn) => fn(ev));
-    }
-    contains(target) {
-      return target === this || this.children.includes(target);
-    }
-    replaceChildren(...children) {
-      this.children = children;
-    }
-    appendChild(child) {
-      this.children.push(child);
-      return child;
-    }
-    getBoundingClientRect() {
-      return { left: 10, right: 610, top: 20, bottom: 54, width: 600, height: 34 };
-    }
-    get offsetHeight() {
-      return 140;
-    }
+    });
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   }
+}
 
-  const html = renderChangePage(withChanges, { repoName: 'demo', routeBase: '/repo/demo', active: 'commit', head: 'old' });
-  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => match[1])
-    .find((candidate) => candidate.includes('function scheduleNavTo'));
-  assert.ok(script, 'has the embedded auto-refresh script');
+// ─────────────────────────────────────────────────────────── 1. the route
 
-  const commitRef = new FakeEl({ id: 'commitRef', 'data-picker': 'commit', value: 'old' });
-  const cmpBase = new FakeEl({ id: 'cmpBase', 'data-picker': 'base', value: 'main' });
-  const cmpHead = new FakeEl({ id: 'cmpHead', 'data-picker': 'head', value: 'Working tree', 'data-worktree': '1' });
-  const elements = {
-    refPicker: new FakeEl({ id: 'refPicker', hidden: true }),
-    commitRef,
-    cmpBase,
-    cmpHead,
-  };
-  const context = {
-    console,
-    Event: class Event {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-    fetch: async () => ({ json: async () => ({ branches: [], commits: [] }) }),
-    setTimeout: (fn) => {
-      fn();
-      return 1;
-    },
-    clearTimeout() {},
-    location: { href: '', pathname: '/repo/demo/change', search: '?scope=commit&commit=old' },
-    window: { innerWidth: 1024, innerHeight: 768, addEventListener() {} },
-    document: {
-      getElementById: (id) => elements[id] ?? null,
-      querySelector: () => null,
-      querySelectorAll: (selector) => {
-        if (selector === '[data-panel]') return [new FakeEl({ 'data-panel': 'commit' })];
-        if (selector === '[data-picker]') return [commitRef, cmpBase, cmpHead];
-        return [];
-      },
-      createElement: () => new FakeEl(),
-      addEventListener() {},
-    },
-  };
+test('the change route serves a React shell, not a hand-built page', async () => {
+  await withRepo(async ({ page }) => {
+    const { response, html } = await page();
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
 
-  vm.runInNewContext(script, context);
+    assert.match(html, /<title>diffStory — choose review scope<\/title>/);
+    assert.match(html, /<body class="ds-map-bg" data-surface="change">/, 'the dot field paints before React mounts');
+    assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
+    assert.match(html, /<script type="module" src="\/assets\/client\/change\.js"><\/script>/);
+    assert.match(html, /<meta name="theme-color" content="#0a0c0f" data-ds-theme-color>/);
 
-  commitRef.value = 'feature/demo';
-  commitRef.dispatchEvent(new context.Event('change'));
-  assert.equal(context.location.href, '/repo/demo/change?scope=commit&commit=feature%2Fdemo');
+    // The theme bootstrap must run before the stylesheet or a light-mode user
+    // gets a dark flash on every scope navigation — and every scope change on
+    // this surface IS a navigation, so it would flash constantly.
+    assert.ok(
+      html.indexOf("var key='ds-theme'") < html.indexOf('<link rel="stylesheet"'),
+      'resolves the theme before the stylesheet',
+    );
 
-  context.location.href = '';
-  context.location.search = '?base=main';
-  cmpBase.value = '42dbc69';
-  cmpBase.dispatchEvent(new context.Event('change'));
-  assert.equal(context.location.href, '/repo/demo/change?base=42dbc69', 'base rev goes straight into the base param');
-
-  context.location.href = '';
-  context.location.search = '?base=main';
-  cmpBase.value = 'main';
-  cmpHead.value = 'feature/demo';
-  cmpHead.removeAttribute('data-worktree');
-  cmpHead.dispatchEvent(new context.Event('change'));
-  assert.equal(context.location.href, '/repo/demo/change?base=main&head=feature%2Fdemo');
-
-  context.location.href = '';
-  context.location.search = '?base=main&head=feature%2Fdemo';
-  cmpHead.value = 'Working tree';
-  cmpHead.setAttribute('data-worktree', '1');
-  cmpHead.dispatchEvent(new context.Event('change'));
-  assert.equal(context.location.href, '/repo/demo/change?base=main', 'working tree means no head param');
+    const executable = html.match(/<script(?![^>]*type="application\/json")[^>]*>/g) ?? [];
+    assert.equal(executable.length, 2, `expected exactly the theme bootstrap and the module entry, got ${executable}`);
+  });
 });
 
-test('renderChangePage shows a notice banner and the agent + model picker', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', notice: 'steps must be a non-empty array' });
-  assert.ok(html.includes('class="notice"') && html.includes('steps must be a non-empty array'), 'shows the notice');
-  assert.ok(html.includes('generate a fresh story from the Story tab'), 'points generation to the review page');
-  assert.ok(!html.includes('id="agentSel"') && !html.includes('id="modelSel"'), 'does not render story controls here');
+test('every entry point that means "choose a scope" reaches this surface', async () => {
+  await withRepo(async ({ page, route }) => {
+    for (const path of [`${route}/change`, `${route}/change?scope=uncommitted`, `${route}/change?base=main&head=feature`]) {
+      const { response, html } = await page(path);
+      assert.equal(response.status, 200, `${path} should render the scope picker`);
+      assert.match(html, /data-surface="change"/, `${path} should render the scope picker`);
+    }
+    // The bare route and the legacy new-story query both redirect into the
+    // repo-named change route rather than rendering a second copy of it.
+    for (const path of ['/change?scope=uncommitted', '/?story=new']) {
+      const { response } = await page(path);
+      assert.equal(response.status, 302, `${path} redirects rather than rendering`);
+      assert.ok(response.headers.get('location')?.startsWith(`${route}/change`), response.headers.get('location'));
+    }
+  });
 });
 
-test('change page does not embed the generation progress panel', () => {
-  const html = renderChangePage(
-    { hasChanges: true, baseLabel: 'main', files: [{ path: 'a.ts', added: 1, removed: 0 }] },
-    { repoName: 'r', base: '', head: '', scopeLabel: 'Uncommitted', active: 'uncommitted' },
+test('a story that will not load lands here with an explanation, not on the error page', async () => {
+  // The reason this surface exists twice over. `reviewScreen()` falls through to
+  // `changeScreen(…, notice)` and the notice is the ONLY thing that tells the
+  // reviewer why they are looking at a scope picker instead of their review.
+  await withRepo(async ({ repo, page, payloadOf, route }) => {
+    mkdirSync(join(repo, '.diffstory'), { recursive: true });
+    writeFileSync(join(repo, '.diffstory', 'story.json'), '{"bogus":true}');
+
+    const { response, html } = await page(`${route}/review?story=story.json`);
+    assert.equal(response.status, 200);
+    assert.match(html, /data-surface="change"/, 'a broken story falls through to the scope picker');
+    assert.ok(!html.includes("Couldn't build the review"), 'and never to the raw error page');
+
+    const payload = payloadOf(html);
+    assert.ok(payload.notice, 'the payload carries the explanation');
+    assert.match(payload.notice, /is not a valid story/, payload.notice);
+    assert.match(payload.notice, /steps must be a non-empty array/, 'including what specifically is wrong');
+    // The scope picker still has to be usable — the fallthrough is a working
+    // page, not a stub with an error on it.
+    assert.equal(payload.routeBase, route);
+    assert.ok(Array.isArray(payload.files));
+    assert.ok(payload.scopeLabel);
+  });
+});
+
+test('a healthy scope carries no notice at all', async () => {
+  await withRepo(async ({ page, payloadOf }) => {
+    const { html } = await page();
+    assert.equal(payloadOf(html).notice, undefined, 'the amber banner is for failures only');
+  });
+});
+
+// ─────────────────────────────────────────────────────────── 2. the payload
+
+test('the payload carries the RESOLVED scope, not the raw query', async () => {
+  await withRepo(async ({ page, payloadOf, route, repo }) => {
+    const compare = payloadOf((await page(`${route}/change?base=main&head=feature`)).html);
+    assert.equal(compare.active, 'compare');
+    assert.equal(compare.base, 'main');
+    assert.equal(compare.head, 'feature');
+    assert.equal(compare.scopeLabel, 'main → feature');
+    assert.equal(compare.repoName, basename(repo));
+    assert.equal(compare.routeBase, route);
+
+    const uncommitted = payloadOf((await page(`${route}/change?scope=uncommitted`)).html);
+    assert.equal(uncommitted.active, 'uncommitted');
+    assert.equal(uncommitted.base, 'HEAD', 'uncommitted resolves to a concrete ref, not to the absent override');
+    assert.equal(uncommitted.head, undefined, 'and stops at the working tree');
+    assert.equal(uncommitted.scopeLabel, 'Uncommitted changes');
+
+    const commit = payloadOf((await page(`${route}/change?scope=commit&commit=HEAD`)).html);
+    assert.equal(commit.active, 'commit');
+    assert.equal(commit.head, 'HEAD');
+    assert.notEqual(commit.base, 'HEAD', 'a single commit resolves its base to the parent');
+    assert.equal(commit.scopeLabel, 'Latest commit');
+  });
+});
+
+test('the payload lists changed files as raw counts, and generated output is not filtered out server-side', async () => {
+  await withRepo(async ({ page, payloadOf, route }) => {
+    const payload = payloadOf((await page(`${route}/change?base=main&head=feature`)).html);
+    const byPath = Object.fromEntries(payload.files.map((file) => [file.path, file]));
+
+    assert.deepEqual(Object.keys(byPath).sort(), ['added.ts', 'dist/bundle.js', 'kept.ts', 'package-lock.json']);
+    assert.deepEqual(byPath['kept.ts'], { path: 'kept.ts', added: 2, removed: 1 });
+
+    // The generated/primary split is a reading decision and happens in the
+    // component; the payload stays a faithful list of what git reported, so the
+    // +/− ledger and the "Review N files" count still see everything.
+    assert.ok(byPath['dist/bundle.js'], 'build output travels');
+    assert.ok(byPath['package-lock.json'], 'lockfiles travel');
+
+    // Presentation stays client-side.
+    const text = JSON.stringify(payload);
+    assert.ok(!text.includes('review file'), 'the file/files wording is formatted in the component');
+    assert.ok(!text.includes('totalChanged'), 'a second copy of files.length cannot disagree with files.length');
+    assert.ok(!text.includes('hasChanges'), 'nor can a second copy of files.length > 0');
+  });
+});
+
+test('an empty working tree is a state, not an error', async () => {
+  await withRepo(async ({ page, payloadOf, route }) => {
+    const { response, html } = await page(`${route}/change?scope=uncommitted`);
+    assert.equal(response.status, 200, 'a clean tree is a 200');
+    const payload = payloadOf(html);
+    assert.deepEqual(payload.files, [], 'with nothing to review');
+    assert.equal(payload.notice, undefined, 'and nothing has gone wrong');
+    assert.equal(payload.active, 'uncommitted');
+  });
+});
+
+test('a hostile ref cannot break out of the payload script element', async () => {
+  const hostile = '</script><img src=x onerror=alert(1)>';
+  await withRepo(async ({ page, payloadOf, route }) => {
+    // `resolveScope` builds its label out of the ref the user typed, so a
+    // crafted ?base= is the shortest path from a URL to the document.
+    const { html } = await page(`${route}/change?base=${encodeURIComponent(hostile)}&head=${encodeURIComponent('<!--')}`);
+    assert.ok(!html.includes('</script><img'), 'the raw sequence must never appear in the document');
+    assert.ok(!html.includes('<!--'), 'nor may a comment opener switch the tokenizer state');
+    const payload = payloadOf(html);
+    assert.equal(payload.base, hostile, 'and it still round-trips exactly');
+    assert.equal(payload.head, '<!--');
+  });
+});
+
+// ─────────────────────────────────────────── 3. at-risk choreography, in source
+
+test('the ref combobox keeps all four of its keyboard shortcuts', () => {
+  // ArrowDown / ArrowUp, CLAMPED. The repo picker's folder list wraps; this one
+  // must not. Both are inventoried that way on purpose.
+  assert.match(refPicker, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp" \|\| event\.key === "Home" \|\| event\.key === "End"/);
+  assert.match(refPicker, /move\(index \+ \(event\.key === "ArrowDown" \? 1 : -1\)\)/);
+  assert.match(refPicker, /setOverride\(Math\.max\(0, Math\.min\(next, rows\.length - 1\)\)\)/, 'clamps at both ends');
+  assert.ok(
+    !/%\s*rows\.length/.test(refPicker),
+    'a modulo would turn the clamp into the repo picker’s wrapping behaviour',
   );
-  assert.doesNotMatch(html, /ds-pp-plan/);
-  assert.doesNotMatch(html, /function ProgressPanel/);
-  assert.doesNotMatch(html, /new ProgressPanel|ProgressPanel\(/);
-  assert.doesNotMatch(html, /run_done/);
+  // Home / End.
+  assert.match(refPicker, /if \(event\.key === "Home"\) move\(0\);/);
+  assert.match(refPicker, /else if \(event\.key === "End"\) move\(rows\.length - 1\);/);
+  // An arrow against a closed listbox opens it and stops there.
+  assert.match(refPicker, /if \(!owns\) \{\s*open\(kind, queries\[kind\]\);\s*return;\s*\}/);
+  // Enter activates the active option, which navigates.
+  assert.match(refPicker, /event\.key === "Enter" && owns && rows\[index\]\?\.value/);
+  assert.match(refPicker, /choose\(rows\[index\]\.value\)/);
+  // Escape closes, and stops any document-level handler double-handling it.
+  assert.match(refPicker, /event\.key === "Escape" && owns/);
+  assert.match(refPicker, /event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*close\(\);/);
+  // Every arrow/Home/End path suppresses the browser's own caret movement.
+  assert.ok((refPicker.match(/event\.preventDefault\(\)/g) ?? []).length >= 4);
+  // Hover moves the active descendant WITHOUT scrolling; keys scroll.
+  assert.match(refPicker, /scrollNext\.current = true;/);
+  assert.match(refPicker, /onHover: \(position: number\) => \{\s*scrollNext\.current = false;/);
+  assert.match(refPicker, /scrollIntoView\(\{ block: "nearest" \}\)/);
 });
 
-test('change page draws from the shared --app-* tokens', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.match(html, /--app-bg:/);
-  assert.match(html, /--elev:var\(--app-elev\)/);
+test('the ref combobox keeps its combobox/listbox accessibility contract', () => {
+  // Three fields, one listbox, and no <datalist> anywhere.
+  assert.match(refPicker, /role: "combobox"/);
+  assert.match(refPicker, /"aria-autocomplete": "list"/);
+  assert.match(refPicker, /"aria-haspopup": "listbox"/);
+  assert.match(refPicker, /"aria-controls": "refPicker"/);
+  assert.match(refPicker, /"aria-expanded": owns/);
+  assert.match(refPicker, /"aria-activedescendant": owns && index >= 0 \? `ref-option-\$\{id\}-\$\{index\}` : undefined/);
+  assert.match(refPicker, /id="refPicker"\s+role="listbox"\s+aria-label="Available git references"/);
+  assert.match(refPicker, /role="option"/);
+  assert.match(refPicker, /aria-selected=\{position === index\}/);
+  assert.match(refPicker, /tabIndex=\{-1\}/, 'options stay out of the tab ring');
+  assert.ok(!/<datalist/.test(changeSource), 'the native datalist menu is not what this is');
+  // Three fields exist, each with the id the picker addresses it by.
+  for (const field of ['"commit", "commitRef"', '"base", "cmpBase"', '"head", "cmpHead"']) {
+    assert.ok(scopeCard.includes(field), `wires ${field}`);
+  }
+  // The disclosure buttons stay in sync too.
+  assert.match(scopeCard, /aria-controls="commitPanel"\s+aria-expanded=\{openPanel === "commit"\}/);
+  assert.match(scopeCard, /aria-controls="comparePanel"\s+aria-expanded=\{openPanel === "compare"\}/);
 });
 
-test('change page keeps the session heading primary and the workflow stepper secondary', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.match(html, /<header class="session-head">[\s\S]*?<div class="lede">[\s\S]*?<div class="review-path"/);
-  assert.match(html, /\.review-path\{[^}]*border-top:1px solid var\(--line-soft\);border-bottom:1px solid var\(--line-soft\)/);
-  assert.doesNotMatch(html, /ds-scope-thread|class="ds-thread-layer"/);
-  assert.doesNotMatch(html, /scope-current-mark|\.scope-side:before|\.sopt:before/, 'does not decorate selected cards with partial-edge accent strips');
+test('the option list is different for each field, and says so while it loads', () => {
+  assert.match(refs, /if \(!data\) return \[option\("", "Loading refs…", "reading local git refs", ""\)\];/);
+  assert.match(refs, /if \(kind === "commit"\) return \[option\("HEAD", "HEAD", "current HEAD", "head"\)\]\.concat\(commitOptions\(data\)\)/);
+  assert.match(refs, /option\(WORKTREE, WORKTREE_LABEL, "HEAD plus uncommitted edits", "worktree"\)/);
+  // The compare SOURCE gets branches then commits and no worktree pseudo-row:
+  // you cannot diff *from* an uncommitted tree.
+  assert.match(refs, /return branchOptions\(data\)\.concat\(commitOptions\(data\)\);/);
+  // The filter reads value + label + meta + kind, so a commit subject matches.
+  assert.match(refs, /`\$\{row\.value\} \$\{row\.label\} \$\{row\.meta\} \$\{row\.kind\}`\.toLowerCase\(\)/);
+  assert.match(refs, /if \(!row\.value\) return true;/, 'the loading row is never filtered away');
+  // The active row on (re)build matches the field, or the worktree row, or 0.
+  assert.match(refs, /row\.value === current \|\| \(row\.value === WORKTREE && worktree\)/);
+  assert.match(refs, /return found < 0 \? 0 : found;/);
+  // Bare-string branches from older builds are still normalised.
+  assert.match(refs, /typeof raw === "string" \? \{ name: raw, kind: "branch" \} : raw/);
 });
 
-test('change page keeps ref navigation stable while preserving anchored picker motion', () => {
-  const html = renderChangePage(withChanges, { repoName: 'demo', diffFiles });
-  assert.doesNotMatch(html, /\.wrap\{animation:change-page-in/, 'does not replay the whole page entrance after a ref navigation');
-  assert.doesNotMatch(html, /\.refpanel:not\(\[hidden\]\)\{animation:change-panel-in/, 'does not clip and re-enter the selected scope panel');
-  assert.match(html, /\.refpicker:not\(\[hidden\]\)\{animation:change-picker-in var\(--motion-duration-ui\)/);
-  assert.match(html, /prefers-reduced-motion:reduce\)\{\.sopt,\.openreview\{transition:none\}/);
+test('the anchored listbox keeps its placement arithmetic', () => {
+  // Every constant here is load-bearing: the width floor, the viewport margins,
+  // the 7px offset, the flip-above rule and its own clamp.
+  assert.match(refs, /Math\.min\(Math\.max\(260, Math\.round\(rect\.width\)\), Math\.max\(220, window\.innerWidth - 24\)\)/);
+  assert.match(refs, /Math\.min\(Math\.max\(12, Math\.round\(rect\.left\)\), Math\.max\(12, window\.innerWidth - width - 12\)\)/);
+  assert.match(refs, /Math\.max\(140, Math\.min\(260, window\.innerHeight - 24\)\)/);
+  assert.match(refs, /let top = rect\.bottom \+ 7;/);
+  assert.match(refs, /top = rect\.top - 7 - height;/);
+  assert.match(refs, /if \(top < 12\) top = Math\.max\(12, window\.innerHeight - height - 12\);/);
+  // And it stays anchored while the page moves under it. `scroll` is captured.
+  assert.match(refPicker, /window\.addEventListener\("scroll", reposition, true\)/);
+  assert.match(refPicker, /window\.addEventListener\("resize", reposition\)/);
+  // Placement writes styles directly. A setState per scroll frame is how an
+  // anchored popover starts lagging behind its anchor.
+  assert.match(refs, /picker\.style\.left = `\$\{left\}px`;/);
+});
+
+test('a press inside the listbox never steals focus from the field', () => {
+  // Without this the field blurs mid-click, the listbox closes, and the click
+  // lands on nothing.
+  assert.match(refPicker, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/);
+  // Focus leaving for the listbox is not a dismissal; anything else is, once
+  // the browser has settled on a new active element.
+  assert.match(refPicker, /if \(next && listbox\.current\?\.contains\(next\)\) return;/);
+  assert.match(refPicker, /if \(inputs\.current\[kind\] === focused\) return;/);
+  // A press anywhere else closes, unless it is the listbox or the owning field.
+  assert.match(refPicker, /document\.addEventListener\("mousedown", onDown\)/);
+  assert.match(refPicker, /if \(target === inputs\.current\[active\]\) return;/);
+});
+
+test('the refs request happens once, and its failure is silent and retryable', () => {
+  assert.match(refPicker, /fetch\("\/api\/refs"\)/);
+  assert.match(refPicker, /if \(cachedRefs\) return Promise\.resolve\(cachedRefs\);/);
+  assert.match(refPicker, /if \(inflightRefs\) return inflightRefs;/);
+  assert.match(refPicker, /\.catch\(\(\) => \{\s*inflightRefs = null;\s*return null;\s*\}\)/, 'a failure clears the in-flight promise so the next interaction retries');
+  // Opening a panel loads refs, and so does arriving with one already open.
+  assert.match(scopeCard, /const showPanel = \(panel: Panel\) => \{\s*setOpenPanel\(panel\);\s*ensureRefs\(\);/);
+  assert.match(scopeCard, /if \(openPanel\) ensureRefs\(\);/);
+});
+
+test('selection comes from the URL and disclosure does not', () => {
+  // At-risk: opening a panel must never look like choosing a scope. The first
+  // argument to segmentClass is the payload's `active`; the second is local
+  // disclosure state, and they are never conflated.
+  assert.match(scopeCard, /segmentClass\(active === "uncommitted", false\)/);
+  assert.match(scopeCard, /segmentClass\(active === "commit", openPanel === "commit"\)/);
+  assert.match(scopeCard, /segmentClass\(active === "compare", openPanel === "compare"\)/);
+  assert.match(scopeCard, /function segmentClass\(selected: boolean, open: boolean\)/);
+  assert.match(scopeCard, /selected\s*\?\s*"border-accent-line bg-accent-soft/, 'selected wins over open');
+  assert.match(scopeCard, /aria-current=\{active === "uncommitted" \? "true" : undefined\}/);
+  // Only the disclosure buttons open panels; the uncommitted segment is a link.
+  assert.match(scopeCard, /href=\{`\$\{routeBase\}\/change\?scope=uncommitted`\}/);
+});
+
+test('the scope summary and the compare editor never show the same two refs at once', () => {
+  assert.match(scopeCard, /const showSplitSummary = inCompare && openPanel !== "compare";/);
+  assert.match(scopeCard, /aria-label="Selected comparison"/);
+  assert.match(scopeCard, /aria-label=\{`Source: \$\{baseValue\}`\}/);
+  assert.match(scopeCard, /aria-label=\{`Target: \$\{headValue\}`\}/);
+  assert.match(scopeCard, /aria-label="Selected review scope"/);
+  assert.match(scopeCard, /active === "compare" \? "Selected comparison" : active === "commit" \? "Selected commit" : "Selected scope"/);
+  // The compare editor prefills only in compare mode: other scopes resolve base
+  // to bookkeeping values that would read as a chosen rev.
+  assert.match(scopeCard, /useState\(inCompare \? base : ""\)/);
+  assert.match(scopeCard, /const targetIsWorktree = !inCompare \|\| !head;/);
+});
+
+test('scope changes are real URLs, debounced, and never loop', () => {
+  // The same-URL guard. Without it the page recomputes the URL it is already on
+  // and navigates to itself forever.
+  assert.match(scopeCard, /if \(url !== window\.location\.pathname \+ window\.location\.search\) window\.location\.href = url;/);
+  assert.match(scopeCard, /if \(delay > 0\) navTimer\.current = window\.setTimeout\(go, delay\);\s*else go\(\);/);
+  assert.match(scopeCard, /if \(navTimer\.current\) window\.clearTimeout\(navTimer\.current\);/);
+  // Typing waits 700ms; choosing a row or leaving an edited field does not.
+  assert.match(scopeCard, /commit\(next, 700\)/);
+  assert.match(scopeCard, /scheduleNavTo\(commitUrl\(value\), 0\)/);
+  // The two URL shapes.
+  assert.match(scopeCard, /\$\{routeBase\}\/change\?scope=commit&commit=\$\{encodeURIComponent\(value\.trim\(\) \|\| "HEAD"\)\}/);
+  assert.match(scopeCard, /if \(!source\) return "";/, 'no base means no navigation at all');
+  assert.match(scopeCard, /worktree \|\| nextHead\.trim\(\) === WORKTREE_LABEL \? "" : nextHead\.trim\(\)/);
+  assert.match(scopeCard, /\$\{target \? `&head=\$\{encodeURIComponent\(target\)\}` : ""\}/, 'the working tree is the absence of &head');
+  // And the review link repeats the resolved scope so /diff diffs the same pair.
+  assert.match(changeApp, /const diffHref = `\$\{routeBase\}\/diff\$\{scopeQuery\(base, head\)\}`;/);
+  assert.match(format, /parts\.push\(`base=\$\{encodeURIComponent\(base\)\}`\)/);
+});
+
+test('navigation stays real URLs — no client-side router is introduced', () => {
+  // Comments mentioning the API by name are fine; a call to it is not.
+  assert.ok(
+    !/(?:history|window\.history)\s*\.\s*(?:pushState|replaceState)\s*\(/.test(changeSource),
+    'there is no history API anywhere in this codebase',
+  );
+  assert.match(scopeCard, /window\.location\.href = url;/);
+});
+
+test('the change page touches no browser storage of its own', () => {
+  const keys = new Set(
+    [...changeSource.matchAll(/(?:localStorage|sessionStorage)\.(?:get|set|remove)Item\("([^"]+)"/g)].map((m) => m[1]),
+  );
+  assert.deepEqual([...keys], [], 'the theme hook owns the only key this surface reaches');
+  assert.ok(!/sessionStorage/.test(changeSource), 'no sessionStorage anywhere in this app');
+});
+
+test('the change page opens no live connection and embeds no progress panel', () => {
+  assert.ok(!/EventSource/.test(changeSource), 'freshness here is manual: Reload, Re-check, or a scope navigation');
+  for (const gone of [/ds-pp-plan/, /ProgressPanel/, /run_done/, /\/api\/generate/, /\/api\/story\/repair/]) {
+    assert.doesNotMatch(changeSource, gone, `${gone} belongs to the review page`);
+  }
+  // The only endpoint this surface calls.
+  const endpoints = [...changeSource.matchAll(/fetch\("(\/[^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(endpoints, ['/api/refs']);
+});
+
+test('the surface does not animate its own arrival', () => {
+  // At-risk #8, and the single most important motion decision here: every scope
+  // change is a full navigation, so a page-level entrance replays on every ref
+  // change and reads as broken.
+  assert.ok(!/ds-reveal/.test(changeSource), 'no page or section entrance');
+  assert.ok(!/AnimatedNumber|NumberTicker|animated-number|number-ticker/.test(changeSource), 'the ledger does not count up on every arrival');
+  assert.ok(!/layoutId|layout=/.test(changeSource), 'the segments do not animate between selections');
+  assert.ok(!/ds-scope-thread|ds-thread-layer/.test(changeSource), 'no decorative thread on this surface');
+  // The one entrance that IS wanted, with the vanilla timing and Signal easing.
+  assert.match(refPicker, /const EASE_SIGNAL_OUT = \[0\.23, 1, 0\.32, 1\] as const;/);
+  assert.match(refPicker, /clipPath: "inset\(0px 0px 100% round 10px\)", y: -4, scale: 0\.985/);
+  assert.match(refPicker, /transition=\{open && !reduce \? \{ duration: 0\.2, ease: EASE_SIGNAL_OUT \} : \{ duration: 0 \}\}/);
+  assert.match(refPicker, /const reduce = useReducedMotion\(\);/, 'and it steps instead of animating under reduced motion');
+  // Press feedback keeps the vanilla scale and drops under reduced motion.
+  // This used to be `/active:scale-\[\.985\]|max-\[600px\]/`, which the second
+  // alternative satisfied on every version of this file — including the one
+  // where the segments listed `transform` in their transition and then never
+  // changed a transform, so there was no press feedback at all. The scale now
+  // comes from Motion's gesture, which gates itself on `useReducedMotion()`.
+  assert.match(scopeCard, /motion-reduce:transition-none motion-reduce:active:transform-none/);
+  assert.match(scopeCard, /const SEGMENT_PRESS = 0\.985;/);
+  assert.equal(
+    (scopeCard.match(/pressScale=\{SEGMENT_PRESS\}/g) ?? []).length,
+    3,
+    'all three segments press, not just the two that are buttons',
+  );
+  // And none of them lifts on hover: three tiles side by side scaling up 2% is
+  // the "lurch" the repo picker's full-width card rejected, at three times over.
+  assert.equal((scopeCard.match(/whileHover=\{undefined\}/g) ?? []).length, 4);
+});
+
+test('the beUI segments do not inherit beUI geometry', () => {
+  // `SIZE_CLASS` pins `h-10` on every Button variant, and tailwind-merge treats
+  // `h` and `min-h` as different groups — without `h-auto` the 64px scope tile
+  // silently becomes a 40px pill. Its base class also centres content, which on
+  // a `flex-col` tile centres both labels away from the left edge.
+  assert.match(scopeCard, /const SEGMENT_BASE = cn\(\s*\n?\s*"flex h-auto min-h-16 [^"]*items-stretch justify-start/);
+  // The vendored colour classes name variables this app does not define, so the
+  // segment supplies its own — including the focus ring, because the component
+  // ships `focus-visible` styling that resolves to nothing.
+  assert.match(scopeCard, /focus-visible:outline-none focus-visible:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/);
+});
+
+test('the vendored ref field keeps a focus ring of its own', () => {
+  // beUI's Input draws focus with `ring-2 ring-ring/40` and `border-foreground/40`,
+  // and neither `--color-ring` nor `--color-foreground` exists in this app's
+  // theme bridge — those utilities compile to nothing at all. The ring has to be
+  // rebuilt from the one thing the component does publish, `data-state`.
+  assert.match(
+    scopeCard,
+    /data-\[state=focused\]:border-accent-line data-\[state=focused\]:shadow-\[0_0_0_3px_var\(--accent-soft\)\]/,
+  );
+  assert.ok(!/ring-ring|border-foreground/.test(scopeCard), 'and not from a variable that does not exist');
+  // All three fields are the same field.
+  assert.equal((scopeCard.match(/classNames=\{FIELD_CLASSNAMES\}/g) ?? []).length, 3);
+  // The picker's `value` still arrives as a string, because that is what the
+  // component hands back — the old handler read `event.target.value` and this
+  // one must not silently start committing `[object Object]`.
+  assert.match(scopeCard, /onChange: \(next: string\) => \{\s*picker\.open\(kind, next\);\s*commit\(next, 700\);/);
+});
+
+test('every live-region carrier this surface adopts is quieted', () => {
+  // `Input` bakes in a `role="alert"` and `Loader` a `role="status"`. Importing
+  // the hook is not the same as covering the node, so assert the ref each hook
+  // is given actually wraps the carrier: the card element for the fields, the
+  // listbox element for its spinner, and a `display: contents` box for the
+  // reload control, which lives in the nav rather than in the card.
+  assert.match(scopeCard, /vendor\/beui\/motion\/input/);
+  assert.match(scopeCard, /vendor\/beui\/motion\/loader/);
+  assert.match(scopeCard, /const card = useRef<HTMLElement>\(null\);\s*useQuietSubtree\(card\);/);
+  assert.match(scopeCard, /<section\s*\n?\s*ref=\{card\}/);
+  assert.match(scopeCard, /const root = useRef<HTMLSpanElement>\(null\);\s*useQuietSubtree\(root\);/);
+  assert.match(scopeCard, /<span ref=\{root\} className="contents">/);
+  assert.match(refPicker, /useQuietSubtree\(ref\);/);
+  // The listbox spinner replaces the kind tag on the placeholder row only — a
+  // spinner on a real ref would claim work that is not happening.
+  assert.match(refPicker, /\{row\.value \? row\.kind : <Loader variant="spinner" size=\{13\} label="" /);
+});
+
+test('the file inventory keeps its reading order, its generated split, and its counts', () => {
+  // Generated output is partitioned out of the primary list but still counted.
+  assert.match(format, /\/\^\(dist\|build\|coverage\|out\|target\)\\\//);
+  assert.match(format, /package-lock\\\.json\|yarn\\\.lock\|pnpm-lock\\\.yaml/);
+  assert.match(fileSummary, /const primary = files\.filter\(\(file\) => !generatedOutput\(file\.path\)\);/);
+  assert.match(fileSummary, /const generated = files\.filter\(\(file\) => generatedOutput\(file\.path\)\);/);
+  assert.match(fileSummary, /<b className="font-display font-bold text-text tabular-nums">\{primary\.length\}<\/b> review/);
+  assert.match(fileSummary, /const reviewCount = `\$\{files\.length\} \$\{plural\(files\.length, "file", "files"\)\}`;/, 'the CTA counts every file, generated output included');
+  assert.match(format, /acc\.added \+ \(file\.added \?\? 0\)/, 'so does the ledger');
+  // The CTA spells out the verb for assistive technology.
+  assert.match(fileSummary, /aria-label=\{`Start review of \$\{reviewCount\}`\}/);
+  // Binary files get a hatch and a word, never a fake +0/−0.
+  assert.match(fileSummary, /binary \/ metadata/);
+  assert.match(fileSummary, /const binary = file\.added === null \|\| file\.removed === null;/);
+  // The atlas's evidence selectors for this surface.
+  assert.match(fileSummary, /className="file-card min-w-0"/);
+  assert.match(fileSummary, /"frow flex items-center/);
+  assert.match(fileSummary, /className="empty-title/);
+  // Generated output is still a disclosure, still collapsed, still counted.
+  assert.match(fileSummary, /id: "generated"/);
+  assert.match(fileSummary, /<span>Generated output<\/span>/);
+  assert.match(fileSummary, /\{generated\.length\} \{plural\(generated\.length, "file", "files"\)\}/);
+  assert.ok(!/defaultValue=/.test(fileSummary), 'and it does not arrive open');
+  // The vendored accordion animates a 28px corner radius onto its row as an
+  // inline style. Dropping the `!` leaves a rounded island sitting in the middle
+  // of a flush file list, and no ordinary utility can outrank an inline style.
+  assert.match(fileSummary, /item: "rounded-none! /);
+});
+
+test('the scope picker declines the vendored components that would change what it means', () => {
+  // Each of these was considered and rejected on behaviour, not on taste; the
+  // reasons are written down at the site that would have used them. An import
+  // is what would undo that, so an import is what this guards.
+  for (const declined of [
+    'motion/table',
+    'motion/tabs',
+    'motion/morphing-tabs',
+    'motion/expandable-tabs',
+    'motion/select',
+    'motion/select-morph',
+    'motion/popover',
+    'motion/number-ticker',
+    'motion/animated-number',
+    'motion/scroll-reveal',
+    'motion/text-reveal',
+    'agents/file-diff',
+  ]) {
+    assert.ok(!changeSource.includes(`vendor/beui/${declined}`), `${declined} was declined on purpose`);
+  }
+  // The reasoning survives in prose, which the stripped source cannot see — so
+  // read the raw files for it and fail if a rewrite quietly drops the record.
+  const prose = ['ScopeCard.tsx', 'RefPicker.tsx', 'FileSummary.tsx', 'ChangeApp.tsx']
+    .map((file) => readRaw(`surfaces/change/${file}`))
+    .join('\n');
+  assert.match(prose, /role="tablist"/, 'why the segments are not tabs');
+  assert.match(prose, /the only key any of the three binds is Escape/, 'why the combobox is not a Select');
+  assert.match(prose, /motion\/table\//, 'why the inventory is not a data grid');
+});
+
+test('the empty working tree keeps its honest, non-error copy', () => {
+  // The tick used to be a `✓` glyph in the copy; it is now the badge's own
+  // Check icon. Same tone, same words, same success colour — assert all three
+  // rather than the string that happens to hold them.
+  assert.match(fileSummary, /status="success"/);
+  assert.match(fileSummary, /icon=\{<Check /);
+  assert.match(fileSummary, /bg-add-soft[^"]*text-add/, 'the clean tree reads as success, never as an error');
+  assert.match(fileSummary, /working tree clean/);
+  assert.match(fileSummary, /Nothing to review/);
+  assert.match(fileSummary, /Pick another scope above, or make a change\. When your agent writes code, the changes appear here\./);
+  assert.match(fileSummary, /Re-check/);
+  assert.match(fileSummary, /Review history →/);
+  assert.doesNotMatch(fileSummary, /Nothing to review for /, 'does not repeat long refs in the empty-state headline');
+});
+
+test('the failure notice keeps its wording and its way forward', () => {
+  assert.match(changeApp, /That review couldn&rsquo;t be loaded\./);
+  assert.match(changeApp, /Open the diff viewer below,\s*\n?\s*then generate a fresh story from the Story tab\./);
+  assert.match(changeApp, /\{notice\}/, 'and the server’s own reason, verbatim');
+  assert.match(changeApp, /border-amber bg-amber-soft/);
+  assert.ok(
+    changeApp.indexOf('{notice ?') < changeApp.indexOf('<ScopeCard'),
+    'renders above the scope controls, not below the fold',
+  );
+});
+
+test('the session header keeps the heading primary and the workflow stepper secondary', () => {
+  assert.match(changeApp, /Review session/);
+  assert.match(changeApp, /Choose what to review/);
+  assert.match(changeApp, /Set the exact git scope, confirm the changed files, then start with the real diff\./);
+  // Four stages, three connectors, stage 01 current, numerals not badges.
+  assert.match(changeApp, /\["01", "Scope"\],\s*\n\s*\["02", "Read"\],\s*\n\s*\["03", "Resolve"\],\s*\n\s*\["04", "Decide"\],/);
+  assert.match(changeApp, /\{index > 0 \? \(/, 'the connector is skipped before the first stage, which is what makes it three');
+  assert.match(changeApp, /aria-current=\{active \? "step" : undefined\}/);
+  assert.match(changeApp, /role="list"\s*\n?\s*aria-label="Review workflow"/);
+  assert.match(changeApp, /font-display text-sm leading-none font-bold tracking-\[var\(--tracking-numeral\)\]/, 'Space Grotesk numerals, not circled badges');
+  // The ledger is supporting detail and steps aside below 980px.
+  assert.match(changeApp, /aria-label="Current scope summary"/);
+  assert.match(changeApp, /max-\[980px\]:hidden/);
+});
+
+test('the nav keeps the wordmark, the breadcrumb, and the two page actions', () => {
+  assert.match(changeApp, /crumbs=\{\[\{ label: repoName, href: `\$\{routeBase\}\/change` \}, \{ label: "Scope" \}\]\}/);
+  assert.match(changeApp, /href=\{`\$\{routeBase\}\/stories`\}/);
+  assert.match(changeApp, />\s*History\s*</);
+  assert.match(scopeCard, /aria-label="Reload current scope"/);
+  // The reload hint used to be a `title`, which is a permanent accessible
+  // DESCRIPTION. A tooltip only supplies `aria-describedby` while its bubble is
+  // open, so the description has to be restored explicitly or it exists for
+  // exactly as long as the pointer hovers.
+  assert.match(scopeCard, /const RELOAD_HINT = "Re-read the working tree and rebuild the diff";/);
+  assert.match(scopeCard, /<Tooltip content=\{RELOAD_HINT\}/);
+  assert.match(scopeCard, /aria-description=\{RELOAD_HINT\}/, 'the hover-only bubble is not the whole story');
+  assert.match(scopeCard, /max-\[480px\]:hidden">Reload<\/span>/, 'the reload label goes away on a phone, the icon does not');
+  // The shared bar itself.
+  assert.match(nav, /title="Home — your repositories"\s*\n?\s*aria-label="Home"/);
+  assert.match(nav, /<nav aria-label="Breadcrumb"/);
+  assert.match(nav, /aria-current="page"/);
+  assert.match(nav, /max-\[560px\]:hidden/, 'the wordmark gives way to the mark on a phone');
+  assert.match(nav, /<ThemeMenu \/>/, 'one theme control, before the page slot');
+});
+
+test('the change page does not resurrect UI that was deliberately removed', () => {
+  for (const gone of [
+    /Generate guided review/,
+    /storyMode/,
+    /Current branch/,
+    /Branch commits/,
+    /Cross-branch commits/,
+    /cmpBaseRef/,
+    /cmpHeadRef/,
+    /Review commit/,
+    /Compare refs</,
+    /data-picker="side-commit"/,
+    /Review sessions/,
+    /Each side takes anything git does/,
+    /agentSel|modelSel/,
+    /scope-command/,
+  ]) {
+    assert.doesNotMatch(changeSource, gone, `${gone} was removed on purpose`);
+  }
+  // Source/Target, never From/To.
+  assert.match(scopeCard, /Source <i/);
+  assert.match(scopeCard, /Target <i/);
+  assert.ok(!/>From</.test(scopeCard) && !/>To</.test(scopeCard), 'labels the sides by meaning, not position');
+});
+
+// ─────────────────────────────────────────────────────────── 4. the bundle
+
+test('the built bundle actually ships the change behaviour', (t) => {
+  const dir = new URL('../dist/client/', import.meta.url);
+  const entry = new URL('change.js', dir);
+  if (!existsSync(entry)) {
+    t.skip('client bundle not built');
+    return;
+  }
+  // Code splitting hoists whatever two surfaces share into a `chunk-*.js`, so
+  // the question "did this string survive the build" is about the entry AND the
+  // chunks it pulls in — asserting on the entry alone would start failing the
+  // day another surface happens to use the same helper.
+  //
+  // esbuild emits an ASCII bundle, so every non-ASCII character in a user-facing
+  // string ("Loading refs…", "Parent → selected commit", the curly apostrophe in
+  // the failure notice) ships as a `\uXXXX` escape. Decode those before
+  // searching, or half the strings worth guarding would silently never match.
+  const js = readdirSync(dir)
+    .filter((file) => file === 'change.js' || (file.startsWith('chunk-') && file.endsWith('.js')))
+    .map((file) => readFileSync(new URL(file, dir), 'utf8'))
+    .join('\n')
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+
+  assert.ok(js.includes('/api/refs'), 'bundle calls /api/refs');
+  for (const text of [
+    'Choose what to review',
+    'Review session',
+    'Uncommitted',
+    'Working tree vs HEAD',
+    'Single commit',
+    'Parent → selected commit',
+    'Compare any refs',
+    'Source → target, any branch or commit',
+    'HEAD or a commit SHA',
+    'branch, tag, or commit',
+    'Shows that commit against its first parent',
+    'Available git references',
+    'Loading refs…',
+    'No matching refs',
+    'HEAD plus uncommitted edits',
+    'Working tree',
+    'Selected comparison',
+    'Selected review scope',
+    'Nothing to review',
+    'working tree clean',
+    'Re-check',
+    'Review history →',
+    'Generated output',
+    'binary / metadata',
+    'Start review of ',
+    'Reload current scope',
+    'Review workflow',
+    // The failure branch a user only ever sees when something has gone wrong is
+    // the easiest string on the surface to lose and the hardest to notice.
+    'That review couldn',
+    'Open the diff viewer below, then generate a fresh story from the Story tab.',
+  ]) {
+    assert.ok(js.includes(text), `bundle should contain ${JSON.stringify(text)}`);
+  }
+  assert.ok(js.includes('__DIFFSTORY_DATA__'), 'bundle reads the shell payload');
+  assert.ok(js.includes('ds-theme'), 'bundle carries the theme contract');
+  assert.ok(!js.includes('pushState'), 'and introduces no client-side router');
 });

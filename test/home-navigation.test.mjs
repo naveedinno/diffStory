@@ -68,7 +68,12 @@ test('the logo returns from an open repository to home without waiting for repo 
     const reviewHistory = await (await fetch(
       `${origin}/repo/${encodeURIComponent(basename(repo))}/stories`,
     )).text();
-    assert.match(reviewHistory, /class="nv-brand" href="\/repos"/, 'repository logo points at home');
+    // Review history is a React surface: the nav bar (and its home-pointing
+    // wordmark) is rendered by `client/shared/nav.tsx`, so what this route
+    // guarantees is that the surface booted at all. That the wordmark points at
+    // `/repos` is asserted in test/story-picker.test.mjs; what matters HERE is
+    // the Git usage measured below.
+    assert.match(reviewHistory, /data-surface="stories"/, 'review history is what the repo route serves');
 
     process.env.PATH = `${bin}:${realPath}`;
     const response = await fetch(`${origin}/repos`);
@@ -76,7 +81,7 @@ test('the logo returns from an open repository to home without waiting for repo 
     const gitCommands = readFileSync(gitLog, 'utf8').split('\n').filter(Boolean);
 
     assert.equal(response.status, 200);
-    assert.match(html, /Add repository/);
+    assert.match(html, /data-surface="picker"/);
     // Home is a picker view, so following the logo must not inspect the open
     // repository at all. Judging that by the Git commands the navigation issued
     // — rather than by how long it took — keeps the test immune to machine load.
@@ -142,11 +147,11 @@ test('repository and story navigation do not synchronously repeat Git inspection
     process.env.PATH = `${bin}:${realPath}`;
     // Review history, home, and reopening a repository are pure navigation: they
     // must reach their destination without inspecting the working tree at all.
-    await navigate('close story', `${repoRoute}/stories`, undefined, /Review history/, 0);
+    await navigate('close story', `${repoRoute}/stories`, undefined, /data-surface="stories"/, 0);
     // Rendering a story is the one navigation allowed to inspect, and only once
     // — a synchronous repeat would roughly double the commands it issues.
     await navigate('open story', `${repoRoute}/review?story=story.json`, undefined, /Home navigation fixture/, 8);
-    await navigate('visit home', '/repos', undefined, /Add repository/, 0);
+    await navigate('visit home', '/repos', undefined, /data-surface="picker"/, 0);
     await navigate(
       'open repository',
       '/api/repo/open',
@@ -206,11 +211,11 @@ test('closing a story keeps the next repository entry on review history', async 
 
     const history = await fetch(`${origin}${repoRoute}/stories`);
     assert.equal(history.status, 200);
-    assert.match(await history.text(), /Review history/);
+    assert.match(await history.text(), /data-surface="stories"/);
 
     const homeResponse = await fetch(`${origin}/repos`);
     assert.equal(homeResponse.status, 200);
-    assert.match(await homeResponse.text(), /Add repository/);
+    assert.match(await homeResponse.text(), /data-surface="picker"/);
 
     assert.equal(
       (await openRepository()).route,
@@ -237,12 +242,12 @@ test('visiting home does not strand a review restored from browser history', asy
     const review = await fetch(`${origin}${repoRoute}/review?story=story.json`);
     assert.equal(review.status, 200);
     const html = await review.text();
-    const token = html.match(/data-review-page-token="([^"]+)"/)?.[1];
+    const token = html.match(/"pageToken":"([^"]+)"/)?.[1];
     assert.ok(token, 'review page receives a lease for its lazy requests');
 
     const picker = await fetch(`${origin}/repos`);
     assert.equal(picker.status, 200);
-    assert.match(await picker.text(), /Add repository/);
+    assert.match(await picker.text(), /data-surface="picker"/);
 
     const restoredPageState = await fetch(
       `${origin}/api/review-state?page=${encodeURIComponent(token)}`,
