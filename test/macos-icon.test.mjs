@@ -4,6 +4,59 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
+
+// The installer's real icon lives at macos/DiffStoryApp/icons/icon.png, which is
+// gitignored — a worktree, a fresh clone, or CI has no copy of it. What is under
+// test here is scripts/build-icns.mjs, and that only cares that the iconset holds
+// correctly sized PNGs, so the test draws its own source rather than depending on
+// an untracked file.
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let remainder = n;
+  for (let bit = 0; bit < 8; bit += 1) {
+    remainder = remainder & 1 ? 0xedb88320 ^ (remainder >>> 1) : remainder >>> 1;
+  }
+  return remainder >>> 0;
+});
+
+function crc32(buffer) {
+  let remainder = 0xffffffff;
+  for (const byte of buffer) {
+    remainder = crcTable[(remainder ^ byte) & 0xff] ^ (remainder >>> 8);
+  }
+  return (remainder ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, checksum]);
+}
+
+function solidPng(size) {
+  const stride = size * 4 + 1; // one filter byte per row, then RGBA pixels
+  const raw = Buffer.alloc(size * stride);
+  for (let y = 0; y < size; y += 1) {
+    const row = y * stride;
+    for (let x = 0; x < size; x += 1) {
+      raw.writeUInt32BE(0x1f6fffff, row + 1 + x * 4);
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header[8] = 8; // bit depth
+  header[9] = 6; // colour type: RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', zlib.deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 test('macOS updater closes and relaunches an already-running installed app', () => {
   const installer = fs.readFileSync('scripts/install-macos-app.sh', 'utf8');
@@ -23,18 +76,24 @@ test('macOS installer builds an iconutil-readable ICNS without iconutil packing'
   const iconset = path.join(tempDir, 'diffStory.iconset');
   const output = path.join(tempDir, 'diffStory.icns');
   const extracted = path.join(tempDir, 'extracted.iconset');
-  const source = path.resolve('macos/DiffStoryApp/icons/icon.png');
+  const source = path.join(tempDir, 'icon.png');
   fs.mkdirSync(iconset);
+  fs.writeFileSync(source, solidPng(1024));
 
   for (const size of [16, 32, 128, 256, 512]) {
-    execFileSync('/usr/bin/sips', [
-      '-z', String(size), String(size), source,
-      '--out', path.join(iconset, `icon_${size}x${size}.png`),
-    ]);
-    execFileSync('/usr/bin/sips', [
-      '-z', String(size * 2), String(size * 2), source,
-      '--out', path.join(iconset, `icon_${size}x${size}@2x.png`),
-    ]);
+    for (const [name, pixels] of [
+      [`icon_${size}x${size}.png`, size],
+      [`icon_${size}x${size}@2x.png`, size * 2],
+    ]) {
+      const scaled = path.join(iconset, name);
+      execFileSync('/usr/bin/sips', [
+        '-z', String(pixels), String(pixels), source, '--out', scaled,
+      ], { stdio: 'pipe' });
+      // sips exits 0 and only warns when it cannot read its input, so without
+      // this check an unusable source surfaces as a confusing ENOENT deep inside
+      // build-icns.mjs instead of failing here.
+      assert.ok(fs.existsSync(scaled), `sips produced ${name} from the source icon`);
+    }
   }
 
   execFileSync(process.execPath, ['scripts/build-icns.mjs', iconset, output]);
