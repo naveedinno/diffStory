@@ -27,16 +27,35 @@ real coding agent and never writes `.diffstory/` data to this repository.
 
 ## Coverage contract
 
-The atlas deliberately covers four kinds of UI evidence:
+Enforced by `test/ui-atlas.test.mjs`, not just by convention:
 
-- **Pages** — repository picker, review history, change scope, raw diff, and the
-  guided review entry point.
-- **Review** — code steps, concept steps, unified and split all-files views,
-  review status, the queued-comment workspace, its Copy all handoff, and a
-  queued comment traced back to code.
-- **Progress** — running, complete, stopped, and failed story-generation states.
-- **Responsive and theme** — mobile/tablet review surfaces and the two explicit
-  color themes.
+- **Pages** — repository picker, its folder-browser modal, review history,
+  change scope, the anchored ref picker, and the raw diff. Each of these is
+  captured at **all three viewports** (desktop 1440×960, tablet 920×820, mobile
+  390×844), and the page surfaces are captured in **both themes**.
+- **Empty states** — no repositories yet, no saved reviews, and a clean working
+  tree. An atlas of only-populated screens hides half the design.
+- **Review** — code steps, concept steps, unified and split all-files views, the
+  review page, the queued-comment workspace, the inline composer, and a queued
+  comment traced back to code.
+- **Progress panel** — running, complete, stopped, failed, cannot-start, and the
+  `stage` variant mounted inside the storyless intro; plus a mobile frame that
+  exercises the panel's 520px head-grid breakpoint, and element-scale closeups.
+- **Responsive** — the review workspace at tablet and phone widths.
+
+Each shot records the `surface` it drives, which is what the capture script
+switches on and what the coverage assertions count. Several states share one
+surface across viewports and themes.
+
+If a frame contains a diff-load error, the capture script records a `degraded`
+note on that shot and prints it. A screenshot of an error page is worse than no
+screenshot, because it reads as coverage — an unexpected one fails the run.
 
 `manifest.json` is the machine-readable inventory. `manifest.js` contains the
 same data so the gallery also works from a `file://` URL.
+
+## `baseline-pre-react/`
+
+A frozen copy of a complete capture, taken immediately before the React/beUI
+rewrite began. Live atlas runs overwrite `screenshots/`; that directory does not
+change. See its own README for the date and commit.

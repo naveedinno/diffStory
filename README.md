@@ -158,29 +158,15 @@ If no agent is installed, diffStory still opens and still works as a local diff
 viewer with the complete comment queue. Only story generation and repair are
 unavailable until Claude or Codex is on your PATH.
 
-## VS Code Navigation Bridge
+## Jump To Source In VS Code
 
-The optional VS Code companion is deliberately tiny. It has no review sidebar,
-Git model, comments, stories, commands, or webview. It only lets diffStory open
-an exact reviewed source location in VS Code.
+Command-click on macOS or Ctrl-click elsewhere on an identifier in the
+current-code side of a diff. diffStory opens the reviewed file in VS Code,
+places the caret at the clicked location, and brings that line into view
+without a success notification.
 
-Install it from this checkout:
-
-```sh
-cd vscode-extension
-npm install
-npm run package
-code --install-extension diffstory-vscode-0.9.2.vsix
-```
-
-In diffStory, Command-click on macOS or Ctrl-click elsewhere on an identifier
-in the current-code side of a diff. If needed, the bridge opens the reviewed
-repository in VS Code first and resumes the requested navigation after the
-workspace loads. It opens the reviewed file, places the caret at the clicked
-location, and brings that line into view without a success notification.
-
-The bridge keeps the previous extension identifier, so installing it upgrades
-and replaces the retired full DiffStory review extension.
+This uses VS Code's built-in `vscode://file/…` handler, so a stock VS Code
+install is all you need — there is no companion extension.
 
 ## Review Files
 

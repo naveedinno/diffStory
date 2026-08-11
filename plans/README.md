@@ -13,6 +13,47 @@ Baseline: commit `b352778`, audited against the working tree on 2026-07-14. The 
 | 007 | Make drawers spatial and interruptible | MEDIUM | DONE |
 | 008 | Transform the reading progress fill | MEDIUM | DONE |
 | 009 | Make comment switching instant | MEDIUM | DONE |
+| 010 | Restore reduced-motion and touch gating on the React surfaces | MEDIUM | DONE |
+| 011 | Unify press feedback to one scale | MEDIUM | DONE |
+| 012 | Give the floating progress panel an entrance and exit | MEDIUM | DONE |
+
+## Second audit — 2026-08-09, commit `2156520`
+
+Plans 001–009 were written against the pre-rewrite vanilla app. Four of the five
+surfaces have since been rewritten in React 19 + Motion 11 + Tailwind v4, and
+their vanilla sources (`src/picker.ts`, `src/story-picker.ts`,
+`src/change-page.ts`, `src/progress-ui.ts`) deleted. This audit re-checked the
+motion surface after that move.
+
+**The July standards largely survived.** No `ease-in`, no `transition: all`,
+every duration a motion token, explicit transition property lists throughout.
+There is no large corrective backlog and nothing rated HIGH.
+
+Three findings became plans:
+
+- **010** is a genuine regression: plan 006 completed reduced-motion coverage
+  across the app, and the repo picker lost it in the rewrite. It is now the only
+  surface with ungated movement. Bundled with a touch-hover gap on the story row.
+- **011** is cohesion: four different press scales (`.94`, `.97`, `.98`, `.992`)
+  where the playbook specifies 0.95–0.98. `.992` is imperceptible on the picker's
+  most-clicked control; `.94` is the app's most aggressive press and sits on a
+  destructive delete.
+- **012** is the one additive item, and it closes a deferral from the first
+  audit (see the scope note below).
+
+**Status of the three opportunities deferred in July**, re-checked against git:
+
+| Opportunity | Outcome |
+| --- | --- |
+| Folder-browser entrance | Already existed in the vanilla picker; the rewrite ported and tokenised it. Closed, not new. |
+| Anchored popover polish | The vanilla change page had **zero** transitions on the ref picker. The React version added a `clipPath: inset()` reveal with `y: -4`, `scale: 0.985`, gated on reduced motion. **Delivered by the rewrite.** |
+| Floating progress-panel entrance | **Still open** → plan 012. |
+
+Not audited in depth this round: interruptibility and performance across
+`client/surfaces/review/engine/review-engine.js` (3,319 lines) and
+`client/surfaces/review/review.css` (1,190 lines). Both were lifted near-verbatim
+from the code that passed the July audit, so they carry its findings forward, but
+they have not been re-examined against those two categories since the port.
 
 ## Recommended execution order
 

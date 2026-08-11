@@ -1,7 +1,8 @@
 // Unit tests for the shared diff-row renderer. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFF_CSS } from '../dist/diff-assets.js';
+import { readFileSync } from 'node:fs';
+const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 import { renderUnifiedRow, renderSplitRow, renderHunkGap, rowAttrs, targetAttrs } from '../dist/diff-render.js';
 
 function cssRuleBody(css, selector) {

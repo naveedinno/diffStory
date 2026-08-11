@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFF_CSS, DIFF_JS } from '../dist/diff-assets.js';
-import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
-import { progressPanelStyles } from '../dist/progress-ui.js';
+import { readFileSync } from 'node:fs';
 import { sharedTokens } from '../dist/theme.js';
+
+// The review page's CSS and JS are client files now, not template strings. The
+// motion contract they carry is unchanged, so the assertions are too.
+const DIFF_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
+const PAGE_JS = DIFF_JS;
+const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
+const PAGE_CSS = DIFF_CSS;
 
 function ruleBody(css, selector) {
   const start = css.indexOf(selector + '{');
@@ -116,9 +121,9 @@ test('reduced motion keeps status feedback but removes movement and pulses', () 
   assert.doesNotMatch(PAGE_CSS, /ds-voice-card/);
   assert.match(PAGE_CSS, /\.ds-live-banner\{transition:none!important\}/);
   assert.match(DIFF_CSS, /\.ds-row\.is-voice-focus[^}]*animation:none!important;filter:none!important/);
-  const progress = progressPanelStyles();
-  assert.match(progress, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(progress, /\.ds-pp-spin,\.ds-pp-step\.is-active \.ds-pp-mark::before,\.ds-pp-live-dot,\.ds-pp-mile\.is-active \.ds-pp-mile-dot\{animation:none!important\}/);
+  // The progress panel's own reduced-motion contract moved with it into
+  // `client/surfaces/progress/` and is asserted by test/progress-ui.test.mjs
+  // against the component, not against a stylesheet string.
 });
 
 test('drawers share an interruptible spatial lifecycle', () => {

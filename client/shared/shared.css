@@ -1,0 +1,351 @@
+/* Cross-surface CSS that Tailwind utilities cannot express.
+ *
+ * Everything here is either a @keyframes (no utility form), a pseudo-element
+ * backdrop, or a transition whose exact timing is asserted by
+ * test/motion-regressions.test.mjs and must stay byte-comparable to the vanilla
+ * originals in src/theme.ts. Anything a utility CAN express belongs in the TSX,
+ * not here — this file should stay short.
+ *
+ * Ported verbatim (values, not markup) from:
+ *   src/theme.ts  threadAtmosphereStyles()  -> .ds-map-bg, .ds-atmosphere-thread
+ *   src/theme.ts  themeControlStyles()      -> .ds-theme-*
+ *   src/picker.ts .scrim / .sheet / .reveal -> .ds-scrim, .ds-sheet, .ds-reveal
+ *
+ * `components` layer, so a Tailwind utility on the same element still wins.
+ */
+
+@layer components {
+  /* ---------------------------------------------------------------- page atmosphere */
+
+  /* The fixed dot field, masked so it fades out down the page. Applied via the
+     shell's bodyClass so it is painted during boot, before React commits. */
+  body.ds-map-bg::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(var(--map-dot) 1px, transparent 1.6px);
+    background-size: 26px 26px;
+    -webkit-mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, 0.38) 58%, transparent 94%);
+    mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, 0.38) 58%, transparent 94%);
+  }
+
+  .ds-atmosphere-thread {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .ds-atmosphere-thread .thread-base {
+    fill: none;
+    stroke: var(--thread-dim);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ds-atmosphere-thread .thread-pulse {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+  }
+  .ds-atmosphere-thread .thread-nodes circle {
+    fill: var(--text-3);
+  }
+  .ds-atmosphere-thread .thread-nodes .node-mid {
+    fill: var(--accent-hi);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-atmosphere-thread .thread-base {
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+      animation: ds-thread-draw 1.4s var(--motion-ease-out) 0.15s forwards;
+    }
+    .ds-atmosphere-thread .thread-nodes {
+      opacity: 0;
+      animation: ds-thread-nodes-in 0.5s var(--motion-ease-out) 1.2s forwards;
+    }
+    /* 11s / 2s delay / infinite / backwards is asserted verbatim by the motion
+       regression suite. Do not "tidy" these numbers. */
+    .ds-atmosphere-thread .thread-pulse {
+      stroke-dasharray: 7 93;
+      animation: ds-thread-pulse 11s linear 2s infinite backwards;
+    }
+    @keyframes ds-thread-draw {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+    @keyframes ds-thread-nodes-in {
+      to {
+        opacity: 1;
+      }
+    }
+    @keyframes ds-thread-pulse {
+      0% {
+        stroke-dashoffset: 0;
+        opacity: 0;
+      }
+      6% {
+        opacity: 0.85;
+      }
+      88% {
+        opacity: 0.85;
+      }
+      100% {
+        stroke-dashoffset: -100;
+        opacity: 0;
+      }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ds-atmosphere-thread .thread-pulse {
+      display: none;
+    }
+    .ds-atmosphere-thread .thread-nodes {
+      opacity: 0.62;
+    }
+  }
+
+  /* ---------------------------------------------------------------- entrance reveal */
+
+  /* Opt-in per section. NOT a page-level entrance: the change page deliberately
+     has none (three doesNotMatch assertions protect that), because every scope
+     change there is a full navigation and a replayed entrance reads as broken. */
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-reveal {
+      animation: ds-reveal-up var(--motion-duration-spatial) var(--motion-ease-out) backwards;
+    }
+    .ds-reveal-1 {
+      animation-delay: 0.02s;
+    }
+    .ds-reveal-2 {
+      animation-delay: 0.07s;
+    }
+    @keyframes ds-reveal-up {
+      from {
+        opacity: 0;
+        transform: translateY(7px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------- modal scrim + sheet */
+
+  /* The `visibility 0s linear 200ms` delay is what keeps the scrim clickable
+     until the fade-out finishes; `.is-shown` cancels the delay on the way in.
+     Paired with useModalChoreography's rAF + 210ms close timer. */
+  .ds-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--scrim);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--motion-duration-ui) ease,
+      visibility 0s linear var(--motion-duration-ui);
+  }
+  .ds-scrim.is-shown {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  .ds-scrim[hidden] {
+    display: none;
+  }
+
+  .ds-sheet {
+    transform-origin: 50% 0;
+    transform: translateY(12px) scale(0.975);
+    opacity: 0;
+    transition:
+      transform var(--motion-duration-spatial) var(--motion-ease-drawer),
+      opacity var(--motion-duration-ui) ease;
+  }
+  .ds-scrim.is-shown .ds-sheet {
+    transform: none;
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ds-scrim,
+    .ds-sheet {
+      transition: none;
+    }
+    .ds-scrim.is-shown .ds-sheet {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  /* ---------------------------------------------------------------- theme control */
+
+  .ds-theme-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+  }
+  .ds-theme-toggle {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--fill-2);
+    color: var(--text-2);
+    font: inherit;
+    cursor: pointer;
+  }
+  /* Hit-slop: the visible pill is 34px, the target is 46px. */
+  .ds-theme-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+  .ds-theme-toggle:hover,
+  .ds-theme-toggle[aria-expanded="true"] {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .ds-theme-toggle:focus-visible,
+  .ds-theme-menu button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .ds-theme-toggle > span {
+    width: 17px;
+    height: 17px;
+    display: grid;
+    place-items: center;
+  }
+  .ds-theme-toggle svg,
+  .ds-theme-choice-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.45;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ds-theme-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 100;
+    width: 154px;
+    padding: 6px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    background: var(--surface-3);
+    box-shadow: var(--shadow);
+    transform-origin: calc(100% - 17px) -7px;
+  }
+  .ds-theme-menu[hidden] {
+    display: none;
+  }
+  .ds-theme-menu button {
+    width: 100%;
+    height: 36px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ds-theme-menu button:hover,
+  .ds-theme-menu button:focus-visible {
+    background: var(--fill-2);
+  }
+  .ds-theme-choice-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-2);
+  }
+  .ds-theme-check {
+    color: var(--accent);
+    font-weight: 700;
+    opacity: 0;
+  }
+  .ds-theme-menu button[aria-checked="true"] .ds-theme-check {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-theme-menu:not([hidden]) {
+      animation: ds-anchored-pop var(--motion-duration-ui) var(--motion-ease-out) backwards;
+    }
+    .ds-theme-toggle {
+      transition:
+        background-color var(--motion-duration-fast) ease,
+        color var(--motion-duration-fast) ease,
+        transform var(--motion-duration-press) var(--motion-ease-out);
+    }
+    .ds-theme-toggle:active {
+      transform: scale(0.94);
+    }
+    @keyframes ds-anchored-pop {
+      from {
+        opacity: 0;
+        clip-path: inset(0 0 100% 72% round 10px);
+        transform: translateY(-4px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        clip-path: inset(0 round 10px);
+        transform: none;
+      }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ds-theme-toggle,
+    .ds-theme-menu button {
+      transition: none;
+    }
+    .ds-theme-toggle:active {
+      transform: none;
+    }
+  }
+
+  /* ---------------------------------------------------------------- utility */
+
+  .ds-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}

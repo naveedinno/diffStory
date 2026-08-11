@@ -1,8 +1,18 @@
 // The diff-surface client assets stay composed into the one page IIFE. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFF_CSS, DIFF_JS } from '../dist/diff-assets.js';
-import { PAGE_CSS, PAGE_JS } from '../dist/page-assets.js';
+import { readFileSync } from 'node:fs';
+import { sharedTokens } from '../dist/theme.js';
+
+// `DIFF_CSS`/`DIFF_JS` and `PAGE_CSS`/`PAGE_JS` were template strings inlined
+// into every review document. They are files now — `review.css` and the ported
+// `review-engine.js` — and the assertions below are unchanged, because the text
+// is. The four names are kept as aliases so the diff of this file shows only
+// what actually moved.
+const DIFF_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
+const PAGE_JS = DIFF_JS;
+const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
+const PAGE_CSS = DIFF_CSS;
 
 test('diff-assets exports the diff client functions', () => {
   assert.match(DIFF_JS, /function setMode\(/);
@@ -11,10 +21,16 @@ test('diff-assets exports the diff client functions', () => {
   assert.match(DIFF_JS, /function handleChangeShortcut\(/);
 });
 
-test('diff assets are composed back into the page assets', () => {
-  assert.ok(PAGE_JS.includes(DIFF_JS), 'DIFF_JS is spliced into PAGE_JS');
-  assert.ok(PAGE_CSS.includes(DIFF_CSS), 'DIFF_CSS is appended to PAGE_CSS');
-  assert.match(PAGE_JS, /^\s*\(function\(\)\{/, 'still one IIFE');
+test('the diff assets ship as one review stylesheet and one review engine', () => {
+  // They used to be `DIFF_CSS`/`DIFF_JS` template strings spliced into
+  // `PAGE_CSS`/`PAGE_JS`. Same composition, two files: the stylesheet is
+  // imported by `client/styles.css`, and the diff functions are declarations
+  // inside the engine's single exported entry point, which is what keeps them
+  // in one closure with the page half.
+  assert.match(DIFF_JS, /^\/\/ The review page's interaction engine\./);
+  assert.match(DIFF_JS, /export function startReviewEngine\(options\)\{/);
+  assert.ok(DIFF_JS.indexOf('function setMode(') > DIFF_JS.indexOf('export function startReviewEngine'));
+  assert.match(DIFF_CSS, /^\/\* The review surface's stylesheet\./);
 });
 
 test('diff CSS moved out of page-assets core', () => {
@@ -126,7 +142,11 @@ test('split divider and change rows have keyboard review foundations', () => {
 });
 
 test('review page consumes shared tokens and respects reduced motion', () => {
-  assert.match(PAGE_CSS, /--app-bg:/);
+  // The tokens are no longer inlined ahead of the review CSS — every surface
+  // gets them from the generated theme bridge — so the check is that the review
+  // stylesheet USES them and defines none of its own palette.
+  assert.match(sharedTokens(), /--app-bg:/);
+  assert.match(PAGE_CSS, /var\(--app-bg\)|var\(--panel/);
   assert.match(DIFF_CSS, /prefers-reduced-motion/);
 });
 

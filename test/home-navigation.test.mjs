@@ -67,7 +67,12 @@ test('the logo returns from an open repository to home without waiting for repo 
     const reviewHistory = await (await fetch(
       `${origin}/repo/${encodeURIComponent(basename(repo))}/stories`,
     )).text();
-    assert.match(reviewHistory, /class="nv-brand" href="\/repos"/, 'repository logo points at home');
+    // Review history is a React surface: the nav bar (and its home-pointing
+    // wordmark) is rendered by `client/shared/nav.tsx`, so what this route
+    // guarantees is that the surface booted at all. That the wordmark points at
+    // `/repos` is asserted in test/story-picker.test.mjs; what matters HERE is
+    // the timing measured below.
+    assert.match(reviewHistory, /data-surface="stories"/, 'review history is what the repo route serves');
 
     process.env.PATH = `${bin}:${realPath}`;
     const started = performance.now();
@@ -76,7 +81,7 @@ test('the logo returns from an open repository to home without waiting for repo 
     const elapsedMs = performance.now() - started;
 
     assert.equal(response.status, 200);
-    assert.match(html, /Add repository/);
+    assert.match(html, /data-surface="picker"/);
     assert.ok(
       elapsedMs < 300,
       `logo-to-home navigation took ${Math.round(elapsedMs)}ms because it waited for repository inspection`,
@@ -125,9 +130,9 @@ test('repository and story navigation do not synchronously repeat Git inspection
 
   try {
     process.env.PATH = `${bin}:${realPath}`;
-    await navigate('close story', `${repoRoute}/stories`, undefined, /Review history/);
+    await navigate('close story', `${repoRoute}/stories`, undefined, /data-surface="stories"/);
     await navigate('open story', `${repoRoute}/review?story=story.json`, undefined, /Home navigation fixture/);
-    await navigate('visit home', '/repos', undefined, /Add repository/);
+    await navigate('visit home', '/repos', undefined, /data-surface="picker"/);
     await navigate(
       'open repository',
       '/api/repo/open',
@@ -184,11 +189,11 @@ test('closing a story keeps the next repository entry on review history', async 
 
     const history = await fetch(`${origin}${repoRoute}/stories`);
     assert.equal(history.status, 200);
-    assert.match(await history.text(), /Review history/);
+    assert.match(await history.text(), /data-surface="stories"/);
 
     const homeResponse = await fetch(`${origin}/repos`);
     assert.equal(homeResponse.status, 200);
-    assert.match(await homeResponse.text(), /Add repository/);
+    assert.match(await homeResponse.text(), /data-surface="picker"/);
 
     assert.equal(
       (await openRepository()).route,
@@ -215,12 +220,12 @@ test('visiting home does not strand a review restored from browser history', asy
     const review = await fetch(`${origin}${repoRoute}/review?story=story.json`);
     assert.equal(review.status, 200);
     const html = await review.text();
-    const token = html.match(/data-review-page-token="([^"]+)"/)?.[1];
+    const token = html.match(/"pageToken":"([^"]+)"/)?.[1];
     assert.ok(token, 'review page receives a lease for its lazy requests');
 
     const picker = await fetch(`${origin}/repos`);
     assert.equal(picker.status, 200);
-    assert.match(await picker.text(), /Add repository/);
+    assert.match(await picker.text(), /data-surface="picker"/);
 
     const restoredPageState = await fetch(
       `${origin}/api/review-state?page=${encodeURIComponent(token)}`,

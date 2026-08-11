@@ -1,7 +1,7 @@
 {
   "name": "@naveedinno/diffstory",
   "version": "0.1.0",
-  "description": "diffStory \u2014 guided, in-order diff review with a local queued-comment handoff.",
+  "description": "diffStory — guided, in-order diff review with a local queued-comment handoff.",
   "type": "module",
   "author": "naveedinno <naveedinno@proton.me>",
   "repository": {
@@ -21,8 +21,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && npm run build:browser-assets",
+    "build": "tsc && npm run build:browser-assets && npm run build:client",
     "build:browser-assets": "node scripts/build-browser-assets.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "typecheck:client": "tsc -p client/tsconfig.json",
     "check": "npm run build && node --test test/*.test.mjs",
     "dev": "npm run build && node dist/app-server.js",
     "start": "node dist/app-server.js",
@@ -50,10 +52,23 @@
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
+    "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^22.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "esbuild": "^0.28.1",
     "mermaid": "^11.16.0",
     "playwright-core": "^1.61.1",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.14.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.30.0",
+    "motion": "^11.18.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0"
   }
 }

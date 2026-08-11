@@ -141,7 +141,7 @@ test('fresh desktop server restores a recent repository route and falls back whe
     const restored = await fetch(`${restarted.base}${savedRoute}`);
     assert.equal(restored.status, 200);
     assert.equal(restored.url, `${restarted.base}${savedRoute}`);
-    assert.match(await restored.text(), /Review history/);
+    assert.match(await restored.text(), /data-surface="stories"/);
 
     restarted.server.close();
     await once(restarted.server, 'close');
@@ -161,8 +161,14 @@ test('fresh desktop server restores a recent repository route and falls back whe
   }
 });
 
+
+// Page facts live in the shell's JSON payload now, not in `<body>` attributes.
+const shellPayload = (html) => JSON.parse(html.match(/id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/)[1]);
+
 function reviewPageToken(html) {
-  const match = html.match(/data-review-page-token="([^"]+)"/);
+  // The page facts travel in the shell's JSON payload now; React stamps them
+  // onto <body> at mount, so the server response no longer carries them.
+  const match = html.match(/"pageToken":"([^"]+)"/);
   assert.ok(match?.[1], 'review page issues a lazy-evidence token');
   return match[1];
 }
@@ -182,8 +188,8 @@ test('malformed feedback blocks every comment write without losing source bytes'
   try {
     const route = `/repo/${encodeURIComponent(basename(repo))}/diff`;
     const pageHtml = await (await fetch(`${base}${route}`)).text();
-    assert.match(pageHtml, /data-feedback-health="invalid"/);
-    assert.match(pageHtml, /Feedback file needs repair/);
+    assert.equal(shellPayload(pageHtml).chrome.feedbackHealthy, false);
+    assert.ok(shellPayload(pageHtml).chrome.feedbackRecovery, 'and says how to repair it');
 
     const state = await (await fetch(`${base}/api/review-state`)).json();
     assert.equal(state.feedbackHealth.status, 'invalid');
@@ -305,8 +311,9 @@ test('initial review and excluded preview stay bounded for a 100 MB single-line 
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.ok(Buffer.byteLength(html) < 5 * 1024 * 1024, 'initial HTML is independent of changed bytes');
-    assert.match(html, /hundred-megabytes\.txt/);
-    assert.match(html, /Large diff/);
+    const bounded = shellPayload(html);
+    assert.deepEqual(bounded.excludedFiles.map((file) => file.path), ['hundred-megabytes.txt']);
+    assert.equal(bounded.excludedFiles[0].reason, 'large-diff');
     assert.doesNotMatch(html, /a{100000}/, 'the changed body is not embedded in initial HTML');
 
     const token = reviewPageToken(html);
@@ -375,10 +382,11 @@ test('story drift routes keep side-file changes current and lazily render only t
   try {
     const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
     let html = await (await fetch(`${base}${route}`)).text();
-    assert.match(html, /Story current · 1 side file changed/);
-    assert.doesNotMatch(html, /Story needs refresh/);
+    let drift = shellPayload(html).storyDrift;
+    assert.equal(drift.inScopeFiles, 0, 'the story\'s own files still match its baseline');
+    assert.equal(drift.outsideScopeFiles, 1);
     const token = reviewPageToken(html);
-    const observation = html.match(/data-drift-observation="([a-f0-9]{64})"/)?.[1];
+    const observation = drift.observationId;
     assert.ok(observation);
 
     const summary = await (await fetch(leased(`${base}/api/story-drift`, token))).json();
@@ -409,7 +417,9 @@ test('story drift routes keep side-file changes current and lazily render only t
     assert.equal((await moved.json()).reloadRequired, true);
 
     html = await (await fetch(`${base}${route}`)).text();
-    assert.match(html, /Story needs refresh · 1 story file \+ 1 side file changed/);
+    drift = shellPayload(html).storyDrift;
+    assert.equal(drift.inScopeFiles, 1, 'a story file moved, so the story needs a refresh');
+    assert.equal(drift.outsideScopeFiles, 1);
   } finally {
     server.close();
     rmSync(repo, { recursive: true, force: true });
@@ -456,11 +466,16 @@ test('story drift preserves metadata-only rename and mode evidence in lazy detai
   try {
     const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
     const html = await (await fetch(`${base}${route}`)).text();
-    assert.match(html, /Story current · 4 side files changed/);
-    assert.match(html, /data-drift-label="old-name\.txt → new-name\.txt"/);
-    assert.match(html, /data-drift-label="combo-old\.txt → combo-new\.txt"/);
+    const drift = shellPayload(html).storyDrift;
+    assert.equal(drift.inScopeFiles, 0);
+    assert.equal(drift.outsideScopeFiles, 4);
+    const renames = drift.files
+      .filter((file) => file.oldPath && file.oldPath !== file.path)
+      .map((file) => `${file.oldPath} → ${file.path}`);
+    assert.ok(renames.includes('old-name.txt → new-name.txt'));
+    assert.ok(renames.includes('combo-old.txt → combo-new.txt'));
     const token = reviewPageToken(html);
-    const observation = html.match(/data-drift-observation="([a-f0-9]{64})"/)?.[1];
+    const observation = drift.observationId;
     assert.ok(observation);
 
     const renamed = await fetch(leased(`${base}/api/story-drift/file?observation=${observation}&file=new-name.txt&layout=unified`, token));
@@ -520,8 +535,7 @@ test('story drift refuses a snapshot copied into a different story scope', async
   try {
     const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
     const html = await (await fetch(`${base}${route}`)).text();
-    assert.match(html, /Freshness unverified/);
-    assert.doesNotMatch(html, /Story current/);
+    assert.equal(shellPayload(html).storyFreshness, 'unverified');
     const token = reviewPageToken(html);
     const summary = await (await fetch(leased(`${base}/api/story-drift`, token))).json();
     assert.equal(summary.state, 'unverified');
@@ -697,14 +711,16 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal(root.headers.get('x-frame-options'), 'DENY');
     assert.equal(root.headers.get('x-content-type-options'), 'nosniff');
     assert.match(root.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
-    const rootText = (await root.text()).toLowerCase();
-    assert.ok(rootText.includes('pick a repo'));
-    assert.ok(rootText.includes('add repository'));
-    assert.ok(rootText.includes('skillwarn'));
-    assert.ok(rootText.includes('update skills'));
-    assert.ok(rootText.includes('/api/skills/update'));
-    assert.ok(rootText.includes('d.route'));
-    assert.ok(rootText.includes("'/repo/'+encodeuricomponent"));
+    // The picker is a React surface now: the document is a shell plus a JSON
+    // payload, and its behaviour (skills banner, open-route fallback, remove
+    // action) is asserted in test/picker.test.mjs against the shell payload and
+    // the built bundle. What this test still owns is that / serves the picker
+    // shell at all, with the right title and entry point.
+    const rootText = await root.text();
+    assert.match(rootText, /<title>diffStory — pick a repo<\/title>/);
+    assert.match(rootText, /<body class="ds-map-bg" data-surface="picker">/);
+    assert.match(rootText, /<script type="module" src="\/assets\/client\/picker\.js"><\/script>/);
+    assert.match(rootText.toLowerCase(), /pick a repo/);
 
     const hostileOrigin = await fetch(`${base}/api/repo/close`, {
       method: 'POST',
@@ -796,7 +812,13 @@ test('app server drives picker → open → refs → recent → close', async ()
     assert.equal((await fetch(`${base}/api/refs`)).status, 409);
 
     const picker = await (await fetch(`${base}/repos`)).text();
-    assert.ok(picker.includes('data-remove-repo'), 'repo picker exposes a remove action for recents');
+    const pickerPayload = JSON.parse(
+      /<script type="application\/json" id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/.exec(picker)[1],
+    );
+    assert.ok(
+      pickerPayload.recents.some((row) => row.path === repo),
+      'repo picker ships the recent whose row carries the remove action',
+    );
 
     const removed = await fetch(`${base}/api/repos/recent`, {
       method: 'DELETE',

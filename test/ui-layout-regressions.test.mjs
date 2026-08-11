@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../src/page-assets.ts', import.meta.url), 'utf8');
+// `src/page-assets.ts` held the review page's CSS and its client JS in one
+// file, and the assertions below read both out of one `source`. Both moved into
+// `client/surfaces/review/` unchanged — the stylesheet verbatim, the engine as
+// a module — so `source` is the pair, concatenated, and every regex here still
+// means what it meant.
+const reviewCss = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
+const engineJs = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
+const source = `${reviewCss}\n${engineJs}`;
 
 function driftHarness(compact) {
   const driftClient = source.match(/  function invalidateDriftRequest\(\)\{[\s\S]*?\n  \}\n  function fileMatchesFilter/)?.[0]
@@ -87,7 +94,8 @@ test('desktop story stages reclaim redundant side-navigation gutters', () => {
 });
 
 test('a code step draws exactly one frame around the diff', () => {
-  const diffSource = readFileSync(new URL('../src/diff-assets.ts', import.meta.url), 'utf8');
+  // DIFF_CSS is part of the review stylesheet now.
+  const diffSource = reviewCss;
   // The island keeps its border; the card inside it gives one up, so the two
   // concentric rounded frames collapse into one.
   assert.match(

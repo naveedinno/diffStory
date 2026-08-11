@@ -93,9 +93,11 @@ test('each story in one review scope keeps its own saved reading position', asyn
     const res = await fetch(`${base}${route(repo)}/review?story=${encodeURIComponent(id)}`);
     assert.equal(res.status, 200);
     const html = await res.text();
+    const payload = JSON.parse(html.match(/id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/)[1]);
     return {
-      scope: (/data-review-scope="([^"]*)"/.exec(html) || [])[1],
-      story: (/data-story-key="([^"]*)"/.exec(html) || [])[1],
+      // Both halves of the reading-position key, straight out of the payload.
+      scope: payload.reviewScope,
+      story: payload.storyKey,
     };
   };
   try {
@@ -214,7 +216,7 @@ test('opening a repo shows story history even when a prior story is remembered',
 
     const history = await fetch(`${second.base}${openedState.route}`);
     assert.equal(history.status, 200);
-    assert.match(await history.text(), /Review history/);
+    assert.match(await history.text(), /data-surface="stories"/);
 
     await selectStory(second.base, repo, 'stories/beta.json');
     const posted = await postComment(second.base, 'b.txt', 'after restart');
