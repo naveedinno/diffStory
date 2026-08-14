@@ -12,9 +12,12 @@
 // buy is a divergence from what users run.
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 
 export function mountSurface(tree: ReactNode, containerId = "root"): void {
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`diffStory: no #${containerId} element to mount into.`);
-  createRoot(container).render(tree);
+  flushSync(() => {
+    createRoot(container).render(tree);
+  });
 }

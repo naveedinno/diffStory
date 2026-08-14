@@ -164,7 +164,7 @@ test('review history serves a React shell, not a hand-built page', async () => {
       assert.match(html, /<title>diffStory — [^<]* review history<\/title>/);
       assert.match(html, /<body class="ds-map-bg" data-surface="stories">/, 'the dot field paints before React mounts');
       assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
-      assert.match(html, /<script type="module" src="\/assets\/client\/stories\.js"><\/script>/);
+      assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/stories\.js"><\/script>/);
 
       // The theme bootstrap must run before the stylesheet or a light-mode user
       // gets a dark flash on every navigation (dark is the no-script fallback).
@@ -174,7 +174,13 @@ test('review history serves a React shell, not a hand-built page', async () => {
       );
 
       const executable = html.match(/<script(?![^>]*type="application\/json")[^>]*>/g) ?? [];
-      assert.equal(executable.length, 2, `expected the theme bootstrap and the module entry, got ${executable}`);
+    // Three executable scripts now, not two: the theme bootstrap, the entry
+    // module, and the tiny inline timer that releases the entry's
+    // `blocking="render"` after ENTRY_RENDER_BLOCK_MS. See the note on
+    // `entryBlockingRelease()` in src/shell.ts — the blocking is what stops a
+    // navigation flashing an empty shell, and the timer is what stops it
+    // holding a blank window on a slow boot.
+      assert.equal(executable.length, 3, `expected the theme bootstrap, the module entry, and the blocking-release timer, got ${executable}`);
     });
   } finally {
     rmSync(repo, { recursive: true, force: true });

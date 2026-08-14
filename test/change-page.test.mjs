@@ -132,7 +132,7 @@ test('the change route serves a React shell, not a hand-built page', async () =>
     assert.match(html, /<title>diffStory — choose review scope<\/title>/);
     assert.match(html, /<body class="ds-map-bg" data-surface="change">/, 'the dot field paints before React mounts');
     assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
-    assert.match(html, /<script type="module" src="\/assets\/client\/change\.js"><\/script>/);
+    assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/change\.js"><\/script>/);
     assert.match(html, /<meta name="theme-color" content="#0a0c0f" data-ds-theme-color>/);
 
     // The theme bootstrap must run before the stylesheet or a light-mode user
@@ -144,8 +144,83 @@ test('the change route serves a React shell, not a hand-built page', async () =>
     );
 
     const executable = html.match(/<script(?![^>]*type="application\/json")[^>]*>/g) ?? [];
-    assert.equal(executable.length, 2, `expected exactly the theme bootstrap and the module entry, got ${executable}`);
+    // Three executable scripts now, not two: the theme bootstrap, the entry
+    // module, and the tiny inline timer that releases the entry's
+    // `blocking="render"` after ENTRY_RENDER_BLOCK_MS. See the note on
+    // `entryBlockingRelease()` in src/shell.ts — the blocking is what stops a
+    // navigation flashing an empty shell, and the timer is what stops it
+    // holding a blank window on a slow boot.
+    assert.equal(executable.length, 3, `expected exactly the theme bootstrap, the module entry, and the blocking-release timer, got ${executable}`);
   });
+});
+
+test('a scope change cannot paint an empty shell between the two pages', async () => {
+  // The reported bug: "the page flickers sometimes when changing options".
+  //
+  // Every scope change here is a full navigation to a shell that renders
+  // client-side, so between the old page and the new one there is a window
+  // where the document exists and React has not committed. Measured on this
+  // machine with a frame-by-frame screencast, the browser's first paint and
+  // React's first commit landed within ~5 ms of each other and the race went
+  // either way run to run — when paint won, one frame of bare ink page with the
+  // boot dots on it reached the screen. Hence "sometimes".
+  //
+  // Three mechanisms close it, and all three are load-bearing:
+  //
+  //   1. the entry is `blocking="render"`, so the document may not paint until
+  //      the module has executed;
+  //   2. `mountSurface` wraps the first `render()` in `flushSync`, so React's
+  //      initial commit happens INSIDE that execution. Without this the module
+  //      finishes, rendering unblocks, and React commits a tick later — which
+  //      measured 2/3 flashes, i.e. barely better than nothing;
+  //   3. an inline timer releases the blocking after ENTRY_RENDER_BLOCK_MS, so
+  //      a slow boot falls back to the boot placeholder instead of holding a
+  //      blank window. Unbounded, an 8x-CPU cold boot showed a flat untextured
+  //      rectangle for 4.4 s.
+  //
+  // What this test cannot do is prove the timing, which is the whole bug. That
+  // was verified in Chrome across nine runs of a screencast harness, before
+  // (3/3 flashed) and after (0/3). This guards the mechanisms that produced it.
+  await withRepo(async ({ page }) => {
+    const { html } = await page();
+    assert.match(html, /<script type="module" blocking="render" data-ds-entry src=/);
+    assert.match(html, /script\[data-ds-entry\]\[blocking\]/, 'the release timer targets the entry');
+    assert.match(html, /removeAttribute\('blocking'\)/);
+    // Bounded, and AT OR ABOVE the placeholder's 240ms reveal — see the note on
+    // ENTRY_RENDER_BLOCK_MS. Below it, giving up paints a bare page while the
+    // dots are still waiting on their delay, so the wait gets no explanation.
+    // Deliberately NOT scaled to the slowest surface's first commit: review and
+    // raw diff commit around 300ms and still never flash, because a setTimeout
+    // cannot fire mid-module-evaluation. Raising it past the reveal only
+    // lengthens the cold-start hold.
+    const budget = /},(\d+)\);<\/script>/.exec(html);
+    assert.ok(budget, 'the release is on a timer');
+    assert.ok(Number(budget[1]) >= 240, `release budget ${budget?.[1]}ms must be >= the 240ms placeholder reveal`);
+    assert.ok(Number(budget[1]) <= 1000, `release budget ${budget?.[1]}ms would read as a hang on a cold start`);
+    // The blocking must sit AFTER the stylesheet: the sheet is render-blocking
+    // too, and the entry has to be discoverable as early as possible.
+    assert.ok(
+      html.indexOf('<link rel="stylesheet"') < html.indexOf('blocking="render"'),
+      'the stylesheet is still requested first',
+    );
+  });
+
+  // The synchronous first commit, at the one seam that decides it.
+  const mount = readRaw('shared/mount.tsx');
+  assert.match(mount, /flushSync\(\(\) => \{\s*createRoot\(container\)\.render\(tree\);\s*\}\);/);
+  assert.match(mount, /import \{ flushSync \} from "react-dom";/);
+});
+
+test('the boot placeholder stays invisible for its whole delay', () => {
+  // `animation-fill-mode: backwards` applies the FIRST KEYFRAME during the
+  // delay, and the first keyframe of `ds-boot-pulse` is `opacity:.18`. So while
+  // the shell claimed the dots were hidden until 240 ms, they in fact painted
+  // from the very first frame — caught on screencast 125 ms into a navigation.
+  // Without a fill mode the base `opacity:0` holds, which is what was intended.
+  const shell = readFileSync(new URL('../src/shell.ts', import.meta.url), 'utf8');
+  assert.match(shell, /animation:ds-boot-pulse [^']*240ms infinite\}/);
+  assert.ok(!/240ms infinite backwards/.test(shell), 'backwards would reveal the dots during the delay');
+  assert.match(shell, /\.ds-boot-dot\{[^']*opacity:0\}/, 'and the resting state is genuinely invisible');
 });
 
 test('every entry point that means "choose a scope" reaches this surface', async () => {
@@ -392,6 +467,52 @@ test('selection comes from the URL and disclosure does not', () => {
   assert.match(scopeCard, /aria-current=\{active === "uncommitted" \? "true" : undefined\}/);
   // Only the disclosure buttons open panels; the uncommitted segment is a link.
   assert.match(scopeCard, /href=\{`\$\{routeBase\}\/change\?scope=uncommitted`\}/);
+  // …but "never look like choosing a scope" is not "never look like anything".
+  // `open` used to be `bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]`,
+  // which against --fill-1 is under a percent of luminance in either theme, so
+  // an open editor under a DIFFERENT lit segment read as a bug rather than as
+  // two states. It now takes the same accent border as `selected` and none of
+  // the fill: filled beats outlined, and both beat nothing.
+  assert.match(scopeCard, /open\s*\n?\s*\?\s*"border-accent-line text-text"/);
+  assert.ok(
+    !/color-mix\(in_srgb,var\(--accent\)_8%/.test(scopeCard),
+    'the invisible open tint does not come back',
+  );
+});
+
+test('the three scope segments stay three across, in one track', () => {
+  // The card is inside a `max-w-[960px]` main, where three segments fit down to
+  // roughly 600px — below which they already shorten to a single centred label.
+  // A two-column breakpoint therefore only ever orphaned the third segment on a
+  // row of its own beside several hundred px of dead space, and the old
+  // `max-[1080px]:grid-cols-2` did that on most laptop windows.
+  assert.match(scopeCard, /const SEGMENT_TRACK = cn\(\s*\n?\s*"grid grid-cols-3 /);
+  assert.ok(!/grid-cols-2/.test(scopeCard), 'no width drops the segments to two columns');
+  assert.match(scopeCard, /className=\{SEGMENT_TRACK\}/);
+  // The track owns the fill and the hairline; the segments are transparent
+  // compartments in it, which is what makes three controls read as one choice.
+  assert.match(scopeCard, /const SEGMENT_TRACK = cn\(\s*\n?\s*"[^"]*bg-fill-1/);
+  assert.match(scopeCard, /const SEGMENT_BASE = cn\(\s*\n?\s*"[^"]*border-transparent bg-transparent/);
+});
+
+test('an endpoint of the diff is one tile whether it is being edited or resolved', () => {
+  // The compare editor and the resolved summary describe the same two refs. They
+  // are the same `SLOT` geometry with two tones — neutral while you type, accent
+  // once it has resolved — so replacing one with the other is a tone change
+  // rather than a layout change. They also share the grid, to the pixel.
+  assert.match(scopeCard, /const SLOT = cn\(/);
+  assert.match(scopeCard, /const SLOT_EDIT = cn\(SLOT, /);
+  assert.match(scopeCard, /const SLOT_DONE = cn\(SLOT, /);
+  assert.equal(
+    (scopeCard.match(/grid-cols-\[minmax\(0,1fr\)_32px_minmax\(0,1fr\)\]/g) ?? []).length,
+    2,
+    'the compare editor and the split summary use one grid',
+  );
+  // Neither tile draws a border around a border any more.
+  assert.ok(
+    !/rounded-\[var\(--radius-lg\)\] border border-line-soft bg-fill-1 p-\[13px\]/.test(scopeCard),
+    'the commit panel is a slot, not a panel wrapping a field',
+  );
 });
 
 test('the scope summary and the compare editor never show the same two refs at once', () => {
@@ -499,16 +620,25 @@ test('the beUI segments do not inherit beUI geometry', () => {
   assert.match(scopeCard, /focus-visible:outline-none focus-visible:shadow-\[var\(--shadow-focus\)\]/);
 });
 
-test('the vendored ref field keeps a focus ring of its own', () => {
-  // beUI's Input draws focus with `ring-2 ring-ring/40` and `border-foreground/40`,
-  // and neither `--color-ring` nor `--color-foreground` exists in this app's
-  // theme bridge — those utilities compile to nothing at all. The ring has to be
-  // rebuilt from the one thing the component does publish, `data-state`.
-  assert.match(
-    scopeCard,
-    /data-\[state=focused\]:border-accent-line data-\[state=focused\]:shadow-\[var\(--shadow-focus\)\]/,
-  );
-  assert.ok(!/ring-ring|border-foreground/.test(scopeCard), 'and not from a variable that does not exist');
+test('the vendored ref field keeps a focus ring, drawn on the slot that labels it', () => {
+  // The field is borderless now: the slot around it is the box, so a ring on
+  // the `<input>` wrapper would be a second box inside the first. The ring
+  // moved to the slot and hangs off `focus-within`, which stays lit while a
+  // listbox row is being hovered — the same reason the old ring hung off the
+  // component's `data-state="focused"` rather than off `:focus`.
+  assert.match(scopeCard, /focus-within:border-accent-line focus-within:shadow-\[var\(--shadow-focus\)\]/);
+  // And the component's own focus decoration is cancelled rather than left to
+  // paint under it. NOTE: `--color-ring` DOES resolve in this bridge (it is
+  // `--accent-line`, client/generated/theme.css), so beUI's `ring-2
+  // ring-ring/40` is not the no-op an earlier version of this comment claimed —
+  // without `ring-0` it draws. `border-foreground/40` resolves too.
+  assert.match(scopeCard, /field: "[^"]*\bring-0\b/);
+  assert.match(scopeCard, /field: "[^"]*\bborder-transparent\b/);
+  assert.ok(!/ring-ring|border-foreground/.test(scopeCard), 'and none of it is re-spelled by hand');
+  // Refs are data, and data is mono here (DESIGN_MEMORY.md). The placeholder is
+  // prose about refs, so it stays sans.
+  assert.match(scopeCard, /input: cn\(\s*\n?\s*"[^"]*font-mono/);
+  assert.match(scopeCard, /placeholder:font-sans/);
   // All three fields are the same field.
   assert.equal((scopeCard.match(/classNames=\{FIELD_CLASSNAMES\}/g) ?? []).length, 3);
   // The picker's `value` still arrives as a string, because that is what the

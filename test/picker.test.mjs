@@ -111,7 +111,7 @@ test('the picker route serves a React shell, not a hand-built page', async () =>
     assert.match(html, /<title>diffStory — pick a repo<\/title>/);
     assert.match(html, /<body class="ds-map-bg" data-surface="picker">/, 'the dot field paints before React mounts');
     assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
-    assert.match(html, /<script type="module" src="\/assets\/client\/picker\.js"><\/script>/);
+    assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/picker\.js"><\/script>/);
     assert.match(html, /<meta name="theme-color" content="#0a0c0f" data-ds-theme-color>/);
 
     // The theme bootstrap must run before the stylesheet or a light-mode user
@@ -124,7 +124,13 @@ test('the picker route serves a React shell, not a hand-built page', async () =>
     // One inline script (theme) + one JSON data block + one module entry is the
     // whole script budget for a shell. Anything else belongs in the bundle.
     const executable = html.match(/<script(?![^>]*type="application\/json")[^>]*>/g) ?? [];
-    assert.equal(executable.length, 2, `expected exactly the theme bootstrap and the module entry, got ${executable}`);
+    // Three executable scripts now, not two: the theme bootstrap, the entry
+    // module, and the tiny inline timer that releases the entry's
+    // `blocking="render"` after ENTRY_RENDER_BLOCK_MS. See the note on
+    // `entryBlockingRelease()` in src/shell.ts — the blocking is what stops a
+    // navigation flashing an empty shell, and the timer is what stops it
+    // holding a blank window on a slow boot.
+    assert.equal(executable.length, 3, `expected exactly the theme bootstrap, the module entry, and the blocking-release timer, got ${executable}`);
   });
 });
 
