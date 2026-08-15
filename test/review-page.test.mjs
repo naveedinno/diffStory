@@ -158,7 +158,7 @@ test('both review entry points serve the same shell', async () => {
       assert.equal(response.status, 200);
       const html = await response.text();
       assert.match(html, /data-surface="review"/, `${path} is the review surface`);
-      assert.match(html, /<script type="module" src="\/assets\/client\/review\.js"><\/script>/);
+      assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/review\.js"><\/script>/);
       assert.match(html, new RegExp(`<title>diffStory — ${title}`));
       // Painted during boot so the dot field is there before React commits.
       assert.match(html, /<body class="ds-map-bg/);
@@ -187,16 +187,20 @@ test('a broken story still falls through to the scope picker with an explanation
   }
 });
 
-test('the shell carries exactly one inline script and one data block', async () => {
+test('the shell carries exactly two inline scripts and one data block', async () => {
   const repo = fixtureRepo();
   const { server, base, route } = await boot(repo);
   try {
     const html = await (await fetch(`${base}${route}/review?story=story.json`)).text();
     // The theme bootstrap must stay inline and stay ahead of the stylesheet, or
-    // a light-mode user gets a dark flash on every navigation. Nothing else may
-    // join it: the `#ds-initial-comments` block the vanilla page shipped is a
-    // payload field now.
-    assert.equal((html.match(/<script>/g) || []).length, 1);
+    // a light-mode user gets a dark flash on every navigation.
+    //
+    // The second inline script is the entry's blocking-release timer, and it is
+    // deliberately not folded into the bootstrap: the bootstrap resolves the
+    // palette, this one bounds how long the entry module may hold up the first
+    // paint. Nothing else may join them — the `#ds-initial-comments` block the
+    // vanilla page shipped is a payload field now.
+    assert.equal((html.match(/<script>/g) || []).length, 2);
     assert.doesNotMatch(html, /id="ds-initial-comments"/);
     assert.ok(
       html.indexOf('<script>') < html.indexOf('<link rel="stylesheet"'),
@@ -309,7 +313,11 @@ test('hostile authored text cannot terminate the payload script element', async 
     // `</script` closes the element early and `<!--` switches the tokenizer into
     // script-data-escaped state, which then swallows the real closing tag. Both
     // start with `<`, which is the one character the serializer has to escape.
-    assert.equal((html.match(/<\/script>/g) || []).length, 3, 'bootstrap + payload + module entry');
+    assert.equal(
+      (html.match(/<\/script>/g) || []).length,
+      4,
+      'bootstrap + blocking-release timer + payload + module entry',
+    );
     assert.ok(!html.includes('<img src=x'), 'no element escapes into the document');
     assert.ok(!html.includes('<!--'), 'no comment state is entered');
     assert.match(html, /\\u003c/, 'the payload block escapes every < it serializes');

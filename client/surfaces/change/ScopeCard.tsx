@@ -21,11 +21,14 @@
 //
 // ── beUI adoption notes ──────────────────────────────────────────────────────
 //
-// The theme bridge defines none of the shadcn variable names beUI reaches for
-// (`foreground`, `background`, `card`, `primary`, `destructive`, `muted`,
-// `ring`) — `client/generated/theme.css` has not one of them — so every one of
-// those utilities compiles to nothing and each colour, focus ring included, is
-// supplied here.
+// The theme bridge DOES define the shadcn variable names beUI reaches for —
+// `client/generated/theme.css` maps `foreground`, `background`, `card`,
+// `primary`, `destructive`, `muted` and `ring` onto Signal values — so the
+// vendored utilities resolve and paint. That is the opposite of what an earlier
+// version of this note claimed, and it matters in one direction only: a
+// vendored colour left alone is not a no-op that quietly vanishes, it is a
+// second opinion drawn underneath whatever this file draws on top. So each
+// colour is either replaced or explicitly cancelled below, never just ignored.
 //
 //   - `Button` / `ButtonLink` carry the three scope segments. Before this they
 //     had a `transition-[…,transform,…]` and nothing that ever changed a
@@ -43,9 +46,12 @@
 //     spread, so the combobox contract is untouched, and `placePicker` still
 //     measures the real `<input>` — the wrapper divs are around it, not
 //     between it and the viewport. Its `onChange` hands over a string rather
-//     than an event, which is why `wire()` commits `(next: string)`. Focus
-//     indication comes from `data-state="focused"`, because the component's own
-//     `ring-ring/40` is one of the utilities that compiles to nothing.
+//     than an event, which is why `wire()` commits `(next: string)`. The field
+//     is now drawn BORDERLESS inside its slot (see SLOT below), so its own
+//     resting border, its focused `border-foreground/40`, and its `ring-2
+//     ring-ring/40` are all cancelled in `FIELD_CLASSNAMES` — `--color-ring`
+//     does resolve in this bridge, so leaving the ring alone would draw a
+//     second box inside the slot that already owns the focus indication.
 //   - `Tooltip` replaces the reload button's `title` and the truncated summary
 //     values. On the summary that `title` said nothing the element did not
 //     already say as its own text, so nothing needs restoring. On the reload
@@ -85,10 +91,21 @@ type Panel = "commit" | "compare";
 const TOOLTIP_SURFACE =
   "max-w-[min(90vw,52ch)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
 
+// The three segments sit INSIDE a recessed track rather than floating on the
+// card as three separate tiles. Three tiles with their own fill and their own
+// hairline read as three cards you could each act on; one track with three
+// compartments reads as "pick exactly one of these", which is what it is. So
+// the segment itself is transparent — the track supplies the fill — and colour
+// is spent only on the two states that mean something (see `segmentClass`).
+const SEGMENT_TRACK = cn(
+  "grid grid-cols-3 gap-1 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 p-1",
+  "max-[600px]:gap-0.5 contrast-more:border-text",
+);
+
 const SEGMENT_BASE = cn(
   // `h-auto` and `items-stretch justify-start` undo the height and the centring
   // that beUI's base/size classes bake into every Button.
-  "flex h-auto min-h-16 cursor-pointer flex-col items-stretch justify-start gap-1 rounded-[var(--radius-lg)] border border-transparent px-3 py-2.5 text-left no-underline",
+  "flex h-auto min-h-16 cursor-pointer flex-col items-stretch justify-start gap-1 rounded-[var(--radius)] border border-transparent bg-transparent px-3 py-2.5 text-left no-underline",
   "transition-[background-color,border-color,transform,box-shadow] duration-[var(--motion-duration-fast)] ease-out",
   "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
   "motion-reduce:transition-none motion-reduce:active:transform-none",
@@ -98,64 +115,124 @@ const SEGMENT_BASE = cn(
 /** The press scale the vanilla segments were written for and never got. */
 const SEGMENT_PRESS = 0.985;
 
+/**
+ * Selected and open are DIFFERENT things and now look it.
+ *
+ * `selected` is the scope the URL actually resolved — the diff you are looking
+ * at. `open` is only "this editor is showing"; you can open the commit editor
+ * while a compare is on screen, and until you pick a ref nothing has changed.
+ * The old pairing spent `color-mix(accent 8%)` on `open`, which against
+ * `--fill-1` is under a percent of luminance apart and was invisible in both
+ * themes — so a lit blue segment and an unrelated open editor looked like a
+ * bug. Filled-versus-outlined is the standard way to rank two live states and
+ * survives both themes: `selected` takes the accent border AND the accent fill
+ * AND the weight; `open` takes the same border and nothing else.
+ */
 function segmentClass(selected: boolean, open: boolean): string {
   return cn(
     SEGMENT_BASE,
-    "text-text-2 hover:border-line hover:bg-fill-2 hover:text-text",
+    "text-text-2 hover:bg-fill-2 hover:text-text",
     selected
       ? "border-accent-line bg-accent-soft font-semibold text-text"
       : open
-        ? "border-[color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] text-text"
-        : "bg-fill-1",
+        ? "border-accent-line text-text"
+        : "border-transparent",
     "contrast-more:border-text",
   );
 }
 
 /**
- * Signal colours for the vendored field.
+ * Signal colours for the vendored field, drawn borderless inside its slot.
  *
- * `field` is the bordered box; the component's own `border-border` and
- * `ring-ring/40` name variables this app does not define, so both the resting
- * border and the focus ring have to be written here. The focus ring hangs off
- * `data-state="focused"` rather than `:focus` because that is the state the
- * component publishes, and it stays lit while a listbox row is being hovered.
+ * The field used to carry its own 40px bordered box, which then sat inside the
+ * bordered slot that labels it — a border inside a border, twice over in the
+ * compare editor. The slot is the box now, so everything the component draws
+ * around the text is cancelled here: `rounded-none border-transparent
+ * bg-transparent` for the resting state, and `ring-0` because
+ * `--color-ring` DOES resolve in this bridge (it is `--accent-line`), so the
+ * component's focused `ring-2 ring-ring/40` would otherwise paint a second box
+ * inside the slot that already shows focus via `focus-within`.
+ *
+ * The value is mono: these fields hold refs, and `DESIGN_MEMORY.md` gives IBM
+ * Plex Mono to "code, refs, hashes, data". The PLACEHOLDER stays sans, because
+ * "branch, tag, or commit" is prose about refs, not a ref.
  */
 const FIELD_CLASSNAMES: InputClassNames = {
   root: "min-w-0 gap-0",
-  field: cn(
-    "h-[var(--control-h-lg)] min-w-0 rounded-[var(--radius)] border-line bg-surface",
-    "hover:border-text-3",
-    "data-[state=focused]:border-accent-line data-[state=focused]:shadow-[var(--shadow-focus)]",
-    "contrast-more:border-text",
+  field: "h-7 min-w-0 rounded-none border-transparent bg-transparent ring-0",
+  input: cn(
+    "h-7 pr-0 pl-[22px] font-mono text-[13.5px] font-semibold text-text",
+    "placeholder:font-sans placeholder:text-[13px] placeholder:font-normal placeholder:text-text-3",
   ),
-  input: "text-[13px] text-text placeholder:text-text-3",
-  leftIcon: "left-[11px] text-text-3",
+  leftIcon: "left-0 text-text-3 [&_svg]:h-[15px] [&_svg]:w-[15px]",
 };
 
-const SUMMARY_TILE = cn(
-  "min-w-0 rounded-[var(--radius-lg)] border border-line-soft px-[13px] py-2.5",
-  "bg-[color-mix(in_srgb,var(--accent)_5%,var(--fill-1))] contrast-more:border-text",
+// One endpoint of the diff, in one geometry. The compare editor and the
+// resolved summary describe the same two refs, so they are the same tile with
+// the same height, radius, padding and kicker — only the tone and the contents
+// differ. Before this they were two different components that happened to sit
+// in the same place, and switching between them looked like a layout change
+// rather than one object resolving.
+const SLOT = cn(
+  "flex min-h-[72px] min-w-0 flex-col justify-center gap-1 rounded-[var(--radius-lg)] border border-line-soft px-3 py-2.5",
+  "max-[600px]:min-h-[62px] max-[600px]:px-2.5 max-[600px]:py-2 contrast-more:border-text",
 );
 
-// All three kickers live inside SUMMARY_TILE, whose fill is accent-tinted. On
+/** Being edited: neutral fill, and the whole tile shows the focus ring. */
+const SLOT_EDIT = cn(SLOT, "cursor-text bg-fill-1 focus-within:border-accent-line focus-within:shadow-[var(--shadow-focus)]");
+
+/** Resolved: the accent tint that marks "this is the answer, not the question". */
+const SLOT_DONE = cn(SLOT, "overflow-hidden bg-[color-mix(in_srgb,var(--accent)_5%,var(--fill-1))]");
+
+const KICKER_BASE = "font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] uppercase";
+
+// The resolved kickers live inside SLOT_DONE, whose fill is accent-tinted. On
 // that tint --text-3 lands at 4.26:1 (light) / 4.34:1 (dark) — the only AA miss
 // left on this page, and it misses in both themes because the tile is the thing
 // moving, not the ink. --accent-text is the tuned small-text blue (it is plain
 // --accent in dark, #005cae in light), so the label reaches 5.09:1 / 5.92:1 and
 // reads as belonging to the tile rather than sitting on it by accident.
-const KICKER = "font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-accent-text uppercase";
+const KICKER = cn(KICKER_BASE, "text-accent-text");
+
+// The editing kickers sit on the neutral --fill-1 slot, where --accent-text
+// would be the loudest thing in a tile whose point is the value you are typing.
+// --text-2 clears AA on that fill in both themes and leaves the accent to mean
+// "resolved".
+const KICKER_EDIT = cn(KICKER_BASE, "text-text-2");
+
+// The "older" / "newer" gloss that rides after a kicker. Written out at each
+// call site rather than wrapped in a `<Gloss>` component on purpose: the guard
+// in test/change-page.test.mjs that keeps these sides labelled by meaning reads
+// for the literal `Source <i` / `Target <i`, and a component would hide the
+// labelling from it.
+const GLOSS = "ml-[5px] font-normal tracking-normal normal-case not-italic opacity-80";
 
 function Arrow({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "grid h-7 w-7 flex-none place-items-center self-center rounded-full border border-line-soft bg-fill-1 text-base text-text-3",
-        "max-[600px]:h-6 max-[600px]:w-6 max-[600px]:text-sm contrast-more:border-text",
+        "grid h-6 w-6 flex-none place-items-center self-center rounded-full border border-line bg-surface-2 text-text-2",
+        "max-[600px]:h-5 max-[600px]:w-5 contrast-more:border-text",
         className,
       )}
     >
-      →
+      {/* A drawn arrow rather than the "→" glyph: at 24px the glyph rendered at
+          whatever weight IBM Plex Sans has at that size, which next to 1.8-stroke
+          Lucide icons in the same row read as a different icon set. */}
+      <svg
+        viewBox="0 0 24 24"
+        width="12"
+        height="12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M5 12h12" />
+        <path d="m12 5 7 7-7 7" />
+      </svg>
     </span>
   );
 }
@@ -170,12 +247,18 @@ function Arrow({ className }: { className?: string }) {
  * `aria-description` to restore. What the tooltip buys is a legible bubble with
  * no second-long wait, portalled past the tile's own `overflow-hidden`.
  */
-function SummaryValue({ value, className }: { value: string; className?: string }) {
+function SummaryValue({ value, mono, className }: { value: string; mono?: boolean; className?: string }) {
   return (
     <Tooltip content={value} side="bottom" className={TOOLTIP_SURFACE} wrapperClassName="block min-w-0 max-w-full">
       <b
         className={cn(
-          "block min-w-0 truncate text-[15px] leading-[1.2] font-bold tracking-[-.01em] text-text max-[600px]:text-[13px]",
+          "block min-w-0 truncate leading-[1.25] tracking-[-.01em] text-text max-[600px]:text-[13px]",
+          // A ref is data and takes the mono voice, matching the field it was
+          // typed into and the mono the rest of the app gives refs. `scopeLabel`
+          // is the one value here that is prose ("Uncommitted changes"), so it
+          // keeps the sans display face — setting a sentence in mono would say
+          // it is a ref when it is not.
+          mono ? "font-mono text-[13.5px] font-semibold" : "text-[15px] font-bold",
           className,
         )}
       >
@@ -335,7 +418,12 @@ export function ScopeCard({ payload }: ScopeCardProps) {
       aria-label="Review scope"
       className="overflow-visible rounded-[var(--radius-island)] border border-transparent bg-surface-2 p-4 max-[600px]:p-3.5 contrast-more:border-text"
     >
-      <div role="group" aria-label="Review scope" className="grid grid-cols-3 gap-[9px] max-[1080px]:grid-cols-2 max-[600px]:grid-cols-3 max-[600px]:gap-1.5">
+      {/* Three columns at every width above 600px. The old
+          `max-[1080px]:grid-cols-2` dropped to two columns while the card was
+          still the full 960px the `<main>` allows, which left "Compare any
+          refs" alone on a second row beside 470px of dead space — and it did
+          that on any window narrower than about 1080px, which is most of them. */}
+      <div role="group" aria-label="Review scope" className={SEGMENT_TRACK}>
         <ButtonLink
           href={`${routeBase}/change?scope=uncommitted`}
           aria-current={active === "uncommitted" ? "true" : undefined}
@@ -380,14 +468,10 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         id="commitPanel"
         data-panel="commit"
         hidden={openPanel !== "commit"}
-        className={cn(
-          "mt-3 grid grid-cols-[minmax(220px,1fr)] items-end gap-2.5 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 p-[13px]",
-          openPanel !== "commit" && "hidden",
-          "max-[700px]:grid-cols-[minmax(0,1fr)] contrast-more:border-text",
-        )}
+        className={cn("mt-3 grid grid-cols-[minmax(0,1fr)] gap-1.5", openPanel !== "commit" && "hidden")}
       >
-        <label className="flex min-w-0 flex-col gap-1.5 text-[12.5px] text-text-2">
-          <span className="font-semibold text-text-2">Commit</span>
+        <label className={SLOT_EDIT}>
+          <span className={KICKER_EDIT}>Commit</span>
           <Input
             {...commitField}
             leftIcon={<GitCommitHorizontal strokeWidth={1.8} aria-hidden="true" />}
@@ -395,29 +479,26 @@ export function ScopeCard({ payload }: ScopeCardProps) {
             classNames={FIELD_CLASSNAMES}
           />
         </label>
-        <p className="col-span-full m-0 text-xs leading-[1.4] text-text-3">
+        <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
           Shows that commit against its first parent; root commits are shown against the empty tree.
         </p>
       </div>
 
+      {/* The editor and the resolved summary below share this grid verbatim, so
+          the two refs never move sideways when one replaces the other. */}
       <div
         id="comparePanel"
         data-panel="compare"
         hidden={openPanel !== "compare"}
         className={cn(
-          "mt-3 grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-end gap-2.5",
+          "mt-3 grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-stretch gap-2",
           openPanel !== "compare" && "hidden",
-          "max-[700px]:grid-cols-[minmax(0,1fr)]",
+          "max-[700px]:grid-cols-[minmax(0,1fr)] max-[700px]:gap-2.5",
         )}
       >
-        <label
-          className={cn(
-            "relative flex min-h-[72px] min-w-0 flex-col justify-center gap-1.5 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 px-2.5 py-2 text-[12.5px] text-text-2",
-            "focus-within:border-accent-line focus-within:shadow-[var(--shadow-focus)] contrast-more:border-text",
-          )}
-        >
-          <span className="font-semibold text-text-2">
-            Source <i className="ml-[5px] text-[11.5px] font-normal text-text-3 not-italic">older</i>
+        <label className={SLOT_EDIT}>
+          <span className={KICKER_EDIT}>
+            Source <i className={GLOSS}>older</i>
           </span>
           <Input
             {...baseField}
@@ -427,14 +508,9 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           />
         </label>
         <Arrow className="max-[700px]:hidden" />
-        <label
-          className={cn(
-            "relative flex min-h-[72px] min-w-0 flex-col justify-center gap-1.5 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 px-2.5 py-2 text-[12.5px] text-text-2",
-            "focus-within:border-accent-line focus-within:shadow-[var(--shadow-focus)] contrast-more:border-text",
-          )}
-        >
-          <span className="font-semibold text-text-2">
-            Target <i className="ml-[5px] text-[11.5px] font-normal text-text-3 not-italic">newer</i>
+        <label className={SLOT_EDIT}>
+          <span className={KICKER_EDIT}>
+            Target <i className={GLOSS}>newer</i>
           </span>
           <Input
             {...headField}
@@ -450,37 +526,29 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         <div
           role="group"
           aria-label="Selected comparison"
-          className="mt-3 grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-stretch gap-2.5 max-[600px]:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)] max-[600px]:gap-[7px]"
+          className="mt-3 grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-stretch gap-2 max-[600px]:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)] max-[600px]:gap-1.5"
         >
-          <span
-            aria-label={`Source: ${baseValue}`}
-            className={cn(SUMMARY_TILE, "flex min-h-16 flex-col justify-center gap-[5px] overflow-hidden max-[600px]:min-h-[60px] max-[600px]:px-2.5 max-[600px]:py-[9px]")}
-          >
+          <span aria-label={`Source: ${baseValue}`} className={SLOT_DONE}>
             <span className={KICKER}>
-              Source <i className="ml-[5px] font-normal tracking-normal normal-case not-italic">older</i>
+              Source <i className={GLOSS}>older</i>
             </span>
-            <SummaryValue value={baseValue} />
+            <SummaryValue value={baseValue} mono />
           </span>
           <Arrow />
-          <span
-            aria-label={`Target: ${headValue}`}
-            className={cn(SUMMARY_TILE, "flex min-h-16 flex-col justify-center gap-[5px] overflow-hidden max-[600px]:min-h-[60px] max-[600px]:px-2.5 max-[600px]:py-[9px]")}
-          >
+          <span aria-label={`Target: ${headValue}`} className={SLOT_DONE}>
             <span className={KICKER}>
-              Target <i className="ml-[5px] font-normal tracking-normal normal-case not-italic">newer</i>
+              Target <i className={GLOSS}>newer</i>
             </span>
-            <SummaryValue value={headValue} />
+            <SummaryValue value={headValue} mono />
           </span>
         </div>
       ) : inCompare ? null : (
         <div
           aria-label="Selected review scope"
-          className={cn(SUMMARY_TILE, "mt-3 grid min-h-[58px] items-center max-[600px]:min-h-[54px] max-[600px]:px-[11px] max-[600px]:py-[9px]")}
+          className={cn(SLOT_DONE, "mt-3 min-h-[58px] max-[600px]:min-h-[54px]")}
         >
-          <span className="flex min-w-0 flex-col gap-1">
-            <span className={KICKER}>{summaryKicker}</span>
-            <SummaryValue value={scopeLabel} className="text-base tracking-[-.012em]" />
-          </span>
+          <span className={KICKER}>{summaryKicker}</span>
+          <SummaryValue value={scopeLabel} className="text-base tracking-[-.012em]" />
         </div>
       )}
 

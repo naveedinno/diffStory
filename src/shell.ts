@@ -61,6 +61,62 @@ export function clientEntryHref(surface: ShellSurface): string {
   return `${CLIENT_ASSET_BASE}/${surface}.js`;
 }
 
+/**
+ * How long the entry module is allowed to hold up the first paint.
+ *
+ * Matched to the boot placeholder's own 240 ms reveal, and that is the whole
+ * argument: the release is the moment we give up and let the shell paint, so if
+ * it lands before the dots are due the user gets a bare page with nothing on it
+ * to explain the wait. Landing exactly on the reveal means whenever the shell
+ * does appear, the placeholder is already due to appear with it.
+ *
+ * It is NOT tuned to the slowest surface's first commit, which is the obvious
+ * theory and is wrong. Measured warm, the review and raw-diff surfaces commit
+ * around 300 ms — well past this budget — yet neither paints an empty shell at
+ * 200 ms, 240 ms or 400 ms. The reason is that a `setTimeout` cannot fire while
+ * the main thread is synchronously evaluating a 346 kB module: on a CPU-bound
+ * boot the release callback does not get to run until after the module (and so
+ * after the `flushSync` commit inside it), which makes it a no-op exactly when
+ * it would have hurt. The bound therefore protects the NETWORK-bound case,
+ * where the thread is idle waiting on bytes and the timer really does fire —
+ * which is the case that produced the 4.4 s blank rectangle below.
+ *
+ * Raising it buys nothing measurable and lengthens the one case that does pay:
+ * a cold start, where there is no previous page to hold and the browser shows
+ * its own `color-scheme` background for the duration. On a navigation the held
+ * frame is the page the user was already looking at, which beats an empty one.
+ */
+export const ENTRY_RENDER_BLOCK_MS = 240;
+
+/**
+ * Release the entry script's render-blocking after `ENTRY_RENDER_BLOCK_MS`.
+ *
+ * `blocking="render"` on the entry is what stops a scope change from flashing
+ * an empty shell: every scope change on the change surface is a full
+ * navigation, and without it the browser paints the placeholder in the ~5 ms
+ * window between the stylesheet landing and React's first commit. Measured on
+ * this machine that race went either way run to run, which is exactly the
+ * "sometimes" in the bug report.
+ *
+ * Unbounded, though, it trades that for something worse. Throttled to 8x CPU on
+ * a cold tab the entry takes ~4.4 s, and a render-blocked document shows a flat
+ * untextured rectangle for every one of those seconds — no dot field, no boot
+ * placeholder, nothing. That is the precise failure `bootPlaceholder()` exists
+ * to prevent, so the blocking has to be bounded rather than absolute.
+ *
+ * Removing the attribute takes the element out of the document's render-blocking
+ * set, so the pending paint goes through immediately. Firing after the module
+ * has already run is a no-op.
+ */
+function entryBlockingRelease(): string {
+  return (
+    '<script>' +
+    `setTimeout(function(){var s=document.querySelector('script[data-ds-entry][blocking]');` +
+    `if(s)s.removeAttribute('blocking');},${ENTRY_RENDER_BLOCK_MS});` +
+    '</script>'
+  );
+}
+
 export interface ShellInput<TPayload> {
   /** Which React entry point boots, and which bundle is requested. */
   surface: ShellSurface;
@@ -162,10 +218,17 @@ function esc(s: string): string {
  * is the slow case only — a cold macOS-app launch, a large review page — where
  * an empty white/ink rectangle reads as "broken".
  *
- * The 240 ms `animation-delay` with `backwards` fill is the whole trick: the
- * element is invisible until then, so a boot that beats the delay shows
- * nothing at all. `prefers-reduced-motion` gets a plain opacity step instead of
- * the pulse.
+ * The 240 ms `animation-delay` is the whole trick: the element is invisible
+ * until then, so a boot that beats the delay shows nothing at all.
+ * `prefers-reduced-motion` gets a plain opacity step instead of the pulse.
+ *
+ * That only became true when the `backwards` fill was removed. `backwards`
+ * applies the FIRST KEYFRAME during the delay, and the first keyframe of
+ * `ds-boot-pulse` is `opacity:.18` — so for its entire life this placeholder
+ * did the opposite of what this note claimed, painting three grey dots from the
+ * very first frame instead of staying hidden. It was visible 125 ms into a
+ * navigation, caught frame-by-frame in a screencast. With no fill mode the base
+ * `opacity:0` holds through the delay, which is what was always intended.
  *
  * React's `createRoot(...).render()` replaces the container's existing children
  * on its first commit, so no client-side teardown is required.
@@ -193,7 +256,7 @@ function bootPlaceholderStyles(): string {
     '.ds-boot-dot{width:7px;height:7px;border-radius:999px;background:var(--text-3,#8792a2);opacity:0}' +
     '.ds-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}' +
     '@media (prefers-reduced-motion:no-preference){' +
-    '.ds-boot-dot{animation:ds-boot-pulse 1.1s var(--motion-ease-in-out,cubic-bezier(.77,0,.175,1)) 240ms infinite backwards}' +
+    '.ds-boot-dot{animation:ds-boot-pulse 1.1s var(--motion-ease-in-out,cubic-bezier(.77,0,.175,1)) 240ms infinite}' +
     '.ds-boot-dot:nth-child(2){animation-delay:380ms}' +
     '.ds-boot-dot:nth-child(3){animation-delay:520ms}' +
     '@keyframes ds-boot-pulse{0%,100%{opacity:.18}50%{opacity:.8}}}' +
@@ -233,12 +296,13 @@ export function renderShell<TPayload>(input: ShellInput<TPayload>): string {
 ${themeBootstrapScript()}
 ${BRAND_HEAD_LINKS}
 <title>${esc(APP_BRAND)} — ${esc(input.title)}</title>
-<link rel="stylesheet" href="${CLIENT_STYLESHEET_HREF}">${styles ? `\n${styles}` : ''}
+<link rel="stylesheet" href="${CLIENT_STYLESHEET_HREF}">
+<script type="module" blocking="render" data-ds-entry src="${clientEntryHref(input.surface)}"></script>
+${entryBlockingRelease()}${styles ? `\n${styles}` : ''}
 </head>
 <body${bodyClass} data-surface="${esc(input.surface)}">
 <div id="root">${root}</div>
 <script type="application/json" id="${SHELL_PAYLOAD_ID}">${serializeShellPayload(input.payload)}</script>
-<script type="module" src="${clientEntryHref(input.surface)}"></script>
 </body>
 </html>`;
 }

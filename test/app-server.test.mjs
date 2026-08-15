@@ -719,7 +719,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     const rootText = await root.text();
     assert.match(rootText, /<title>diffStory — pick a repo<\/title>/);
     assert.match(rootText, /<body class="ds-map-bg" data-surface="picker">/);
-    assert.match(rootText, /<script type="module" src="\/assets\/client\/picker\.js"><\/script>/);
+    assert.match(rootText, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/picker\.js"><\/script>/);
     assert.match(rootText.toLowerCase(), /pick a repo/);
 
     const hostileOrigin = await fetch(`${base}/api/repo/close`, {
