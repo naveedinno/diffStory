@@ -31,32 +31,32 @@
  * fresh array of exactly this type.
  */
 export interface RecentRow {
-  path: string;
-  name: string;
-  isGit: boolean;
-  hasTour: boolean;
-  currentBranch: string | null;
-  changedFiles: number;
-  /** Epoch milliseconds. */
-  lastOpened: number;
+ path: string;
+ name: string;
+ isGit: boolean;
+ hasTour: boolean;
+ currentBranch: string | null;
+ changedFiles: number;
+ /** Epoch milliseconds. */
+ lastOpened: number;
 }
 
 /** `GET /` (no repo), `GET /repos`, and the no-repo fallback for /change,/review. */
 export interface PickerPayload {
-  recents: RecentRow[];
-  /** `os.homedir()`, used to render "~/…" paths client-side. */
-  home: string;
-  /** Server clock at render time — relative times must not use the client clock. */
-  now: number;
+ recents: RecentRow[];
+ /** `os.homedir()`, used to render "~/…" paths client-side. */
+ home: string;
+ /** Server clock at render time — relative times must not use the client clock. */
+ now: number;
 }
 
 /** One changed file, as `numstat()` reports it. `null` counts mean binary. */
 export interface ChangeFileView {
-  path: string;
-  /** Added lines, or `null` for a binary / metadata-only change. */
-  added: number | null;
-  /** Removed lines, or `null` for a binary / metadata-only change. */
-  removed: number | null;
+ path: string;
+ /** Added lines, or `null` for a binary / metadata-only change. */
+ added: number | null;
+ /** Removed lines, or `null` for a binary / metadata-only change. */
+ removed: number | null;
 }
 
 /**
@@ -85,19 +85,19 @@ export interface ChangeFileView {
  * `files.length`, and a second copy of a number can only ever disagree with it.
  */
 export interface ChangePayload {
-  repoName: string;
-  /** `/repo/<encoded name>` — every link on the surface is built from this. */
-  routeBase: string;
-  /** Resolved base ref for the current scope. */
-  base: string;
-  /** Resolved head ref, absent when the comparison ends at the working tree. */
-  head?: string;
-  /** Human scope description from `resolveScope()`, e.g. "Uncommitted changes". */
-  scopeLabel: string;
-  active: 'uncommitted' | 'commit' | 'compare';
-  files: ChangeFileView[];
-  /** Set only when a review route could not load its story. */
-  notice?: string;
+ repoName: string;
+ /** `/repo/<encoded name>` — every link on the surface is built from this. */
+ routeBase: string;
+ /** Resolved base ref for the current scope. */
+ base: string;
+ /** Resolved head ref, absent when the comparison ends at the working tree. */
+ head?: string;
+ /** Human scope description from `resolveScope()`, e.g. "Uncommitted changes". */
+ scopeLabel: string;
+ active: "uncommitted" | "commit" | "compare";
+ files: ChangeFileView[];
+ /** Set only when a review route could not load its story. */
+ notice?: string;
 }
 
 /**
@@ -115,55 +115,55 @@ export interface ChangePayload {
  * as "No summary yet.".
  */
 export interface StoryRowView {
-  /** Also the `?story=` value for the review link. */
-  id: string;
-  /** `narrativeText()` of the authored title. Empty when the file is unreadable. */
-  title: string;
-  /** `narrativeText()` of the authored summary. Empty when there is none. */
-  summary: string;
-  /** Why the story could not be read. Present only when `valid` is false. */
-  error?: string;
-  valid: boolean;
-  /** Epoch milliseconds — the story file's mtime. */
-  updatedAt: number;
-  steps: number;
-  primers: number;
-  files: number;
-  freshness: 'current' | 'stale' | 'unverified';
-  inStoryDrift: number;
-  outsideStoryDrift: number;
-  /**
-   * Live evidence. Meaningful only when `StoriesPayload.liveEvidence` is true;
-   * the metadata projection reports zeroes (and a `liveFiles` count taken from
-   * the story's own steps rather than from the diff).
-   */
-  liveFiles: number;
-  additions: number;
-  deletions: number;
-  openComments: number;
-  /** `command` is the raw git invocation, shown as the chip's `title`. */
-  scope: { label: string; command: string };
+ /** Also the `?story=` value for the review link. */
+ id: string;
+ /** `narrativeText()` of the authored title. Empty when the file is unreadable. */
+ title: string;
+ /** `narrativeText()` of the authored summary. Empty when there is none. */
+ summary: string;
+ /** Why the story could not be read. Present only when `valid` is false. */
+ error?: string;
+ valid: boolean;
+ /** Epoch milliseconds — the story file's mtime. */
+ updatedAt: number;
+ steps: number;
+ primers: number;
+ files: number;
+ freshness: "current" | "stale" | "unverified";
+ inStoryDrift: number;
+ outsideStoryDrift: number;
+ /**
+  * Live evidence. Meaningful only when `StoriesPayload.liveEvidence` is true;
+  * the metadata projection reports zeroes (and a `liveFiles` count taken from
+  * the story's own steps rather than from the diff).
+  */
+ liveFiles: number;
+ additions: number;
+ deletions: number;
+ openComments: number;
+ /** `command` is the raw git invocation, shown as the chip's `title`. */
+ scope: { label: string; command: string };
 }
 
 /** `GET /repo/<name>`, `/repo/<name>/`, `/repo/<name>/stories`. */
 export interface StoriesPayload {
-  repoName: string;
-  /** `/repo/<encoded-basename>` — every link on the page is built from it. */
-  routeBase: string;
-  /** Newest-updated first, tie-broken by id. */
-  stories: StoryRowView[];
-  /**
-   * True only when `?evidence=refresh` was honoured, i.e. the rows came from
-   * `listStories()` and not `listStoryMetadata()`.
-   *
-   * One flag for the whole list, not one per row: both projections are a single
-   * call, so every row in a payload always agrees. It gates the badge state
-   * machine ("Saved" when false) and the `+A −D` fact, which must not be
-   * presented as fact when nobody rebuilt the diff.
-   */
-  liveEvidence: boolean;
-  /** Server clock at render time — relative times must not use the client clock. */
-  now: number;
+ repoName: string;
+ /** `/repo/<encoded-basename>` — every link on the page is built from it. */
+ routeBase: string;
+ /** Newest-updated first, tie-broken by id. */
+ stories: StoryRowView[];
+ /**
+  * True only when `?evidence=refresh` was honoured, i.e. the rows came from
+  * `listStories()` and not `listStoryMetadata()`.
+  *
+  * One flag for the whole list, not one per row: both projections are a single
+  * call, so every row in a payload always agrees. It gates the badge state
+  * machine ("Saved" when false) and the `+A −D` fact, which must not be
+  * presented as fact when nobody rebuilt the diff.
+  */
+ liveEvidence: boolean;
+ /** Server clock at render time — relative times must not use the client clock. */
+ now: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,24 +190,24 @@ export interface StoriesPayload {
 // Everything the projection omits arrives later through the lazy endpoints,
 // each of which still returns server-rendered diff HTML.
 
-import type { Comment, ReviewFileIndexEntry } from './types.js';
-import type { ReviewExclusionMetadata } from './noise.js';
+import type { Comment, ReviewFileIndexEntry } from "./types.js";
+import type { ReviewExclusionMetadata } from "./noise.js";
 
 /** A projected narrative: sanitized HTML, flat text, and the spoken form. */
 export interface ReviewProse {
-  html: string;
-  text: string;
-  /** What narration reads. Never derived from `text` — the parser owns it. */
-  speech: string;
+ html: string;
+ text: string;
+ /** What narration reads. Never derived from `text` — the parser owns it. */
+ speech: string;
 }
 
 /** One review beat: a sentence plus the diff rows it focuses. */
 export interface ReviewBeatView {
-  /** Index into the step's focus groups; also the `data-focus-group` value. */
-  focusGroup: number;
-  text: ReviewProse;
-  /** "file.ts, lines 3 to 9" — the spoken destination for the beat button. */
-  destination: string;
+ /** Index into the step's focus groups; also the `data-focus-group` value. */
+ focusGroup: number;
+ text: ReviewProse;
+ /** "file.ts, lines 3 to 9" — the spoken destination for the beat button. */
+ destination: string;
 }
 
 /**
@@ -223,72 +223,72 @@ export interface ReviewBeatView {
  * `GET /api/review/step-panel?index=N`.
  */
 export interface ReviewStepView {
-  id: string;
-  kind: 'changed' | 'new-file' | 'context' | 'concept';
-  /** 1-based position among code steps, as the step header prints it. */
-  order: number;
-  title: ReviewProse;
-  /** Post-change path. Absent on a concept step. */
-  file?: string;
-  /** "Changed" / "New file" / "Context" / "Concept". */
-  kindLabel: string;
-  /** Authored chapter label; drives the >10-step rail compaction grouping. */
-  chapter?: string;
-  /** Code steps only. Empty when the step has a single review note instead. */
-  beats: ReviewBeatView[];
-  /** The single review note used when a code step has no beats. */
-  why?: ReviewProse;
-  /** Concept steps only: title + body + caption, joined and terminated. */
-  conceptSpeech?: string;
-  /** Broad-step warning shown beside the rail's beat list. */
-  health?: { broad: boolean; reasons: string[] };
+ id: string;
+ kind: "changed" | "new-file" | "context" | "concept";
+ /** 1-based position among code steps, as the step header prints it. */
+ order: number;
+ title: ReviewProse;
+ /** Post-change path. Absent on a concept step. */
+ file?: string;
+ /** "Changed" / "New file" / "Context" / "Concept". */
+ kindLabel: string;
+ /** Authored chapter label; drives the >10-step rail compaction grouping. */
+ chapter?: string;
+ /** Code steps only. Empty when the step has a single review note instead. */
+ beats: ReviewBeatView[];
+ /** The single review note used when a code step has no beats. */
+ why?: ReviewProse;
+ /** Concept steps only: title + body + caption, joined and terminated. */
+ conceptSpeech?: string;
+ /** Broad-step warning shown beside the rail's beat list. */
+ health?: { broad: boolean; reasons: string[] };
 }
 
 /** One changed file, as the sidebar tree and the Files view stubs need it. */
 export interface ReviewFileRow {
-  file: string;
-  add: number;
-  del: number;
-  /** Changed rows in this file that no story step explains. */
-  untoured: number;
-  kind: 'changed' | 'new' | 'context';
-  kindLabel: string;
-  /** `data-filter-status` — the git status letter set the filter menu reads. */
-  status: string;
-  /** Changed declarations, folded into `data-filter-path` for search. */
-  symbols: string[];
-  /**
-   * Binds a review mark to this exact file diff. `viewedFiles[path] === hash`
-   * is the whole "reviewed" contract: a code change changes the hash and the
-   * mark drops, which is why this is not a boolean.
-   */
-  reviewHash: string;
-  /** Whether a full working-tree copy exists, so Full file can be offered. */
-  hasFull: boolean;
-  /** Whether the file has hunks at all; a file with none gets no mode toggle. */
-  hasHunks: boolean;
+ file: string;
+ add: number;
+ del: number;
+ /** Changed rows in this file that no story step explains. */
+ untoured: number;
+ kind: "changed" | "new" | "context";
+ kindLabel: string;
+ /** `data-filter-status` — the git status letter set the filter menu reads. */
+ status: string;
+ /** Changed declarations, folded into `data-filter-path` for search. */
+ symbols: string[];
+ /**
+  * Binds a review mark to this exact file diff. `viewedFiles[path] === hash`
+  * is the whole "reviewed" contract: a code change changes the hash and the
+  * mark drops, which is why this is not a boolean.
+  */
+ reviewHash: string;
+ /** Whether a full working-tree copy exists, so Full file can be offered. */
+ hasFull: boolean;
+ /** Whether the file has hunks at all; a file with none gets no mode toggle. */
+ hasHunks: boolean;
 }
 
 /** An author-flagged place to distrust first, listed on the Overview. */
 export interface ReviewHotspotView {
-  /** Navigation index (Overview is 0), so `data-goto-step` can use it directly. */
-  panelIndex: number;
-  order: number;
-  title: ReviewProse;
-  reason: ReviewProse;
+ /** Navigation index (Overview is 0), so `data-goto-step` can use it directly. */
+ panelIndex: number;
+ order: number;
+ title: ReviewProse;
+ reason: ReviewProse;
 }
 
 /** The story's own words. Empty strings on a storyless page. */
 export interface ReviewStoryView {
-  title: ReviewProse;
-  summary?: ReviewProse;
-  /** Recovered intent. When present the goal leads and the summary is the map. */
-  intent?: {
-    goal: ReviewProse;
-    design?: ReviewProse;
-    /** Deliberate omissions, so a reviewer does not flag them as misses. */
-    nonGoals: ReviewProse[];
-  };
+ title: ReviewProse;
+ summary?: ReviewProse;
+ /** Recovered intent. When present the goal leads and the summary is the map. */
+ intent?: {
+  goal: ReviewProse;
+  design?: ReviewProse;
+  /** Deliberate omissions, so a reviewer does not flag them as misses. */
+  nonGoals: ReviewProse[];
+ };
 }
 
 /**
@@ -300,33 +300,39 @@ export interface ReviewStoryView {
  * never read an unchecked change as clean — see `applyCoverageVerdict()`.
  */
 export interface ReviewTrustView {
-  pending: boolean;
-  coveredLines: number;
-  uncoveredLines: number;
-  /** Number of uncovered ranges. Meaningless while `pending`. */
-  uncoveredCount: number;
+ pending: boolean;
+ coveredLines: number;
+ uncoveredLines: number;
+ /** Number of uncovered ranges. Meaningless while `pending`. */
+ uncoveredCount: number;
 }
 
 /** One file that changed after the story's baseline was captured. */
 export interface StoryDriftViewFile {
-  path: string;
-  oldPath?: string;
-  status: 'added' | 'modified' | 'deleted' | 'renamed' | 'mode-changed' | 'unknown';
-  scope: 'story' | 'outside';
-  additions?: number;
-  deletions?: number;
-  detail: 'exact' | 'summary-only';
-  reason?: string;
+ path: string;
+ oldPath?: string;
+ status:
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "mode-changed"
+  | "unknown";
+ scope: "story" | "outside";
+ additions?: number;
+ deletions?: number;
+ detail: "exact" | "summary-only";
+ reason?: string;
 }
 
 /** The "Since story" report behind the Overview's freshness control. */
 export interface StoryDriftView {
-  state: 'current' | 'outside-only' | 'story-changed' | 'mixed' | 'unverified';
-  observationId?: string;
-  baselineId?: string;
-  inScopeFiles: number;
-  outsideScopeFiles: number;
-  files: StoryDriftViewFile[];
+ state: "current" | "outside-only" | "story-changed" | "mixed" | "unverified";
+ observationId?: string;
+ baselineId?: string;
+ inScopeFiles: number;
+ outsideScopeFiles: number;
+ files: StoryDriftViewFile[];
 }
 
 /**
@@ -337,91 +343,93 @@ export interface StoryDriftView {
  * *preserves* these across its own card rebuilds rather than recomputing them.
  */
 export interface CommentAnchorView {
-  id: string;
-  state: 'current' | 'moved' | 'changed' | 'old-side' | 'legacy';
-  /** The code now at that location, when it differs from what was commented on. */
-  currentExcerpt?: string;
+ id: string;
+ state: "current" | "moved" | "changed" | "old-side" | "legacy";
+ /** Human label for the badge; server-owned because it depends on the state semantics. */
+ label: string;
+ /** Current line for moved anchors; omitted when the original line is still correct. */
+ currentLine?: number;
 }
 
 /** Facts the chrome must have right on first paint, all derived server-side. */
 export interface ReviewChromeFacts {
-  openCount: number;
-  blockingOpenCount: number;
-  /** The story deliberately excluded some files from its scope. */
-  focusedStory: boolean;
-  feedbackHealthy: boolean;
-  /** How to repair the comment store. Empty when healthy. */
-  feedbackRecovery: string;
-  /** Nothing on the Review page wants a decision — hides the ▲ flag. */
-  reviewClean: boolean;
-  showTrustPill: boolean;
-  trustPillClean: boolean;
-  /** "12 code steps + 2 primers" — the rail's reading-order label. */
-  readingOrder: string;
+ openCount: number;
+ blockingOpenCount: number;
+ /** The story deliberately excluded some files from its scope. */
+ focusedStory: boolean;
+ feedbackHealthy: boolean;
+ /** How to repair the comment store. Empty when healthy. */
+ feedbackRecovery: string;
+ /** Nothing on the Review page wants a decision — hides the ▲ flag. */
+ reviewClean: boolean;
+ showTrustPill: boolean;
+ trustPillClean: boolean;
+ /** "12 code steps + 2 primers" — the rail's reading-order label. */
+ readingOrder: string;
 }
 
 /** `GET /repo/<name>/review` and `GET /repo/<name>/diff`. */
 export interface ReviewPayload {
-  /** Absolute repo path. Diagnostic only; VS Code links are resolved server-side. */
-  repo: string;
-  repoName: string;
-  routeBase: string;
-  /** No story: Files opens by default and the Story tab offers the generator. */
-  storyless: boolean;
-  /** `describeBase()` — what the subtitle compares the working tree against. */
-  baseLabel: string;
-  /** Ref for the post-change side. Absent means the live working tree. */
-  headRef?: string;
-  /** The story's own base ref, used by the storyless generator's scope. */
-  baseRef?: string;
+ /** Absolute repo path. Diagnostic only; VS Code links are resolved server-side. */
+ repo: string;
+ repoName: string;
+ routeBase: string;
+ /** No story: Files opens by default and the Story tab offers the generator. */
+ storyless: boolean;
+ /** `describeBase()` — what the subtitle compares the working tree against. */
+ baseLabel: string;
+ /** Ref for the post-change side. Absent means the live working tree. */
+ headRef?: string;
+ /** The story's own base ref, used by the storyless generator's scope. */
+ baseRef?: string;
 
-  /** Every lazy request on this page must carry `?page=<pageToken>`. */
-  pageToken: string;
-  /**
-   * Identity of the story on screen. Half of the reading-position key:
-   * several stories — and every regeneration of one — share a single
-   * `base..head` scope, so the scope key alone cannot say whose saved position
-   * a page may resume. Dropping it replays one story's position into another.
-   */
-  storyKey: string;
-  /** `reviewState.scopeKey` — the other half, and the challenge/ack key root. */
-  reviewScope: string;
-  /** `${repo}|${scopeKey || baseLabel}|full` — scopes the reviewed-file marks. */
-  viewedScope: string;
-  /** Binds the challenge checklist and the exclusions acknowledgement to a diff. */
-  currentDiffHash: string;
+ /** Every lazy request on this page must carry `?page=<pageToken>`. */
+ pageToken: string;
+ /**
+  * Identity of the story on screen. Half of the reading-position key:
+  * several stories — and every regeneration of one — share a single
+  * `base..head` scope, so the scope key alone cannot say whose saved position
+  * a page may resume. Dropping it replays one story's position into another.
+  */
+ storyKey: string;
+ /** `reviewState.scopeKey` — the other half, and the challenge/ack key root. */
+ reviewScope: string;
+ /** `${repo}|${scopeKey || baseLabel}|full` — scopes the reviewed-file marks. */
+ viewedScope: string;
+ /** Binds the challenge checklist and the exclusions acknowledgement to a diff. */
+ currentDiffHash: string;
 
-  story: ReviewStoryView;
-  steps: ReviewStepView[];
-  files: ReviewFileRow[];
-  hotspots: ReviewHotspotView[];
-  trust: ReviewTrustView;
+ story: ReviewStoryView;
+ steps: ReviewStepView[];
+ files: ReviewFileRow[];
+ hotspots: ReviewHotspotView[];
+ trust: ReviewTrustView;
 
-  totalSteps: number;
-  codeSteps: number;
-  conceptSteps: number;
-  filesChanged: number;
-  contextFiles: number;
-  totalAdd: number;
-  totalDel: number;
-  /** Hunk-bearing changed files inside the story's selected scope. */
-  storyFilesChanged: number;
-  /** The story's declared file scope, when it narrowed one. */
-  storyIncludedFiles: string[];
+ totalSteps: number;
+ codeSteps: number;
+ conceptSteps: number;
+ filesChanged: number;
+ contextFiles: number;
+ totalAdd: number;
+ totalDel: number;
+ /** Hunk-bearing changed files inside the story's selected scope. */
+ storyFilesChanged: number;
+ /** The story's declared file scope, when it narrowed one. */
+ storyIncludedFiles: string[];
 
-  storyFreshness: 'current' | 'stale' | 'unverified';
-  storyDrift?: StoryDriftView;
+ storyFreshness: "current" | "stale" | "unverified";
+ storyDrift?: StoryDriftView;
 
-  /** Already story-scoped by the lease. Open comments only. */
-  comments: Comment[];
-  commentAnchors: CommentAnchorView[];
+ /** Already story-scoped by the lease. The chrome counts open comments separately. */
+ comments: Comment[];
+ commentAnchors: CommentAnchorView[];
 
-  /** Files in the exact scope that the bounded renderer keeps out of the DOM. */
-  excludedFiles: ReviewExclusionMetadata[];
-  /** Paths whose index and working-tree bytes are different review states. */
-  stagedWorktreeDivergentFiles: string[];
+ /** Files in the exact scope that the bounded renderer keeps out of the DOM. */
+ excludedFiles: ReviewExclusionMetadata[];
+ /** Paths whose index and working-tree bytes are different review states. */
+ stagedWorktreeDivergentFiles: string[];
 
-  chrome: ReviewChromeFacts;
+ chrome: ReviewChromeFacts;
 }
 
 /** Re-exported so the client can name what the payload carries. */

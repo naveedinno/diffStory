@@ -20,22 +20,22 @@
 // Authored text and code are escaped here, server-side. The one client-side
 // HTML insertion remains locally rendered Mermaid SVG, parsed and sanitized in
 // the browser before it reaches the DOM.
-import { buildReviewModel } from './view-model.js';
-import { intraLineMap } from './intra-line.js';
-import { renderSplitRow, renderUnifiedRow, renderHunkGap } from './diff-render.js';
-import { renderShell } from './shell.js';
-import { APP_BRAND } from './config.js';
-import { readWholeFile } from './git.js';
+import { buildReviewModel } from "./view-model.js";
+import { intraLineMap } from "./intra-line.js";
+import { renderSplitRow, renderUnifiedRow, renderHunkGap, } from "./diff-render.js";
+import { renderShell } from "./shell.js";
+import { APP_BRAND } from "./config.js";
+import { readWholeFile } from "./git.js";
 function commentSide(c) {
-    return c.side === 'left' ? 'left' : 'right';
+    return c.side === "left" ? "left" : "right";
 }
 function jsonForDataScript(value) {
     return JSON.stringify(value)
-        .replace(/&/g, '\\u0026')
-        .replace(/</g, '\\u003c')
-        .replace(/>/g, '\\u003e')
-        .replace(/\u2028/g, '\\u2028')
-        .replace(/\u2029/g, '\\u2029');
+        .replace(/&/g, "\\u0026")
+        .replace(/</g, "\\u003c")
+        .replace(/>/g, "\\u003e")
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
 }
 // ---- sidebar ----
 function repairStepIcon() {
@@ -58,7 +58,7 @@ export function renderStoryStepPanel(_repo, model, comments, stepIndex) {
     return stepPanel(step, stepIndex, model.totalSteps, comments, stepIndexById);
 }
 function stepPanel(step, i, total, comments, stepIndexById) {
-    return step.kind === 'concept'
+    return step.kind === "concept"
         ? conceptStepPanel(step, i, total, stepIndexById)
         : codeStepPanel(step, i, total, comments);
 }
@@ -68,13 +68,13 @@ function codeStepPanel(s, i, total, comments) {
     // cross-references — "Standalone"/"Final step" carry no navigation cue.
     const flow = /^(Calls|Returns)/.test(s.flow)
         ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
-        : '';
-    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ''} hidden>
+        : "";
+    return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${s.focusExplicit ? ' data-story-focus="authored"' : ""} hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
         <span class="ds-dot"></span>
-        <span class="ds-badge ds-badge-${s.kind === 'new-file' ? 'new' : s.kind}">${esc(s.kindLabel)}</span>
+        <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
         ${flow}
         <span class="ds-flex"></span>
       </div>
@@ -85,9 +85,9 @@ function codeStepPanel(s, i, total, comments) {
     </div>
     ${s.hotspot
         ? `<div class="ds-hotspot-flag" role="note"><span class="ds-hotspot-flag-kicker" aria-hidden="true">▲ Distrust</span><span class="ds-sr-only">Author-flagged hotspot: </span><span class="ds-hotspot-flag-reason">${s.hotspot.html}</span></div>`
-        : ''}
+        : ""}
     <div class="ds-diffscroll">
-      <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ''}>
+      <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ""}>
         <div class="ds-difftoolbar">
           <span class="ds-flex"></span>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
@@ -107,17 +107,24 @@ function codeStepPanel(s, i, total, comments) {
   </section>`;
 }
 function moveRangeLabel(file, [start, end]) {
-    return `${file}:${start}${start === end ? '' : `–${end}`}`;
+    return `${file}:${start}${start === end ? "" : `–${end}`}`;
 }
 function calloutEndpoint(move) {
-    if (move.hidden?.as === 'destination') {
-        return move.before.local ? { endpoint: move.before, side: 'left' } : { endpoint: move.after, side: 'right' };
+    if (move.hidden?.as === "destination") {
+        return move.before.local
+            ? { endpoint: move.before, side: "left" }
+            : { endpoint: move.after, side: "right" };
     }
-    return move.after.local ? { endpoint: move.after, side: 'right' } : { endpoint: move.before, side: 'left' };
+    return move.after.local
+        ? { endpoint: move.after, side: "right" }
+        : { endpoint: move.before, side: "left" };
 }
 function rowMatchesEndpoint(row, endpoint, side) {
-    const line = side === 'left' ? row.oldNo : row.newNo;
-    return endpoint.local && line !== undefined && line >= endpoint.range[0] && line <= endpoint.range[1];
+    const line = side === "left" ? row.oldNo : row.newNo;
+    return (endpoint.local &&
+        line !== undefined &&
+        line >= endpoint.range[0] &&
+        line <= endpoint.range[1]);
 }
 function calloutsByLastRow(s) {
     const rows = s.blocks.flat();
@@ -126,7 +133,9 @@ function calloutsByLastRow(s) {
         if (!move.hidden)
             continue;
         const anchor = calloutEndpoint(move);
-        const row = rows.filter((candidate) => rowMatchesEndpoint(candidate, anchor.endpoint, anchor.side)).at(-1);
+        const row = rows
+            .filter((candidate) => rowMatchesEndpoint(candidate, anchor.endpoint, anchor.side))
+            .at(-1);
         if (!row)
             continue;
         result.set(row, [...(result.get(row) ?? []), move]);
@@ -134,14 +143,14 @@ function calloutsByLastRow(s) {
     return result;
 }
 function moveTargetAttributes(endpoint) {
-    return `${endpoint.targetStep ? ` data-move-target-step="${endpoint.targetStep}"` : ''} data-move-target-file="${esc(endpoint.file)}" data-move-target-line="${endpoint.range[0]}"`;
+    return `${endpoint.targetStep ? ` data-move-target-step="${endpoint.targetStep}"` : ""} data-move-target-file="${esc(endpoint.file)}" data-move-target-line="${endpoint.range[0]}"`;
 }
 function crossFileRouteHtml(move, remote) {
     const remoteIsSource = !move.before.local;
-    const role = remoteIsSource ? 'source' : 'destination';
+    const role = remoteIsSource ? "source" : "destination";
     const fileLabel = moveRangeLabel(remote.file, remote.range);
     const file = `<button type="button" class="ds-annot-dest"${moveTargetAttributes(remote)} aria-label="${esc(`Open cross-file ${role} ${fileLabel}`)}"><span>${esc(fileLabel)}</span></button>`;
-    const here = `<span class="ds-annot-here ds-annot-here-${remoteIsSource ? 'right' : 'left'}">this code</span>`;
+    const here = `<span class="ds-annot-here ds-annot-here-${remoteIsSource ? "right" : "left"}">this code</span>`;
     const arrow = '<span class="ds-annot-route-arrow" aria-hidden="true">→</span>';
     return `<div class="ds-annot-route" data-cross-file-role="${role}">
     <span class="ds-annot-relation">Cross-file ${role}</span>
@@ -150,18 +159,26 @@ function crossFileRouteHtml(move, remote) {
 }
 function calloutHtml(move, unified = false) {
     if (!move.hidden)
-        return '';
+        return "";
     const anchor = calloutEndpoint(move);
-    const remote = !move.before.local ? move.before : !move.after.local ? move.after : undefined;
-    const route = move.hidden.as === 'destination' && remote ? crossFileRouteHtml(move, remote) : '';
+    const remote = move.before.local
+        ? move.after.local
+            ? undefined
+            : move.after
+        : move.before;
+    const route = move.hidden.as === "destination" && remote
+        ? crossFileRouteHtml(move, remote)
+        : "";
     const detail = `<span class="ds-annot-tag">${esc(move.hidden.tag)}</span>
     <span class="ds-annot-what">${move.hidden.what.html}</span>`;
-    return `<div class="ds-annot-callout ds-annot-callout-${move.hidden.as}${route ? ' ds-annot-callout-cross' : ''} ds-annot-callout-${unified ? 'unified' : anchor.side}" data-annot-callout="${esc(move.id)}" data-move-id="${esc(move.id)}" role="note">
+    return `<div class="ds-annot-callout ds-annot-callout-${move.hidden.as}${route ? " ds-annot-callout-cross" : ""} ds-annot-callout-${unified ? "unified" : anchor.side}" data-annot-callout="${esc(move.id)}" data-move-id="${esc(move.id)}" role="note">
     ${route}${route ? `<div class="ds-annot-detail">${detail}</div>` : detail}
   </div>`;
 }
 function rowCallouts(row, callouts, unified = false) {
-    return (callouts.get(row) ?? []).map((move) => calloutHtml(move, unified)).join('');
+    return (callouts.get(row) ?? [])
+        .map((move) => calloutHtml(move, unified))
+        .join("");
 }
 function annotationEndpoint(endpoint) {
     if (endpoint.local)
@@ -177,13 +194,13 @@ function annotationSummary(s) {
     const relationships = s.moves
         .filter((move) => Boolean(move.label))
         .map((move) => {
-        const sourceLabel = move.kind === 'flow' ? 'Source' : 'Before';
-        const destinationLabel = move.kind === 'flow' ? 'destination' : 'after';
-        return `<span>Code relationship: ${esc(move.label ?? '')}. ${sourceLabel} ${esc(moveRangeLabel(move.before.file, move.before.range))}; ${destinationLabel} ${esc(moveRangeLabel(move.after.file, move.after.range))}.</span>`;
+        const sourceLabel = move.kind === "flow" ? "Source" : "Before";
+        const destinationLabel = move.kind === "flow" ? "destination" : "after";
+        return `<span>Code relationship: ${esc(move.label ?? "")}. ${sourceLabel} ${esc(moveRangeLabel(move.before.file, move.before.range))}; ${destinationLabel} ${esc(moveRangeLabel(move.after.file, move.after.range))}.</span>`;
     });
     return relationships.length
-        ? `<div class="ds-sr-only" data-annotation-summary>${relationships.join(' ')}</div>`
-        : '';
+        ? `<div class="ds-sr-only" data-annotation-summary>${relationships.join(" ")}</div>`
+        : "";
 }
 function annotationData(s) {
     const moves = s.moves
@@ -198,12 +215,14 @@ function annotationData(s) {
     }));
     return moves.length
         ? `<script type="application/json" data-annotations>${jsonForDataScript({ moves })}</script>`
-        : '';
+        : "";
 }
 function storyRepairMenu(step, iconOnly = false) {
-    const healthTitle = step.health.broad ? ` Broad step: ${step.health.reasons.join(' · ')}.` : '';
-    return `<details class="ds-story-tune${iconOnly ? ' is-icon' : ''}">
-    <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}">${iconOnly ? repairStepIcon() : '<span>Repair step</span>'}</summary>
+    const healthTitle = step.health.broad
+        ? ` Broad step: ${step.health.reasons.join(" · ")}.`
+        : "";
+    return `<details class="ds-story-tune${iconOnly ? " is-icon" : ""}">
+    <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}">${iconOnly ? repairStepIcon() : "<span>Repair step</span>"}</summary>
     <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the claim and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each decision its own local camera.</small></button></div>
   </details>`;
 }
@@ -216,7 +235,7 @@ function conceptStepPanel(s, i, total, stepIndexById) {
         <span class="ds-concept-next-title">${next.title.html}</span>
         <span class="ds-concept-next-arrow" aria-hidden="true">→</span>
       </button>`
-        : '';
+        : "";
     const diagram = s.diagram
         ? `<figure class="ds-concept-diagram" data-concept-diagram>
         <div class="ds-concept-diagram-output" data-mermaid-output role="img" aria-label="${esc(s.diagram.caption.text)}"><span class="ds-concept-diagram-loading">Drawing the mental model…</span></div>
@@ -227,7 +246,7 @@ function conceptStepPanel(s, i, total, stepIndexById) {
           <pre><code>${esc(s.diagram.source)}</code></pre>
         </details>
       </figure>`
-        : '';
+        : "";
     const speech = conceptSpeechText(s);
     return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
     <div class="ds-step-top">
@@ -272,7 +291,7 @@ function conceptSpeechText(s) {
         .map((part) => part?.trim())
         .filter((part) => Boolean(part))
         .map(endsSentence)
-        .join(' ')
+        .join(" ")
         .trim();
 }
 function stepStoryHtml(s, diffRegionId, stepIndex) {
@@ -282,9 +301,9 @@ function stepStoryHtml(s, diffRegionId, stepIndex) {
     <p class="ds-why-text" data-speech-text="${esc(s.why.speech)}">${nl(s.why.html)}</p>
   </div>`;
     return `<div class="ds-beatdock" data-beat-dock data-dock-step="${stepIndex}" hidden>
-    <span class="ds-beatdock-count"><b data-beat-current>01</b><span>/ ${String(s.beats.length).padStart(2, '0')}</span></span>
+    <span class="ds-beatdock-count"><b data-beat-current>01</b><span>/ ${String(s.beats.length).padStart(2, "0")}</span></span>
     <div class="ds-beatdock-copy">
-      <div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join('')}</div>
+      <div class="ds-beats">${s.beats.map((beat) => beatHtml(beat, s.file, diffRegionId)).join("")}</div>
     </div>
     <span class="ds-beatdock-actions">
       <button type="button" data-beat-move="-1" aria-label="Previous review beat" disabled>←</button>
@@ -300,75 +319,98 @@ function beatHtml(beat, file, diffRegionId) {
 function beatDestination(file, highlights) {
     const ranges = highlights.map(([start, end]) => {
         if (start === 0 && end === 0)
-            return 'deleted lines';
+            return "deleted lines";
         return start === end ? `line ${start}` : `lines ${start} to ${end}`;
     });
-    return `${file}, ${ranges.join(' and ')}`;
+    return `${file}, ${ranges.join(" and ")}`;
 }
 function storyUnifiedDiffInner(s, comments) {
     if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
-        return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
+        return `<div class="ds-diffnote">${esc(s.note ?? "Nothing to show for this step.")}</div>`;
     }
     const callouts = calloutsByLastRow(s);
     const body = s.blocks
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return ((bi > 0 ? renderHunkGap() : '') +
-            block.map((row) => storyUnifiedRow(row, s, comments, bi, intra) + rowCallouts(row, callouts, true)).join(''));
+        return ((bi > 0 ? renderHunkGap() : "") +
+            block
+                .map((row) => storyUnifiedRow(row, s, comments, bi, intra) +
+                rowCallouts(row, callouts, true))
+                .join(""));
     })
-        .join('');
+        .join("");
     const note = s.note && s.blocks.some((b) => b.length)
         ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
-        : '';
+        : "";
     return `${storyUnifiedHead(s)}${note}${annotationSummary(s)}<div class="ds-diffbody ds-diffbody-unified">${body}</div>`;
 }
 function storyUnifiedHead(s) {
-    const label = s.context ? 'Context' : s.newFile ? 'New file' : 'Unified';
-    const note = s.context ? 'unchanged — shown so the change makes sense' : s.newFile ? '' : 'before and after in one readable column';
-    return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ''}</div>`;
+    const label = s.context ? "Context" : s.newFile ? "New file" : "Unified";
+    const note = s.context
+        ? "unchanged — shown so the change makes sense"
+        : s.newFile
+            ? ""
+            : "before and after in one readable column";
+    return `<div class="ds-diffhead ds-diffhead-ctx"><span class="ds-diffhead-side"><span class="ds-diffhead-label${s.newFile ? " ds-green" : ""}">${label}</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>${note ? `<span class="ds-diffhead-note">${note}</span>` : ""}</div>`;
 }
 function storyUnifiedRow(row, s, _comments, blockIndex, intra) {
-    const target = row.type === 'del' && row.oldNo !== undefined
-        ? { side: 'left', file: s.oldFile, line: row.oldNo }
-        : row.newNo !== undefined
-            ? { side: 'right', file: s.file, line: row.newNo }
+    const target = row.type === "del" && row.oldNo !== undefined
+        ? { side: "left", file: s.oldFile, line: row.oldNo }
+        : row.newNo === undefined
+            ? undefined
+            : { side: "right", file: s.file, line: row.newNo };
+    const unified = {
+        type: row.type,
+        no: target?.line,
+        content: row.content,
+        untoured: row.untoured,
+    };
+    const side = row.type === "del"
+        ? intra?.get(row)?.left
+        : row.type === "add"
+            ? intra?.get(row)?.right
             : undefined;
-    const unified = { type: row.type, no: target?.line, content: row.content, untoured: row.untoured };
-    const side = row.type === 'del' ? intra?.get(row)?.left : row.type === 'add' ? intra?.get(row)?.right : undefined;
     const focusIndex = rowVoiceFocusIndex(row, s, blockIndex);
-    const focusAttr = focusIndex === null ? '' : ` data-step-focus="${focusIndex}"`;
-    const stepAttr = target ? ` data-step="${esc(s.id)}"` : '';
+    const focusAttr = focusIndex === null ? "" : ` data-step-focus="${focusIndex}"`;
+    const stepAttr = target ? ` data-step="${esc(s.id)}"` : "";
     const rowHtml = renderUnifiedRow(unified, target, side).replace(/^<div class="([^"]+)"/, `<div class="$1"${stepAttr}${focusAttr}`);
     return rowHtml;
 }
 function diffInner(s, comments) {
     if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
-        return `<div class="ds-diffnote">${esc(s.note ?? 'Nothing to show for this step.')}</div>`;
+        return `<div class="ds-diffnote">${esc(s.note ?? "Nothing to show for this step.")}</div>`;
     }
     const head = diffHead(s);
-    const hunkGap = () => (s.context || s.newFile ? renderHunkGap() : renderHunkGap(undefined, { split: true }));
+    const hunkGap = () => s.context || s.newFile
+        ? renderHunkGap()
+        : renderHunkGap(undefined, { split: true });
     const canExpandViewport = !s.context && !s.newFile && !s.pairedView && s.viewport[0] > 0;
     const viewportBefore = canExpandViewport && s.viewport[0] > 1
-        ? renderHunkGap({ file: s.file, from: 1, to: s.viewport[0] - 1 }, { split: true, edge: 'before' })
-        : '';
+        ? renderHunkGap({ file: s.file, from: 1, to: s.viewport[0] - 1 }, { split: true, edge: "before" })
+        : "";
     const viewportAfter = canExpandViewport
-        ? renderHunkGap({ file: s.file, from: s.viewport[1] + 1, to: 'eof' }, { split: true, edge: 'after' })
-        : '';
+        ? renderHunkGap({ file: s.file, from: s.viewport[1] + 1, to: "eof" }, { split: true, edge: "after" })
+        : "";
     const callouts = calloutsByLastRow(s);
     const body = viewportBefore +
         s.blocks
             .map((block, bi) => {
             const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-            return ((bi > 0 ? hunkGap() : '') +
-                block.map((row) => sbsRow(row, s, comments, bi, intra) + rowCallouts(row, callouts)).join(''));
+            return ((bi > 0 ? hunkGap() : "") +
+                block
+                    .map((row) => sbsRow(row, s, comments, bi, intra) +
+                    rowCallouts(row, callouts))
+                    .join(""));
         })
-            .join('') +
+            .join("") +
         viewportAfter;
     const note = s.note && s.blocks.some((b) => b.length)
         ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
-        : '';
-    const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
-    const bodyClass = paired?.kind === 'flow' ? ' ds-diffbody-paired-flow' : '';
+        : "";
+    const paired = s.pairedView
+        ? s.moves.find((move) => move.id === s.pairedView)
+        : undefined;
+    const bodyClass = paired?.kind === "flow" ? " ds-diffbody-paired-flow" : "";
     return `${head}${note}${annotationSummary(s)}<div class="ds-diffbody${bodyClass}">${body}</div>${annotationData(s)}`;
 }
 function diffHead(s) {
@@ -378,14 +420,16 @@ function diffHead(s) {
       <span class="ds-diffhead-note">unchanged — shown so the change makes sense</span>
     </div>`;
     }
-    const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
+    const paired = s.pairedView
+        ? s.moves.find((move) => move.id === s.pairedView)
+        : undefined;
     if (paired) {
-        const flow = paired.kind === 'flow';
-        const leftLabel = flow ? 'Source' : 'Before';
-        const rightLabel = flow ? 'Destination' : 'After';
+        const flow = paired.kind === "flow";
+        const leftLabel = flow ? "Source" : "Before";
+        const rightLabel = flow ? "Destination" : "After";
         return `<div class="ds-diffhead ds-diffhead-paired">
       <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label">${leftLabel}</span><span class="ds-diffhead-path">${esc(paired.before.file)}</span></span><span class="ds-diffhead-divider"></span>
-      <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label ${flow ? 'ds-blue' : 'ds-green'}">${rightLabel}</span><span class="ds-diffhead-path">${esc(paired.after.file)}</span></span>
+      <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label ${flow ? "ds-blue" : "ds-green"}">${rightLabel}</span><span class="ds-diffhead-path">${esc(paired.after.file)}</span></span>
     </div>`;
     }
     if (s.newFile) {
@@ -393,26 +437,38 @@ function diffHead(s) {
       <span class="ds-diffhead-side"><span class="ds-diffhead-label ds-green">New file</span><span class="ds-diffhead-path">${esc(s.file)}</span></span>
     </div>`;
     }
-    const leftLabel = s.newFile ? 'Did not exist' : 'Before';
-    const rightLabel = s.newFile ? 'New file' : 'After';
+    const leftLabel = s.newFile ? "Did not exist" : "Before";
+    const rightLabel = s.newFile ? "New file" : "After";
     return `<div class="ds-diffhead">
     <span class="ds-diffhead-side ds-diffhead-side-l">
-      <span class="ds-diffhead-label${s.newFile ? ' ds-dim' : ''}">${leftLabel}</span>
-      ${s.newFile ? '' : `<span class="ds-diffhead-path">${esc(s.file)}</span>`}
+      <span class="ds-diffhead-label${s.newFile ? " ds-dim" : ""}">${leftLabel}</span>
+      ${s.newFile ? "" : `<span class="ds-diffhead-path">${esc(s.file)}</span>`}
     </span>
     <span class="ds-diffhead-divider"></span>
     <span class="ds-diffhead-side ds-diffhead-side-r">
-      <span class="ds-diffhead-label${s.newFile ? ' ds-green' : ''}">${rightLabel}</span>
+      <span class="ds-diffhead-label${s.newFile ? " ds-green" : ""}">${rightLabel}</span>
       <span class="ds-diffhead-path">${esc(s.file)}</span>
     </span>
   </div>`;
 }
 function sbsRow(row, s, _comments, blockIndex, intra) {
-    const paired = s.pairedView ? s.moves.find((move) => move.id === s.pairedView) : undefined;
-    const leftTarget = !s.context && (paired || !s.newFile) && row.oldNo !== undefined
-        ? { side: 'left', file: paired?.before.file ?? s.oldFile, line: row.oldNo }
+    const paired = s.pairedView
+        ? s.moves.find((move) => move.id === s.pairedView)
         : undefined;
-    const rightTarget = row.newNo !== undefined ? { side: 'right', file: paired?.after.file ?? s.file, line: row.newNo } : undefined;
+    const leftTarget = !s.context && (paired || !s.newFile) && row.oldNo !== undefined
+        ? {
+            side: "left",
+            file: paired?.before.file ?? s.oldFile,
+            line: row.oldNo,
+        }
+        : undefined;
+    const rightTarget = row.newNo === undefined
+        ? undefined
+        : {
+            side: "right",
+            file: paired?.after.file ?? s.file,
+            line: row.newNo,
+        };
     const rowHtml = renderSplitRow(row, {
         leftTarget,
         rightTarget,
@@ -427,15 +483,15 @@ function sbsRow(row, s, _comments, blockIndex, intra) {
 function rowMoveTokens(row, s) {
     const tokens = [];
     for (const move of s.moves) {
-        if (move.before.local
-            && row.oldNo !== undefined
-            && row.oldNo >= move.before.range[0]
-            && row.oldNo <= move.before.range[1])
+        if (move.before.local &&
+            row.oldNo !== undefined &&
+            row.oldNo >= move.before.range[0] &&
+            row.oldNo <= move.before.range[1])
             tokens.push(`${move.id}:before`);
-        if (move.after.local
-            && row.newNo !== undefined
-            && row.newNo >= move.after.range[0]
-            && row.newNo <= move.after.range[1])
+        if (move.after.local &&
+            row.newNo !== undefined &&
+            row.newNo >= move.after.range[0] &&
+            row.newNo <= move.after.range[1])
             tokens.push(`${move.id}:after`);
     }
     return tokens;
@@ -445,24 +501,28 @@ function rowVoiceFocusIndex(row, s, blockIndex) {
     if (idx >= 0) {
         return s.focusExplicit ? idx : blockIndex;
     }
-    return !s.focusExplicit && row.type === 'del' && s.kind === 'changed' ? blockIndex : null;
+    return !s.focusExplicit && row.type === "del" && s.kind === "changed"
+        ? blockIndex
+        : null;
 }
 function rowInFocusRange(row, s, [start, end]) {
     if (row.newNo !== undefined)
         return row.newNo >= start && row.newNo <= end;
-    return s.kind === 'changed' && row.type === 'del' && start === 0 && end === 0;
+    return s.kind === "changed" && row.type === "del" && start === 0 && end === 0;
 }
 // ---- all files ----
 /** Inner master/detail panel markup, also served lazily for non-active files. */
 export function renderFilePanelContent(f, _stepIndexById) {
     const [dir, base] = splitPath(f.file);
-    const canExpand = f.kind !== 'context' && f.hasFull;
+    const canExpand = f.kind !== "context" && f.hasFull;
     const gapBefore = (hi) => {
         if (!canExpand)
-            return hi > 0 ? renderHunkGap() : '';
+            return hi > 0 ? renderHunkGap() : "";
         if (hi === 0) {
             const start = f.hunkRanges[0]?.[0] ?? 1;
-            return start > 1 ? renderHunkGap({ file: f.file, from: 1, to: start - 1 }) : '';
+            return start > 1
+                ? renderHunkGap({ file: f.file, from: 1, to: start - 1 })
+                : "";
         }
         const prevEnd = f.hunkRanges[hi - 1][1];
         const nextStart = f.hunkRanges[hi][0];
@@ -472,26 +532,35 @@ export function renderFilePanelContent(f, _stepIndexById) {
     };
     // A new file's whole content is the hunk — nothing is hidden past it, so the
     // trailing "reveal more" affordance would promise lines that can't exist.
-    const gapAfterLast = canExpand && f.hunks.length && f.kind !== 'new'
-        ? renderHunkGap({ file: f.file, from: f.hunkRanges[f.hunkRanges.length - 1][1] + 1, to: 'eof' })
-        : '';
+    const gapAfterLast = canExpand && f.hunks.length && f.kind !== "new"
+        ? renderHunkGap({
+            file: f.file,
+            from: f.hunkRanges[f.hunkRanges.length - 1][1] + 1,
+            to: "eof",
+        })
+        : "";
     const unified = f.hunks.length
         ? f.hunks
             .map((hunk, hi) => {
             const intra = intraLineMap(hunk, (r) => r.type, (r) => r.content);
-            return gapBefore(hi) + hunk.map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra))).join('');
+            return (gapBefore(hi) +
+                hunk
+                    .map((r) => unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra)))
+                    .join(""));
         })
-            .join('') + gapAfterLast
+            .join("") + gapAfterLast
         : '<div class="ds-diffnote">No diff to show.</div>';
     // Changed files default to Split. A context-only file has no before/after
     // diff, so Unified is its real evidence and Split must not be offered.
-    const toggle = f.kind === 'context'
-        ? `<div class="ds-modetoggle" role="group" aria-label="File display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>${f.hasFull ? '<button data-mode="full" aria-pressed="false">Full file</button>' : ''}</div>`
+    const toggle = f.kind === "context"
+        ? `<div class="ds-modetoggle" role="group" aria-label="File display mode"><button class="is-active" data-mode="diff" aria-pressed="true">Unified</button>${f.hasFull
+            ? '<button data-mode="full" aria-pressed="false">Full file</button>'
+            : ""}</div>`
         : f.hasFull
             ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button><button data-mode="full" aria-pressed="false">Full file</button></div>`
             : f.hunks.length
                 ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button></div>`
-                : '';
+                : "";
     return `<div class="ds-filepanel-head">
       <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(base)}</span></span>
       <span class="ds-flex"></span>
@@ -500,8 +569,8 @@ export function renderFilePanelContent(f, _stepIndexById) {
       ${toggle}
     </div>
     <div class="ds-filepanel-body">
-      <div data-diff-inner${f.kind === 'context' ? '' : ' hidden'}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
-      <div data-split-inner${f.kind === 'context' ? ' hidden' : ''}><div class="ds-diffnote" role="status">Loading the split view…</div></div>
+      <div data-diff-inner${f.kind === "context" ? "" : " hidden"}><div class="ds-diffbody ds-diffbody-unified">${unified}</div></div>
+      <div data-split-inner${f.kind === "context" ? " hidden" : ""}><div class="ds-diffnote" role="status">Loading the split view…</div></div>
       <div data-full-inner hidden></div>
     </div>
   `;
@@ -515,8 +584,8 @@ function unifiedRow(row, file, oldFile = file, intra) {
     const target = row.no === undefined
         ? undefined
         : {
-            side: row.type === 'del' ? 'left' : 'right',
-            file: row.type === 'del' ? oldFile : file,
+            side: row.type === "del" ? "left" : "right",
+            file: row.type === "del" ? oldFile : file,
             line: row.no,
         };
     return renderUnifiedRow(row, target, intra);
@@ -524,22 +593,49 @@ function unifiedRow(row, file, oldFile = file, intra) {
 /** Look up a unified row's precomputed intra-line side (del→left, add→right). */
 function unifiedIntra(row, map) {
     const sides = map.get(row);
-    return row.type === 'del' ? sides?.left : sides?.right;
+    return row.type === "del" ? sides?.left : sides?.right;
 }
-function commentAnchorState(repo, headRef, c) {
-    if (commentSide(c) === 'left')
-        return 'old-side';
-    if (!c.selectedText)
-        return 'legacy';
-    const lines = readWholeFile(repo, c.file, headRef);
-    if (!lines)
-        return 'changed';
-    const text = lines.join('\n');
-    const index = text.indexOf(c.selectedText);
-    if (index < 0)
-        return 'changed';
-    const currentLine = text.slice(0, index).split('\n').length;
-    return currentLine === c.line ? 'current' : 'moved';
+function commentAnchorLabel(state) {
+    if (state === "changed")
+        return "Code changed";
+    if (state === "moved")
+        return "Code moved";
+    if (state === "old-side")
+        return "Old side";
+    if (state === "legacy")
+        return "Line-only anchor";
+    return "Anchor current";
+}
+function commentAnchorView(repo, headRef, c) {
+    let state = "current";
+    let currentLine;
+    if (commentSide(c) === "left")
+        state = "old-side";
+    else if (c.selectedText) {
+        const lines = readWholeFile(repo, c.file, headRef);
+        if (lines) {
+            const text = lines.join("\n");
+            const index = text.indexOf(c.selectedText);
+            if (index < 0)
+                state = "changed";
+            else {
+                currentLine = text.slice(0, index).split("\n").length;
+                state = currentLine === c.line ? "current" : "moved";
+            }
+        }
+        else
+            state = "changed";
+    }
+    else
+        state = "legacy";
+    return {
+        id: c.id,
+        state,
+        label: commentAnchorLabel(state),
+        ...(currentLine !== undefined && currentLine !== c.line
+            ? { currentLine }
+            : {}),
+    };
 }
 // ---- trust evidence ----
 export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDivergentFiles, storyless) {
@@ -550,38 +646,42 @@ export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDi
             ? `<div class="ds-trust-clean">The full bounded diff is available file by file. No story-coverage claim is applied in this view.</div>`
             : clean
                 ? `<div class="ds-trust-clean">✓ Every changed range in the bounded renderer is fully explained by a step.</div>`
-                : '';
+                : "";
     const coverage = `<section class="ds-reviewpage-section" data-review-section="evidence" aria-labelledby="ds-reviewpage-evidence-h" tabindex="-1">
     <h2 class="ds-reviewpage-h" id="ds-reviewpage-evidence-h">Coverage</h2>
-    <div class="ds-trust-sub">${storyless ? 'Exact change scope, staging state, and files outside the bounded renderer.' : 'Coverage of the bounded review, plus every file kept outside it.'}</div>
-    ${storyless || trust.pending ? '' : `<div class="ds-trust-stats">
-      <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, 'line')} covered by a step</div></div>
-      <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, 'change')} no step explains</div></div>
+    <div class="ds-trust-sub">${storyless ? "Exact change scope, staging state, and files outside the bounded renderer." : "Coverage of the bounded review, plus every file kept outside it."}</div>
+    ${storyless || trust.pending
+        ? ""
+        : `<div class="ds-trust-stats">
+      <div class="ds-trust-stat ok"><div class="ds-trust-num">${trust.coveredLines}</div><div class="ds-trust-lbl">changed ${plural(trust.coveredLines, "line")} covered by a step</div></div>
+      <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, "change")} no step explains</div></div>
     </div>`}
     ${verdict}
-    <div class="ds-trust-foot">${storyless ? 'The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities.' : 'Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility.'}</div>
+    <div class="ds-trust-foot">${storyless ? "The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities." : "Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility."}</div>
   </section>`;
-    const unexplained = trust.pending || storyless || clean ? '' : unexplainedSection(trust, stepIndexById);
+    const unexplained = trust.pending || storyless || clean
+        ? ""
+        : unexplainedSection(trust, stepIndexById);
     const exclusions = excludedFiles.length
         ? `<section class="ds-reviewpage-section ds-exclusions" data-review-section="exclusions" aria-labelledby="ds-exclusions-title" tabindex="-1">
         <h2 class="ds-reviewpage-h" id="ds-exclusions-title">Outside the bounded renderer <span class="ds-option-count">${excludedFiles.length}</span></h2>
         <p class="ds-exclusions-note">These files are part of the git change but are not included in story coverage or the default diff DOM. Inspect them deliberately before deciding.</p>
-        ${excludedFiles.map(excludedFileCard).join('')}
+        ${excludedFiles.map(excludedFileCard).join("")}
         <label class="ds-exclusion-ack"><input type="checkbox" data-exclusions-ack><span><strong>I inspected these exclusions</strong><small>Bound to this exact diff; a code change clears the acknowledgement.</small></span></label>
       </section>`
-        : '';
+        : "";
     const stagedState = indexDivergentFiles.length
         ? `<section class="ds-reviewpage-section ds-exclusions" data-review-section="staged" aria-labelledby="ds-index-state-title" tabindex="-1">
         <h2 class="ds-reviewpage-h" id="ds-index-state-title">Staged state differs <span class="ds-option-count">${indexDivergentFiles.length}</span></h2>
         <p class="ds-exclusions-note">These paths contain one version in Git's index and another in the working tree. A single combined diff cannot prove which version you intend to commit, so approval stays blocked until they match.</p>
-        ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join('')}
+        ${indexDivergentFiles.map((path) => `<article class="ds-exclusion-card"><div><code>${esc(path)}</code><span>Index and working tree contain different bytes</span></div></article>`).join("")}
       </section>`
-        : '';
+        : "";
     // Every block below is its own review-page section, so the wrapper only exists
     // to give the lazy fetch one node to swap. data-trust-uncovered is how that
     // replacement settles the pill: an empty value means "no verdict" — the client
     // must leave the pill alone rather than read a missing answer as zero.
-    return `<div class="ds-trust-evidence" data-trust-evidence data-trust-pending="${trust.pending ? '1' : '0'}" data-trust-uncovered="${trust.pending ? '' : trust.uncovered.length}" data-trust-storyless="${storyless ? '1' : '0'}">
+    return `<div class="ds-trust-evidence" data-trust-evidence data-trust-pending="${trust.pending ? "1" : "0"}" data-trust-uncovered="${trust.pending ? "" : trust.uncovered.length}" data-trust-storyless="${storyless ? "1" : "0"}">
     ${coverage}
     ${unexplained}
     ${stagedState}
@@ -603,35 +703,37 @@ function unexplainedSection(trust, stepIndexById) {
     for (const u of trust.uncovered) {
         const entry = byFile.get(u.file) ?? { ranges: 0, lines: 0 };
         entry.ranges += 1;
-        entry.lines += u.rows.filter((r) => r.type === 'add').length;
+        entry.lines += u.rows.filter((r) => r.type === "add").length;
         byFile.set(u.file, entry);
     }
     const files = [...byFile.entries()].sort((a, b) => b[1].ranges - a[1].ranges || a[0].localeCompare(b[0]));
     const fileRows = files
         .map(([file, count]) => `<button type="button" class="ds-unexplained-file" data-goto-file="${esc(file)}" title="Open ${esc(file)} in Files">
           <code>${esc(file)}</code>
-          <span class="ds-unexplained-file-count">${count.ranges} ${plural(count.ranges, 'range')}${count.lines ? ` · ${count.lines} ${plural(count.lines, 'line')}` : ''}</span>
+          <span class="ds-unexplained-file-count">${count.ranges} ${plural(count.ranges, "range")}${count.lines ? ` · ${count.lines} ${plural(count.lines, "line")}` : ""}</span>
         </button>`)
-        .join('');
+        .join("");
     return `<section class="ds-reviewpage-section ds-unexplained" data-review-section="unexplained" aria-labelledby="ds-reviewpage-unexplained-h" tabindex="-1">
     <h2 class="ds-reviewpage-h" id="ds-reviewpage-unexplained-h"><span class="ds-tri" aria-hidden="true">▲</span>Unexplained changes <span class="ds-option-count">${ranges}</span></h2>
-    <p class="ds-unexplained-note">${ranges} changed ${plural(ranges, 'range')} across ${files.length} ${plural(files.length, 'file')} ${ranges === 1 ? 'is' : 'are'} in the diff with no story step walking through ${ranges === 1 ? 'it' : 'them'}. That is a gap in the story, not a verdict on the code — read ${ranges === 1 ? 'it' : 'them'} yourself, or ask ${esc(APP_BRAND)} to explain.</p>
+    <p class="ds-unexplained-note">${ranges} changed ${plural(ranges, "range")} across ${files.length} ${plural(files.length, "file")} ${ranges === 1 ? "is" : "are"} in the diff with no story step walking through ${ranges === 1 ? "it" : "them"}. That is a gap in the story, not a verdict on the code — read ${ranges === 1 ? "it" : "them"} yourself, or ask ${esc(APP_BRAND)} to explain.</p>
     <div class="ds-unexplained-files">${fileRows}</div>
     <details class="ds-unexplained-detail" data-unexplained-disclosure>
-      <summary><span class="ds-unexplained-summary-label">Show ${ranges === 1 ? 'the change' : `all ${ranges} changes`}</span><span class="ds-unexplained-summary-hint">diff, with jump and explain actions</span></summary>
-      <div class="ds-unexplained-cards">${trust.uncovered.map((u) => trustCard(u, stepIndexById)).join('')}</div>
+      <summary><span class="ds-unexplained-summary-label">Show ${ranges === 1 ? "the change" : `all ${ranges} changes`}</span><span class="ds-unexplained-summary-hint">diff, with jump and explain actions</span></summary>
+      <div class="ds-unexplained-cards">${trust.uncovered.map((u) => trustCard(u, stepIndexById)).join("")}</div>
     </details>
   </section>`;
 }
 function excludedFileCard(file) {
-    const reason = file.reason === 'generated-path'
-        ? 'Generated or vendored path'
-        : file.reason === 'large-diff'
-            ? 'Large diff'
-            : file.reason === 'binary'
-                ? 'Binary or non-text change'
-                : 'Metadata-only change';
-    const lines = file.changedLines == null ? 'Binary or uncounted change' : `${file.changedLines} changed ${plural(file.changedLines, 'line')}`;
+    const reason = file.reason === "generated-path"
+        ? "Generated or vendored path"
+        : file.reason === "large-diff"
+            ? "Large diff"
+            : file.reason === "binary"
+                ? "Binary or non-text change"
+                : "Metadata-only change";
+    const lines = file.changedLines == null
+        ? "Binary or uncounted change"
+        : `${file.changedLines} changed ${plural(file.changedLines, "line")}`;
     return `<article class="ds-exclusion-card" data-excluded-file="${esc(file.path)}">
     <div><code>${esc(file.path)}</code><span>${reason} · ${lines}</span></div>
     <button type="button" class="ds-btn ds-btn-ghost" data-inspect-excluded="${esc(file.path)}">Inspect current file</button>
@@ -641,12 +743,14 @@ function excludedFileCard(file) {
 function trustCard(u, stepIndexById) {
     const intra = intraLineMap(u.rows, (r) => r.type, (r) => r.content);
     const rows = u.rows.length
-        ? u.rows.map((r) => unifiedRow(r, u.file, u.file, unifiedIntra(r, intra))).join('')
+        ? u.rows
+            .map((r) => unifiedRow(r, u.file, u.file, unifiedIntra(r, intra)))
+            .join("")
         : `<div class="ds-diffnote">${esc(u.file)}:${u.line}</div>`;
-    const stepIdx = u.stepId !== undefined ? stepIndexById.get(u.stepId) : undefined;
-    const jump = stepIdx !== undefined
-        ? `<button class="ds-btn ds-btn-solid" data-goto-step="${stepIdx}">Jump to ${esc(u.file)}</button>`
-        : `<button class="ds-btn ds-btn-solid" data-goto-file="${esc(u.file)}">Show ${esc(u.file)}</button>`;
+    const stepIdx = u.stepId === undefined ? undefined : stepIndexById.get(u.stepId);
+    const jump = stepIdx === undefined
+        ? `<button class="ds-btn ds-btn-solid" data-goto-file="${esc(u.file)}">Show ${esc(u.file)}</button>`
+        : `<button class="ds-btn ds-btn-solid" data-goto-step="${stepIdx}">Jump to ${esc(u.file)}</button>`;
     return `<div class="ds-trust-card">
     <div class="ds-trust-card-head">
       <span class="ds-trust-card-path">${esc(u.file)}<span class="ds-dim">:${u.line}</span></span>
@@ -661,12 +765,12 @@ function trustCard(u, stepIndexById) {
 }
 // ---- full file (used by the lazy /api/fullfile endpoint) ----
 function splitHead(opts) {
-    const leftLabel = opts.newFile ? 'Did not exist' : 'Before';
-    const rightLabel = opts.newFile ? 'New file' : 'After';
+    const leftLabel = opts.newFile ? "Did not exist" : "Before";
+    const rightLabel = opts.newFile ? "New file" : "After";
     return `<div class="ds-diffhead">
-    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${opts.newFile ? ' ds-dim' : ''}">${leftLabel}</span>${opts.newFile ? '' : `<span class="ds-diffhead-path">${esc(opts.oldFile ?? opts.file)}</span>`}</span>
+    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${opts.newFile ? " ds-dim" : ""}">${leftLabel}</span>${opts.newFile ? "" : `<span class="ds-diffhead-path">${esc(opts.oldFile ?? opts.file)}</span>`}</span>
     <span class="ds-diffhead-divider"></span>
-    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${opts.newFile ? ' ds-green' : ''}">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
+    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${opts.newFile ? " ds-green" : ""}">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
   </div>`;
 }
 export function renderFullFile(rows, opts) {
@@ -674,7 +778,7 @@ export function renderFullFile(rows, opts) {
         return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
     }
     const intra = intraLineMap(rows, (r) => r.type, (r) => r.content);
-    const body = rows.map((r) => fullRow(r, opts, intra)).join('');
+    const body = rows.map((r) => fullRow(r, opts, intra)).join("");
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
 }
 /** The lazily-loaded Split view for one All-files panel: hunks only,
@@ -686,10 +790,12 @@ export function renderSplitHunks(blocks, opts) {
     const canExpand = !!opts.canExpand && !!hunkRanges;
     const gapBefore = (bi) => {
         if (!canExpand || !hunkRanges)
-            return bi > 0 ? renderHunkGap(undefined, { split: true }) : '';
+            return bi > 0 ? renderHunkGap(undefined, { split: true }) : "";
         if (bi === 0) {
             const start = hunkRanges[0]?.[0] ?? 1;
-            return start > 1 ? renderHunkGap({ file: opts.file, from: 1, to: start - 1 }, { split: true }) : '';
+            return start > 1
+                ? renderHunkGap({ file: opts.file, from: 1, to: start - 1 }, { split: true })
+                : "";
         }
         const prevEnd = hunkRanges[bi - 1][1];
         const nextStart = hunkRanges[bi][0];
@@ -700,14 +806,18 @@ export function renderSplitHunks(blocks, opts) {
     // A new file's whole content is the hunk — nothing is hidden past it (see
     // filePanel's matching guard), so it gets no trailing eof expand affordance.
     const gapAfterLast = canExpand && hunkRanges && blocks.length && !opts.newFile
-        ? renderHunkGap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: 'eof' }, { split: true })
-        : '';
+        ? renderHunkGap({
+            file: opts.file,
+            from: hunkRanges[hunkRanges.length - 1][1] + 1,
+            to: "eof",
+        }, { split: true })
+        : "";
     const body = blocks
         .map((block, bi) => {
         const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return gapBefore(bi) + block.map((row) => fullRow(row, opts, intra)).join('');
+        return (gapBefore(bi) + block.map((row) => fullRow(row, opts, intra)).join(""));
     })
-        .join('') + gapAfterLast;
+        .join("") + gapAfterLast;
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
 }
 /** Compact, single-column rendering for since-story evidence. The drawer's
@@ -716,14 +826,16 @@ export function renderSplitHunks(blocks, opts) {
 export function renderUnifiedHunks(file) {
     if (!file.hunks.length)
         return `<div class="ds-diffnote">No diff to show.</div>`;
-    const body = file.hunks.map((hunk, index) => {
+    const body = file.hunks
+        .map((hunk, index) => {
         const rows = hunk.lines.map((line) => renderUnifiedRow({
             type: line.type,
             no: line.newNo ?? line.oldNo,
             content: line.content,
         }));
-        return `${index ? renderHunkGap() : ''}${rows.join('')}`;
-    }).join('');
+        return `${index ? renderHunkGap() : ""}${rows.join("")}`;
+    })
+        .join("");
     return `<div class="ds-diffbody ds-diffbody-unified ds-drift-unified">${body}</div>`;
 }
 /** Rows served by /api/diff/context, wrapped so the client can read the
@@ -733,37 +845,47 @@ export function renderContextRows(rows, layout, opts) {
         return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
     const from = rows[0].newNo ?? 0;
     const to = rows[rows.length - 1].newNo ?? 0;
-    const body = layout === 'split'
-        ? rows.map((r) => fullRow(r, opts)).join('')
+    const body = layout === "split"
+        ? rows.map((r) => fullRow(r, opts)).join("")
         : rows
-            .map((r) => unifiedRow({ type: 'ctx', no: r.newNo, content: r.content }, opts.file, opts.oldFile ?? opts.file))
-            .join('');
+            .map((r) => unifiedRow({ type: "ctx", no: r.newNo, content: r.content }, opts.file, opts.oldFile ?? opts.file))
+            .join("");
     return `<div data-ctx-rows data-from="${from}" data-to="${to}">${body}</div>`;
 }
 function fullRow(row, opts, intra) {
     const leftTarget = !opts.newFile && row.oldNo !== undefined
-        ? { side: 'left', file: opts.oldFile ?? opts.file, line: row.oldNo }
+        ? {
+            side: "left",
+            file: opts.oldFile ?? opts.file,
+            line: row.oldNo,
+        }
         : undefined;
-    const rightTarget = row.newNo !== undefined ? { side: 'right', file: opts.file, line: row.newNo } : undefined;
-    return renderSplitRow(row, { leftTarget, rightTarget, sides: intra?.get(row) });
+    const rightTarget = row.newNo === undefined
+        ? undefined
+        : { side: "right", file: opts.file, line: row.newNo };
+    return renderSplitRow(row, {
+        leftTarget,
+        rightTarget,
+        sides: intra?.get(row),
+    });
 }
 // ---- shared bits ----
 function splitPath(p) {
-    const i = p.lastIndexOf('/');
-    return i < 0 ? ['', p] : [p.slice(0, i + 1), p.slice(i + 1)];
+    const i = p.lastIndexOf("/");
+    return i < 0 ? ["", p] : [p.slice(0, i + 1), p.slice(i + 1)];
 }
 function plural(n, word) {
-    return n === 1 ? word : word + 's';
+    return n === 1 ? word : word + "s";
 }
 function esc(s) {
     return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
 function nl(s) {
-    return s.replace(/\n/g, '<br>');
+    return s.replace(/\n/g, "<br>");
 }
 function prose(value) {
     return { html: value.html, text: value.text, speech: value.speech };
@@ -793,7 +915,7 @@ function stepView(step) {
         beats: [],
         ...(step.chapter ? { chapter: step.chapter } : {}),
     };
-    if (step.kind === 'concept') {
+    if (step.kind === "concept") {
         return { ...base, conceptSpeech: conceptSpeechText(step) };
     }
     return {
@@ -810,7 +932,11 @@ function fileRow(file) {
         add: file.add,
         del: file.del,
         untoured: file.untoured,
-        kind: file.kind === 'new' ? 'new' : file.kind === 'context' ? 'context' : 'changed',
+        kind: file.kind === "new"
+            ? "new"
+            : file.kind === "context"
+                ? "context"
+                : "changed",
         kindLabel: file.kindLabel,
         status: file.status,
         symbols: file.symbols,
@@ -821,8 +947,8 @@ function fileRow(file) {
 }
 function readingOrderLabel(model) {
     if (!model.conceptSteps)
-        return `${model.codeSteps} ${plural(model.codeSteps, 'step')}`;
-    return `${model.codeSteps} ${plural(model.codeSteps, 'code step')} + ${model.conceptSteps} ${plural(model.conceptSteps, 'primer')}`;
+        return `${model.codeSteps} ${plural(model.codeSteps, "step")}`;
+    return `${model.codeSteps} ${plural(model.codeSteps, "code step")} + ${model.conceptSteps} ${plural(model.conceptSteps, "primer")}`;
 }
 /**
  * Build the payload and render the shell.
@@ -834,22 +960,22 @@ function readingOrderLabel(model) {
  */
 export function renderReviewShell(input) {
     const { repo, tour, files, baseLabel, comments, headRef } = input;
-    const routeBase = input.routeBase ?? '';
+    const routeBase = input.routeBase ?? "";
     const storyless = input.storyless ?? false;
     const storyDrift = input.storyDrift;
     const storyFreshness = storyless
-        ? 'current'
+        ? "current"
         : storyDrift
-            ? storyDrift.state === 'unverified'
-                ? 'unverified'
-                : storyDrift.state === 'story-changed' || storyDrift.state === 'mixed'
-                    ? 'stale'
-                    : 'current'
-            : (input.storyFreshness ?? 'current');
+            ? storyDrift.state === "unverified"
+                ? "unverified"
+                : storyDrift.state === "story-changed" || storyDrift.state === "mixed"
+                    ? "stale"
+                    : "current"
+            : (input.storyFreshness ?? "current");
     const reviewState = input.reviewState ?? {
-        scopeKey: '',
-        currentDiffHash: '',
-        feedbackHealth: { status: 'healthy', source: 'missing' },
+        scopeKey: "",
+        currentDiffHash: "",
+        feedbackHealth: { status: "healthy", source: "missing" },
     };
     const excludedFiles = input.excludedFiles ?? [];
     const indexDivergentFiles = input.stagedWorktreeDivergentFiles ?? [];
@@ -861,19 +987,22 @@ export function renderReviewShell(input) {
         trustPending: !!input.fileIndex,
         baseRef: tour.base ?? baseLabel,
     });
-    const queuedComments = comments.filter((comment) => comment.status === 'open');
+    const activeComments = comments.filter((comment) => comment.status !== "resolved");
+    const queuedComments = activeComments.filter((comment) => comment.status === "open");
     const openCount = queuedComments.length;
-    const blockingOpenCount = queuedComments.filter((comment) => comment.type === 'change').length;
+    const blockingOpenCount = queuedComments.filter((comment) => comment.type === "change").length;
     const uncoveredCount = model.trust.uncovered.length;
     const focusedStory = !!tour.storyScope?.excludedFiles?.length;
-    const feedbackHealthy = reviewState.feedbackHealth?.status !== 'invalid';
-    const feedbackRecovery = reviewState.feedbackHealth?.status === 'invalid' ? reviewState.feedbackHealth.recovery : '';
+    const feedbackHealthy = reviewState.feedbackHealth?.status !== "invalid";
+    const feedbackRecovery = reviewState.feedbackHealth?.status === "invalid"
+        ? reviewState.feedbackHealth.recovery
+        : "";
     const trustPending = !!model.trust.pending;
     const reviewClean = !trustPending &&
         feedbackHealthy &&
         blockingOpenCount === 0 &&
         uncoveredCount === 0 &&
-        storyFreshness === 'current' &&
+        storyFreshness === "current" &&
         excludedFiles.length === 0 &&
         indexDivergentFiles.length === 0 &&
         !focusedStory;
@@ -881,17 +1010,17 @@ export function renderReviewShell(input) {
     const showTrustPill = !storyless || excludedFiles.length > 0 || indexDivergentFiles.length > 0;
     const trustPillClean = !trustPending &&
         !indexDivergentFiles.length &&
-        (storyless || (storyFreshness === 'current' && !uncoveredCount));
+        (storyless || (storyFreshness === "current" && !uncoveredCount));
     const payload = {
         repo,
-        repoName: input.repoName ?? routeBase.split('/').pop() ?? '',
+        repoName: input.repoName ?? routeBase.split("/").pop() ?? "",
         routeBase,
         storyless,
         baseLabel,
         ...(headRef ? { headRef } : {}),
         ...(tour.base ? { baseRef: tour.base } : {}),
-        pageToken: input.reviewPageToken ?? '',
-        storyKey: input.storyKey ?? '',
+        pageToken: input.reviewPageToken ?? "",
+        storyKey: input.storyKey ?? "",
         reviewScope: reviewState.scopeKey,
         viewedScope: `${repo}|${reviewState.scopeKey || baseLabel}|full`,
         currentDiffHash: reviewState.currentDiffHash,
@@ -902,7 +1031,9 @@ export function renderReviewShell(input) {
                 ? {
                     intent: {
                         goal: prose(model.story.intent.goal),
-                        ...(model.story.intent.design ? { design: prose(model.story.intent.design) } : {}),
+                        ...(model.story.intent.design
+                            ? { design: prose(model.story.intent.design) }
+                            : {}),
                         nonGoals: model.story.intent.nonGoals.map(prose),
                     },
                 }
@@ -933,14 +1064,11 @@ export function renderReviewShell(input) {
         storyIncludedFiles: tour.storyScope?.includedFiles ?? [],
         storyFreshness,
         ...(storyDrift ? { storyDrift } : {}),
-        comments: queuedComments,
+        comments: activeComments,
         // Where each comment's code went since it was written. Only the server can
         // answer this — it re-reads the working tree and searches for the selected
         // text — so it travels rather than being recomputed in the browser.
-        commentAnchors: queuedComments.map((comment) => ({
-            id: comment.id,
-            state: commentAnchorState(repo, headRef, comment),
-        })),
+        commentAnchors: activeComments.map((comment) => commentAnchorView(repo, headRef, comment)),
         excludedFiles,
         stagedWorktreeDivergentFiles: indexDivergentFiles,
         chrome: {
@@ -956,12 +1084,12 @@ export function renderReviewShell(input) {
         },
     };
     return renderShell({
-        surface: 'review',
-        title: storyless ? 'Reviewing the diff' : model.story.title.text,
+        surface: "review",
+        title: storyless ? "Reviewing the diff" : model.story.title.text,
         payload,
         // `ds-map-bg` must be painted during boot, before React commits, or the
         // page flashes a flat background. `ds-overview-active` is the initial
         // navigation position; the engine owns it from then on.
-        bodyClass: `ds-map-bg${storyless ? '' : ' ds-overview-active'}`,
+        bodyClass: `ds-map-bg${storyless ? "" : " ds-overview-active"}`,
     });
 }

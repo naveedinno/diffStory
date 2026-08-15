@@ -1,32 +1,33 @@
 // Load and validate the story file (.diffstory/story.json). Validation is hand-rolled (no schema dep)
 // but thorough — a malformed story should fail loudly with a useful message,
 // not render a broken page.
-import { readFileSync } from 'node:fs';
-import { narrativeIssues, narrativeText } from './narrative.js';
-const CODE_KINDS = ['changed', 'context', 'new-file'];
-const KINDS = [...CODE_KINDS, 'concept'];
-const MODES = ['brief', 'guided', 'detailed'];
+import { readFileSync } from "node:fs";
+import { assertSafeRepoPath } from "./git.js";
+import { narrativeIssues, narrativeText, } from "./narrative.js";
+const CODE_KINDS = ["changed", "context", "new-file"];
+const KINDS = [...CODE_KINDS, "concept"];
+const MODES = ["brief", "guided", "detailed"];
 const MOVE_KINDS = [
-    'moved',
-    'extracted',
-    'inlined',
-    'wrapped',
-    'unwrapped',
-    'condition-changed',
-    'reordered',
-    'flow',
+    "moved",
+    "extracted",
+    "inlined",
+    "wrapped",
+    "unwrapped",
+    "condition-changed",
+    "reordered",
+    "flow",
 ];
 const CONCEPT_CODE_FIELDS = [
-    'file',
-    'range',
-    'ranges',
-    'viewport',
-    'highlights',
-    'beats',
-    'focus',
-    'why',
-    'calls',
-    'returnsTo',
+    "file",
+    "range",
+    "ranges",
+    "viewport",
+    "highlights",
+    "beats",
+    "focus",
+    "why",
+    "calls",
+    "returnsTo",
 ];
 const CONCEPT_MIN_WORDS = 60;
 const CONCEPT_MAX_WORDS = 220;
@@ -59,20 +60,23 @@ export class TourError extends Error {
  * so a clean story adds nothing here.
  */
 function validateNarrative(value, name, tier, errors) {
-    if (typeof value !== 'string')
+    if (typeof value !== "string")
         return;
     for (const issue of narrativeIssues(value, tier))
         errors.push(`${name} ${issue}`);
 }
 /** True when a field carries no readable prose once its markup is stripped. */
 function isBlankNarrative(value) {
-    return typeof value !== 'string' || !narrativeText(value).trim();
+    return typeof value !== "string" || !narrativeText(value).trim();
 }
 function isLineNumber(v) {
-    return typeof v === 'number' && Number.isInteger(v) && v > 0;
+    return typeof v === "number" && Number.isInteger(v) && v > 0;
 }
 function isDeletionAnchor(value) {
-    return Array.isArray(value) && value.length === 2 && value[0] === 0 && value[1] === 0;
+    return (Array.isArray(value) &&
+        value.length === 2 &&
+        value[0] === 0 &&
+        value[1] === 0);
 }
 /**
  * A stop the author marked as skim-worthy: mechanical sweep coverage rather than
@@ -80,15 +84,18 @@ function isDeletionAnchor(value) {
  * declares its own low-stakes stops instead of the app guessing from prose.
  */
 function isSkimStep(step) {
-    return Array.isArray(step.tags) && step.tags.some((tag) => typeof tag === 'string' && /^(skim|sweep|mechanical)$/i.test(tag.trim()));
+    return (Array.isArray(step.tags) &&
+        step.tags.some((tag) => typeof tag === "string" &&
+            /^(skim|sweep|mechanical)$/i.test(tag.trim())));
 }
 /** A range that strict validation can safely compare after shape validation. */
 function isComparableLineRange(value) {
-    return isDeletionAnchor(value) || (Array.isArray(value) &&
-        value.length === 2 &&
-        isLineNumber(value[0]) &&
-        isLineNumber(value[1]) &&
-        value[0] <= value[1]);
+    return (isDeletionAnchor(value) ||
+        (Array.isArray(value) &&
+            value.length === 2 &&
+            isLineNumber(value[0]) &&
+            isLineNumber(value[1]) &&
+            value[0] <= value[1]));
 }
 function mergedLineRanges(ranges) {
     const sorted = ranges
@@ -107,9 +114,12 @@ function mergedLineRanges(ranges) {
 }
 function sameLineCoverage(a, b) {
     if (a.some(isDeletionAnchor) || b.some(isDeletionAnchor)) {
-        return a.length === 1 && b.length === 1 && isDeletionAnchor(a[0]) && isDeletionAnchor(b[0]);
+        return (a.length === 1 &&
+            b.length === 1 &&
+            isDeletionAnchor(a[0]) &&
+            isDeletionAnchor(b[0]));
     }
-    return JSON.stringify(mergedLineRanges(a)) === JSON.stringify(mergedLineRanges(b));
+    return (JSON.stringify(mergedLineRanges(a)) === JSON.stringify(mergedLineRanges(b)));
 }
 function validateLineRange(value, name, errors, opts = {}) {
     if (isDeletionAnchor(value)) {
@@ -118,7 +128,10 @@ function validateLineRange(value, name, errors, opts = {}) {
         errors.push(`${name} can use [0, 0] only for a pure deleted-file changed step`);
         return undefined;
     }
-    if (!Array.isArray(value) || value.length !== 2 || !isLineNumber(value[0]) || !isLineNumber(value[1])) {
+    if (!Array.isArray(value) ||
+        value.length !== 2 ||
+        !isLineNumber(value[0]) ||
+        !isLineNumber(value[1])) {
         errors.push(`${name} must be [startLine, endLine]`);
         return undefined;
     }
@@ -131,12 +144,14 @@ function validateLineRange(value, name, errors, opts = {}) {
 function validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
     if (step.focus === undefined)
         return;
-    if (typeof step.focus !== 'object' || step.focus === null || Array.isArray(step.focus)) {
+    if (typeof step.focus !== "object" ||
+        step.focus === null ||
+        Array.isArray(step.focus)) {
         errors.push(`${where}.focus must be an object`);
         return;
     }
     const focus = step.focus;
-    if (focus.label !== undefined && typeof focus.label !== 'string') {
+    if (focus.label !== undefined && typeof focus.label !== "string") {
         errors.push(`${where}.focus.label must be a string`);
     }
     if (!Array.isArray(focus.ranges) || focus.ranges.length === 0) {
@@ -190,7 +205,9 @@ function validateBeats(step, containerRange, containerName, where, errors, allow
         return;
     }
     step.beats.forEach((rawBeat, i) => {
-        if (typeof rawBeat !== 'object' || rawBeat === null || Array.isArray(rawBeat)) {
+        if (typeof rawBeat !== "object" ||
+            rawBeat === null ||
+            Array.isArray(rawBeat)) {
             errors.push(`${where}.beats[${i}] must be an object`);
             return;
         }
@@ -198,50 +215,52 @@ function validateBeats(step, containerRange, containerName, where, errors, allow
         if (isBlankNarrative(beat.text)) {
             errors.push(`${where}.beats[${i}].text is required`);
         }
-        validateNarrative(beat.text, `${where}.beats[${i}].text`, 'inline', errors);
+        validateNarrative(beat.text, `${where}.beats[${i}].text`, "inline", errors);
         validateBeatHighlights(beat, i, containerRange, containerName, where, errors, allowDeletionAnchor);
     });
 }
 function validateIntent(t, errors) {
     if (t.intent === undefined)
         return;
-    if (typeof t.intent !== 'object' || t.intent === null || Array.isArray(t.intent)) {
-        errors.push('intent must be an object');
+    if (typeof t.intent !== "object" ||
+        t.intent === null ||
+        Array.isArray(t.intent)) {
+        errors.push("intent must be an object");
         return;
     }
     const intent = t.intent;
     if (isBlankNarrative(intent.goal))
-        errors.push('intent.goal is required');
-    validateNarrative(intent.goal, 'intent.goal', 'inline', errors);
-    if (intent.design !== undefined && typeof intent.design !== 'string')
-        errors.push('intent.design must be a string');
-    validateNarrative(intent.design, 'intent.design', 'inline', errors);
+        errors.push("intent.goal is required");
+    validateNarrative(intent.goal, "intent.goal", "inline", errors);
+    if (intent.design !== undefined && typeof intent.design !== "string")
+        errors.push("intent.design must be a string");
+    validateNarrative(intent.design, "intent.design", "inline", errors);
     if (intent.sources !== undefined) {
         if (!Array.isArray(intent.sources) || intent.sources.length === 0) {
-            errors.push('intent.sources must be a non-empty array');
+            errors.push("intent.sources must be a non-empty array");
         }
         else {
             intent.sources.forEach((s, i) => {
-                if (typeof s !== 'string' || !s.trim())
+                if (typeof s !== "string" || !s.trim())
                     errors.push(`intent.sources[${i}] must be a non-empty string`);
                 // Sources are evidence labels the reviewer scans, never formatted prose.
-                validateNarrative(s, `intent.sources[${i}]`, 'text', errors);
+                validateNarrative(s, `intent.sources[${i}]`, "text", errors);
             });
         }
     }
     if (intent.nonGoals !== undefined) {
-        if (!Array.isArray(intent.nonGoals)) {
-            errors.push('intent.nonGoals must be an array');
-        }
-        else {
+        if (Array.isArray(intent.nonGoals)) {
             // An empty array means "this change has no deliberate omissions", which is
             // the same honest claim as omitting the field. Rejecting it would fail a
             // whole story over a semantically correct answer.
             intent.nonGoals.forEach((s, i) => {
-                if (typeof s !== 'string' || !s.trim())
+                if (typeof s !== "string" || !s.trim())
                     errors.push(`intent.nonGoals[${i}] must be a non-empty string`);
-                validateNarrative(s, `intent.nonGoals[${i}]`, 'inline', errors);
+                validateNarrative(s, `intent.nonGoals[${i}]`, "inline", errors);
             });
+        }
+        else {
+            errors.push("intent.nonGoals must be an array");
         }
     }
 }
@@ -250,20 +269,20 @@ function validateHotspots(t, errors) {
     if (t.hotspots === undefined)
         return;
     if (!Array.isArray(t.hotspots) || t.hotspots.length === 0) {
-        errors.push('hotspots must be a non-empty array');
+        errors.push("hotspots must be a non-empty array");
         return;
     }
     t.hotspots.forEach((raw, i) => {
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
             errors.push(`hotspots[${i}] must be an object`);
             return;
         }
         const spot = raw;
-        if (typeof spot.step !== 'string' || !spot.step.trim())
+        if (typeof spot.step !== "string" || !spot.step.trim())
             errors.push(`hotspots[${i}].step is required`);
         if (isBlankNarrative(spot.reason))
             errors.push(`hotspots[${i}].reason is required`);
-        validateNarrative(spot.reason, `hotspots[${i}].reason`, 'inline', errors);
+        validateNarrative(spot.reason, `hotspots[${i}].reason`, "inline", errors);
     });
 }
 function validateStringArray(value, name, errors, opts = {}) {
@@ -281,44 +300,67 @@ function validateStringArray(value, name, errors, opts = {}) {
         return;
     }
     value.forEach((s, i) => {
-        if (typeof s !== 'string' || !s.trim())
+        if (typeof s !== "string" || !s.trim())
             errors.push(`${name}[${i}] must be a non-empty string`);
     });
+}
+function validateRepoPath(value, name, errors) {
+    try {
+        assertSafeRepoPath(value);
+    }
+    catch {
+        errors.push(`${name} must be a safe repository-relative path`);
+    }
 }
 function validateStoryScope(t, errors) {
     if (t.storyScope === undefined)
         return;
-    if (typeof t.storyScope !== 'object' || t.storyScope === null || Array.isArray(t.storyScope)) {
-        errors.push('storyScope must be an object');
+    if (typeof t.storyScope !== "object" ||
+        t.storyScope === null ||
+        Array.isArray(t.storyScope)) {
+        errors.push("storyScope must be an object");
         return;
     }
     const scope = t.storyScope;
-    validateStringArray(scope.includedFiles, 'storyScope.includedFiles', errors, {
+    validateStringArray(scope.includedFiles, "storyScope.includedFiles", errors, {
         required: true,
         nonEmpty: true,
     });
-    validateStringArray(scope.excludedFiles, 'storyScope.excludedFiles', errors);
-    if (scope.reviewerNote !== undefined && typeof scope.reviewerNote !== 'string') {
-        errors.push('storyScope.reviewerNote must be a string');
+    validateStringArray(scope.excludedFiles, "storyScope.excludedFiles", errors);
+    if (Array.isArray(scope.includedFiles)) {
+        scope.includedFiles.forEach((file, index) => {
+            if (typeof file === "string" && file.trim())
+                validateRepoPath(file, `storyScope.includedFiles[${index}]`, errors);
+        });
+    }
+    if (Array.isArray(scope.excludedFiles)) {
+        scope.excludedFiles.forEach((file, index) => {
+            if (typeof file === "string" && file.trim())
+                validateRepoPath(file, `storyScope.excludedFiles[${index}]`, errors);
+        });
+    }
+    if (scope.reviewerNote !== undefined &&
+        typeof scope.reviewerNote !== "string") {
+        errors.push("storyScope.reviewerNote must be a string");
     }
     // Reviewer guidance is echoed back into agent prompts, not into the page.
-    validateNarrative(scope.reviewerNote, 'storyScope.reviewerNote', 'text', errors);
+    validateNarrative(scope.reviewerNote, "storyScope.reviewerNote", "text", errors);
 }
 function validateConceptDiagram(value, where, errors) {
     if (value === undefined)
         return;
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
         errors.push(`${where}.diagram must be an object`);
         return;
     }
     const diagram = value;
-    if (diagram.type !== 'mermaid')
+    if (diagram.type !== "mermaid")
         errors.push(`${where}.diagram.type must be "mermaid"`);
-    if (typeof diagram.caption !== 'string' || !diagram.caption.trim()) {
+    if (typeof diagram.caption !== "string" || !diagram.caption.trim()) {
         errors.push(`${where}.diagram.caption is required`);
     }
-    validateNarrative(diagram.caption, `${where}.diagram.caption`, 'inline', errors);
-    if (typeof diagram.source !== 'string' || !diagram.source.trim()) {
+    validateNarrative(diagram.caption, `${where}.diagram.caption`, "inline", errors);
+    if (typeof diagram.source !== "string" || !diagram.source.trim()) {
         errors.push(`${where}.diagram.source is required`);
         return;
     }
@@ -330,19 +372,21 @@ function validateConceptDiagram(value, where, errors) {
     if (lines.length > MERMAID_MAX_LINES) {
         errors.push(`${where}.diagram.source must be at most ${MERMAID_MAX_LINES} lines`);
     }
-    const declaration = lines.find((line) => line.trim() && !line.trim().startsWith('%%'))?.trim() ?? '';
+    const declaration = lines
+        .find((line) => line.trim() && !line.trim().startsWith("%%"))
+        ?.trim() ?? "";
     if (!/^(?:flowchart\s+(?:TD|TB|BT|LR|RL)|sequenceDiagram\b|stateDiagram-v2\b)/.test(declaration)) {
         errors.push(`${where}.diagram.source must start with flowchart, sequenceDiagram, or stateDiagram-v2`);
     }
     const unsafePatterns = [
-        [/%%\s*\{/i, 'configuration directives'],
-        [/\bclick\b/i, 'click directives'],
-        [/\bhref\b/i, 'href directives'],
-        [/(?:https?:|javascript:|data:)?\/\//i, 'external URLs'],
-        [/(?:javascript:|data:)/i, 'executable or embedded URLs'],
-        [/<\/?[a-z][^>]*>/i, 'HTML tags'],
-        [/\b(?:image|img)\s*:/i, 'image directives'],
-        [/\b(?:classDef|linkStyle|style)\b/i, 'custom style directives'],
+        [/%%\s*\{/i, "configuration directives"],
+        [/\bclick\b/i, "click directives"],
+        [/\bhref\b/i, "href directives"],
+        [/(?:https?:|javascript:|data:)?\/\//i, "external URLs"],
+        [/(?:javascript:|data:)/i, "executable or embedded URLs"],
+        [/<\/?[a-z][^>]*>/i, "HTML tags"],
+        [/\b(?:image|img)\s*:/i, "image directives"],
+        [/\b(?:classDef|linkStyle|style)\b/i, "custom style directives"],
     ];
     for (const [pattern, label] of unsafePatterns) {
         if (pattern.test(source))
@@ -353,10 +397,13 @@ function validateConceptStep(step, where, errors) {
     if (isBlankNarrative(step.body))
         errors.push(`${where}.body is required`);
     // The one block-tier field in the whole story: headings, lists, tables, code.
-    validateNarrative(step.body, `${where}.body`, 'block', errors);
-    validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, { required: true, nonEmpty: true });
+    validateNarrative(step.body, `${where}.body`, "block", errors);
+    validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, {
+        required: true,
+        nonEmpty: true,
+    });
     if (Array.isArray(step.preparesFor)) {
-        const refs = step.preparesFor.filter((ref) => typeof ref === 'string');
+        const refs = step.preparesFor.filter((ref) => typeof ref === "string");
         if (new Set(refs).size !== refs.length)
             errors.push(`${where}.preparesFor must not contain duplicate step ids`);
     }
@@ -368,26 +415,35 @@ function validateConceptStep(step, where, errors) {
 }
 function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     const stepKind = step.kind;
-    if (typeof step.file !== 'string' || !step.file)
+    if (typeof step.file !== "string" || !step.file)
         errors.push(`${where}.file is required`);
-    if (typeof step.why !== 'string')
+    else
+        validateRepoPath(step.file, `${where}.file`, errors);
+    if (typeof step.why !== "string")
         errors.push(`${where}.why is required`);
-    validateNarrative(step.why, `${where}.why`, 'inline', errors);
+    validateNarrative(step.why, `${where}.why`, "inline", errors);
     validateStringArray(step.calls, `${where}.calls`, errors);
-    if (step.returnsTo !== undefined && typeof step.returnsTo !== 'string') {
+    if (step.returnsTo !== undefined && typeof step.returnsTo !== "string") {
         errors.push(`${where}.returnsTo must be a string`);
     }
-    if (storyFiles && stepKind !== 'context' && typeof step.file === 'string' && !storyFiles.has(step.file)) {
+    if (storyFiles &&
+        stepKind !== "context" &&
+        typeof step.file === "string" &&
+        !storyFiles.has(step.file)) {
         errors.push(`${where}.file must be in storyScope.includedFiles`);
     }
-    const allowDeletionAnchor = stepKind === 'changed';
-    const stepRange = validateLineRange(step.range, `${where}.range`, errors, { allowDeletionAnchor });
+    const allowDeletionAnchor = stepKind === "changed";
+    const stepRange = validateLineRange(step.range, `${where}.range`, errors, {
+        allowDeletionAnchor,
+    });
     const viewportRange = step.viewport === undefined
         ? undefined
-        : validateLineRange(step.viewport, `${where}.viewport`, errors, { allowDeletionAnchor });
+        : validateLineRange(step.viewport, `${where}.viewport`, errors, {
+            allowDeletionAnchor,
+        });
     const containerRange = viewportRange ?? stepRange;
     const containerName = viewportRange ? `${where}.viewport` : `${where}.range`;
-    if (stepKind === 'context' && step.ranges !== undefined) {
+    if (stepKind === "context" && step.ranges !== undefined) {
         errors.push(`${where}.ranges is not allowed for a context step`);
     }
     else {
@@ -399,13 +455,15 @@ function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     validateMoves(step, where, storyFiles, storyVersion, viewportRange ?? stepRange, errors);
 }
 function validateMoveAnchor(value, name, storyFiles, errors) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
         errors.push(`${name} must be an object`);
         return undefined;
     }
     const anchor = value;
-    const file = typeof anchor.file === 'string' ? anchor.file.trim() : '';
-    if (!file)
+    const file = typeof anchor.file === "string" ? anchor.file.trim() : "";
+    if (file)
+        validateRepoPath(file, `${name}.file`, errors);
+    else
         errors.push(`${name}.file must be a non-empty string`);
     const range = validateLineRange(anchor.range, `${name}.range`, errors);
     if (file && storyFiles && !storyFiles.has(file)) {
@@ -417,27 +475,27 @@ function validateMoveAnchor(value, name, storyFiles, errors) {
 function validateMoveHidden(value, name, errors) {
     if (value === undefined)
         return;
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
         errors.push(`${name} must be an object`);
         return;
     }
     const hidden = value;
-    if (!['path', 'destination', 'consequence'].includes(hidden.as)) {
+    if (!["path", "destination", "consequence"].includes(hidden.as)) {
         errors.push(`${name}.as must be one of path, destination, consequence`);
     }
-    if (typeof hidden.tag !== 'string' || !hidden.tag.trim()) {
+    if (typeof hidden.tag !== "string" || !hidden.tag.trim()) {
         errors.push(`${name}.tag must be a non-empty string`);
     }
     else {
-        validateNarrative(hidden.tag, `${name}.tag`, 'text', errors);
+        validateNarrative(hidden.tag, `${name}.tag`, "text", errors);
         if (hidden.tag.length > 48)
             errors.push(`${name}.tag must be at most 48 characters`);
     }
-    if (typeof hidden.what !== 'string' || !hidden.what.trim()) {
+    if (typeof hidden.what !== "string" || !hidden.what.trim()) {
         errors.push(`${name}.what must be a non-empty string`);
     }
     else {
-        validateNarrative(hidden.what, `${name}.what`, 'inline', errors);
+        validateNarrative(hidden.what, `${name}.what`, "inline", errors);
         if (hidden.what.length > 120)
             errors.push(`${name}.what must be at most 120 characters`);
     }
@@ -447,7 +505,7 @@ function validateMoves(step, where, storyFiles, storyVersion, visibleRange, erro
         return;
     if (storyVersion !== 3)
         errors.push(`${where}.moves and pairedView require story version 3`);
-    if (step.kind === 'context') {
+    if (step.kind === "context") {
         if (step.moves !== undefined)
             errors.push(`${where}.moves is not allowed for a context step`);
         if (step.pairedView !== undefined)
@@ -469,12 +527,14 @@ function validateMoves(step, where, storyFiles, storyVersion, visibleRange, erro
     const validMoves = new Map();
     step.moves.forEach((rawMove, index) => {
         const name = `${where}.moves[${index}]`;
-        if (typeof rawMove !== 'object' || rawMove === null || Array.isArray(rawMove)) {
+        if (typeof rawMove !== "object" ||
+            rawMove === null ||
+            Array.isArray(rawMove)) {
             errors.push(`${name} must be an object`);
             return;
         }
         const move = rawMove;
-        if (typeof move.id !== 'string' || !move.id.trim()) {
+        if (typeof move.id !== "string" || !move.id.trim()) {
             errors.push(`${name}.id must be a non-empty string`);
         }
         else if (ids.has(move.id)) {
@@ -484,15 +544,15 @@ function validateMoves(step, where, storyFiles, storyVersion, visibleRange, erro
             ids.add(move.id);
         }
         if (!MOVE_KINDS.includes(move.kind)) {
-            errors.push(`${name}.kind must be one of ${MOVE_KINDS.join(', ')}`);
+            errors.push(`${name}.kind must be one of ${MOVE_KINDS.join(", ")}`);
         }
         const before = validateMoveAnchor(move.before, `${name}.before`, storyFiles, errors);
         const after = validateMoveAnchor(move.after, `${name}.after`, storyFiles, errors);
-        if (move.label !== undefined && typeof move.label !== 'string') {
+        if (move.label !== undefined && typeof move.label !== "string") {
             errors.push(`${name}.label must be a string`);
         }
-        else if (typeof move.label === 'string') {
-            validateNarrative(move.label, `${name}.label`, 'text', errors);
+        else if (typeof move.label === "string") {
+            validateNarrative(move.label, `${name}.label`, "text", errors);
             if (move.label.length > 24)
                 errors.push(`${name}.label must be at most 24 characters`);
         }
@@ -501,38 +561,38 @@ function validateMoves(step, where, storyFiles, storyVersion, visibleRange, erro
             if (before.file !== step.file && after.file !== step.file) {
                 errors.push(`${name} must anchor at least one endpoint in ${where}.file`);
             }
-            if (before.file === after.file
-                && visibleRange
-                && (after.range[1] < visibleRange[0] || after.range[0] > visibleRange[1])) {
+            if (before.file === after.file &&
+                visibleRange &&
+                (after.range[1] < visibleRange[0] || after.range[0] > visibleRange[1])) {
                 errors.push(`${name}.after.range must intersect ${where}.viewport`);
             }
-            if (typeof move.hidden === 'object'
-                && move.hidden !== null
-                && !Array.isArray(move.hidden)
-                && move.hidden.as === 'destination'
-                && before.file === after.file) {
+            if (typeof move.hidden === "object" &&
+                move.hidden !== null &&
+                !Array.isArray(move.hidden) &&
+                move.hidden.as === "destination" &&
+                before.file === after.file) {
                 errors.push(`${name}.hidden.as "destination" requires a cross-file move`);
             }
-            if (typeof move.id === 'string' && move.id.trim())
+            if (typeof move.id === "string" && move.id.trim())
                 validMoves.set(move.id, { before, after });
         }
     });
     if (step.pairedView !== undefined) {
-        if (typeof step.pairedView !== 'string' || !step.pairedView.trim()) {
+        if (typeof step.pairedView !== "string" || !step.pairedView.trim()) {
             errors.push(`${where}.pairedView must be a non-empty move id`);
             return;
         }
         const move = validMoves.get(step.pairedView);
-        if (!move) {
-            errors.push(`${where}.pairedView must reference a move id in ${where}.moves`);
-        }
-        else {
+        if (move) {
             if (move.before.file === move.after.file) {
                 errors.push(`${where}.pairedView must reference a cross-file move`);
             }
             if (move.after.file !== step.file) {
                 errors.push(`${where}.pairedView move after.file must equal ${where}.file`);
             }
+        }
+        else {
+            errors.push(`${where}.pairedView must reference a move id in ${where}.moves`);
         }
     }
 }
@@ -556,7 +616,9 @@ function validateClaimedRanges(step, stepRange, where, errors, allowDeletionAnch
         errors.push(`${where}.ranges must be a non-empty array when present`);
         return;
     }
-    const parsed = step.ranges.map((value, i) => validateLineRange(value, `${where}.ranges[${i}]`, errors, { allowDeletionAnchor }));
+    const parsed = step.ranges.map((value, i) => validateLineRange(value, `${where}.ranges[${i}]`, errors, {
+        allowDeletionAnchor,
+    }));
     const valid = parsed.filter((r) => !!r);
     if (valid.length !== parsed.length || !stepRange)
         return;
@@ -570,19 +632,21 @@ function validateClaimedRanges(step, stepRange, where, errors, allowDeletionAnch
     }
 }
 function storyScopeIncludedFiles(t) {
-    if (typeof t.storyScope !== 'object' || t.storyScope === null || Array.isArray(t.storyScope))
+    if (typeof t.storyScope !== "object" ||
+        t.storyScope === null ||
+        Array.isArray(t.storyScope))
         return null;
     const includedFiles = t.storyScope.includedFiles;
     if (!Array.isArray(includedFiles) || includedFiles.length === 0)
         return null;
-    if (!includedFiles.every((f) => typeof f === 'string' && f.trim()))
+    if (!includedFiles.every((f) => typeof f === "string" && f.trim()))
         return null;
     return new Set(includedFiles);
 }
 export function loadTour(path) {
     let raw;
     try {
-        raw = readFileSync(path, 'utf8');
+        raw = readFileSync(path, "utf8");
     }
     catch {
         throw new TourError(`No review story found at ${path}. Open the diff in the diffStory app and generate one.`);
@@ -597,58 +661,59 @@ export function loadTour(path) {
     canonicalizeStepKindAliases(parsed);
     const errors = validateTour(parsed);
     if (errors.length) {
-        throw new TourError(`${path} is not a valid story:\n  - ${errors.join('\n  - ')}`);
+        throw new TourError(`${path} is not a valid story:\n  - ${errors.join("\n  - ")}`);
     }
     return parsed;
 }
 function canonicalizeStepKindAliases(obj) {
-    if (typeof obj !== 'object' || obj === null)
+    if (typeof obj !== "object" || obj === null)
         return;
     const steps = obj.steps;
     if (!Array.isArray(steps))
         return;
     for (const s of steps) {
-        if (typeof s !== 'object' || s === null)
+        if (typeof s !== "object" || s === null)
             continue;
         const step = s;
-        if (step.kind === 'deleted')
-            step.kind = 'changed';
+        if (step.kind === "deleted")
+            step.kind = "changed";
     }
 }
 export function validateTour(obj) {
     const errors = [];
-    if (typeof obj !== 'object' || obj === null)
-        return ['story must be a JSON object'];
+    if (typeof obj !== "object" || obj === null)
+        return ["story must be a JSON object"];
     const t = obj;
     if (t.version !== 1 && t.version !== 2 && t.version !== 3)
-        errors.push('version must be 1, 2, or 3');
-    if (t.diffFingerprint !== undefined && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
-        errors.push('diffFingerprint must be a SHA-256 hex digest');
+        errors.push("version must be 1, 2, or 3");
+    if (t.diffFingerprint !== undefined &&
+        !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
+        errors.push("diffFingerprint must be a SHA-256 hex digest");
     }
     if (t.storySnapshot !== undefined) {
         const snapshot = t.storySnapshot;
-        if (typeof snapshot !== 'object'
-            || snapshot === null
-            || Array.isArray(snapshot)
-            || snapshot.version !== 1
-            || !/^[0-9a-f]{64}$/.test(String(snapshot.id ?? ''))) {
-            errors.push('storySnapshot must be a version 1 snapshot reference');
+        if (typeof snapshot !== "object" ||
+            snapshot === null ||
+            Array.isArray(snapshot) ||
+            snapshot.version !== 1 ||
+            !/^[0-9a-f]{64}$/.test(String(snapshot.id ?? ""))) {
+            errors.push("storySnapshot must be a version 1 snapshot reference");
         }
     }
     if (t.mode !== undefined && !MODES.includes(t.mode)) {
-        errors.push(`mode must be one of ${MODES.join(', ')}`);
+        errors.push(`mode must be one of ${MODES.join(", ")}`);
     }
     if (isBlankNarrative(t.title))
-        errors.push('title is required');
-    validateNarrative(t.title, 'title', 'text', errors);
-    if (typeof t.summary !== 'string')
+        errors.push("title is required");
+    validateNarrative(t.title, "title", "text", errors);
+    if (typeof t.summary !== "string")
         errors.push('summary is required (use "" if none)');
-    validateNarrative(t.summary, 'summary', 'inline', errors);
+    validateNarrative(t.summary, "summary", "inline", errors);
     validateIntent(t, errors);
     validateHotspots(t, errors);
     validateStoryScope(t, errors);
     if (!Array.isArray(t.steps) || t.steps.length === 0) {
-        errors.push('steps must be a non-empty array');
+        errors.push("steps must be a non-empty array");
         return errors;
     }
     const rawSteps = t.steps;
@@ -659,12 +724,12 @@ export function validateTour(obj) {
     let codeStepCount = 0;
     rawSteps.forEach((s, i) => {
         const where = `steps[${i}]`;
-        if (typeof s !== 'object' || s === null) {
+        if (typeof s !== "object" || s === null) {
             errors.push(`${where} must be an object`);
             return;
         }
         const step = s;
-        if (typeof step.id !== 'string' || !step.id)
+        if (typeof step.id !== "string" || !step.id)
             errors.push(`${where}.id is required`);
         else if (ids.has(step.id))
             errors.push(`${where}.id "${step.id}" is duplicated`);
@@ -672,7 +737,7 @@ export function validateTour(obj) {
             ids.add(step.id);
             stepsById.set(step.id, step);
         }
-        if (typeof step.order !== 'number') {
+        if (typeof step.order !== "number") {
             errors.push(`${where}.order must be a number`);
         }
         else if (!Number.isInteger(step.order) || step.order <= 0) {
@@ -684,27 +749,28 @@ export function validateTour(obj) {
         else {
             orders.add(step.order);
         }
-        if (typeof step.title !== 'string' || !step.title)
+        if (typeof step.title !== "string" || !step.title)
             errors.push(`${where}.title is required`);
-        validateNarrative(step.title, `${where}.title`, 'text', errors);
-        if (step.chapter !== undefined && (typeof step.chapter !== 'string' || !step.chapter.trim())) {
+        validateNarrative(step.title, `${where}.title`, "text", errors);
+        if (step.chapter !== undefined &&
+            (typeof step.chapter !== "string" || !step.chapter.trim())) {
             errors.push(`${where}.chapter must be a non-empty string`);
         }
         // Chapters group the rail by string equality, so they carry no markup.
-        validateNarrative(step.chapter, `${where}.chapter`, 'text', errors);
+        validateNarrative(step.chapter, `${where}.chapter`, "text", errors);
         validateStringArray(step.tags, `${where}.tags`, errors);
         if (Array.isArray(step.tags)) {
-            step.tags.forEach((tag, tagIndex) => validateNarrative(tag, `${where}.tags[${tagIndex}]`, 'text', errors));
+            step.tags.forEach((tag, tagIndex) => validateNarrative(tag, `${where}.tags[${tagIndex}]`, "text", errors));
         }
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
-            errors.push(`${where}.kind must be one of ${KINDS.join(', ')}`);
+            errors.push(`${where}.kind must be one of ${KINDS.join(", ")}`);
             // Keep reporting malformed code-anchor fields alongside the bad kind, as
             // v1 validation did, so authors can fix one step in a single pass.
             validateCodeStep(step, where, storyFiles, t.version, errors);
             return;
         }
-        if (stepKind === 'concept') {
+        if (stepKind === "concept") {
             if (t.version !== 2 && t.version !== 3)
                 errors.push(`${where}.kind "concept" requires story version 2 or 3`);
             validateConceptStep(step, where, errors);
@@ -715,37 +781,38 @@ export function validateTour(obj) {
         }
     });
     if (codeStepCount === 0)
-        errors.push('steps must include at least one code step');
+        errors.push("steps must include at least one code step");
     // Referential integrity for code flow and concept-to-code preparation links.
     // A story's reading path is defined by `order`, even when the JSON array was
     // authored out of order, so adjacency checks use that same canonical path.
     const readingPath = rawSteps
         .map((step, sourceIndex) => ({ step, sourceIndex }))
         .sort((a, b) => {
-        const aOrder = typeof a.step?.order === 'number'
+        const aOrder = typeof a.step?.order === "number"
             ? a.step.order
             : Number.MAX_SAFE_INTEGER;
-        const bOrder = typeof b.step?.order === 'number'
+        const bOrder = typeof b.step?.order === "number"
             ? b.step.order
             : Number.MAX_SAFE_INTEGER;
         return aOrder - bOrder || a.sourceIndex - b.sourceIndex;
     });
     readingPath.forEach(({ step: s, sourceIndex: i }, pathIndex) => {
-        if (typeof s !== 'object' || s === null)
+        if (typeof s !== "object" || s === null)
             return;
         const step = s;
-        if (step.kind === 'concept') {
+        if (step.kind === "concept") {
             const refs = Array.isArray(step.preparesFor)
-                ? step.preparesFor.filter((ref) => typeof ref === 'string')
+                ? step.preparesFor.filter((ref) => typeof ref === "string")
                 : [];
             const next = readingPath[pathIndex + 1]?.step;
-            if (!next || typeof next !== 'object' || next === null) {
+            if (!next || typeof next !== "object" || next === null) {
                 errors.push(`steps[${i}] concept step cannot be the last step`);
             }
-            else if (next.kind === 'concept') {
+            else if (next.kind === "concept") {
                 errors.push(`steps[${i}] concept steps cannot be adjacent`);
             }
-            else if (typeof next.id === 'string' && !refs.includes(next.id)) {
+            else if (typeof next.id === "string" &&
+                !refs.includes(next.id)) {
                 errors.push(`steps[${i}].preparesFor must include the immediately following code step`);
             }
             for (const ref of refs) {
@@ -754,10 +821,12 @@ export function validateTour(obj) {
                     errors.push(`steps[${i}].preparesFor must reference a known later code step; "${ref}" is unknown`);
                     continue;
                 }
-                if (target.kind === 'concept') {
+                if (target.kind === "concept") {
                     errors.push(`steps[${i}].preparesFor must reference later code steps, not concept "${ref}"`);
                 }
-                if (typeof step.order === 'number' && typeof target.order === 'number' && target.order <= step.order) {
+                if (typeof step.order === "number" &&
+                    typeof target.order === "number" &&
+                    target.order <= step.order) {
                     errors.push(`steps[${i}].preparesFor must reference later code steps`);
                 }
             }
@@ -766,16 +835,18 @@ export function validateTour(obj) {
         const refs = [
             ...(Array.isArray(step.calls)
                 ? step.calls
-                    .filter((ref) => typeof ref === 'string')
-                    .map((ref) => ['calls', ref])
+                    .filter((ref) => typeof ref === "string")
+                    .map((ref) => ["calls", ref])
                 : []),
-            ...(typeof step.returnsTo === 'string' ? [['returnsTo', step.returnsTo]] : []),
+            ...(typeof step.returnsTo === "string"
+                ? [["returnsTo", step.returnsTo]]
+                : []),
         ];
         for (const [field, ref] of refs) {
             if (!ids.has(ref)) {
                 errors.push(`steps[${i}] references unknown step id "${ref}"`);
             }
-            else if (stepsById.get(ref)?.kind === 'concept') {
+            else if (stepsById.get(ref)?.kind === "concept") {
                 errors.push(`steps[${i}].${field} must reference code steps, not concept "${ref}"`);
             }
         }
@@ -783,15 +854,15 @@ export function validateTour(obj) {
     // Hotspots anchor distrust to real evidence, so each must resolve to a code step.
     if (Array.isArray(t.hotspots)) {
         t.hotspots.forEach((raw, i) => {
-            if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+            if (typeof raw !== "object" || raw === null || Array.isArray(raw))
                 return;
             const ref = raw.step;
-            if (typeof ref !== 'string' || !ref.trim())
+            if (typeof ref !== "string" || !ref.trim())
                 return;
             if (!ids.has(ref)) {
                 errors.push(`hotspots[${i}].step references unknown step id "${ref}"`);
             }
-            else if (stepsById.get(ref)?.kind === 'concept') {
+            else if (stepsById.get(ref)?.kind === "concept") {
                 errors.push(`hotspots[${i}].step must reference a code step, not concept "${ref}"`);
             }
         });
@@ -804,8 +875,9 @@ export function validateTour(obj) {
  * on the text projection, the same string the speech stream is built from.
  */
 function conceptWordCount(body) {
-    return typeof body === 'string'
-        ? narrativeText(body).match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ?? 0
+    return typeof body === "string"
+        ? (narrativeText(body).match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu)?.length ??
+            0)
         : 0;
 }
 /**
@@ -817,13 +889,13 @@ export function validateGeneratedConceptSteps(tour) {
     const errors = [];
     const concepts = tour.steps
         .map((step, index) => ({ step, index }))
-        .filter((entry) => entry.step.kind === 'concept');
+        .filter((entry) => entry.step.kind === "concept");
     if (!concepts.length)
         return errors;
-    const mode = tour.mode ?? 'guided';
-    const limit = mode === 'brief' ? 1 : mode === 'detailed' ? 3 : 2;
+    const mode = tour.mode ?? "guided";
+    const limit = mode === "brief" ? 1 : mode === "detailed" ? 3 : 2;
     if (concepts.length > limit) {
-        errors.push(`${mode} stories can include at most ${limit === 1 ? 'one' : limit === 2 ? 'two' : 'three'} concept ${limit === 1 ? 'step' : 'steps'}`);
+        errors.push(`${mode} stories can include at most ${limit === 1 ? "one" : limit === 2 ? "two" : "three"} concept ${limit === 1 ? "step" : "steps"}`);
     }
     for (const { step, index } of concepts) {
         const words = conceptWordCount(step.body);
@@ -849,32 +921,32 @@ export function validateGeneratedTour(tour) {
     const errors = validateTour(tour);
     errors.push(...validateGeneratedConceptSteps(tour));
     if (tour.version !== 3)
-        errors.push('version must be 3 for a generated story');
+        errors.push("version must be 3 for a generated story");
     if (!tour.mode)
-        errors.push('mode is required for a generated story');
+        errors.push("mode is required for a generated story");
     // Callers normally hand this a tour that already passed validateTour(), but it
     // is exported and agent output can be arbitrary — report a missing field
     // rather than throwing, so the reviewer sees a fixable message.
     if (isBlankNarrative(tour.summary)) {
-        errors.push('summary must explain the generated reading path');
+        errors.push("summary must explain the generated reading path");
     }
-    if (!tour.intent) {
-        errors.push('intent is required for a generated story');
-    }
-    else {
+    if (tour.intent) {
         if (isBlankNarrative(tour.intent.design)) {
-            errors.push('intent.design must explain the existing app path, attachment point, and new outcome');
+            errors.push("intent.design must explain the existing app path, attachment point, and new outcome");
         }
         if (!Array.isArray(tour.intent.sources) || !tour.intent.sources.length) {
-            errors.push('intent.sources must name the evidence used to recover the task');
+            errors.push("intent.sources must name the evidence used to recover the task");
         }
     }
+    else {
+        errors.push("intent is required for a generated story");
+    }
     if ((tour.hotspots?.length ?? 0) > 3) {
-        errors.push('hotspots must name at most 3 distrust spots; keep only the places you are least sure about');
+        errors.push("hotspots must name at most 3 distrust spots; keep only the places you are least sure about");
     }
     tour.steps.forEach((step, i) => {
         const where = `steps[${i}]`;
-        if (step.kind === 'concept') {
+        if (step.kind === "concept") {
             return;
         }
         if (isBlankNarrative(step.why)) {
@@ -889,9 +961,16 @@ export function validateGeneratedTour(tour) {
             errors.push(`${where}.highlights are required for a generated story`);
         if (!step.beats?.length)
             errors.push(`${where}.beats are required for a generated story`);
-        const stepRange = isComparableLineRange(step.range) ? step.range : undefined;
-        const viewportRange = isComparableLineRange(step.viewport) ? step.viewport : undefined;
-        if (viewportRange && stepRange && !isDeletionAnchor(stepRange) && !isDeletionAnchor(viewportRange)) {
+        const stepRange = isComparableLineRange(step.range)
+            ? step.range
+            : undefined;
+        const viewportRange = isComparableLineRange(step.viewport)
+            ? step.viewport
+            : undefined;
+        if (viewportRange &&
+            stepRange &&
+            !isDeletionAnchor(stepRange) &&
+            !isDeletionAnchor(viewportRange)) {
             if (stepRange[0] < viewportRange[0] || stepRange[1] > viewportRange[1]) {
                 errors.push(`${where}.range must be inside ${where}.viewport`);
             }
@@ -906,18 +985,19 @@ export function validateGeneratedTour(tour) {
             // Context stops do not claim changed code, so a huge context `range`
             // cannot justify a huge camera. Only changed/new-file steps may need the
             // larger-range exception to frame one genuinely contiguous change.
-            const detailedCap = step.kind === 'context' ? 60 : Math.max(60, withContext);
-            const compactCap = step.kind === 'context' ? 40 : Math.max(40, withContext);
+            const detailedCap = step.kind === "context" ? 60 : Math.max(60, withContext);
+            const compactCap = step.kind === "context" ? 40 : Math.max(40, withContext);
             if (viewportLines > detailedCap) {
                 errors.push(`${where}.viewport must stay within one 60-line camera shot`);
             }
-            if ((tour.mode === 'brief' || tour.mode === 'guided') && viewportLines > compactCap) {
+            if ((tour.mode === "brief" || tour.mode === "guided") &&
+                viewportLines > compactCap) {
                 errors.push(`${where}.viewport should stay within 40 lines in ${tour.mode} mode; split the step`);
             }
         }
-        const beatLimit = tour.mode === 'detailed' ? 5 : 3;
+        const beatLimit = tour.mode === "detailed" ? 5 : 3;
         if ((step.beats?.length ?? 0) > beatLimit) {
-            errors.push(`${where}.beats should contain at most ${beatLimit} review points in ${tour.mode ?? 'guided'} mode; split the step`);
+            errors.push(`${where}.beats should contain at most ${beatLimit} review points in ${tour.mode ?? "guided"} mode; split the step`);
         }
         step.beats?.forEach((beat, beatIndex) => {
             // Two prose failures that make a beat say nothing the diff hasn't already
@@ -925,7 +1005,7 @@ export function validateGeneratedTour(tour) {
             // inconsistently across runs, so the ones that can be checked are checked.
             // Both patterns read the text projection, so markup and entities cannot
             // hide a line-number opener or a value transition from them.
-            const beatText = narrativeText(typeof beat?.text === 'string' ? beat.text : '').trim();
+            const beatText = narrativeText(typeof beat?.text === "string" ? beat.text : "").trim();
             if (LINE_NUMBER_OPENER.test(beatText)) {
                 errors.push(`${where}.beats[${beatIndex}].text must not open by naming line numbers; ` +
                     `the highlight already points there — say why those lines matter`);
@@ -945,13 +1025,18 @@ export function validateGeneratedTour(tour) {
             const validHighlights = [];
             beat.highlights.forEach((highlight, highlightIndex) => {
                 if (isComparableLineRange(highlight)) {
-                    validHighlights.push({ range: highlight, sourceIndex: highlightIndex });
+                    validHighlights.push({
+                        range: highlight,
+                        sourceIndex: highlightIndex,
+                    });
                 }
                 else {
                     errors.push(`${where}.beats[${beatIndex}].highlights[${highlightIndex}] must be a [start, end] pair`);
                 }
             });
-            const sortedHighlights = validHighlights.map(({ range }) => range).sort((a, b) => a[0] - b[0]);
+            const sortedHighlights = validHighlights
+                .map(({ range }) => range)
+                .sort((a, b) => a[0] - b[0]);
             if (sortedHighlights.some((range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10)) {
                 errors.push(`${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`);
             }
@@ -970,12 +1055,14 @@ export function validateGeneratedTour(tour) {
                 errors.push(`${where}.highlights must match the union of ${where}.beats highlights`);
             }
         }
-        if (step.kind !== 'context' && stepRange && step.beats?.length) {
+        if (step.kind !== "context" && stepRange && step.beats?.length) {
             const coversChange = step.beats.some((beat) => (Array.isArray(beat.highlights) ? beat.highlights : [])
                 .filter(isComparableLineRange)
                 .some((highlight) => isDeletionAnchor(stepRange)
                 ? isDeletionAnchor(highlight)
-                : !isDeletionAnchor(highlight) && highlight[0] <= stepRange[1] && highlight[1] >= stepRange[0]));
+                : !isDeletionAnchor(highlight) &&
+                    highlight[0] <= stepRange[1] &&
+                    highlight[1] >= stepRange[0]));
             if (!coversChange) {
                 errors.push(`${where}.beats must include a highlight that overlaps the changed range`);
             }

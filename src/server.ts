@@ -2,9 +2,19 @@
 // refreshing reflects the current diff and story with no watch process. The repo
 // is held in a mutable Session, so the same server can boot empty (app/picker
 // mode) and switch repos at runtime via /api/repo/open.
-import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { execFileSync, spawn } from 'node:child_process';
-import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGeneratedTour } from './tour.js';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+  type Server,
+} from "node:http";
+import { execFileSync, spawn } from "node:child_process";
+import {
+  loadTour,
+  orderedSteps,
+  validateGeneratedConceptSteps,
+  validateGeneratedTour,
+} from "./tour.js";
 import {
   isGitRepo,
   resolveBase,
@@ -28,10 +38,11 @@ import {
   reviewSourceMetadataFingerprint,
   stagedWorktreeDivergentFiles,
   numstat,
-} from './git.js';
-import { parseUnifiedDiff } from './diff.js';
-import type { ReviewExclusionMetadata } from './noise.js';
-import { computeCoverage } from './coverage.js';
+  assertSafeRepoPath,
+} from "./git.js";
+import { parseUnifiedDiff } from "./diff.js";
+import type { ReviewExclusionMetadata } from "./noise.js";
+import { computeCoverage } from "./coverage.js";
 import {
   renderReviewShell,
   renderFullFile,
@@ -42,18 +53,29 @@ import {
   renderStoryStepPanel,
   renderTrustEvidence,
   type StoryDriftView,
-} from './render.js';
-import { esc } from './diff-render.js';
-import { renderShell } from './shell.js';
-import type { PickerPayload } from './payloads.js';
-import type { StoriesPayload, StoryRowView } from './payloads.js';
-import type { ChangePayload } from './payloads.js';
-import { narrativeText } from './narrative.js';
-import { summarizeChange } from './change-view.js';
-import { resolveScope, type Scope } from './scope.js';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange } from './view-model.js';
-import { buildReviewModel } from './view-model.js';
+} from "./render.js";
+import { esc } from "./diff-render.js";
+import { renderShell } from "./shell.js";
+import type { PickerPayload } from "./payloads.js";
+import type { StoriesPayload, StoryRowView } from "./payloads.js";
+import type { ChangePayload } from "./payloads.js";
+import { narrativeText } from "./narrative.js";
+import { summarizeChange } from "./change-view.js";
+import { resolveScope, type Scope } from "./scope.js";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
+import {
+  buildFullFileRows,
+  hunksToSbsBlocks,
+  hunkNewRange,
+} from "./view-model.js";
+import { buildReviewModel } from "./view-model.js";
 import {
   loadComments,
   loadCommentsWithHealth,
@@ -64,15 +86,15 @@ import {
   InvalidCommentStoreError,
   type CommentStoreHealth,
   type NewComment,
-} from './comments.js';
-import { resolveStoryPath, APP_BRAND, DATA_DIR } from './config.js';
+} from "./comments.js";
+import { resolveStoryPath, APP_BRAND, DATA_DIR } from "./config.js";
 import {
   isCodeStep,
   type DiffFile,
   type ReviewFileIndexEntry,
   type StoryScope,
   type Tour,
-} from './types.js';
+} from "./types.js";
 import {
   availableAgents,
   streamAgent,
@@ -87,13 +109,27 @@ import {
   type Agent,
   type AgentRunOptions,
   type StreamResult,
-} from './agent.js';
+} from "./agent.js";
 import {
-  runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, errorEvent, doneEvent,
-  observedPhase, phaseRank, noteEventsFromText, createFileEnricher,
-  type ProgressEvent, type Phase, type Workflow, type RunContext, type RunStatus, type FileScope,
-} from './progress.js';
-import { skillStatus, updateSkills } from './repo-setup.js';
+  runStarted,
+  contextEvent,
+  phaseEvent,
+  heartbeatEvent,
+  warningEvent,
+  errorEvent,
+  doneEvent,
+  observedPhase,
+  phaseRank,
+  noteEventsFromText,
+  createFileEnricher,
+  type ProgressEvent,
+  type Phase,
+  type Workflow,
+  type RunContext,
+  type RunStatus,
+  type FileScope,
+} from "./progress.js";
+import { skillStatus, updateSkills } from "./repo-setup.js";
 import {
   createSession,
   openSession,
@@ -103,18 +139,35 @@ import {
   getReviewPageLease,
   type ReviewPageLease,
   type Session,
-} from './session.js';
-import { inspectRepo } from './repo-state.js';
-import { forgetRecent, recordRecent, loadRecents } from './recents.js';
-import { recallStorySelection, recordStorySelection } from './story-selection.js';
-import { listDirs } from './fs-browse.js';
-import { deleteStory, diffFingerprint, hasStories, listStories, listStoryMetadata, storyIdForPath, storyPathForId } from './stories.js';
-import { homedir } from 'node:os';
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { createAloudReader, type AloudReader } from './aloud-client.js';
-import { listCodexStoryModels } from './codex-tasks.js';
-import { LiveEventHub, storyFileFingerprint } from './live.js';
-import { reviewStateSummary } from './review-state.js';
+} from "./session.js";
+import { inspectRepo } from "./repo-state.js";
+import { forgetRecent, recordRecent, loadRecents } from "./recents.js";
+import {
+  recallStorySelection,
+  recordStorySelection,
+} from "./story-selection.js";
+import { listDirs } from "./fs-browse.js";
+import {
+  deleteStory,
+  diffFingerprint,
+  hasStories,
+  listStories,
+  listStoryMetadata,
+  storyIdForPath,
+  storyPathForId,
+} from "./stories.js";
+import { homedir } from "node:os";
+import {
+  createReadStream,
+  existsSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { createAloudReader, type AloudReader } from "./aloud-client.js";
+import { listCodexStoryModels } from "./codex-tasks.js";
+import { LiveEventHub, storyFileFingerprint } from "./live.js";
+import { reviewStateSummary } from "./review-state.js";
 import {
   captureStorySnapshot,
   inspectStoryDrift,
@@ -123,7 +176,7 @@ import {
   type StoryDriftReport,
   type StoryDriftExpectedBinding,
   type StorySnapshotRef,
-} from './story-drift.js';
+} from "./story-drift.js";
 
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -154,7 +207,9 @@ export function serve(opts: ServeOptions): Server {
   });
   const aloud = opts.aloud ?? createAloudReader();
   const openExternal = opts.openExternal ?? openExternalUrl;
-  const server = createServer((req, res) => handle(req, res, session, home, liveHub, aloud, openExternal));
+  const server = createServer((req, res) =>
+    handle(req, res, session, home, liveHub, aloud, openExternal),
+  );
   // Dispose the hub when close is REQUESTED, not on the 'close' event: the
   // server cannot finish closing while the hub still holds SSE responses open.
   const requestClose = server.close.bind(server);
@@ -162,10 +217,10 @@ export function serve(opts: ServeOptions): Server {
     liveHub.dispose();
     return requestClose(callback);
   }) as typeof server.close;
-  server.on('close', () => liveHub.dispose());
+  server.on("close", () => liveHub.dispose());
 
-  server.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') {
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
       console.error(`Port ${opts.port} is already in use.`);
     } else {
       console.error(`Server error: ${err.message}`);
@@ -175,19 +230,25 @@ export function serve(opts: ServeOptions): Server {
 
   // This app can read repositories and launch local agents. Keep that surface
   // on the loopback interface even when the host machine is on a shared network.
-  server.listen(opts.port, '127.0.0.1', () => {
+  server.listen(opts.port, "127.0.0.1", () => {
     const addr = server.address();
-    const port = typeof addr === 'object' && addr ? addr.port : opts.port;
+    const port = typeof addr === "object" && addr ? addr.port : opts.port;
     const url = `http://localhost:${port}/`;
     if (session.repo == null) {
       console.log(`\n  ${APP_BRAND} app ready → ${url}`);
-      console.log(`  pick a repo to review (or open one you've used before).\n`);
+      console.log(
+        `  pick a repo to review (or open one you've used before).\n`,
+      );
     } else {
       const storyCount = listStoryMetadata(session.repo).length;
-      const storyLabel = `${storyCount} ${storyCount === 1 ? 'story' : 'stories'}`;
+      const storyLabel = `${storyCount} ${storyCount === 1 ? "story" : "stories"}`;
       console.log(`\n  ${APP_BRAND} review ready → ${url}`);
-      console.log(`  reviewing ${storyLabel} in ${join(session.repo, DATA_DIR)}`);
-      console.log(`  comments can be copied directly or queued in Review → Comments.\n`);
+      console.log(
+        `  reviewing ${storyLabel} in ${join(session.repo, DATA_DIR)}`,
+      );
+      console.log(
+        `  comments can be copied directly or queued in Review → Comments.\n`,
+      );
     }
     console.log(`  Ctrl-C to stop.\n`);
     if (opts.open) openBrowser(url);
@@ -197,12 +258,15 @@ export function serve(opts: ServeOptions): Server {
 }
 
 function noRepo(res: ServerResponse): void {
-  sendJson(res, 409, { error: 'No repo is open.' });
+  sendJson(res, 409, { error: "No repo is open." });
 }
 
 /** Undefined means an unscoped legacy caller; null means a supplied dead lease. */
-function optionalRequestLease(session: Session, url: URL): ReviewPageLease | null | undefined {
-  const token = url.searchParams.get('page') ?? undefined;
+function optionalRequestLease(
+  session: Session,
+  url: URL,
+): ReviewPageLease | null | undefined {
+  const token = url.searchParams.get("page") ?? undefined;
   if (!token) return undefined;
   const lease = getReviewPageLease(session, token);
   if (!lease || !session.repo || lease.repo !== session.repo) return null;
@@ -211,7 +275,7 @@ function optionalRequestLease(session: Session, url: URL): ReviewPageLease | nul
 
 function invalidFeedbackResponse(
   res: ServerResponse,
-  health: Extract<CommentStoreHealth, { status: 'invalid' }>,
+  health: Extract<CommentStoreHealth, { status: "invalid" }>,
 ): void {
   sendJson(res, 409, {
     error: `${health.message} ${health.recovery}`,
@@ -221,28 +285,51 @@ function invalidFeedbackResponse(
 }
 
 function sendCommentMutationError(res: ServerResponse, error: unknown): void {
-  if (error instanceof InvalidCommentStoreError) return invalidFeedbackResponse(res, error.health);
-  sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+  if (error instanceof InvalidCommentStoreError)
+    return invalidFeedbackResponse(res, error.health);
+  sendJson(res, 400, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function validateNewCommentForLease(
+  input: NewComment,
+  lease: ReviewPageLease | undefined,
+): void {
+  assertSafeRepoPath(input.file);
+  if (!Number.isFinite(input.line) || Math.trunc(input.line) < 1) {
+    throw new Error("comment line is required");
+  }
+  if (lease && !lease.fileFingerprints[input.file]) {
+    throw new Error("comment file is not part of this review");
+  }
 }
 
 function repoRouteBase(repo: string): string {
   return `/repo/${encodeURIComponent(basename(repo))}`;
 }
 
-function repoRoute(repo: string, screen: 'stories' | 'change' | 'review' | 'diff', search = ''): string {
+function repoRoute(
+  repo: string,
+  screen: "stories" | "change" | "review" | "diff",
+  search = "",
+): string {
   return `${repoRouteBase(repo)}/${screen}${search}`;
 }
 
 function parseRepoRoute(
   pathname: string,
   repo: string | null,
-): 'stories' | 'change' | 'review' | 'diff' | null {
+): "stories" | "change" | "review" | "diff" | null {
   if (!repo) return null;
   const base = repoRouteBase(repo);
-  if (pathname === base || pathname === `${base}/`) return 'stories';
+  if (pathname === base || pathname === `${base}/`) return "stories";
   if (!pathname.startsWith(`${base}/`)) return null;
   const screen = pathname.slice(base.length + 1);
-  return screen === 'stories' || screen === 'change' || screen === 'review' || screen === 'diff'
+  return screen === "stories" ||
+    screen === "change" ||
+    screen === "review" ||
+    screen === "diff"
     ? screen
     : null;
 }
@@ -263,7 +350,11 @@ function recentRepoForRoute(pathname: string, home: string): string | null {
   } catch {
     return null;
   }
-  return loadRecents(home).find((entry) => basename(entry.path) === name && isGitRepo(entry.path))?.path ?? null;
+  return (
+    loadRecents(home).find(
+      (entry) => basename(entry.path) === name && isGitRepo(entry.path),
+    )?.path ?? null
+  );
 }
 
 function redirect(res: ServerResponse, location: string): void {
@@ -272,8 +363,13 @@ function redirect(res: ServerResponse, location: string): void {
 }
 
 function localHostname(value: string): boolean {
-  const host = value.toLowerCase().replace(/^\[|\]$/g, '');
-  return host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '::1';
+  const host = value.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "127.0.0.1" ||
+    host === "::1"
+  );
 }
 
 /**
@@ -292,38 +388,50 @@ function isTrustedLocalRequest(req: IncomingMessage): boolean {
   }
   if (!localHostname(expected.hostname)) return false;
 
-  const fetchSite = req.headers['sec-fetch-site'];
-  if (typeof fetchSite === 'string' && fetchSite !== 'same-origin' && fetchSite !== 'none') return false;
+  const fetchSite = req.headers["sec-fetch-site"];
+  if (
+    typeof fetchSite === "string" &&
+    fetchSite !== "same-origin" &&
+    fetchSite !== "none"
+  )
+    return false;
 
   const origin = req.headers.origin;
   if (!origin) return true;
   try {
     const actual = new URL(origin);
-    return actual.protocol === 'http:' && localHostname(actual.hostname) && actual.host === expected.host;
+    return (
+      actual.protocol === "http:" &&
+      localHostname(actual.hostname) &&
+      actual.host === expected.host
+    );
   } catch {
     return false;
   }
 }
 
 function setLocalResponseHeaders(res: ServerResponse): void {
-  res.setHeader('Content-Security-Policy', [
-    "default-src 'none'",
-    "base-uri 'none'",
-    "connect-src 'self'",
-    "font-src 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    "img-src 'self' data:",
-    "media-src 'self' blob:",
-    "script-src 'self' 'unsafe-inline'",
-    // 'self' is required for the client stylesheet served from /assets/client;
-    // 'unsafe-inline' still covers the inline styling the vanilla pages emit.
-    "style-src 'self' 'unsafe-inline'",
-  ].join('; '));
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'none'",
+      "base-uri 'none'",
+      "connect-src 'self'",
+      "font-src 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data:",
+      "media-src 'self' blob:",
+      "script-src 'self' 'unsafe-inline'",
+      // 'self' is required for the client stylesheet served from /assets/client;
+      // 'unsafe-inline' still covers the inline styling the vanilla pages emit.
+      "style-src 'self' 'unsafe-inline'",
+    ].join("; "),
+  );
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
 }
 
 function handle(
@@ -335,40 +443,42 @@ function handle(
   aloud: AloudReader,
   openExternal: (url: string) => boolean,
 ): void {
-  const url = new URL(req.url ?? '/', 'http://localhost');
-  const method = req.method ?? 'GET';
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const method = req.method ?? "GET";
 
   setLocalResponseHeaders(res);
   if (!isTrustedLocalRequest(req)) {
-    return sendJson(res, 403, { error: 'This local app only accepts same-origin localhost requests.' });
+    return sendJson(res, 403, {
+      error: "This local app only accepts same-origin localhost requests.",
+    });
   }
 
   try {
-    if (method === 'GET' && url.pathname === '/api/health') {
-      return sendJson(res, 200, { app: 'diffStory', ready: true });
+    if (method === "GET" && url.pathname === "/api/health") {
+      return sendJson(res, 200, { app: "diffStory", ready: true });
     }
-    if (method === 'GET' && url.pathname === '/api/aloud/status') {
+    if (method === "GET" && url.pathname === "/api/aloud/status") {
       return runAloudStatus(res, aloud);
     }
-    if (method === 'POST' && url.pathname === '/api/aloud/speak') {
+    if (method === "POST" && url.pathname === "/api/aloud/speak") {
       return readBody(req, res, (body) => runAloudSpeak(res, aloud, body));
     }
-    if (method === 'POST' && url.pathname === '/api/aloud/prepare') {
+    if (method === "POST" && url.pathname === "/api/aloud/prepare") {
       return readBody(req, res, (body) => runAloudPrepare(res, aloud, body));
     }
-    if (method === 'POST' && url.pathname === '/api/aloud/control') {
+    if (method === "POST" && url.pathname === "/api/aloud/control") {
       return readBody(req, res, (body) => runAloudControl(res, aloud, body));
     }
-    if (method === 'GET' && url.pathname === '/assets/mermaid.esm.min.mjs') {
+    if (method === "GET" && url.pathname === "/assets/mermaid.esm.min.mjs") {
       return sendMermaidBrowserAsset(res);
     }
-    if (method === 'GET' && url.pathname.startsWith('/assets/fonts/')) {
+    if (method === "GET" && url.pathname.startsWith("/assets/fonts/")) {
       return sendFontAsset(res, basename(url.pathname));
     }
-    if (method === 'GET' && url.pathname.startsWith('/assets/client/')) {
+    if (method === "GET" && url.pathname.startsWith("/assets/client/")) {
       return sendClientAsset(res, basename(url.pathname));
     }
-    if (method === 'GET' && url.pathname === '/api/events') {
+    if (method === "GET" && url.pathname === "/api/events") {
       const lease = optionalRequestLease(session, url);
       if (!lease) {
         // 204 tells EventSource to stop reconnecting against a dead lease.
@@ -379,147 +489,202 @@ function handle(
       liveHub.connect(lease, req, res);
       return;
     }
-    if (method === 'GET' && url.pathname === '/') {
+    if (method === "GET" && url.pathname === "/") {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
       // Back-compat for URLs emitted by older app builds.
-      if (url.searchParams.has('story')) {
+      if (url.searchParams.has("story")) {
         return redirect(
           res,
-          url.searchParams.get('story') === 'new'
-            ? repoRoute(session.repo, 'change')
-            : repoRoute(session.repo, 'review', url.search),
+          url.searchParams.get("story") === "new"
+            ? repoRoute(session.repo, "change")
+            : repoRoute(session.repo, "review", url.search),
         );
       }
       if (hasChangeQuery(url.searchParams)) {
-        return redirect(res, repoRoute(session.repo, 'change', url.search));
+        return redirect(res, repoRoute(session.repo, "change", url.search));
       }
-      return redirect(res, repoRoute(session.repo, sessionEntryScreen(session), url.search));
+      return redirect(
+        res,
+        repoRoute(session.repo, sessionEntryScreen(session), url.search),
+      );
     }
-    if (method === 'GET' && session.repo == null && url.pathname.startsWith('/repo/')) {
+    if (
+      method === "GET" &&
+      session.repo == null &&
+      url.pathname.startsWith("/repo/")
+    ) {
       const restoredRepo = recentRepoForRoute(url.pathname, home);
-      if (!restoredRepo) return redirect(res, '/');
+      if (!restoredRepo) return redirect(res, "/");
       openSession(session, restoredRepo);
       restoreStorySelection(session, home);
     }
-    const repoScreen = method === 'GET' ? parseRepoRoute(url.pathname, session.repo) : null;
-    if (repoScreen === 'stories') {
+    const repoScreen =
+      method === "GET" ? parseRepoRoute(url.pathname, session.repo) : null;
+    if (repoScreen === "stories") {
       // Reaching review history is the explicit "close story" transition. Keep
       // the persisted resume target aligned with the page the reviewer chose;
       // otherwise Home -> repo silently jumps back into the story they just
       // closed, which makes rapid navigation feel like it ignored them.
-      const wasInsideStory = !session.chooseStory || typeof session.selectedStory === 'string';
+      const wasInsideStory =
+        !session.chooseStory || typeof session.selectedStory === "string";
       session.chooseStory = true;
       session.selectedStory = undefined;
-      if (wasInsideStory) recordStorySelection(home, session.repo as string, null, nowMs());
-      return sendHtml(res, storyChooser(session, url.searchParams.get('evidence') === 'refresh'));
+      if (wasInsideStory)
+        recordStorySelection(home, session.repo as string, null, nowMs());
+      return sendHtml(
+        res,
+        storyChooser(session, url.searchParams.get("evidence") === "refresh"),
+      );
     }
-    if (repoScreen === 'change') {
+    if (repoScreen === "change") {
       session.chooseStory = false;
       session.selectedStory = null;
       return sendHtml(res, changeScreen(session, url.searchParams));
     }
-    if (repoScreen === 'diff') {
+    if (repoScreen === "diff") {
       session.chooseStory = false;
       session.selectedStory = null;
       return sendHtml(res, diffScreen(session, url.searchParams));
     }
-    if (repoScreen === 'review') {
+    if (repoScreen === "review") {
       return sendHtml(res, reviewScreen(session, url.searchParams, home));
     }
-    if (method === 'GET' && url.pathname === '/stories') {
+    if (method === "GET" && url.pathname === "/stories") {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
-      return redirect(res, repoRoute(session.repo, 'stories'));
+      return redirect(res, repoRoute(session.repo, "stories"));
     }
-    if (method === 'GET' && url.pathname === '/repos') {
+    if (method === "GET" && url.pathname === "/repos") {
       // Home is a picker view, not a repository-close command. Keeping the
       // active session and its page leases alive makes browser Back/Forward
       // reliable; POST /api/repo/close remains the explicit close transition.
       return sendHtml(res, pickerStub(home));
     }
-    if (method === 'GET' && url.pathname === '/change') {
+    if (method === "GET" && url.pathname === "/change") {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
-      return redirect(res, repoRoute(session.repo, 'change', url.search));
+      return redirect(res, repoRoute(session.repo, "change", url.search));
     }
-    if (method === 'GET' && url.pathname === '/review') {
+    if (method === "GET" && url.pathname === "/review") {
       if (session.repo == null) return sendHtml(res, pickerStub(home));
-      return redirect(res, repoRoute(session.repo, 'review', url.search));
+      return redirect(res, repoRoute(session.repo, "review", url.search));
     }
-    if (method === 'GET' && url.pathname === '/api/repos/recent') {
+    if (method === "GET" && url.pathname === "/api/repos/recent") {
       return sendJson(res, 200, listRecentRepos(home));
     }
-    if (method === 'DELETE' && url.pathname === '/api/repos/recent') {
+    if (method === "DELETE" && url.pathname === "/api/repos/recent") {
       return readBody(req, res, (body) => {
-        let path = '';
+        let path = "";
         try {
-          path = String((JSON.parse(body || '{}') as { path?: string }).path ?? '');
+          path = String(
+            (JSON.parse(body || "{}") as { path?: string }).path ?? "",
+          );
         } catch {
-          return sendJson(res, 400, { error: 'invalid JSON' });
+          return sendJson(res, 400, { error: "invalid JSON" });
         }
-        if (!path) return sendJson(res, 400, { error: 'Missing repository path.' });
+        if (!path)
+          return sendJson(res, 400, { error: "Missing repository path." });
         const removed = loadRecents(home).some((e) => e.path === path);
         forgetRecent(home, path);
-        return sendJson(res, 200, { ok: true, removed, recents: recentRowsForPicker(home) });
+        return sendJson(res, 200, {
+          ok: true,
+          removed,
+          recents: recentRowsForPicker(home),
+        });
       });
     }
-    if (method === 'GET' && url.pathname === '/api/agents') {
-      return sendJson(res, 200, { agents: availableAgents(), skills: skillStatus(home) });
+    if (method === "GET" && url.pathname === "/api/agents") {
+      return sendJson(res, 200, {
+        agents: availableAgents(),
+        skills: skillStatus(home),
+      });
     }
-    if (method === 'POST' && url.pathname === '/api/editor/open') {
+    if (method === "POST" && url.pathname === "/api/editor/open") {
       if (!session.repo) return noRepo(res);
       return readBody(req, res, (body) => {
         let input: { file?: unknown; line?: unknown; column?: unknown };
         try {
-          input = JSON.parse(body || '{}') as typeof input;
+          input = JSON.parse(body || "{}") as typeof input;
         } catch {
-          return sendJson(res, 400, { error: 'invalid JSON' });
+          return sendJson(res, 400, { error: "invalid JSON" });
         }
-        const file = typeof input.file === 'string' ? input.file : '';
+        const file = typeof input.file === "string" ? input.file : "";
         const line = Number(input.line);
         const column = Number(input.column);
-        if (!file || !Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
-          return sendJson(res, 400, { error: 'A valid file, line, and column are required.' });
+        if (
+          !file ||
+          !Number.isInteger(line) ||
+          line < 1 ||
+          !Number.isInteger(column) ||
+          column < 1
+        ) {
+          return sendJson(res, 400, {
+            error: "A valid file, line, and column are required.",
+          });
         }
-        const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+        const page = validateReviewPageLease(
+          session,
+          url.searchParams.get("page"),
+          file,
+        );
         if (!page.ok) return sendReviewPageConflict(res, page.error);
         const allowed = new Set<string>([
-          ...boundedReviewIndex(page.fileIndex).map((candidate) => candidate.path),
+          ...boundedReviewIndex(page.fileIndex).map(
+            (candidate) => candidate.path,
+          ),
           ...(page.storyless ? [] : storyReviewFiles(page.tour)),
         ]);
-        if (!allowed.has(file)) return sendJson(res, 400, { error: 'That file is not part of this review.' });
+        if (!allowed.has(file))
+          return sendJson(res, 400, {
+            error: "That file is not part of this review.",
+          });
         const editorUrl = vscodeNavigationUrl(page.repo, file, line, column);
-        if (!editorUrl) return sendJson(res, 400, { error: 'That file path cannot be opened safely.' });
+        if (!editorUrl)
+          return sendJson(res, 400, {
+            error: "That file path cannot be opened safely.",
+          });
         if (!openExternal(editorUrl)) {
-          return sendJson(res, 503, { error: 'VS Code could not be opened. Install VS Code to jump to source from a review.' });
+          return sendJson(res, 503, {
+            error:
+              "VS Code could not be opened. Install VS Code to jump to source from a review.",
+          });
         }
         return sendJson(res, 200, { ok: true });
       });
     }
-    if (method === 'GET' && url.pathname === '/api/codex/models') {
+    if (method === "GET" && url.pathname === "/api/codex/models") {
       listCodexStoryModels()
         .then((models) => sendJson(res, 200, { models }))
-        .catch((error) => sendJson(res, 502, { error: (error as Error).message }));
+        .catch((error) =>
+          sendJson(res, 502, { error: (error as Error).message }),
+        );
       return;
     }
-    if (method === 'POST' && url.pathname === '/api/skills/update') {
+    if (method === "POST" && url.pathname === "/api/skills/update") {
       const updated = updateSkills(home);
-      return sendJson(res, 200, { ok: true, installed: updated.installed, skills: updated.status });
+      return sendJson(res, 200, {
+        ok: true,
+        installed: updated.installed,
+        skills: updated.status,
+      });
     }
-    if (method === 'GET' && url.pathname === '/api/fs') {
-      const p = url.searchParams.get('path');
+    if (method === "GET" && url.pathname === "/api/fs") {
+      const p = url.searchParams.get("path");
       return sendJson(res, 200, listDirs(p && p.trim() ? p : home));
     }
-    if (method === 'POST' && url.pathname === '/api/repo/open') {
+    if (method === "POST" && url.pathname === "/api/repo/open") {
       return readBody(req, res, (body) => {
-        let path = '';
+        let path = "";
         try {
-          path = String((JSON.parse(body || '{}') as { path?: string }).path ?? '');
+          path = String(
+            (JSON.parse(body || "{}") as { path?: string }).path ?? "",
+          );
         } catch {
-          return sendJson(res, 400, { error: 'invalid JSON' });
+          return sendJson(res, 400, { error: "invalid JSON" });
         }
         if (!path || !isGitRepo(path)) {
-          return sendJson(res, 400, { error: 'Not a git repository.' });
+          return sendJson(res, 400, { error: "Not a git repository." });
         }
-        if (session.repo && session.repo !== path) liveHub.closeRepo(session.repo);
+        if (session.repo && session.repo !== path)
+          liveHub.closeRepo(session.repo);
         openSession(session, path);
         const previous = loadRecents(home).find((entry) => entry.path === path);
         const repoState = {
@@ -533,98 +698,170 @@ function handle(
           changedFiles: previous?.changedFiles ?? 0,
         };
         recordRecent(home, path, nowMs(), repoState);
-        sendJson(res, 200, { ...repoState, route: repoRoute(path, sessionEntryScreen(session)) });
+        sendJson(res, 200, {
+          ...repoState,
+          route: repoRoute(path, sessionEntryScreen(session)),
+        });
       });
     }
-    if (method === 'POST' && url.pathname === '/api/repo/close') {
+    if (method === "POST" && url.pathname === "/api/repo/close") {
       if (session.repo) liveHub.closeRepo(session.repo);
       closeSession(session);
       return sendJson(res, 200, { ok: true });
     }
-    if (method === 'DELETE' && url.pathname === '/api/stories') {
+    if (method === "DELETE" && url.pathname === "/api/stories") {
       if (!session.repo) return noRepo(res);
       const repo = session.repo;
       return readBody(req, res, (body) => {
-        let id = '';
+        let id = "";
         try {
-          id = String((JSON.parse(body || '{}') as { id?: string }).id ?? '');
+          id = String((JSON.parse(body || "{}") as { id?: string }).id ?? "");
         } catch {
-          return sendJson(res, 400, { error: 'invalid JSON' });
+          return sendJson(res, 400, { error: "invalid JSON" });
         }
-        if (!id) return sendJson(res, 400, { error: 'Missing story id.' });
+        if (!id) return sendJson(res, 400, { error: "Missing story id." });
         const path = storyPathForId(repo, id);
-        if (!path) return sendJson(res, 404, { error: 'No such story.' });
+        if (!path) return sendJson(res, 404, { error: "No such story." });
         deleteStory(repo, id);
-        if (recallStorySelection(home, repo) === id) recordStorySelection(home, repo, null, nowMs());
+        if (recallStorySelection(home, repo) === id)
+          recordStorySelection(home, repo, null, nowMs());
         if (session.selectedStory === path) {
           session.selectedStory = undefined;
           session.chooseStory = true;
         }
-        return sendJson(res, 200, { ok: true, removed: true, stories: listStories(repo) });
+        return sendJson(res, 200, {
+          ok: true,
+          removed: true,
+          stories: listStories(repo),
+        });
       });
     }
-    if (method === 'GET' && url.pathname === '/api/refs') {
+    if (method === "GET" && url.pathname === "/api/refs") {
       if (!session.repo) return noRepo(res);
-      const ref = url.searchParams.get('ref')?.trim() || '';
+      const ref = url.searchParams.get("ref")?.trim() || "";
       return sendJson(res, 200, {
         ...(ref ? { ref } : {}),
         current: currentBranch(session.repo),
         branches: listBranchRefs(session.repo),
-        commits: listRecentCommits(session.repo, 0, ref || '--all'),
+        commits: listRecentCommits(session.repo, 0, ref || "--all"),
       });
     }
-    if (method === 'GET' && url.pathname === '/api/fullfile') {
-      const file = url.searchParams.get('file') ?? '';
-      const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+    if (method === "GET" && url.pathname === "/api/fullfile") {
+      const file = url.searchParams.get("file") ?? "";
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+        file,
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderFullFileResponse(page, file), file);
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderFullFileResponse(page, file),
+        file,
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/diff/split') {
-      const file = url.searchParams.get('file') ?? '';
-      const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+    if (method === "GET" && url.pathname === "/api/diff/split") {
+      const file = url.searchParams.get("file") ?? "";
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+        file,
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderSplitResponse(page, file), file);
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderSplitResponse(page, file),
+        file,
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/diff/context') {
-      const file = url.searchParams.get('file') ?? '';
-      const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+    if (method === "GET" && url.pathname === "/api/diff/context") {
+      const file = url.searchParams.get("file") ?? "";
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+        file,
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderContextResponse(page, url.searchParams), file);
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderContextResponse(page, url.searchParams),
+        file,
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/diff/file-panel') {
-      const file = url.searchParams.get('file') ?? '';
-      const page = validateReviewPageLease(session, url.searchParams.get('page'), file);
+    if (method === "GET" && url.pathname === "/api/diff/file-panel") {
+      const file = url.searchParams.get("file") ?? "";
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+        file,
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderFilePanelResponse(page, file), file);
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderFilePanelResponse(page, file),
+        file,
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/review/step-panel') {
-      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+    if (method === "GET" && url.pathname === "/api/review/step-panel") {
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderStoryStepResponse(page, url.searchParams.get('index') ?? ''));
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderStoryStepResponse(page, url.searchParams.get("index") ?? ""),
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/review/file-search') {
-      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+    if (method === "GET" && url.pathname === "/api/review/file-search") {
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      const query = (url.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 120);
+      const query = (url.searchParams.get("q") ?? "")
+        .trim()
+        .toLowerCase()
+        .slice(0, 120);
       if (query.length < 2) return sendJson(res, 200, { query, files: [] });
       const matches = boundedReviewIndex(page.fileIndex)
         .map((entry) => materializePageFile(page, entry.path))
         .filter((file): file is DiffFile => !!file)
         .filter((file) =>
           file.hunks.some((hunk) =>
-            hunk.lines.some((line) => line.type !== 'ctx' && line.content.toLowerCase().includes(query)),
+            hunk.lines.some(
+              (line) =>
+                line.type !== "ctx" &&
+                line.content.toLowerCase().includes(query),
+            ),
           ),
         )
         .map((file) => file.newPath);
       return sendJson(res, 200, { query, files: matches });
     }
-    if (method === 'GET' && url.pathname === '/api/review/trust') {
-      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+    if (method === "GET" && url.pathname === "/api/review/trust") {
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
       return sendLeasedHtml(res, session, page, renderTrustResponse(page));
     }
-    if (method === 'GET' && url.pathname === '/api/review/coverage') {
-      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+    if (method === "GET" && url.pathname === "/api/review/coverage") {
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
       // Coverage reads the whole diff, which takes long enough that the working
       // tree can move underneath it. sendLeasedHtml re-checks the race after
@@ -632,61 +869,111 @@ function handle(
       // gets the same treatment rather than reporting a tree that no longer is.
       const verdict = reviewCoverageVerdict(page);
       if (reviewPageRaceSignature(page.lease) !== page.raceSignature) {
-        return sendReviewPageConflict(res, 'The change moved while coverage was being calculated.');
+        return sendReviewPageConflict(
+          res,
+          "The change moved while coverage was being calculated.",
+        );
       }
       return sendJson(res, 200, verdict);
     }
-    if (method === 'GET' && url.pathname === '/api/review/excluded-file') {
-      const page = validateReviewPageLease(session, url.searchParams.get('page'));
+    if (method === "GET" && url.pathname === "/api/review/excluded-file") {
+      const page = validateReviewPageLease(
+        session,
+        url.searchParams.get("page"),
+      );
       if (!page.ok) return sendReviewPageConflict(res, page.error);
-      return sendLeasedHtml(res, session, page, renderExcludedFileResponse(page, url.searchParams.get('file') ?? ''));
+      return sendLeasedHtml(
+        res,
+        session,
+        page,
+        renderExcludedFileResponse(page, url.searchParams.get("file") ?? ""),
+      );
     }
-    if (method === 'GET' && url.pathname === '/api/story-drift') {
+    if (method === "GET" && url.pathname === "/api/story-drift") {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
-      if (!lease || lease.storyIdentity === 'storyless') return sendJson(res, 409, { error: 'No guided story is active.' });
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
+      if (!lease || lease.storyIdentity === "storyless")
+        return sendJson(res, 409, { error: "No guided story is active." });
       try {
         const tour = loadTour(lease.storyPath);
-        if (reviewStoryIdentity(lease.storyPath, tour, false) !== lease.storyIdentity) {
-          return sendReviewPageConflict(res, 'The guided review changed after this page loaded.');
+        if (
+          reviewStoryIdentity(lease.storyPath, tour, false) !==
+          lease.storyIdentity
+        ) {
+          return sendReviewPageConflict(
+            res,
+            "The guided review changed after this page loaded.",
+          );
         }
-        return sendJson(res, 200, storyDriftView(inspectStoryDrift({
-          repo: lease.repo,
-          snapshot: tour.storySnapshot,
-          expected: storyDriftBinding(lease.base, lease.head, tour),
-        })));
+        return sendJson(
+          res,
+          200,
+          storyDriftView(
+            inspectStoryDrift({
+              repo: lease.repo,
+              snapshot: tour.storySnapshot,
+              expected: storyDriftBinding(lease.base, lease.head, tour),
+            }),
+          ),
+        );
       } catch (error) {
         return sendJson(res, 409, { error: (error as Error).message });
       }
     }
-    if (method === 'GET' && url.pathname === '/api/story-drift/file') {
+    if (method === "GET" && url.pathname === "/api/story-drift/file") {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
-      if (!lease || lease.storyIdentity === 'storyless') return sendJson(res, 409, { error: 'No guided story is active.' });
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
+      if (!lease || lease.storyIdentity === "storyless")
+        return sendJson(res, 409, { error: "No guided story is active." });
       try {
         const tour = loadTour(lease.storyPath);
-        if (reviewStoryIdentity(lease.storyPath, tour, false) !== lease.storyIdentity) {
-          return sendReviewPageConflict(res, 'The guided review changed after this page loaded.');
+        if (
+          reviewStoryIdentity(lease.storyPath, tour, false) !==
+          lease.storyIdentity
+        ) {
+          return sendReviewPageConflict(
+            res,
+            "The guided review changed after this page loaded.",
+          );
         }
         const loaded = loadStoryDriftDiff({
           repo: lease.repo,
           snapshot: tour.storySnapshot,
           expected: storyDriftBinding(lease.base, lease.head, tour),
-          observationId: url.searchParams.get('observation') ?? '',
-          path: url.searchParams.get('file') ?? '',
+          observationId: url.searchParams.get("observation") ?? "",
+          path: url.searchParams.get("file") ?? "",
         });
-        if (loaded.status === 'unverified') return sendReviewPageConflict(res, loaded.reason ?? 'The drift evidence changed.');
-        const layout = url.searchParams.get('layout') === 'unified' ? 'unified' : 'split';
+        if (loaded.status === "unverified")
+          return sendReviewPageConflict(
+            res,
+            loaded.reason ?? "The drift evidence changed.",
+          );
+        const layout =
+          url.searchParams.get("layout") === "unified" ? "unified" : "split";
         return sendHtml(res, renderStoryDriftFileResponse(loaded, layout));
       } catch (error) {
         return sendReviewPageConflict(res, (error as Error).message);
       }
     }
-    if (method === 'GET' && url.pathname === '/api/review-state') {
+    if (method === "GET" && url.pathname === "/api/review-state") {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
       if (!session.repo) return noRepo(res);
-      const data = lease ? reviewDataForLease(lease, false) : sessionReviewData(session);
+      const data = lease
+        ? reviewDataForLease(lease, false)
+        : sessionReviewData(session);
       const summary = reviewStateSummary(
         lease?.repo ?? session.repo,
         data.base,
@@ -697,70 +984,108 @@ function handle(
       );
       return sendJson(res, 200, summary);
     }
-    if (method === 'GET' && url.pathname === '/api/comments') {
+    if (method === "GET" && url.pathname === "/api/comments") {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
       const loaded = loadCommentsWithHealth(repo);
-      if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
-      return sendJson(res, 200, commentsForStory(loaded.comments, activeStoryId(session, lease)));
+      if (loaded.health.status === "invalid")
+        return invalidFeedbackResponse(res, loaded.health);
+      return sendJson(
+        res,
+        200,
+        commentsForStory(loaded.comments, activeStoryId(session, lease)),
+      );
     }
-    if (method === 'POST' && url.pathname === '/api/comments') {
+    if (method === "POST" && url.pathname === "/api/comments") {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
       return readBody(req, res, (body) => {
         try {
           const loaded = loadCommentsWithHealth(repo);
-          if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
+          if (loaded.health.status === "invalid")
+            return invalidFeedbackResponse(res, loaded.health);
           const input = JSON.parse(body) as NewComment;
+          validateNewCommentForLease(input, lease);
           // The server owns the story tag: a client cannot file feedback against a
           // story it is not reviewing, and an untagged page leaves it absent.
           const story = activeStoryId(session, lease);
-          const comment = addComment(repo, story ? { ...input, story } : { ...input, story: undefined });
+          const comment = addComment(
+            repo,
+            story ? { ...input, story } : { ...input, story: undefined },
+          );
           sendJson(res, 201, comment);
         } catch (e) {
           sendCommentMutationError(res, e);
         }
       });
     }
-    if (method === 'POST' && url.pathname === '/api/generate') {
+    if (method === "POST" && url.pathname === "/api/generate") {
       return readBody(req, res, (body) => runGenerate(res, session, body));
     }
-    if (method === 'POST' && url.pathname === '/api/story/repair') {
+    if (method === "POST" && url.pathname === "/api/story/repair") {
       return readBody(req, res, (body) => runStoryRepair(res, session, body));
     }
-    if (method === 'PATCH' && url.pathname.startsWith('/api/comments/')) {
+    if (method === "PATCH" && url.pathname.startsWith("/api/comments/")) {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
-      const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
+      const id = decodeURIComponent(
+        url.pathname.slice("/api/comments/".length),
+      );
       return readBody(req, res, (body) => {
         try {
-          const input = JSON.parse(body || '{}') as { type?: string; body?: string };
-          const updated = updateComment(repo, id, input);
+          const input = JSON.parse(body || "{}") as {
+            type?: string;
+            body?: string;
+            status?: string;
+          };
+          const story =
+            lease === undefined ? undefined : activeStoryId(session, lease);
+          const updated = updateComment(repo, id, input, story);
           if (updated) {
             sendJson(res, 200, updated);
-          }
-          else sendJson(res, 404, { error: 'no such comment' });
+          } else sendJson(res, 404, { error: "no such comment" });
         } catch (e) {
           sendCommentMutationError(res, e);
         }
       });
     }
-    if (method === 'DELETE' && url.pathname.startsWith('/api/comments/')) {
+    if (method === "DELETE" && url.pathname.startsWith("/api/comments/")) {
       const lease = optionalRequestLease(session, url);
-      if (lease === null) return sendReviewPageConflict(res, 'This review page is no longer active.');
+      if (lease === null)
+        return sendReviewPageConflict(
+          res,
+          "This review page is no longer active.",
+        );
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
-      const id = decodeURIComponent(url.pathname.slice('/api/comments/'.length));
+      const id = decodeURIComponent(
+        url.pathname.slice("/api/comments/".length),
+      );
       try {
         const loaded = loadCommentsWithHealth(repo);
-        if (loaded.health.status === 'invalid') return invalidFeedbackResponse(res, loaded.health);
-        const ok = deleteComment(repo, id);
+        if (loaded.health.status === "invalid")
+          return invalidFeedbackResponse(res, loaded.health);
+        const story =
+          lease === undefined ? undefined : activeStoryId(session, lease);
+        const ok = deleteComment(repo, id, story);
         res.statusCode = ok ? 204 : 404;
         res.end();
       } catch (error) {
@@ -769,7 +1094,7 @@ function handle(
       return;
     }
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
   } catch (e) {
     sendHtml(res, errorPage((e as Error).message), 500);
   }
@@ -790,9 +1115,9 @@ function handle(
  */
 function pickerStub(home: string): string {
   return renderShell<PickerPayload>({
-    surface: 'picker',
-    title: 'pick a repo',
-    bodyClass: 'ds-map-bg',
+    surface: "picker",
+    title: "pick a repo",
+    bodyClass: "ds-map-bg",
     payload: { recents: recentRowsForPicker(home), home, now: Date.now() },
   });
 }
@@ -815,7 +1140,9 @@ function pickerStub(home: string): string {
  */
 function storyChooser(session: Session, refreshEvidence = false): string {
   const repo = session.repo as string;
-  const summaries = refreshEvidence ? listStories(repo) : listStoryMetadata(repo);
+  const summaries = refreshEvidence
+    ? listStories(repo)
+    : listStoryMetadata(repo);
   const stories: StoryRowView[] = summaries.map((s) => ({
     id: s.id,
     title: narrativeText(s.title),
@@ -837,9 +1164,9 @@ function storyChooser(session: Session, refreshEvidence = false): string {
   }));
   const repoName = basename(repo);
   return renderShell<StoriesPayload>({
-    surface: 'stories',
+    surface: "stories",
     title: `${repoName} review history`,
-    bodyClass: 'ds-map-bg',
+    bodyClass: "ds-map-bg",
     payload: {
       repoName,
       routeBase: repoRouteBase(repo),
@@ -851,10 +1178,19 @@ function storyChooser(session: Session, refreshEvidence = false): string {
 }
 
 function hasChangeQuery(params: URLSearchParams): boolean {
-  return params.has('scope') || params.has('base') || params.has('head') || params.has('commit');
+  return (
+    params.has("scope") ||
+    params.has("base") ||
+    params.has("head") ||
+    params.has("commit")
+  );
 }
 
-function reviewScreen(session: Session, params: URLSearchParams, home: string): string {
+function reviewScreen(
+  session: Session,
+  params: URLSearchParams,
+  home: string,
+): string {
   const picked = applyStoryChoice(session, params, home);
   if (session.selectedStory === null) {
     return changeScreen(session, params);
@@ -874,18 +1210,22 @@ function reviewScreen(session: Session, params: URLSearchParams, home: string): 
     }
   }
   if (picked) {
-    return changeScreen(session, params, 'That story could not be found.');
+    return changeScreen(session, params, "That story could not be found.");
   }
   return changeScreen(session, params);
 }
 
-function applyStoryChoice(session: Session, params: URLSearchParams, home: string): boolean {
-  if (!session.repo || !params.has('story')) return false;
-  const id = params.get('story') ?? '';
+function applyStoryChoice(
+  session: Session,
+  params: URLSearchParams,
+  home: string,
+): boolean {
+  if (!session.repo || !params.has("story")) return false;
+  const id = params.get("story") ?? "";
   session.chooseStory = false;
   session.base = undefined;
   session.head = undefined;
-  if (id === 'new') {
+  if (id === "new") {
     session.selectedStory = null;
     // The storyless change view is not a story, so stop resuming one.
     recordStorySelection(home, session.repo, null, nowMs());
@@ -913,7 +1253,7 @@ function restoreStorySelection(session: Session, home: string): void {
 }
 
 function selectedStoryPath(session: Session): string {
-  if (!session.repo) throw new Error('No repo is open.');
+  if (!session.repo) throw new Error("No repo is open.");
   return session.selectedStory ?? resolveStoryPath(session.repo);
 }
 
@@ -924,10 +1264,15 @@ function selectedStoryPath(session: Session): string {
  * active (the all-files change view), and those surfaces see the whole store.
  */
 function leaseStoryId(lease: ReviewPageLease): string | null {
-  return lease.storyIdentity === 'storyless' ? null : storyIdForPath(lease.repo, lease.storyPath);
+  return lease.storyIdentity === "storyless"
+    ? null
+    : storyIdForPath(lease.repo, lease.storyPath);
 }
 
-function activeStoryId(session: Session, lease?: ReviewPageLease | null): string | null {
+function activeStoryId(
+  session: Session,
+  lease?: ReviewPageLease | null,
+): string | null {
   if (lease) return leaseStoryId(lease);
   if (!session.repo || session.selectedStory === null) return null;
   return storyIdForPath(session.repo, selectedStoryPath(session));
@@ -935,7 +1280,7 @@ function activeStoryId(session: Session, lease?: ReviewPageLease | null): string
 
 /** Apply a scope choice from the Your-change switcher (?scope=... | ?base= | ?head=). */
 function applyScope(session: Session, params: URLSearchParams): void {
-  if (params.get('scope') === 'auto') {
+  if (params.get("scope") === "auto") {
     session.base = undefined;
     session.head = undefined;
     return;
@@ -948,7 +1293,11 @@ function applyScope(session: Session, params: URLSearchParams): void {
 }
 
 /** Resolve scope from the request, stash it on the session, render the scope picker. */
-function changeScreen(session: Session, params: URLSearchParams, notice?: string): string {
+function changeScreen(
+  session: Session,
+  params: URLSearchParams,
+  notice?: string,
+): string {
   const scope = resolveScope(session.repo as string, params);
   session.base = scope.base;
   session.head = scope.head;
@@ -972,9 +1321,9 @@ function renderChange(session: Session, scope: Scope, notice?: string): string {
   const repo = session.repo as string;
   const summary = summarizeChange(repo, session.base, session.head);
   return renderShell<ChangePayload>({
-    surface: 'change',
-    title: 'choose review scope',
-    bodyClass: 'ds-map-bg',
+    surface: "change",
+    title: "choose review scope",
+    bodyClass: "ds-map-bg",
     payload: {
       repoName: basename(repo),
       routeBase: repoRouteBase(repo),
@@ -1002,11 +1351,11 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     repo,
     base,
     head,
-    '',
+    "",
     [],
     data.changeFingerprint,
   );
-  const tour: Tour = { version: 1, title: '', summary: '', steps: [], base };
+  const tour: Tour = { version: 1, title: "", summary: "", steps: [], base };
   const storyPath = selectedStoryPath(session);
   const pageLease = issueReviewPageLease(session, {
     repo,
@@ -1014,11 +1363,16 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     ...(head ? { head } : {}),
     fingerprint: data.changeFingerprint,
     scopeKey: reviewState.scopeKey,
-    mode: 'full',
+    mode: "full",
     storyIdentity: reviewStoryIdentity(storyPath, tour, true),
     storyPath,
     storyFingerprint: storyFileFingerprint(storyPath),
-    fileFingerprints: reviewIndexFingerprints(fileIndex, tour, true, data.changeFingerprint),
+    fileFingerprints: reviewIndexFingerprints(
+      fileIndex,
+      tour,
+      true,
+      data.changeFingerprint,
+    ),
   });
   cacheReviewPageSnapshot(
     pageLease.token,
@@ -1047,7 +1401,10 @@ function diffScreen(session: Session, params: URLSearchParams): string {
 
 /** The recents list, each entry enriched with its current repo state for the picker. */
 function listRecentRepos(home: string) {
-  return loadRecents(home).map((e) => ({ ...inspectRepo(e.path), lastOpened: e.lastOpened }));
+  return loadRecents(home).map((e) => ({
+    ...inspectRepo(e.path),
+    lastOpened: e.lastOpened,
+  }));
 }
 
 /**
@@ -1107,10 +1464,13 @@ const reviewPageSnapshots = new Map<string, ReviewPageSnapshot>();
  * does not call getDiff() or parseUnifiedDiff(); exact file bodies belong to
  * the lazy detail boundary.
  */
-function sessionReviewIndex(session: Session, requireSelectedStory = false): ReviewIndexData {
-  if (!session.repo) throw new Error('No repo is open.');
+function sessionReviewIndex(
+  session: Session,
+  requireSelectedStory = false,
+): ReviewIndexData {
+  if (!session.repo) throw new Error("No repo is open.");
   const repo = session.repo;
-  let tour: Tour = { version: 1, title: '', summary: '', steps: [] };
+  let tour: Tour = { version: 1, title: "", summary: "", steps: [] };
   if (session.selectedStory !== null) {
     try {
       tour = loadTour(selectedStoryPath(session));
@@ -1119,21 +1479,22 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
     }
   }
 
-  const sessionHasScope = session.base !== undefined || session.head !== undefined;
+  const sessionHasScope =
+    session.base !== undefined || session.head !== undefined;
   let base = resolveBase(repo, session.base ?? tour.base);
   let head = session.head ?? tour.head;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const indexSnapshot = reviewChangeIndexSnapshot(repo, base, head);
-    let fileIndex = indexSnapshot.fileIndex;
+    const fileIndex = indexSnapshot.fileIndex;
     if (
       !sessionHasScope &&
-      tour.base === 'HEAD' &&
+      tour.base === "HEAD" &&
       head === undefined &&
       fileIndex.length === 0 &&
       !isDirty(repo)
     ) {
-      base = hasParentCommit(repo) ? 'HEAD~1' : emptyTree(repo);
-      head = 'HEAD';
+      base = hasParentCommit(repo) ? "HEAD~1" : emptyTree(repo);
+      head = "HEAD";
       continue;
     }
     return {
@@ -1147,7 +1508,9 @@ function sessionReviewIndex(session: Session, requireSelectedStory = false): Rev
       excludedFiles: indexSnapshot.excludedFiles,
     };
   }
-  throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
+  throw new Error(
+    "The change is moving too quickly to capture a stable review index. Try again.",
+  );
 }
 
 function reviewIndexFingerprints(
@@ -1159,12 +1522,11 @@ function reviewIndexFingerprints(
   const fingerprints = Object.create(null) as Record<string, string>;
   for (const file of fileIndex) fingerprints[file.path] = file.reviewHash;
   if (!storyless) {
-    // Context-only paths are live evidence too. Using the stricter whole-change
-    // identity is safe: any concurrent change invalidates their lazy request.
-    for (const step of tour.steps) {
-      if (isCodeStep(step) && !fingerprints[step.file]) {
-        fingerprints[step.file] = changeFingerprint;
-      }
+    // Context-only and move-endpoint paths are live evidence too. Using the
+    // stricter whole-change identity is safe: any concurrent change invalidates
+    // their lazy request.
+    for (const file of storyReviewFiles(tour)) {
+      if (!fingerprints[file]) fingerprints[file] = changeFingerprint;
     }
   }
   return fingerprints;
@@ -1174,41 +1536,55 @@ function boundedReviewIndex(
   fileIndex: readonly ReviewFileIndexEntry[],
 ): ReviewFileIndexEntry[] {
   return fileIndex.filter(
-    (file) => !file.binary && !file.large && !file.generated && !file.metadataOnly,
+    (file) =>
+      !file.binary && !file.large && !file.generated && !file.metadataOnly,
   );
 }
 
 function cacheReviewPageSnapshot(
   token: string,
-  data: Omit<ReviewPageSnapshot, 'storyless' | 'sourceSignature'>,
+  data: Omit<ReviewPageSnapshot, "storyless" | "sourceSignature">,
   storyless: boolean,
   sourceSignature: string,
 ): void {
   reviewPageSnapshots.set(token, { ...data, storyless, sourceSignature });
   while (reviewPageSnapshots.size > 16) {
-    const oldest = reviewPageSnapshots.keys().next().value as string | undefined;
+    const oldest = reviewPageSnapshots.keys().next().value as
+      | string
+      | undefined;
     if (!oldest) break;
     reviewPageSnapshots.delete(oldest);
   }
 }
 
-function reviewDiff(repo: string, session: Session, tour: Tour): { base: string; head?: string; diff: string } {
-  const sessionHasScope = session.base !== undefined || session.head !== undefined;
+function reviewDiff(
+  repo: string,
+  session: Session,
+  tour: Tour,
+): { base: string; head?: string; diff: string } {
+  const sessionHasScope =
+    session.base !== undefined || session.head !== undefined;
   let base = resolveBase(repo, session.base ?? tour.base);
   let head = session.head ?? tour.head;
   let diff = getDiff(repo, base, head);
 
-  if (!sessionHasScope && tour.base === 'HEAD' && head === undefined && diff.trim() === '' && !isDirty(repo)) {
-    base = hasParentCommit(repo) ? 'HEAD~1' : emptyTree(repo);
-    head = 'HEAD';
+  if (
+    !sessionHasScope &&
+    tour.base === "HEAD" &&
+    head === undefined &&
+    diff.trim() === "" &&
+    !isDirty(repo)
+  ) {
+    base = hasParentCommit(repo) ? "HEAD~1" : emptyTree(repo);
+    head = "HEAD";
     diff = getDiff(repo, base, head);
   }
 
   return { base, head, diff };
 }
 
-function loadReview(session: Session): Omit<ReviewData, 'changeFingerprint'> {
-  if (!session.repo) throw new Error('No repo is open.');
+function loadReview(session: Session): Omit<ReviewData, "changeFingerprint"> {
+  if (!session.repo) throw new Error("No repo is open.");
   const repo = session.repo;
   const tour = loadTour(selectedStoryPath(session));
   const { base, head, diff } = reviewDiff(repo, session, tour);
@@ -1224,16 +1600,18 @@ function renderReview(session: Session): string {
     repo,
     base,
     head,
-    '',
+    "",
     [],
     data.changeFingerprint,
   );
   const storyDrift = tour.storySnapshot
-    ? storyDriftView(inspectStoryDrift({
-      repo,
-      snapshot: tour.storySnapshot,
-      expected: storyDriftBinding(base, head, tour),
-    }))
+    ? storyDriftView(
+        inspectStoryDrift({
+          repo,
+          snapshot: tour.storySnapshot,
+          expected: storyDriftBinding(base, head, tour),
+        }),
+      )
     : undefined;
   const storyPath = selectedStoryPath(session);
   const pageLease = issueReviewPageLease(session, {
@@ -1242,11 +1620,16 @@ function renderReview(session: Session): string {
     ...(head ? { head } : {}),
     fingerprint: data.changeFingerprint,
     scopeKey: reviewState.scopeKey,
-    mode: 'full',
+    mode: "full",
     storyIdentity: reviewStoryIdentity(storyPath, tour, false),
     storyPath,
     storyFingerprint: storyFileFingerprint(storyPath),
-    fileFingerprints: reviewIndexFingerprints(fileIndex, tour, false, data.changeFingerprint),
+    fileFingerprints: reviewIndexFingerprints(
+      fileIndex,
+      tour,
+      false,
+      data.changeFingerprint,
+    ),
   });
   cacheReviewPageSnapshot(
     pageLease.token,
@@ -1263,7 +1646,10 @@ function renderReview(session: Session): string {
     fileIndex: boundedReviewIndex(fileIndex),
     baseLabel: describeBase(repo, base),
     headRef: head,
-    comments: commentsForStory(loadComments(repo), activeStoryId(session, pageLease)),
+    comments: commentsForStory(
+      loadComments(repo),
+      activeStoryId(session, pageLease),
+    ),
     reviewState,
     reviewPageToken: pageLease.token,
     storyKey: pageLease.storyIdentity,
@@ -1273,8 +1659,11 @@ function renderReview(session: Session): string {
   });
 }
 
-function readSessionReviewData(session: Session, requireSelectedStory = false): Omit<ReviewData, 'changeFingerprint'> {
-  if (!session.repo) throw new Error('No repo is open.');
+function readSessionReviewData(
+  session: Session,
+  requireSelectedStory = false,
+): Omit<ReviewData, "changeFingerprint"> {
+  if (!session.repo) throw new Error("No repo is open.");
   if (session.selectedStory !== null) {
     try {
       return loadReview(session);
@@ -1289,7 +1678,7 @@ function readSessionReviewData(session: Session, requireSelectedStory = false): 
   const head = session.head;
   const diff = getDiff(repo, base, head);
   return {
-    tour: { version: 1, title: '', summary: '', steps: [], base },
+    tour: { version: 1, title: "", summary: "", steps: [], base },
     base,
     head,
     diff,
@@ -1319,23 +1708,39 @@ function sessionReviewScope(
   return { base: resolveBase(repo, session.base), head: session.head };
 }
 
-function sessionReviewData(session: Session, requireSelectedStory = false): ReviewData {
-  if (!session.repo) throw new Error('No repo is open.');
+function sessionReviewData(
+  session: Session,
+  requireSelectedStory = false,
+): ReviewData {
+  if (!session.repo) throw new Error("No repo is open.");
   const repo = session.repo;
   let expectedScope = sessionReviewScope(session, requireSelectedStory);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const before = reviewChangeFingerprint(repo, expectedScope.base, expectedScope.head);
+    const before = reviewChangeFingerprint(
+      repo,
+      expectedScope.base,
+      expectedScope.head,
+    );
     const data = readSessionReviewData(session, requireSelectedStory);
-    if (data.base !== expectedScope.base || (data.head ?? '') !== (expectedScope.head ?? '')) {
+    if (
+      data.base !== expectedScope.base ||
+      (data.head ?? "") !== (expectedScope.head ?? "")
+    ) {
       expectedScope = { base: data.base, head: data.head };
       continue;
     }
-    const confirmedFingerprint = reviewChangeFingerprint(repo, data.base, data.head);
+    const confirmedFingerprint = reviewChangeFingerprint(
+      repo,
+      data.base,
+      data.head,
+    );
     if (confirmedFingerprint === before) {
       return { ...data, changeFingerprint: confirmedFingerprint };
     }
   }
-  throw new Error('The change is moving too quickly to capture a stable review snapshot. Try again.');
+  throw new Error(
+    "The change is moving too quickly to capture a stable review snapshot. Try again.",
+  );
 }
 
 interface LeasedReviewPage {
@@ -1358,10 +1763,18 @@ interface LeasedReviewPage {
 
 type ReviewPageLeaseResult = LeasedReviewPage | { ok: false; error: string };
 
-function reviewPageRaceSignature(lease: ReviewPageLease, sourceFingerprint?: string): string {
+function reviewPageRaceSignature(
+  lease: ReviewPageLease,
+  sourceFingerprint?: string,
+): string {
   const paths = lease.head
     ? [lease.storyPath]
-    : [lease.storyPath, ...Object.keys(lease.fileFingerprints).map((file) => join(lease.repo, file))];
+    : [
+        lease.storyPath,
+        ...Object.keys(lease.fileFingerprints).map((file) =>
+          join(lease.repo, file),
+        ),
+      ];
   return `${sourceFingerprint ?? reviewSourceMetadataFingerprint(lease.repo, lease.base, lease.head)}\0${paths
     .sort()
     .map((path) => {
@@ -1372,18 +1785,31 @@ function reviewPageRaceSignature(lease: ReviewPageLease, sourceFingerprint?: str
         return `${path}\0missing`;
       }
     })
-    .join('\0')}`;
+    .join("\0")}`;
 }
 
-function reviewStoryIdentity(storyPath: string, tour: Tour, storyless: boolean): string {
-  if (storyless) return 'storyless';
+function reviewStoryIdentity(
+  storyPath: string,
+  tour: Tour,
+  storyless: boolean,
+): string {
+  if (storyless) return "storyless";
   return diffFingerprint(`${storyPath}\0${JSON.stringify(tour)}`);
 }
 
 /** Re-read exactly the immutable scope and story named by a page lease. */
-function reviewDataForLease(lease: ReviewPageLease, requireStory = true): ReviewData {
-  const storyless = lease.storyIdentity === 'storyless';
-  let tour: Tour = { version: 1, title: '', summary: '', steps: [], base: lease.base };
+function reviewDataForLease(
+  lease: ReviewPageLease,
+  requireStory = true,
+): ReviewData {
+  const storyless = lease.storyIdentity === "storyless";
+  let tour: Tour = {
+    version: 1,
+    title: "",
+    summary: "",
+    steps: [],
+    base: lease.base,
+  };
   if (!storyless) {
     try {
       tour = loadTour(lease.storyPath);
@@ -1396,9 +1822,17 @@ function reviewDataForLease(lease: ReviewPageLease, requireStory = true): Review
   // The fingerprint covers strictly more state than the diff, so an unchanged
   // fingerprint on both sides of the diff read proves the pair is consistent.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const changeFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
+    const changeFingerprint = reviewChangeFingerprint(
+      lease.repo,
+      lease.base,
+      lease.head,
+    );
     const diff = getDiff(lease.repo, lease.base, lease.head);
-    const confirmedFingerprint = reviewChangeFingerprint(lease.repo, lease.base, lease.head);
+    const confirmedFingerprint = reviewChangeFingerprint(
+      lease.repo,
+      lease.base,
+      lease.head,
+    );
     if (changeFingerprint === confirmedFingerprint) {
       return {
         tour,
@@ -1410,7 +1844,9 @@ function reviewDataForLease(lease: ReviewPageLease, requireStory = true): Review
       };
     }
   }
-  throw new Error('The change is moving too quickly to capture a stable review snapshot. Try again.');
+  throw new Error(
+    "The change is moving too quickly to capture a stable review snapshot. Try again.",
+  );
 }
 
 /** Identity of exactly what one file panel can render. Changed files are fully
@@ -1440,30 +1876,44 @@ function validateReviewPageLease(
   file?: string,
 ): ReviewPageLeaseResult {
   const lease = getReviewPageLease(session, token ?? undefined);
-  if (!lease) return { ok: false, error: 'This review page is no longer active.' };
+  if (!lease)
+    return { ok: false, error: "This review page is no longer active." };
   if (!session.repo || session.repo !== lease.repo) {
-    return { ok: false, error: 'The repository changed after this review page loaded.' };
+    return {
+      ok: false,
+      error: "The repository changed after this review page loaded.",
+    };
   }
 
-  const storyless = lease.storyIdentity === 'storyless';
+  const storyless = lease.storyIdentity === "storyless";
   const snapshot = reviewPageSnapshots.get(lease.token);
 
   if (snapshot) {
     try {
       const liveTour = storyless ? snapshot.tour : loadTour(lease.storyPath);
-      if (reviewStoryIdentity(lease.storyPath, liveTour, storyless) !== lease.storyIdentity) {
-        return { ok: false, error: 'The guided review changed after this page loaded.' };
+      if (
+        reviewStoryIdentity(lease.storyPath, liveTour, storyless) !==
+        lease.storyIdentity
+      ) {
+        return {
+          ok: false,
+          error: "The guided review changed after this page loaded.",
+        };
       }
       const liveSourceSignature = reviewPageRaceSignature(lease);
-      const unchangedByMetadata = liveSourceSignature === snapshot.sourceSignature;
+      const unchangedByMetadata =
+        liveSourceSignature === snapshot.sourceSignature;
       const liveFingerprint = unchangedByMetadata
         ? lease.fingerprint
         : reviewChangeFingerprint(lease.repo, lease.base, lease.head);
-      const unchangedWholeReview = unchangedByMetadata || liveFingerprint === lease.fingerprint;
-      const unchangedRequestedFile = !unchangedWholeReview && file
-        ? reviewFileIndex(lease.repo, lease.base, lease.head)
-            .find((entry) => entry.path === file)?.reviewHash === lease.fileFingerprints[file]
-        : false;
+      const unchangedWholeReview =
+        unchangedByMetadata || liveFingerprint === lease.fingerprint;
+      const unchangedRequestedFile =
+        !unchangedWholeReview && file
+          ? reviewFileIndex(lease.repo, lease.base, lease.head).find(
+              (entry) => entry.path === file,
+            )?.reviewHash === lease.fileFingerprints[file]
+          : false;
       if (unchangedWholeReview || unchangedRequestedFile) {
         return {
           ok: true,
@@ -1473,7 +1923,7 @@ function validateReviewPageLease(
           tour: snapshot.tour,
           base: snapshot.base,
           head: snapshot.head,
-          diff: '',
+          diff: "",
           fileIndex: snapshot.fileIndex,
           fullFiles: [],
           files: [],
@@ -1484,7 +1934,7 @@ function validateReviewPageLease(
       return {
         ok: false,
         error: storyless
-          ? 'The review evidence moved while this page was open.'
+          ? "The review evidence moved while this page was open."
           : `The selected story cannot be validated: ${(error as Error).message}`,
       };
     }
@@ -1497,7 +1947,7 @@ function validateReviewPageLease(
     return {
       ok: false,
       error: storyless
-        ? 'The review evidence moved while this page was open.'
+        ? "The review evidence moved while this page was open."
         : `The selected story cannot be validated: ${(error as Error).message}`,
     };
   }
@@ -1511,22 +1961,39 @@ function validateReviewPageLease(
   );
   if (
     data.base !== lease.base ||
-    (data.head ?? '') !== (lease.head ?? '') ||
+    (data.head ?? "") !== (lease.head ?? "") ||
     reviewState.scopeKey !== lease.scopeKey
   ) {
-    return { ok: false, error: 'The review scope changed after this page loaded.' };
+    return {
+      ok: false,
+      error: "The review scope changed after this page loaded.",
+    };
   }
-  if (reviewStoryIdentity(lease.storyPath, data.tour, storyless) !== lease.storyIdentity) {
-    return { ok: false, error: 'The guided review changed after this page loaded.' };
+  if (
+    reviewStoryIdentity(lease.storyPath, data.tour, storyless) !==
+    lease.storyIdentity
+  ) {
+    return {
+      ok: false,
+      error: "The guided review changed after this page loaded.",
+    };
   }
   const files = data.files;
   if (data.changeFingerprint !== lease.fingerprint) {
-    const leasedFileFingerprint = file ? lease.fileFingerprints[file] : undefined;
+    const leasedFileFingerprint = file
+      ? lease.fileFingerprints[file]
+      : undefined;
     const currentFileFingerprint = file
       ? reviewFileFingerprint(lease.repo, data.head, files, file)
       : undefined;
-    if (!leasedFileFingerprint || currentFileFingerprint !== leasedFileFingerprint) {
-      return { ok: false, error: 'The change moved after this review page loaded.' };
+    if (
+      !leasedFileFingerprint ||
+      currentFileFingerprint !== leasedFileFingerprint
+    ) {
+      return {
+        ok: false,
+        error: "The change moved after this review page loaded.",
+      };
     }
   }
   return {
@@ -1566,16 +2033,29 @@ function sendLeasedHtml(
   // synchronous race without making every lazy request hash the whole change
   // a second time. Fixed-ref evidence is immutable; only its story file is live.
   if (reviewPageRaceSignature(page.lease) !== page.raceSignature) {
-    return sendReviewPageConflict(res, 'The change moved while this panel was loading.');
+    return sendReviewPageConflict(
+      res,
+      "The change moved while this panel was loading.",
+    );
   }
   sendHtml(res, html);
 }
 
-function materializePageFile(page: LeasedReviewPage, file: string): DiffFile | undefined {
+function materializePageFile(
+  page: LeasedReviewPage,
+  file: string,
+): DiffFile | undefined {
   const already = page.files.find((candidate) => candidate.newPath === file);
   if (already) return already;
   const entry = page.fileIndex.find((candidate) => candidate.path === file);
-  if (!entry || entry.binary || entry.large || entry.generated || entry.metadataOnly) return undefined;
+  if (
+    !entry ||
+    entry.binary ||
+    entry.large ||
+    entry.generated ||
+    entry.metadataOnly
+  )
+    return undefined;
   const diff = getFileDiff(page.repo, page.base, file, page.head);
   return parseUnifiedDiff(diff).find((candidate) => candidate.newPath === file);
 }
@@ -1586,7 +2066,7 @@ function storyReviewFiles(tour: Tour): string[] {
   for (const step of tour.steps) {
     if (!isCodeStep(step)) continue;
     files.add(step.file);
-    if ('moves' in step) {
+    if ("moves" in step) {
       for (const move of step.moves ?? []) {
         files.add(move.before.file);
         files.add(move.after.file);
@@ -1606,7 +2086,8 @@ function renderFullFileResponse(page: LeasedReviewPage, file: string): string {
     ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
     ...(storyless ? [] : storyReviewFiles(tour)),
   ]);
-  if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  if (!allowed.has(file))
+    return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
 
   const df = materializePageFile(page, file);
   const files = df ? [df] : [];
@@ -1614,10 +2095,14 @@ function renderFullFileResponse(page: LeasedReviewPage, file: string): string {
   const ranges = storyless
     ? []
     : computeCoverage(tour, files)
-      .uncovered.filter((u) => u.file === file)
-      .map((u) => u.range);
+        .uncovered.filter((u) => u.file === file)
+        .map((u) => u.range);
   const rows = buildFullFileRows(df, newLines, ranges);
-  return renderFullFile(rows, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
+  return renderFullFile(rows, {
+    file,
+    oldFile: df?.oldPath,
+    newFile: df?.status === "added",
+  });
 }
 
 /** The lazily-loaded Split (hunks-only, side-by-side) view for one file. Mirrors
@@ -1630,21 +2115,22 @@ function renderSplitResponse(page: LeasedReviewPage, file: string): string {
     ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
     ...(storyless ? [] : storyReviewFiles(tour)),
   ]);
-  if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  if (!allowed.has(file))
+    return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
 
   const df = materializePageFile(page, file);
   const files = df ? [df] : [];
   const ranges = storyless
     ? []
     : computeCoverage(tour, files)
-      .uncovered.filter((u) => u.file === file)
-      .map((u) => u.range);
+        .uncovered.filter((u) => u.file === file)
+        .map((u) => u.range);
   return renderSplitHunks(hunksToSbsBlocks(df, ranges), {
     file,
     oldFile: df?.oldPath,
-    newFile: df?.status === 'added',
+    newFile: df?.status === "added",
     hunkRanges: df ? df.hunks.map(hunkNewRange) : [],
-    canExpand: df ? df.status !== 'deleted' : false,
+    canExpand: df ? df.status !== "deleted" : false,
   });
 }
 
@@ -1654,7 +2140,10 @@ function renderFilePanelResponse(page: LeasedReviewPage, file: string): string {
   if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
   const { repo, tour, head, storyless } = page;
   const entry = page.fileIndex.find((candidate) => candidate.path === file);
-  if (entry && (entry.binary || entry.large || entry.generated || entry.metadataOnly)) {
+  if (
+    entry &&
+    (entry.binary || entry.large || entry.generated || entry.metadataOnly)
+  ) {
     return `<div class="ds-diffnote">This file stays outside the bounded diff renderer. Open Trust check to inspect its safe preview.</div>`;
   }
   const df = materializePageFile(page, file);
@@ -1668,22 +2157,30 @@ function renderFilePanelResponse(page: LeasedReviewPage, file: string): string {
     fileIndex: entry ? [entry] : undefined,
   });
   const view = model.files.find((candidate) => candidate.file === file);
-  if (!view) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
-  const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
+  if (!view)
+    return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  const stepIndexById = new Map(
+    model.steps.map((step, index) => [step.id, index + 1]),
+  );
   return renderFilePanelContent(view, stepIndexById);
 }
 
 /** Render a single guided-review step on demand. The index is the 1-based
  * panel index used by the client (Overview is panel 0). */
-function renderStoryStepResponse(page: LeasedReviewPage, rawIndex: string): string {
-  if (page.storyless) return `<div class="ds-diffnote">No guided story is selected.</div>`;
+function renderStoryStepResponse(
+  page: LeasedReviewPage,
+  rawIndex: string,
+): string {
+  if (page.storyless)
+    return `<div class="ds-diffnote">No guided story is selected.</div>`;
   const index = Number.parseInt(rawIndex, 10);
   if (!Number.isInteger(index) || index < 1) {
     return `<div class="ds-diffnote">No valid story step requested.</div>`;
   }
   const { repo, tour, head } = page;
   const step = orderedSteps(tour)[index - 1];
-  const df = step && isCodeStep(step) ? materializePageFile(page, step.file) : undefined;
+  const df =
+    step && isCodeStep(step) ? materializePageFile(page, step.file) : undefined;
   const files = df ? [df] : [];
   const model = buildReviewModel(repo, tour, files, head, {
     storyless: false,
@@ -1710,7 +2207,9 @@ function renderTrustResponse(page: LeasedReviewPage): string {
     includeTrustRows: true,
     baseRef: page.base,
   });
-  const stepIndexById = new Map(model.steps.map((step, index) => [step.id, index + 1]));
+  const stepIndexById = new Map(
+    model.steps.map((step, index) => [step.id, index + 1]),
+  );
   return renderTrustEvidence(
     model.trust,
     stepIndexById,
@@ -1745,37 +2244,49 @@ function reviewCoverageVerdict(page: LeasedReviewPage): {
   return { storyless: page.storyless, uncovered: model.trust.uncovered.length };
 }
 
-function renderExcludedFileResponse(page: LeasedReviewPage, file: string): string {
+function renderExcludedFileResponse(
+  page: LeasedReviewPage,
+  file: string,
+): string {
   if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
   const { repo, base, head } = page;
-  const excluded = excludedReviewFiles(repo, base, head).find((candidate) => candidate.path === file);
+  const excluded = excludedReviewFiles(repo, base, head).find(
+    (candidate) => candidate.path === file,
+  );
   if (!excluded) {
     return `<div class="ds-diffnote">That file is not an excluded part of this review.</div>`;
   }
-  if (excluded.reason === 'binary') {
+  if (excluded.reason === "binary") {
     return `<div class="ds-diffnote">Binary contents are not decoded in the review. The file is still part of the exact change fingerprint and must be acknowledged before approval.</div>`;
   }
   let preview = readFileRange(repo, file, 1, 500, head);
-  let side = 'Current file';
+  let side = "Current file";
   if (!preview) {
     preview = readFileRange(repo, file, 1, 500, base);
-    side = 'File before deletion';
+    side = "File before deletion";
   }
-  if (!preview) return `<div class="ds-diffnote">This binary or missing file cannot be previewed as text.</div>`;
-  const rows = preview.lines.map((line, index) => `<span><i>${preview.startLine + index}</i><code>${esc(line) || ' '}</code></span>`).join('');
+  if (!preview)
+    return `<div class="ds-diffnote">This binary or missing file cannot be previewed as text.</div>`;
+  const rows = preview.lines
+    .map(
+      (line, index) =>
+        `<span><i>${preview.startLine + index}</i><code>${esc(line) || " "}</code></span>`,
+    )
+    .join("");
   return `<div class="ds-excluded-file-head"><strong>${side}</strong><span>Bounded preview · first ${preview.lines.length} lines, not story coverage or a before/after diff.</span></div><pre class="ds-excluded-code">${rows}</pre>`;
 }
 
 function storyDriftView(report: StoryDriftReport): StoryDriftView {
-  const state: StoryDriftView['state'] = report.storyFreshness === 'unverified'
-    ? 'unverified'
-    : report.inScopeCount && report.outsideScopeCount
-      ? 'mixed'
-      : report.inScopeCount
-        ? 'story-changed'
-        : report.outsideScopeCount
-          ? 'outside-only'
-          : 'current';
+  const state: StoryDriftView["state"] =
+    report.storyFreshness === "unverified"
+      ? "unverified"
+      : report.inScopeCount && report.outsideScopeCount
+        ? "mixed"
+        : report.inScopeCount
+          ? "story-changed"
+          : report.outsideScopeCount
+            ? "outside-only"
+            : "current";
   return {
     state,
     ...(report.observationId ? { observationId: report.observationId } : {}),
@@ -1785,54 +2296,71 @@ function storyDriftView(report: StoryDriftReport): StoryDriftView {
       path: change.path,
       ...(change.oldPath ? { oldPath: change.oldPath } : {}),
       status: change.kind,
-      scope: change.inStory ? 'story' : 'outside',
-      detail: change.evidence === 'exact' ? 'exact' : 'summary-only',
+      scope: change.inStory ? "story" : "outside",
+      detail: change.evidence === "exact" ? "exact" : "summary-only",
       ...(change.reason ? { reason: change.reason } : {}),
     })),
   };
 }
 
-function renderStoryDriftFileResponse(result: StoryDriftFileDiff, layout: 'split' | 'unified' = 'split'): string {
+function renderStoryDriftFileResponse(
+  result: StoryDriftFileDiff,
+  layout: "split" | "unified" = "split",
+): string {
   const note = result.reason
-    ? `<div class="ds-diffnote${result.status === 'partial' ? '' : ' is-warning'}">${esc(result.reason)}</div>`
-    : '';
+    ? `<div class="ds-diffnote${result.status === "partial" ? "" : " is-warning"}">${esc(result.reason)}</div>`
+    : "";
   if (!result.diff) {
-    return note || `<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`;
+    return (
+      note ||
+      `<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`
+    );
   }
   const file = parseUnifiedDiff(result.diff)[0];
-  if (!file || !file.hunks.length) return `${note}<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`;
-  if (layout === 'unified') return `${note}${renderUnifiedHunks(file)}`;
+  if (!file || !file.hunks.length)
+    return `${note}<div class="ds-diffnote">${esc(metadataOnlyDriftDescription(result))}</div>`;
+  if (layout === "unified") return `${note}${renderUnifiedHunks(file)}`;
   return `${note}${renderSplitHunks(hunksToSbsBlocks(file, []), {
     file: file.newPath || result.path,
     oldFile: file.oldPath || result.oldPath,
-    newFile: file.status === 'added',
+    newFile: file.status === "added",
     hunkRanges: file.hunks.map(hunkNewRange),
     canExpand: false,
   })}`;
 }
 
 function metadataOnlyDriftDescription(result: StoryDriftFileDiff): string {
-  const modes = result.diff?.match(/^old mode ([0-7]+)\r?\nnew mode ([0-7]+)$/m);
+  const modes = result.diff?.match(
+    /^old mode ([0-7]+)\r?\nnew mode ([0-7]+)$/m,
+  );
   if (result.oldPath && result.oldPath !== result.path) {
     if (modes) {
       return `Renamed ${result.oldPath} to ${result.path} and changed file mode from ${modes[1]} to ${modes[2]}; file contents did not change.`;
     }
     return `Renamed ${result.oldPath} to ${result.path}; file contents did not change.`;
   }
-  if (modes) return `File mode changed from ${modes[1]} to ${modes[2]}; file contents did not change.`;
-  return 'File metadata changed without textual content changes.';
+  if (modes)
+    return `File mode changed from ${modes[1]} to ${modes[2]}; file contents did not change.`;
+  return "File metadata changed without textual content changes.";
 }
 
 /** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
  *  file, clamped to [from, to] new-file line numbers. */
-function renderContextResponse(page: LeasedReviewPage, params: URLSearchParams): string {
+function renderContextResponse(
+  page: LeasedReviewPage,
+  params: URLSearchParams,
+): string {
   const { repo, tour, head, storyless } = page;
-  const file = params.get('file') ?? '';
+  const file = params.get("file") ?? "";
   if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
-  const from = Math.max(1, parseInt(params.get('from') ?? '1', 10) || 1);
-  const toRaw = params.get('to') ?? 'eof';
-  const to = toRaw === 'eof' ? Number.MAX_SAFE_INTEGER : parseInt(toRaw, 10) || 0;
-  const layout = params.get('layout') === 'split' ? ('split' as const) : ('unified' as const);
+  const from = Math.max(1, parseInt(params.get("from") ?? "1", 10) || 1);
+  const toRaw = params.get("to") ?? "eof";
+  const to =
+    toRaw === "eof" ? Number.MAX_SAFE_INTEGER : parseInt(toRaw, 10) || 0;
+  const layout =
+    params.get("layout") === "split"
+      ? ("split" as const)
+      : ("unified" as const);
   if (to < from) return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
 
   // Mirror renderFullFileResponse exactly: context-only story files are valid,
@@ -1841,18 +2369,29 @@ function renderContextResponse(page: LeasedReviewPage, params: URLSearchParams):
     ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
     ...(storyless ? [] : storyReviewFiles(tour)),
   ]);
-  if (!allowed.has(file)) return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
+  if (!allowed.has(file))
+    return `<div class="ds-diffnote">That file isn't part of this change.</div>`;
   const df = materializePageFile(page, file);
   const newLines = readWholeFile(repo, file, head) ?? [];
-  if (!newLines.length) return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
+  if (!newLines.length)
+    return `<div class="ds-diffnote">Couldn't read ${esc(file)} from the working tree.</div>`;
   // Clamp to the real file length: ranges past EOF must serve fewer rows,
   // never invented ones. Defense-in-depth — the parser now bounds hunks by
   // their header counts, so it no longer leaks a phantom row past EOF.
   const last = newLines.length;
   const rows = buildFullFileRows(df, newLines, []).filter(
-    (r) => r.type === 'ctx' && r.newNo !== undefined && r.newNo >= from && r.newNo <= to && r.newNo <= last,
+    (r) =>
+      r.type === "ctx" &&
+      r.newNo !== undefined &&
+      r.newNo >= from &&
+      r.newNo <= to &&
+      r.newNo <= last,
   );
-  return renderContextRows(rows, layout, { file, oldFile: df?.oldPath, newFile: df?.status === 'added' });
+  return renderContextRows(rows, layout, {
+    file,
+    oldFile: df?.oldPath,
+    newFile: df?.status === "added",
+  });
 }
 
 function nowMs(): number {
@@ -1860,9 +2399,14 @@ function nowMs(): number {
 }
 
 function agentFailureEvent(r: StreamResult): ProgressEvent {
-  const stage = r.failure === 'startup' ? 'startup' : 'execution';
+  const stage = r.failure === "startup" ? "startup" : "execution";
   const summary = summarizeAgentFailure(r.output, stage);
-  return errorEvent(stage, summary.label, summary.detail, summary.technicalDetail);
+  return errorEvent(
+    stage,
+    summary.label,
+    summary.detail,
+    summary.technicalDetail,
+  );
 }
 
 /** Everything runWorkflow needs to drive one agent run end to end. */
@@ -1877,7 +2421,11 @@ interface WorkflowSpec {
   /** True when this event is a write to the run's own output (drives writing_output). */
   isTargetWrite: (ev: ProgressEvent) => boolean;
   /** After the agent exits, compute terminal status + result + any error/warning events. */
-  finish: (r: StreamResult) => { status: RunStatus; result: Record<string, unknown>; events: ProgressEvent[] };
+  finish: (r: StreamResult) => {
+    status: RunStatus;
+    result: Record<string, unknown>;
+    events: ProgressEvent[];
+  };
   /** Optional cleanup for temp checkouts created only for this workflow. */
   cleanup?: () => void;
   /** Optional file scope: relativize file-event paths and count distinct changed-file reads. */
@@ -1887,18 +2435,25 @@ interface WorkflowSpec {
 export function finishStoryGeneration(
   r: StreamResult,
   storyPath: string,
-  session: Pick<Session, 'selectedStory' | 'chooseStory'> & Partial<Pick<Session, 'repo'>>,
+  session: Pick<Session, "selectedStory" | "chooseStory"> &
+    Partial<Pick<Session, "repo">>,
   previousStoryContents?: string | null,
   requireModernStory = true,
-): { status: RunStatus; result: Record<string, unknown>; events: ProgressEvent[] } {
-  const currentStoryContents = existsSync(storyPath) ? readFileSync(storyPath, 'utf8') : null;
-  const storyWritten = currentStoryContents !== null && (
-    previousStoryContents === undefined ||
-    previousStoryContents === null ||
-    currentStoryContents !== previousStoryContents
-  );
+): {
+  status: RunStatus;
+  result: Record<string, unknown>;
+  events: ProgressEvent[];
+} {
+  const currentStoryContents = existsSync(storyPath)
+    ? readFileSync(storyPath, "utf8")
+    : null;
+  const storyWritten =
+    currentStoryContents !== null &&
+    (previousStoryContents === undefined ||
+      previousStoryContents === null ||
+      currentStoryContents !== previousStoryContents);
   const events: ProgressEvent[] = [];
-  let status: RunStatus = 'complete';
+  let status: RunStatus = "complete";
   if (storyWritten) {
     try {
       const tour = loadTour(storyPath);
@@ -1910,53 +2465,73 @@ export function finishStoryGeneration(
         : { errors: [], warnings: [] };
       qualityErrors.push(...moveVerification.errors);
       if (qualityErrors.length) {
-        throw new Error(`Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join('\n  - ')}`);
+        throw new Error(
+          `Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join("\n  - ")}`,
+        );
       }
       for (const warning of moveVerification.warnings) {
-        events.push(warningEvent('Logic move needs a closer look', warning, 'validation'));
+        events.push(
+          warningEvent("Logic move needs a closer look", warning, "validation"),
+        );
       }
       session.selectedStory = storyPath;
       session.chooseStory = false;
       return { status, result: { storyWritten, storyValid: true }, events };
     } catch (e) {
-      events.push(errorEvent(
-        'validation',
-        'The story did not pass its final check',
-        'The agent wrote a story, but diffStory cannot safely open it yet. Try again or change the story settings.',
-        (e as Error).message,
-      ));
-      status = 'failed';
+      events.push(
+        errorEvent(
+          "validation",
+          "The story did not pass its final check",
+          "The agent wrote a story, but diffStory cannot safely open it yet. Try again or change the story settings.",
+          (e as Error).message,
+        ),
+      );
+      status = "failed";
       return { status, result: { storyWritten, storyValid: false }, events };
     }
   }
-  if (r.failure === 'startup') {
+  if (r.failure === "startup") {
     events.push(agentFailureEvent(r));
-    status = 'failed';
-  } else if (!r.ok) {
-    events.push(agentFailureEvent(r));
-    status = 'failed';
+    status = "failed";
+  } else if (r.ok) {
+    events.push(
+      errorEvent(
+        "output_missing",
+        "The agent finished without a story",
+        "No .diffstory/story.json was created. Try again, or open technical details to see what the agent returned.",
+      ),
+    );
+    status = "failed";
   } else {
-    events.push(errorEvent(
-      'output_missing',
-      'The agent finished without a story',
-      'No .diffstory/story.json was created. Try again, or open technical details to see what the agent returned.',
-    ));
-    status = 'failed';
+    events.push(agentFailureEvent(r));
+    status = "failed";
   }
   return { status, result: { storyWritten, storyValid: false }, events };
 }
 
 function repoForStoryPath(storyPath: string): string {
   let cursor = dirname(resolve(storyPath));
-  while (cursor !== dirname(cursor) && basename(cursor) !== DATA_DIR) cursor = dirname(cursor);
-  return basename(cursor) === DATA_DIR ? dirname(cursor) : dirname(dirname(resolve(storyPath)));
+  while (cursor !== dirname(cursor) && basename(cursor) !== DATA_DIR)
+    cursor = dirname(cursor);
+  return basename(cursor) === DATA_DIR
+    ? dirname(cursor)
+    : dirname(dirname(resolve(storyPath)));
 }
 
 function moveTokens(text: string): string[] {
-  return text.toLowerCase().match(/[a-z_$][a-z0-9_$]*|\d+|===|!==|==|!=|<=|>=|&&|\|\||[-+*/%<>]/g) ?? [];
+  return (
+    text
+      .toLowerCase()
+      .match(/[a-z_$][a-z0-9_$]*|\d+|===|!==|==|!=|<=|>=|&&|\|\||[-+*/%<>]/g) ??
+    []
+  );
 }
 
-function tokenOverlap(left: string[], right: string[], denominator: 'max' | 'left' = 'max'): number {
+function tokenOverlap(
+  left: string[],
+  right: string[],
+  denominator: "max" | "left" = "max",
+): number {
   if (!left.length || !right.length) return 0;
   const counts = new Map<string, number>();
   for (const token of right) counts.set(token, (counts.get(token) ?? 0) + 1);
@@ -1968,58 +2543,102 @@ function tokenOverlap(left: string[], right: string[], denominator: 'max' | 'lef
       counts.set(token, count - 1);
     }
   }
-  return shared / (denominator === 'left' ? left.length : Math.max(left.length, right.length));
+  return (
+    shared /
+    (denominator === "left" ? left.length : Math.max(left.length, right.length))
+  );
 }
 
 function functionShaped(text: string): boolean {
-  return /\b(?:function|def|fn)\s+[A-Za-z_$][\w$]*\s*\(|\b[A-Za-z_$][\w$]*\s*\([^)]*\)\s*(?:\{|=>)/.test(text);
+  return /\b(?:function|def|fn)\s+[A-Za-z_$][\w$]*\s*\(|\b[A-Za-z_$][\w$]*\s*\([^)]*\)\s*(?:\{|=>)/.test(
+    text,
+  );
 }
 
 /** Verify move claims against the exact old/new blobs used by the story. */
-export function verifyLogicMoves(repo: string, tour: Tour): { errors: string[]; warnings: string[] } {
+export function verifyLogicMoves(
+  repo: string,
+  tour: Tour,
+): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
-  if (!repo) return { errors: ['logic moves could not be verified because the repository path is unavailable'], warnings };
+  if (!repo)
+    return {
+      errors: [
+        "logic moves could not be verified because the repository path is unavailable",
+      ],
+      warnings,
+    };
   const steps = orderedSteps(tour);
   steps.forEach((step, stepIndex) => {
-    if (!isCodeStep(step) || !('moves' in step)) return;
+    if (!isCodeStep(step) || !("moves" in step)) return;
     (step.moves ?? []).forEach((move, moveIndex) => {
       const where = `steps[${stepIndex}].moves[${moveIndex}]`;
-      if (move.hidden?.as === 'destination') {
-        const endpointName = move.after.file !== step.file ? 'after' : 'before';
+      if (move.hidden?.as === "destination") {
+        const endpointName = move.after.file === step.file ? "before" : "after";
         const endpoint = move[endpointName];
-        const ref = endpointName === 'before' ? (tour.base ?? 'HEAD') : tour.head;
+        const ref =
+          endpointName === "before" ? (tour.base ?? "HEAD") : tour.head;
         if (readWholeFile(repo, endpoint.file, ref) === null) {
-          errors.push(`${where}.hidden destination file "${endpoint.file}" could not be resolved in the repository`);
+          errors.push(
+            `${where}.hidden destination file "${endpoint.file}" could not be resolved in the repository`,
+          );
         }
       }
-      const readAnchor = (endpoint: 'before' | 'after'): string | null => {
+      const readAnchor = (endpoint: "before" | "after"): string | null => {
         const anchor = move[endpoint];
-        const ref = endpoint === 'before' ? (tour.base ?? 'HEAD') : tour.head;
-        const slice = readFileRange(repo, anchor.file, anchor.range[0], anchor.range[1], ref);
+        const ref = endpoint === "before" ? (tour.base ?? "HEAD") : tour.head;
+        const slice = readFileRange(
+          repo,
+          anchor.file,
+          anchor.range[0],
+          anchor.range[1],
+          ref,
+        );
         const expected = anchor.range[1] - anchor.range[0] + 1;
-        if (!slice || slice.startLine !== anchor.range[0] || slice.lines.length !== expected) {
-          errors.push(`${where}.${endpoint}.range is outside the ${endpoint === 'before' ? 'old' : 'new'} version of "${anchor.file}"`);
+        if (
+          !slice ||
+          slice.startLine !== anchor.range[0] ||
+          slice.lines.length !== expected
+        ) {
+          errors.push(
+            `${where}.${endpoint}.range is outside the ${endpoint === "before" ? "old" : "new"} version of "${anchor.file}"`,
+          );
           return null;
         }
-        return slice.lines.join('\n');
+        return slice.lines.join("\n");
       };
-      const before = readAnchor('before');
-      const after = readAnchor('after');
+      const before = readAnchor("before");
+      const after = readAnchor("after");
       if (before == null || after == null) return;
       const beforeTokens = moveTokens(before);
       const afterTokens = moveTokens(after);
-      if (move.kind === 'moved' && tokenOverlap(beforeTokens, afterTokens) < 0.7) {
-        errors.push(`${where} kind "moved" requires at least 70% token overlap between its anchors`);
+      if (
+        move.kind === "moved" &&
+        tokenOverlap(beforeTokens, afterTokens) < 0.7
+      ) {
+        errors.push(
+          `${where} kind "moved" requires at least 70% token overlap between its anchors`,
+        );
       }
-      if (move.kind === 'extracted') {
-        if (!functionShaped(after) || tokenOverlap(beforeTokens, afterTokens, 'left') < 0.5) {
-          warnings.push(`${where} says "extracted", but its after range does not clearly contain a function-shaped majority of the old logic.`);
+      if (move.kind === "extracted") {
+        if (
+          !functionShaped(after) ||
+          tokenOverlap(beforeTokens, afterTokens, "left") < 0.5
+        ) {
+          warnings.push(
+            `${where} says "extracted", but its after range does not clearly contain a function-shaped majority of the old logic.`,
+          );
         }
       }
-      if (move.kind === 'inlined') {
-        if (!functionShaped(before) || tokenOverlap(afterTokens, beforeTokens, 'left') < 0.5) {
-          warnings.push(`${where} says "inlined", but its before range does not clearly contain a function-shaped majority of the new logic.`);
+      if (move.kind === "inlined") {
+        if (
+          !functionShaped(before) ||
+          tokenOverlap(afterTokens, beforeTokens, "left") < 0.5
+        ) {
+          warnings.push(
+            `${where} says "inlined", but its before range does not clearly contain a function-shaped majority of the new logic.`,
+          );
         }
       }
     });
@@ -2032,19 +2651,23 @@ export function verifyLogicMoves(repo: string, tour: Tour): { errors: string[]; 
  * phases, stream normalized agent events (advancing phases monotonically on real
  * observation), heartbeat liveness while the child runs, then validate → run_done.
  */
-function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): void {
+function runWorkflow(
+  res: ServerResponse,
+  repo: string,
+  spec: WorkflowSpec,
+): void {
   agentBusy = true;
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
 
   const ac = new AbortController();
-  res.on('close', () => ac.abort());
+  res.on("close", () => ac.abort());
 
   let seq = 0;
   const send = (e: ProgressEvent) => {
     try {
-      res.write(JSON.stringify({ seq: seq++, ...e }) + '\n');
+      res.write(JSON.stringify({ seq: seq++, ...e }) + "\n");
     } catch {
       /* client disconnected */
     }
@@ -2060,17 +2683,19 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
 
   send(runStarted(spec.workflow, spec.title));
   send(contextEvent(spec.context));
-  advance('resolving_context');
-  advance('preparing_prompt');
-  advance('starting_agent');
-  advance('agent_running');
+  advance("resolving_context");
+  advance("preparing_prompt");
+  advance("starting_agent");
+  advance("agent_running");
 
   let lastActivity = nowMs();
   const heart = setInterval(() => {
     if (!ac.signal.aborted) send(heartbeatEvent(nowMs() - lastActivity));
   }, 5000);
 
-  const enrich = spec.fileScope ? createFileEnricher(spec.fileScope) : (e: ProgressEvent) => e;
+  const enrich = spec.fileScope
+    ? createFileEnricher(spec.fileScope)
+    : (e: ProgressEvent) => e;
 
   streamAgent(
     spec.agent,
@@ -2082,9 +2707,9 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
       send(out);
       const ph = observedPhase(out, spec.isTargetWrite(out));
       if (ph) advance(ph);
-      if (out.type === 'text') {
+      if (out.type === "text") {
         for (const note of noteEventsFromText(out.data)) {
-          if (note.type === 'phase') advance(note.phase, note.label);
+          if (note.type === "phase") advance(note.phase, note.label);
           else send(note);
         }
       }
@@ -2096,10 +2721,10 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     .then((r) => {
       clearInterval(heart);
       if (ac.signal.aborted) {
-        send(doneEvent('stopped'));
+        send(doneEvent("stopped"));
         return;
       }
-      advance('validating_output');
+      advance("validating_output");
       const { status, result, events } = spec.finish(r);
       for (const e of events) send(e);
       send(doneEvent(status, result));
@@ -2107,11 +2732,11 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     .catch((err) => {
       clearInterval(heart);
       if (ac.signal.aborted) {
-        send(doneEvent('stopped'));
+        send(doneEvent("stopped"));
         return;
       }
-      send(errorEvent('execution', 'The agent run crashed', String(err)));
-      send(doneEvent('failed'));
+      send(errorEvent("execution", "The agent run crashed", String(err)));
+      send(doneEvent("failed"));
     })
     .finally(() => {
       clearInterval(heart);
@@ -2121,7 +2746,10 @@ function runWorkflow(res: ServerResponse, repo: string, spec: WorkflowSpec): voi
     });
 }
 
-function stableDiffRef(repo: string, ref: string | undefined): string | undefined {
+function stableDiffRef(
+  repo: string,
+  ref: string | undefined,
+): string | undefined {
   if (!ref) return undefined;
   return resolveCommit(repo, ref) ?? ref;
 }
@@ -2132,45 +2760,63 @@ function stableDiffRef(repo: string, ref: string | undefined): string | undefine
  * the agent will actually read — else "n of N" carries an unreachable N.
  */
 export function postRenamePath(path: string): string {
-  if (!path.includes(' => ')) return path;
-  if (path.includes('{')) {
-    return path.replace(/\{[^{}]*? => ([^{}]*?)\}/g, '$1').replace(/\/{2,}/g, '/');
+  if (!path.includes(" => ")) return path;
+  if (path.includes("{")) {
+    return path
+      .replace(/\{[^{}]*? => ([^{}]*?)\}/g, "$1")
+      .replace(/\/{2,}/g, "/");
   }
-  return path.slice(path.indexOf(' => ') + 4);
+  return path.slice(path.indexOf(" => ") + 4);
 }
 
 type ScopeResult =
   | { ok: true; scope?: StoryScope }
   | { ok: false; detail: string };
-type NoteResult =
-  | { ok: true; note?: string }
-  | { ok: false; detail: string };
+type NoteResult = { ok: true; note?: string } | { ok: false; detail: string };
 type IncludedFilesResult =
   | { ok: true; included: string[] }
   | { ok: false; detail: string };
 
 function normalizeReviewerNote(value: unknown): NoteResult {
   if (value === undefined || value === null) return { ok: true };
-  if (typeof value !== 'string') return { ok: false, detail: 'Story guidance must be text.' };
+  if (typeof value !== "string")
+    return { ok: false, detail: "Story guidance must be text." };
   const note = value.trim();
   return { ok: true, ...(note ? { note: note.slice(0, 4000) } : {}) };
 }
 
-function normalizeIncludedFiles(value: unknown, changedFiles: string[]): IncludedFilesResult {
-  if (value === undefined || value === null) return { ok: true, included: changedFiles };
-  if (!Array.isArray(value)) return { ok: false, detail: 'Selected story files must be an array.' };
-  const requested = [...new Set(value.map((v) => (typeof v === 'string' ? v.trim() : '')))].filter(Boolean);
-  if (!requested.length) return { ok: false, detail: 'Pick at least one file for the story.' };
+function normalizeIncludedFiles(
+  value: unknown,
+  changedFiles: string[],
+): IncludedFilesResult {
+  if (value === undefined || value === null)
+    return { ok: true, included: changedFiles };
+  if (!Array.isArray(value))
+    return { ok: false, detail: "Selected story files must be an array." };
+  const requested = [
+    ...new Set(value.map((v) => (typeof v === "string" ? v.trim() : ""))),
+  ].filter(Boolean);
+  if (!requested.length)
+    return { ok: false, detail: "Pick at least one file for the story." };
   const changed = new Set(changedFiles);
   const unknown = requested.filter((p) => !changed.has(p));
   if (unknown.length) {
-    return { ok: false, detail: `Selected file is not part of this change: ${unknown[0]}` };
+    return {
+      ok: false,
+      detail: `Selected file is not part of this change: ${unknown[0]}`,
+    };
   }
   const requestedSet = new Set(requested);
-  return { ok: true, included: changedFiles.filter((p) => requestedSet.has(p)) };
+  return {
+    ok: true,
+    included: changedFiles.filter((p) => requestedSet.has(p)),
+  };
 }
 
-function storyScopeFromInput(input: { includedFiles?: unknown; reviewerNote?: unknown }, changedFiles: string[]): ScopeResult {
+function storyScopeFromInput(
+  input: { includedFiles?: unknown; reviewerNote?: unknown },
+  changedFiles: string[],
+): ScopeResult {
   const note = normalizeReviewerNote(input.reviewerNote);
   if (!note.ok) return note;
   const files = normalizeIncludedFiles(input.includedFiles, changedFiles);
@@ -2196,8 +2842,12 @@ function stampStoryMetadata(
 ): void {
   if (!existsSync(storyPath)) return;
   try {
-    const parsed = JSON.parse(readFileSync(storyPath, 'utf8')) as Record<string, unknown>;
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+    const parsed = JSON.parse(readFileSync(storyPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return;
     parsed.diffFingerprint = fingerprint;
     if (scope) parsed.storyScope = scope;
     if (snapshot) parsed.storySnapshot = snapshot;
@@ -2207,13 +2857,22 @@ function stampStoryMetadata(
   }
 }
 
-function storySnapshotScope(tour: Tour): Pick<StoryScope, 'includedFiles'> {
-  const includedFiles = tour.storyScope?.includedFiles
-    ?? tour.steps.filter(isCodeStep).map((step) => step.file);
-  return { includedFiles: [...new Set(includedFiles)].sort((a, b) => a.localeCompare(b)) };
+function storySnapshotScope(tour: Tour): Pick<StoryScope, "includedFiles"> {
+  const includedFiles =
+    tour.storyScope?.includedFiles ??
+    tour.steps.filter(isCodeStep).map((step) => step.file);
+  return {
+    includedFiles: [...new Set(includedFiles)].sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  };
 }
 
-function storyDriftBinding(base: string, head: string | undefined, tour: Tour): StoryDriftExpectedBinding {
+function storyDriftBinding(
+  base: string,
+  head: string | undefined,
+  tour: Tour,
+): StoryDriftExpectedBinding {
   return {
     base,
     ...(head ? { head } : {}),
@@ -2227,7 +2886,7 @@ function captureAndStampStoryBaseline(
   base: string,
   head?: string,
 ): StorySnapshotRef {
-  const storySource = readFileSync(storyPath, 'utf8');
+  const storySource = readFileSync(storyPath, "utf8");
   const tour = loadTour(storyPath);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const snapshot = captureStorySnapshot({
@@ -2238,17 +2897,25 @@ function captureAndStampStoryBaseline(
     });
     const expected = storyDriftBinding(base, head, tour);
     const observed = inspectStoryDrift({ repo, snapshot, expected });
-    if (observed.status !== 'current') continue;
+    if (observed.status !== "current") continue;
     const diff = getDiff(repo, base, head);
     const confirmed = inspectStoryDrift({ repo, snapshot, expected });
-    if (confirmed.status !== 'current' || confirmed.currentIdentity !== observed.currentIdentity) continue;
-    if (readFileSync(storyPath, 'utf8') !== storySource) {
-      throw new Error('The story changed while DiffStory captured its baseline.');
+    if (
+      confirmed.status !== "current" ||
+      confirmed.currentIdentity !== observed.currentIdentity
+    )
+      continue;
+    if (readFileSync(storyPath, "utf8") !== storySource) {
+      throw new Error(
+        "The story changed while DiffStory captured its baseline.",
+      );
     }
     stampStoryMetadata(storyPath, diffFingerprint(diff), undefined, snapshot);
     return snapshot;
   }
-  throw new Error('The repository kept changing while diffStory captured the story baseline.');
+  throw new Error(
+    "The repository kept changing while diffStory captured the story baseline.",
+  );
 }
 
 function finishWithStoryBaseline(
@@ -2258,68 +2925,133 @@ function finishWithStoryBaseline(
   base: string,
   head?: string,
 ): ReturnType<typeof finishStoryGeneration> {
-  if (finished.status !== 'complete') return finished;
+  if (finished.status !== "complete") return finished;
   try {
     const snapshot = captureAndStampStoryBaseline(repo, storyPath, base, head);
-    return { ...finished, result: { ...finished.result, storySnapshot: snapshot.id } };
+    return {
+      ...finished,
+      result: { ...finished.result, storySnapshot: snapshot.id },
+    };
   } catch (error) {
     return {
-      status: 'failed',
+      status: "failed",
       result: { ...finished.result, storySnapshot: false },
-      events: [...finished.events, errorEvent(
-        'validation',
-        'The story baseline could not be captured',
-        'The story is valid, but freshness cannot be proven yet. Retry when repository writes have finished.',
-        (error as Error).message,
-      )],
+      events: [
+        ...finished.events,
+        errorEvent(
+          "validation",
+          "The story baseline could not be captured",
+          "The story is valid, but freshness cannot be proven yet. Retry when repository writes have finished.",
+          (error as Error).message,
+        ),
+      ],
     };
   }
 }
 
-function runStoryRepair(res: ServerResponse, session: Session, body: string): void {
-  let input: { action?: string; file?: string; line?: number; stepId?: string; agent?: string } = {};
+function runStoryRepair(
+  res: ServerResponse,
+  session: Session,
+  body: string,
+): void {
+  let input: {
+    action?: string;
+    file?: string;
+    line?: number;
+    stepId?: string;
+    agent?: string;
+  } = {};
   try {
-    input = JSON.parse(body || '{}');
+    input = JSON.parse(body || "{}");
   } catch {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
+    return sendJson(
+      res,
+      400,
+      errorEvent(
+        "preflight",
+        "Invalid request",
+        "The request body was not valid JSON.",
+      ),
+    );
   }
   const action = input.action as StoryRepairAction;
-  if (!(['explain', 'rewrite', 'shorten', 'split'] as StoryRepairAction[]).includes(action)) {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid story repair', 'Choose explain, rewrite, shorten, or split.'));
+  if (
+    !(
+      ["explain", "rewrite", "shorten", "split"] as StoryRepairAction[]
+    ).includes(action)
+  ) {
+    return sendJson(
+      res,
+      400,
+      errorEvent(
+        "preflight",
+        "Invalid story repair",
+        "Choose explain, rewrite, shorten, or split.",
+      ),
+    );
   }
   const agents = availableAgents();
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
-  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
+  if (!pre.ok)
+    return sendJson(
+      res,
+      pre.status,
+      errorEvent(pre.stage, pre.label, pre.detail),
+    );
   const selected = selectAvailableAgent(input.agent, agents, pre.agent);
-  if (!selected.ok) return sendJson(res, selected.status, errorEvent(selected.stage, selected.label, selected.detail));
+  if (!selected.ok)
+    return sendJson(
+      res,
+      selected.status,
+      errorEvent(selected.stage, selected.label, selected.detail),
+    );
   const repo = session.repo as string;
   const storyPath = selectedStoryPath(session);
   if (!existsSync(storyPath)) {
-    return sendJson(res, 404, errorEvent('preflight', 'No story to repair', 'Generate a story before tuning a step.'));
+    return sendJson(
+      res,
+      404,
+      errorEvent(
+        "preflight",
+        "No story to repair",
+        "Generate a story before tuning a step.",
+      ),
+    );
   }
   let storyWasModern = false;
   try {
     storyWasModern = validateGeneratedTour(loadTour(storyPath)).length === 0;
   } catch (e) {
-    return sendJson(res, 400, errorEvent('validation', 'The current story is invalid', (e as Error).message));
+    return sendJson(
+      res,
+      400,
+      errorEvent(
+        "validation",
+        "The current story is invalid",
+        (e as Error).message,
+      ),
+    );
   }
-  const storyBefore = readFileSync(storyPath, 'utf8');
+  const storyBefore = readFileSync(storyPath, "utf8");
   const data = sessionReviewData(session);
-  const title = action === 'explain'
-    ? 'Explaining an uncovered change'
-    : action === 'rewrite'
-      ? 'Rewriting a story step'
-      : action === 'shorten'
-        ? 'Shortening a story step'
-        : 'Splitting a story step';
+  const title =
+    action === "explain"
+      ? "Explaining an uncovered change"
+      : action === "rewrite"
+        ? "Rewriting a story step"
+        : action === "shorten"
+          ? "Shortening a story step"
+          : "Splitting a story step";
   runWorkflow(res, repo, {
-    workflow: 'guided_review',
+    workflow: "guided_review",
     title,
     agent: selected.agent,
     prompt: storyRepairPrompt({
       action,
       file: input.file?.trim() || undefined,
-      line: Number.isFinite(input.line) ? Math.trunc(Number(input.line)) : undefined,
+      line: Number.isFinite(input.line)
+        ? Math.trunc(Number(input.line))
+        : undefined,
       stepId: input.stepId?.trim() || undefined,
       base: stableDiffRef(repo, data.base) ?? data.base,
       head: stableDiffRef(repo, data.head),
@@ -2327,26 +3059,53 @@ function runStoryRepair(res: ServerResponse, session: Session, body: string): vo
     context: {
       repoName: basename(repo),
       repoPath: repo,
-      workflow: 'guided_review',
+      workflow: "guided_review",
       agent: selected.agent,
       base: describeBase(repo, data.base),
-      head: data.head ?? 'working tree',
+      head: data.head ?? "working tree",
     },
-    isTargetWrite: (event) => event.type === 'file' && event.action !== 'read' && event.target.endsWith('story.json'),
+    isTargetWrite: (event) =>
+      event.type === "file" &&
+      event.action !== "read" &&
+      event.target.endsWith("story.json"),
     finish: (result) => {
-      const storyChanged = existsSync(storyPath) && readFileSync(storyPath, 'utf8') !== storyBefore;
+      const storyChanged =
+        existsSync(storyPath) &&
+        readFileSync(storyPath, "utf8") !== storyBefore;
       if (result.ok && storyChanged) {
-        stampStoryMetadata(storyPath, diffFingerprint(getDiff(repo, data.base, data.head)));
+        stampStoryMetadata(
+          storyPath,
+          diffFingerprint(getDiff(repo, data.base, data.head)),
+        );
       }
-      const finished = finishStoryGeneration(result, storyPath, session, storyBefore, storyWasModern);
-      return finishWithStoryBaseline(finished, repo, storyPath, data.base, data.head);
+      const finished = finishStoryGeneration(
+        result,
+        storyPath,
+        session,
+        storyBefore,
+        storyWasModern,
+      );
+      return finishWithStoryBaseline(
+        finished,
+        repo,
+        storyPath,
+        data.base,
+        data.head,
+      );
     },
-    fileScope: { repoPath: repo, changedFiles: data.files.map((file) => file.newPath) },
+    fileScope: {
+      repoPath: repo,
+      changedFiles: data.files.map((file) => file.newPath),
+    },
   });
 }
 
 /** Drive the agent to write a story for the current repo, streaming progress NDJSON. */
-function runGenerate(res: ServerResponse, session: Session, body: string): void {
+function runGenerate(
+  res: ServerResponse,
+  session: Session,
+  body: string,
+): void {
   let input: {
     base?: string;
     head?: string;
@@ -2361,28 +3120,48 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     reviewerNote?: unknown;
   } = {};
   try {
-    input = JSON.parse(body || '{}');
+    input = JSON.parse(body || "{}");
   } catch {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid request', 'The request body was not valid JSON.'));
+    return sendJson(
+      res,
+      400,
+      errorEvent(
+        "preflight",
+        "Invalid request",
+        "The request body was not valid JSON.",
+      ),
+    );
   }
 
   const agents = availableAgents();
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
-  if (!pre.ok) return sendJson(res, pre.status, errorEvent(pre.stage, pre.label, pre.detail));
-  const agent =
-    (input.agent === 'claude' || input.agent === 'codex') && agents.includes(input.agent)
-      ? input.agent
-      : pre.agent;
-  const model = input.model && input.model.trim() ? input.model.trim() : undefined;
+  if (!pre.ok)
+    return sendJson(
+      res,
+      pre.status,
+      errorEvent(pre.stage, pre.label, pre.detail),
+    );
+  const selected = selectAvailableAgent(input.agent, agents, pre.agent);
+  if (!selected.ok)
+    return sendJson(
+      res,
+      selected.status,
+      errorEvent(selected.stage, selected.label, selected.detail),
+    );
+  const agent = selected.agent;
+  const model =
+    input.model && input.model.trim() ? input.model.trim() : undefined;
   const mode = normalizeStoryMode(input.mode);
-  const agentOptions = agent === 'codex' ? { codex: normalizeCodexRunOptions(input) } : undefined;
-  const workflow: Workflow = mode === 'detailed' ? 'detailed_audit' : 'guided_review';
+  const agentOptions =
+    agent === "codex" ? { codex: normalizeCodexRunOptions(input) } : undefined;
+  const workflow: Workflow =
+    mode === "detailed" ? "detailed_audit" : "guided_review";
   const title =
-    mode === 'brief'
-      ? 'Generating compact story'
-      : mode === 'detailed'
-        ? 'Generating deep review'
-        : 'Generating guided review';
+    mode === "brief"
+      ? "Generating compact story"
+      : mode === "detailed"
+        ? "Generating deep review"
+        : "Generating guided review";
   const repo = session.repo as string;
 
   const base = resolveBase(repo, input.base);
@@ -2391,7 +3170,9 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
   session.base = promptBase;
   session.head = promptHead;
   const storyPath = resolveStoryPath(repo);
-  const storyBefore = existsSync(storyPath) ? readFileSync(storyPath, 'utf8') : null;
+  const storyBefore = existsSync(storyPath)
+    ? readFileSync(storyPath, "utf8")
+    : null;
   // Generated/oversized files (regenerated ABIs, lockfiles) are subtracted from
   // the agent's diff just as they are from the rendered review and coverage gate,
   // so all three agree and the agent doesn't waste a run narrating a 20k-line ABI.
@@ -2403,7 +3184,11 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     .filter((p) => !excludePaths.includes(p));
   const storyScope = storyScopeFromInput(input, changedFiles);
   if (!storyScope.ok) {
-    return sendJson(res, 400, errorEvent('preflight', 'Invalid story scope', storyScope.detail));
+    return sendJson(
+      res,
+      400,
+      errorEvent("preflight", "Invalid story scope", storyScope.detail),
+    );
   }
 
   runWorkflow(res, repo, {
@@ -2412,18 +3197,32 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
     agent,
     model,
     agentOptions,
-    prompt: storyPrompt(promptBase, promptHead, mode, excludePaths, storyScope.scope),
+    prompt: storyPrompt(
+      promptBase,
+      promptHead,
+      mode,
+      excludePaths,
+      storyScope.scope,
+    ),
     context: {
-      repoName: basename(repo), repoPath: repo, workflow, agent, model,
+      repoName: basename(repo),
+      repoPath: repo,
+      workflow,
+      agent,
+      model,
       base: describeBase(repo, promptBase),
-      head: promptHead ?? 'working tree',
+      head: promptHead ?? "working tree",
     },
     // For generate, the output is the story file.
-    isTargetWrite: (ev) => ev.type === 'file' && ev.action !== 'read' && ev.target.endsWith('story.json'),
+    isTargetWrite: (ev) =>
+      ev.type === "file" &&
+      ev.action !== "read" &&
+      ev.target.endsWith("story.json"),
     finish: (r) => {
-      const storyChanged = existsSync(storyPath) && (
-        storyBefore === null || readFileSync(storyPath, 'utf8') !== storyBefore
-      );
+      const storyChanged =
+        existsSync(storyPath) &&
+        (storyBefore === null ||
+          readFileSync(storyPath, "utf8") !== storyBefore);
       if (r.ok && storyChanged) {
         stampStoryMetadata(
           storyPath,
@@ -2431,87 +3230,123 @@ function runGenerate(res: ServerResponse, session: Session, body: string): void 
           storyScope.scope,
         );
       }
-      const finished = finishStoryGeneration(r, storyPath, session, storyBefore);
-      return finishWithStoryBaseline(finished, repo, storyPath, promptBase, promptHead);
+      const finished = finishStoryGeneration(
+        r,
+        storyPath,
+        session,
+        storyBefore,
+      );
+      return finishWithStoryBaseline(
+        finished,
+        repo,
+        storyPath,
+        promptBase,
+        promptHead,
+      );
     },
     fileScope: { repoPath: repo, changedFiles },
   });
 }
 
-function readBody(req: IncomingMessage, res: ServerResponse, done: (body: string) => void): void {
-  let data = '';
+function readBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  done: (body: string) => void,
+): void {
+  let data = "";
   let size = 0;
   let tooLarge = false;
-  req.on('data', (chunk) => {
+  req.on("data", (chunk) => {
     if (tooLarge) return;
-    size += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+    size += Buffer.isBuffer(chunk)
+      ? chunk.length
+      : Buffer.byteLength(String(chunk));
     if (size > 1_000_000) {
       tooLarge = true;
-      data = '';
-      sendJson(res, 413, { error: 'Request body is too large.' });
+      data = "";
+      sendJson(res, 413, { error: "Request body is too large." });
       return;
     }
     data += chunk;
   });
-  req.on('end', () => {
+  req.on("end", () => {
     if (!tooLarge) done(data);
   });
 }
 
 function runAloudStatus(res: ServerResponse, aloud: AloudReader): void {
-  aloud.status()
+  aloud
+    .status()
     .then((status) => sendJson(res, 200, status))
     .catch((error) => sendAloudError(res, error));
 }
 
-function runAloudSpeak(res: ServerResponse, aloud: AloudReader, body: string): void {
+function runAloudSpeak(
+  res: ServerResponse,
+  aloud: AloudReader,
+  body: string,
+): void {
   let input: { batches?: unknown; prefetch?: unknown; text?: unknown };
   try {
-    input = JSON.parse(body || '{}') as typeof input;
+    input = JSON.parse(body || "{}") as typeof input;
   } catch {
-    return sendJson(res, 400, { error: 'invalid JSON' });
+    return sendJson(res, 400, { error: "invalid JSON" });
   }
-  const text = typeof input.text === 'string' ? input.text.trim() : '';
-  if (!text) return sendJson(res, 400, { error: 'No text to speak.' });
+  const text = typeof input.text === "string" ? input.text.trim() : "";
+  if (!text) return sendJson(res, 400, { error: "No text to speak." });
   const batches = Array.isArray(input.batches)
-    ? input.batches.map((batch) => typeof batch === 'string' ? batch.trim() : '')
+    ? input.batches.map((batch) =>
+        typeof batch === "string" ? batch.trim() : "",
+      )
     : undefined;
   if (batches && (batches.length === 0 || batches.some((batch) => !batch))) {
-    return sendJson(res, 400, { error: 'Narration batches must be non-empty strings.' });
+    return sendJson(res, 400, {
+      error: "Narration batches must be non-empty strings.",
+    });
   }
   const prefetch = Number(input.prefetch);
-  aloud.speak({
-    text,
-    ...(batches ? { batches } : {}),
-    ...(Number.isFinite(prefetch) ? { prefetch } : {}),
-  })
+  aloud
+    .speak({
+      text,
+      ...(batches ? { batches } : {}),
+      ...(Number.isFinite(prefetch) ? { prefetch } : {}),
+    })
     .then((status) => sendJson(res, 200, status))
     .catch((error) => sendAloudError(res, error));
 }
 
-function runAloudPrepare(res: ServerResponse, aloud: AloudReader, body: string): void {
+function runAloudPrepare(
+  res: ServerResponse,
+  aloud: AloudReader,
+  body: string,
+): void {
   let input: { batches?: unknown; prefetch?: unknown; text?: unknown };
   try {
-    input = JSON.parse(body || '{}') as typeof input;
+    input = JSON.parse(body || "{}") as typeof input;
   } catch {
-    return sendJson(res, 400, { error: 'invalid JSON' });
+    return sendJson(res, 400, { error: "invalid JSON" });
   }
-  const text = typeof input.text === 'string' ? input.text.trim() : '';
-  if (!text) return sendJson(res, 400, { error: 'No text to prepare.' });
+  const text = typeof input.text === "string" ? input.text.trim() : "";
+  if (!text) return sendJson(res, 400, { error: "No text to prepare." });
   const batches = Array.isArray(input.batches)
-    ? input.batches.map((batch) => typeof batch === 'string' ? batch.trim() : '')
+    ? input.batches.map((batch) =>
+        typeof batch === "string" ? batch.trim() : "",
+      )
     : undefined;
   if (batches && (batches.length === 0 || batches.some((batch) => !batch))) {
-    return sendJson(res, 400, { error: 'Narration batches must be non-empty strings.' });
+    return sendJson(res, 400, {
+      error: "Narration batches must be non-empty strings.",
+    });
   }
   // Forwarded, not dropped: this is how far ahead the page wants warmed, and
   // without it Aloud falls back to its own default depth.
   const prefetch = Number(input.prefetch);
-  aloud.prepare({
-    text,
-    ...(batches ? { batches } : {}),
-    ...(Number.isFinite(prefetch) ? { prefetch } : {}),
-  })
+  aloud
+    .prepare({
+      text,
+      ...(batches ? { batches } : {}),
+      ...(Number.isFinite(prefetch) ? { prefetch } : {}),
+    })
     .then(() => {
       res.statusCode = 204;
       res.end();
@@ -2519,97 +3354,109 @@ function runAloudPrepare(res: ServerResponse, aloud: AloudReader, body: string):
     .catch((error) => sendAloudError(res, error));
 }
 
-function runAloudControl(res: ServerResponse, aloud: AloudReader, body: string): void {
-  let action: 'pause' | 'resume' | 'stop';
+function runAloudControl(
+  res: ServerResponse,
+  aloud: AloudReader,
+  body: string,
+): void {
+  let action: "pause" | "resume" | "stop";
   try {
-    const input = JSON.parse(body || '{}') as { action?: unknown };
-    if (input.action !== 'pause' && input.action !== 'resume' && input.action !== 'stop') {
-      return sendJson(res, 400, { error: 'Unknown Aloud playback action.' });
+    const input = JSON.parse(body || "{}") as { action?: unknown };
+    if (
+      input.action !== "pause" &&
+      input.action !== "resume" &&
+      input.action !== "stop"
+    ) {
+      return sendJson(res, 400, { error: "Unknown Aloud playback action." });
     }
     action = input.action;
   } catch {
-    return sendJson(res, 400, { error: 'invalid JSON' });
+    return sendJson(res, 400, { error: "invalid JSON" });
   }
-  aloud.control(action)
+  aloud
+    .control(action)
     .then((status) => sendJson(res, 200, status))
     .catch((error) => sendAloudError(res, error));
 }
 
 function sendAloudError(res: ServerResponse, error: unknown): void {
-  const status = Number((error as { statusCode?: unknown } | undefined)?.statusCode);
+  const status = Number(
+    (error as { statusCode?: unknown } | undefined)?.statusCode,
+  );
   // Flag blips the reader can recover from (a timeout, a dropped keep-alive
   // socket) so the narration loop can retry instead of tearing playback down and
   // telling the reviewer narration is unavailable.
-  const transient = (error as { transient?: unknown } | undefined)?.transient === true;
+  const transient =
+    (error as { transient?: unknown } | undefined)?.transient === true;
   sendJson(
     res,
     Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503,
     {
-      error: error instanceof Error ? error.message : 'Aloud is unavailable.',
+      error: error instanceof Error ? error.message : "Aloud is unavailable.",
       ...(transient ? { transient: true } : {}),
     },
   );
 }
 
-const MERMAID_BROWSER_ASSET = new URL('./mermaid.esm.min.mjs', import.meta.url);
+const MERMAID_BROWSER_ASSET = new URL("./mermaid.esm.min.mjs", import.meta.url);
 
 function sendMermaidBrowserAsset(res: ServerResponse): void {
   if (!existsSync(MERMAID_BROWSER_ASSET)) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
   const stat = statSync(MERMAID_BROWSER_ASSET);
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-  res.setHeader('Content-Length', String(stat.size));
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Cache-Control", "public, max-age=3600");
   createReadStream(MERMAID_BROWSER_ASSET).pipe(res);
 }
 
 // Self-hosted woff2 for the Signal / Thread-Ledger type system. Served
 // same-origin so the font-src 'self' CSP needs no change. The allowlist is the
 // path-traversal guard: only these exact filenames resolve, everything else 404s.
-const FONT_ASSET_DIR = new URL('./assets/fonts/', import.meta.url);
+const FONT_ASSET_DIR = new URL("./assets/fonts/", import.meta.url);
 const FONT_ASSET_FILES = new Set([
-  'ibm-plex-sans-latin-400-normal.woff2',
-  'ibm-plex-sans-latin-500-normal.woff2',
-  'ibm-plex-sans-latin-600-normal.woff2',
-  'ibm-plex-sans-latin-700-normal.woff2',
-  'ibm-plex-mono-latin-400-normal.woff2',
-  'ibm-plex-mono-latin-500-normal.woff2',
-  'ibm-plex-mono-latin-600-normal.woff2',
-  'ibm-plex-mono-latin-700-normal.woff2',
-  'space-grotesk-latin-500-normal.woff2',
-  'space-grotesk-latin-600-normal.woff2',
-  'space-grotesk-latin-700-normal.woff2',
+  "ibm-plex-sans-latin-400-normal.woff2",
+  "ibm-plex-sans-latin-500-normal.woff2",
+  "ibm-plex-sans-latin-600-normal.woff2",
+  "ibm-plex-sans-latin-700-normal.woff2",
+  "ibm-plex-mono-latin-400-normal.woff2",
+  "ibm-plex-mono-latin-500-normal.woff2",
+  "ibm-plex-mono-latin-600-normal.woff2",
+  "ibm-plex-mono-latin-700-normal.woff2",
+  "space-grotesk-latin-500-normal.woff2",
+  "space-grotesk-latin-600-normal.woff2",
+  "space-grotesk-latin-700-normal.woff2",
 ]);
 
 function sendFontAsset(res: ServerResponse, name: string): void {
   if (!FONT_ASSET_FILES.has(name)) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
   const asset = new URL(name, FONT_ASSET_DIR);
   if (!existsSync(asset)) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
   const stat = statSync(asset);
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'font/woff2');
-  res.setHeader('Content-Length', String(stat.size));
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader("Content-Type", "font/woff2");
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   createReadStream(asset).pipe(res);
 }
 
-const CLIENT_ASSET_DIR = new URL('./client/', import.meta.url);
+const CLIENT_ASSET_DIR = new URL("./client/", import.meta.url);
 const CLIENT_ASSET_TYPES = new Map<string, string>([
-  ['.js', 'text/javascript; charset=utf-8'],
-  ['.css', 'text/css; charset=utf-8'],
-  ['.map', 'application/json; charset=utf-8'],
+  [".js", "text/javascript; charset=utf-8"],
+  [".css", "text/css; charset=utf-8"],
+  [".map", "application/json; charset=utf-8"],
 ]);
 
 /**
@@ -2621,45 +3468,45 @@ const CLIENT_ASSET_TYPES = new Map<string, string>([
  */
 function sendClientAsset(res: ServerResponse, name: string): void {
   // Reject traversal and nested paths outright: this directory is flat.
-  if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith('.')) {
+  if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith(".")) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
-  const type = CLIENT_ASSET_TYPES.get(name.slice(name.lastIndexOf('.')));
+  const type = CLIENT_ASSET_TYPES.get(name.slice(name.lastIndexOf(".")));
   if (!type) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
   const asset = new URL(name, CLIENT_ASSET_DIR);
   if (!existsSync(asset)) {
     res.statusCode = 404;
-    res.end('Not found');
+    res.end("Not found");
     return;
   }
   const stat = statSync(asset);
   res.statusCode = 200;
-  res.setHeader('Content-Type', type);
-  res.setHeader('Content-Length', String(stat.size));
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader("Content-Type", type);
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Cache-Control", "no-cache");
   createReadStream(asset).pipe(res);
 }
 
 function sendHtml(res: ServerResponse, html: string, status = 200): void {
   res.statusCode = status;
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
   // Never cache a page shell. It embeds the review page lease token and the
   // session's current state, so a cached copy is not merely stale — it hands
   // back a dead lease. It is also why a rebuilt app could still look unchanged
   // until a hard reload.
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader("Cache-Control", "no-store");
   res.end(html);
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(payload));
 }
 
@@ -2673,7 +3520,7 @@ code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</sty
 }
 
 function escapeText(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**
@@ -2682,12 +3529,16 @@ function escapeText(s: string): string {
  * letter keeps its colon, which VS Code's handler expects.
  */
 function encodeFsPathForUri(target: string): string {
-  const normalized = target.replace(/\\/g, '/');
-  const rooted = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  const normalized = target.replace(/\\/g, "/");
+  const rooted = normalized.startsWith("/") ? normalized : `/${normalized}`;
   return rooted
-    .split('/')
-    .map((segment, index) => (index === 1 && /^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
-    .join('/');
+    .split("/")
+    .map((segment, index) =>
+      index === 1 && /^[A-Za-z]:$/.test(segment)
+        ? segment
+        : encodeURIComponent(segment),
+    )
+    .join("/");
 }
 
 /**
@@ -2698,24 +3549,46 @@ function encodeFsPathForUri(target: string): string {
  * installed. The path is confined to the reviewed repository before it is
  * handed to the OS.
  */
-export function vscodeNavigationUrl(repo: string, file: string, line: number, column: number): string | null {
-  if (!file || isAbsolute(file) || !Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
+export function vscodeNavigationUrl(
+  repo: string,
+  file: string,
+  line: number,
+  column: number,
+): string | null {
+  if (
+    !file ||
+    isAbsolute(file) ||
+    !Number.isInteger(line) ||
+    line < 1 ||
+    !Number.isInteger(column) ||
+    column < 1
+  ) {
     return null;
   }
   const root = resolve(repo);
   const target = resolve(root, file);
   const fromRoot = relative(root, target);
-  if (!fromRoot || fromRoot === '..' || fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(fromRoot)) {
+  if (
+    !fromRoot ||
+    fromRoot === ".." ||
+    fromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(fromRoot)
+  ) {
     return null;
   }
   return `vscode://file${encodeFsPathForUri(target)}:${line}:${column}`;
 }
 
 function openExternalUrl(url: string): boolean {
-  const cmd = process.platform === 'darwin' ? '/usr/bin/open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  const cmd =
+    process.platform === "darwin"
+      ? "/usr/bin/open"
+      : process.platform === "win32"
+        ? "cmd"
+        : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
   try {
-    execFileSync(cmd, args, { stdio: 'ignore', timeout: 5_000 });
+    execFileSync(cmd, args, { stdio: "ignore", timeout: 5_000 });
     return true;
   } catch {
     return false;
@@ -2724,10 +3597,14 @@ function openExternalUrl(url: string): boolean {
 
 function openBrowser(url: string): void {
   const cmd =
-    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "cmd"
+        : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
   try {
-    spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
+    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
   } catch {
     /* opening the browser is best-effort */
   }

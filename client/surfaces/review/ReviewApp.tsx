@@ -79,7 +79,13 @@ function SidebarToggle() {
   );
 }
 
-function CloseStory({ routeBase, srOnlyLabel }: { routeBase: string; srOnlyLabel?: boolean }) {
+function CloseStory({
+  routeBase,
+  srOnlyLabel,
+}: {
+  routeBase: string;
+  srOnlyLabel?: boolean;
+}) {
   return (
     <a
       className="ds-back"
@@ -91,7 +97,9 @@ function CloseStory({ routeBase, srOnlyLabel }: { routeBase: string; srOnlyLabel
       <span className="ds-ui-icon" aria-hidden="true">
         <ChromeIcon name="close" />
       </span>
-      <span className={srOnlyLabel ? "ds-sr-only" : undefined}>Close story</span>
+      <span className={srOnlyLabel ? "ds-sr-only" : undefined}>
+        Close story
+      </span>
     </a>
   );
 }
@@ -104,25 +112,32 @@ function CloseStory({ routeBase, srOnlyLabel }: { routeBase: string; srOnlyLabel
  * must be hearing the same sentence the server rendered.
  */
 function reviewTabLabel(payload: ReviewPayload): string {
-  const { chrome, trust, excludedFiles, stagedWorktreeDivergentFiles: divergent, storyFreshness } = payload;
+  const {
+    chrome,
+    trust,
+    excludedFiles,
+    stagedWorktreeDivergentFiles: divergent,
+    storyFreshness,
+  } = payload;
   const open = chrome.openCount;
-  const tail = !chrome.feedbackHealthy
-    ? ", feedback file needs repair"
-    : divergent.length
+  const tail = chrome.feedbackHealthy
+    ? divergent.length
       ? `, ${divergent.length} staged and working-tree ${plural(divergent.length, "version")} differ`
-      : storyFreshness !== "current"
-        ? ", story requires regeneration"
-        : trust.uncoveredCount
+      : storyFreshness === "current"
+        ? trust.uncoveredCount
           ? `, ${trust.uncoveredCount} ${plural(trust.uncoveredCount, "change")} not explained by the story`
           : excludedFiles.length
             ? `, ${excludedFiles.length} excluded ${plural(excludedFiles.length, "file")} to inspect`
-            : "";
+            : ""
+        : ", story requires regeneration"
+    : ", feedback file needs repair";
   return `Review, ${open} queued ${plural(open, "comment")}${tail}`;
 }
 
 function DriftDrawer({ payload }: { payload: ReviewPayload }) {
   const report = payload.storyDrift;
-  if (!report || report.state === "unverified" || !report.files.length) return null;
+  if (!report || report.state === "unverified" || !report.files.length)
+    return null;
   const summary = report.inScopeFiles
     ? `${report.inScopeFiles} story ${plural(report.inScopeFiles, "file")}${
         report.outsideScopeFiles
@@ -138,7 +153,13 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
       hidden
     >
       <div className="ds-drawer-scrim" data-drift-close />
-      <div className="ds-drawer ds-drift-drawer" role="dialog" aria-modal="true" aria-labelledby="ds-drift-title" tabIndex={-1}>
+      <div
+        className="ds-drawer ds-drift-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ds-drift-title"
+        tabIndex={-1}
+      >
         <div className="ds-drawer-head">
           <div>
             <div className="ds-drawer-title" id="ds-drift-title">
@@ -146,16 +167,30 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
             </div>
             <div className="ds-drawer-sub">{summary}</div>
           </div>
-          <button className="ds-drawer-x" data-drift-close title="Close" aria-label="Close changes since story">
+          <button
+            className="ds-drawer-x"
+            data-drift-close
+            title="Close"
+            aria-label="Close changes since story"
+          >
             ×
           </button>
         </div>
         <div className="ds-drift-body">
-          <div className="ds-drift-list" role="list" aria-label="Files changed since story">
+          <div
+            className="ds-drift-list"
+            role="list"
+            aria-label="Files changed since story"
+          >
             {report.files.map((file) => {
-              const label = file.oldPath && file.oldPath !== file.path ? `${file.oldPath} → ${file.path}` : file.path;
+              const label =
+                file.oldPath && file.oldPath !== file.path
+                  ? `${file.oldPath} → ${file.path}`
+                  : file.path;
               const status =
-                file.status === "mode-changed" ? "Mode changed" : file.status.charAt(0).toUpperCase() + file.status.slice(1);
+                file.status === "mode-changed"
+                  ? "Mode changed"
+                  : file.status.charAt(0).toUpperCase() + file.status.slice(1);
               return (
                 <button
                   key={file.path}
@@ -174,8 +209,11 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
                     </span>
                   </span>
                   <span className="ds-drift-file-meta">
-                    <em className={`is-${file.scope}`}>{file.scope === "story" ? "Story" : "Side"}</em>
-                    {file.additions !== undefined || file.deletions !== undefined ? (
+                    <em className={`is-${file.scope}`}>
+                      {file.scope === "story" ? "Story" : "Side"}
+                    </em>
+                    {file.additions !== undefined ||
+                    file.deletions !== undefined ? (
                       <span className="ds-drift-lines">
                         <i>+{file.additions ?? 0}</i>
                         <b>−{file.deletions ?? 0}</b>
@@ -194,7 +232,9 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
               <code data-drift-selected-path aria-live="polite" />
             </div>
             <div className="ds-drift-preview" data-drift-preview>
-              <div className="ds-diffnote">Choose a file to load its exact change since the story.</div>
+              <div className="ds-diffnote">
+                Choose a file to load its exact change since the story.
+              </div>
             </div>
           </div>
         </div>
@@ -206,9 +246,19 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
 const COMMANDS: [string, string, string, string][] = [
   ["story", "Open Story", "J / K", "Move through the guided walkthrough"],
   ["files", "Open All files", "/", "Search and filter the changed files"],
-  ["review", "Open Review", "", "Unresolved notes, coverage evidence, and the challenge pass"],
+  [
+    "review",
+    "Open Review",
+    "",
+    "Unresolved notes, coverage evidence, and the challenge pass",
+  ],
   ["next-unviewed", "Next unreviewed file", "", "Keep the review moving"],
-  ["toggle-viewed", "Toggle current file reviewed", "V", "Bind completion to this exact file diff"],
+  [
+    "toggle-viewed",
+    "Toggle current file reviewed",
+    "V",
+    "Bind completion to this exact file diff",
+  ],
   ["read-aloud", "Toggle read aloud", "Space", "Pause or resume narration"],
 ];
 
@@ -217,7 +267,11 @@ function CommandPalette() {
     <div className="ds-command-root" data-command-root hidden>
       {/* A div, not a button: a focusable scrim would join the modal tab loop.
           `render-accessibility.test.mjs` asserts this. */}
-      <div className="ds-command-scrim" data-shortcuts-close aria-hidden="true" />
+      <div
+        className="ds-command-scrim"
+        data-shortcuts-close
+        aria-hidden="true"
+      />
       <div
         className="ds-command"
         role="dialog"
@@ -229,13 +283,23 @@ function CommandPalette() {
         <div className="ds-command-head">
           <div>
             <strong id="ds-command-title">Commands</strong>
-            <span id="ds-command-description">Keyboard-first review without hidden magic.</span>
+            <span id="ds-command-description">
+              Keyboard-first review without hidden magic.
+            </span>
           </div>
-          <button data-shortcuts-close type="button" aria-label="Close commands">
+          <button
+            data-shortcuts-close
+            type="button"
+            aria-label="Close commands"
+          >
             ×
           </button>
         </div>
-        <div className="ds-command-list" role="group" aria-label="Review commands">
+        <div
+          className="ds-command-list"
+          role="group"
+          aria-label="Review commands"
+        >
           {COMMANDS.map(([id, title, key, detail]) => (
             <button key={id} type="button" data-command={id}>
               <span>
@@ -271,7 +335,9 @@ function useBodyFacts(payload: ReviewPayload): void {
       "data-storyless": payload.storyless ? "1" : null,
       "data-read-view": "tour",
       "data-story-freshness": payload.storyFreshness,
-      "data-feedback-health": payload.chrome.feedbackHealthy ? "healthy" : "invalid",
+      "data-feedback-health": payload.chrome.feedbackHealthy
+        ? "healthy"
+        : "invalid",
       "data-story-scope": payload.chrome.focusedStory ? "focused" : null,
       "data-repo": payload.repo,
       "data-viewed-scope": payload.viewedScope,
@@ -292,7 +358,14 @@ function useBodyFacts(payload: ReviewPayload): void {
 }
 
 export function ReviewApp({ payload }: { payload: ReviewPayload }) {
-  const { routeBase, storyless, chrome, trust, excludedFiles, stagedWorktreeDivergentFiles: divergent } = payload;
+  const {
+    routeBase,
+    storyless,
+    chrome,
+    trust,
+    excludedFiles,
+    stagedWorktreeDivergentFiles: divergent,
+  } = payload;
   const started = useRef(false);
   useBodyFacts(payload);
 
@@ -301,7 +374,9 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
     started.current = true;
     startReviewEngine({
       comments: payload.comments,
-      commentAnchors: Object.fromEntries(payload.commentAnchors.map((a) => [a.id, a.state])),
+      commentAnchors: Object.fromEntries(
+        payload.commentAnchors.map((a) => [a.id, a]),
+      ),
     });
   }, [payload]);
 
@@ -310,7 +385,9 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
       <header
         className={`ds-reviewchrome${storyless ? "" : " is-storyful"}`}
         data-review-chrome
-        {...(storyless ? { "data-storyless-chrome": "" } : { "data-story-chrome": "" })}
+        {...(storyless
+          ? { "data-storyless-chrome": "" }
+          : { "data-story-chrome": "" })}
       >
         <div className="ds-reviewchrome-rail">
           <div className="ds-reviewchrome-nav">
@@ -326,7 +403,12 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
           <div className="ds-titlewrap">
             {/* The story's own title is the document title and the tooltip; the
                 visible line stays stable so the chrome does not reflow. */}
-            <div className="ds-title" title={storyless ? "Reviewing the diff" : payload.story.title.text}>
+            <div
+              className="ds-title"
+              title={
+                storyless ? "Reviewing the diff" : payload.story.title.text
+              }
+            >
               Diff review
             </div>
             <div className="ds-reviewchrome-subtitle">
@@ -334,7 +416,11 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
             </div>
           </div>
           <div className="ds-reviewchrome-utilities">
-            <div className="ds-viewtoggle" role="tablist" aria-label="Review view">
+            <div
+              className="ds-viewtoggle"
+              role="tablist"
+              aria-label="Review view"
+            >
               <button
                 className="ds-tab is-active"
                 id="ds-tab-tour"
@@ -355,7 +441,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 aria-selected="false"
                 tabIndex={-1}
               >
-                Files
+                All files
               </button>
               <button
                 className="ds-tab"
@@ -374,10 +460,20 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 title="Review — notes, coverage, and anything the story leaves unexplained"
               >
                 Review
-                <span className="ds-tab-flag" data-review-flag aria-hidden="true" hidden={chrome.reviewClean}>
+                <span
+                  className="ds-tab-flag"
+                  data-review-flag
+                  aria-hidden="true"
+                  hidden={chrome.reviewClean}
+                >
                   ▲
                 </span>
-                <span className="ds-tab-badge" id="ds-open-count" title="Unresolved notes" hidden={!chrome.openCount}>
+                <span
+                  className="ds-tab-badge"
+                  id="ds-open-count"
+                  title="Unresolved notes"
+                  hidden={!chrome.openCount}
+                >
                   <b>{chrome.openCount}</b>
                 </span>
               </button>
@@ -392,7 +488,10 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                   title="Re-read the working tree and refresh this diff"
                   aria-label="Reload diff"
                 >
-                  <span className="ds-ui-icon ds-reload-icon" aria-hidden="true">
+                  <span
+                    className="ds-ui-icon ds-reload-icon"
+                    aria-hidden="true"
+                  >
                     <ChromeIcon name="refresh" />
                   </span>
                   <span data-reload-label>Reload</span>
@@ -420,7 +519,11 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
           </svg>
         </span>
         <span data-live-message>Diff changed.</span>
-        <button className="ds-live-banner-reload" type="button" data-live-reload>
+        <button
+          className="ds-live-banner-reload"
+          type="button"
+          data-live-reload
+        >
           Reload
         </button>
         <button
@@ -435,9 +538,20 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
         </button>
       </div>
 
-      <div className="ds-toast ds-story-reload-toast" data-story-reload-toast role="status" aria-live="polite" aria-atomic="true" hidden>
+      <div
+        className="ds-toast ds-story-reload-toast"
+        data-story-reload-toast
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        hidden
+      >
         <span>Story updated. Reloading in 10 seconds.</span>
-        <button type="button" data-story-reload-cancel aria-label="Cancel automatic story reload">
+        <button
+          type="button"
+          data-story-reload-cancel
+          aria-label="Cancel automatic story reload"
+        >
           Cancel
         </button>
       </div>
@@ -464,9 +578,18 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
           Comment selected code
         </button>
       </div>
-      <div className="ds-toast" id="ds-toast" role="status" aria-live="polite" aria-atomic="true" aria-relevant="additions text" />
+      <div
+        className="ds-toast"
+        id="ds-toast"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-relevant="additions text"
+      />
       <noscript>
-        <div className="ds-empty">diffStory needs JavaScript to drive the review.</div>
+        <div className="ds-empty">
+          diffStory needs JavaScript to drive the review.
+        </div>
       </noscript>
     </>
   );

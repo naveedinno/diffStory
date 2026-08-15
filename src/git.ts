@@ -1,6 +1,6 @@
 // Thin wrapper over the `git` CLI. No external deps — just child_process.
-import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -9,32 +9,79 @@ import {
   readFileSync,
   readlinkSync,
   readSync,
-} from 'node:fs';
-import { join } from 'node:path';
-import { DIFF_CONTEXT_LINES } from './config.js';
+} from "node:fs";
+import { relative, resolve, sep } from "node:path";
+import { DIFF_CONTEXT_LINES } from "./config.js";
 import {
   isGeneratedPath,
   REVIEW_NOISE_MAX_BYTES,
   REVIEW_NOISE_MAX_LINES,
   reviewExclusionMetadata,
   type ReviewExclusionMetadata,
-} from './noise.js';
-import type { FileStatus, ReviewFileIndexEntry } from './types.js';
+} from "./noise.js";
+import type { FileStatus, ReviewFileIndexEntry } from "./types.js";
 
-const APP_DATA_PATHSPEC = ':(exclude).diffstory/**';
+const APP_DATA_PATHSPEC = ":(exclude).diffstory/**";
+
+export function assertSafeRef(ref: string): void {
+  if (
+    typeof ref !== "string" ||
+    !ref ||
+    ref.length > 1024 ||
+    ref.includes("\0") ||
+    ref.includes(":") ||
+    /^-/.test(ref)
+  ) {
+    throw new Error("Git ref is invalid.");
+  }
+}
+
+export function isSafeRepoPath(path: string): boolean {
+  return !(
+    !path ||
+    path.includes("\0") ||
+    path.includes("\\") ||
+    path.startsWith("/") ||
+    path === "." ||
+    path === ".." ||
+    path.split("/").some((part) => !part || part === "." || part === "..") ||
+    isAppDataPath(path)
+  );
+}
+
+export function assertSafeRepoPath(path: string): void {
+  if (!isSafeRepoPath(path))
+    throw new Error("Repository-relative path is unsafe.");
+}
+
+function safeWorkingPath(repo: string, path: string): string {
+  assertSafeRepoPath(path);
+  const absolute = resolve(repo, path);
+  const rel = relative(repo, absolute);
+  if (!rel || rel === ".." || rel.startsWith(`..${sep}`)) {
+    throw new Error("Repository-relative path escapes the repository.");
+  }
+  return absolute;
+}
+
+function safeObjectPath(ref: string, path: string): string {
+  assertSafeRef(ref);
+  assertSafeRepoPath(path);
+  return `${ref}:${path}`;
+}
 
 function isAppDataPath(path: string): boolean {
-  return path === '.diffstory' || path.startsWith('.diffstory/');
+  return path === ".diffstory" || path.startsWith(".diffstory/");
 }
 
 function git(repo: string, args: string[]): string {
-  return execFileSync('git', args, {
+  return execFileSync("git", args, {
     cwd: repo,
-    encoding: 'utf8',
+    encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
     // Capture stderr instead of inheriting it — base-detection probes are
     // expected to fail (e.g. no `origin`), and we don't want those leaking.
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -46,20 +93,23 @@ function tryGit(repo: string, args: string[]): string | null {
   }
 }
 
-function gitOutputAllowingDiffExit(repo: string, args: string[]): string | null {
-  const result = spawnSync('git', args, {
+function gitOutputAllowingDiffExit(
+  repo: string,
+  args: string[],
+): string | null {
+  const result = spawnSync("git", args, {
     cwd: repo,
-    encoding: 'utf8',
+    encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.error) return null;
-  if (result.status === 0 || result.status === 1) return result.stdout ?? '';
+  if (result.status === 0 || result.status === 1) return result.stdout ?? "";
   return null;
 }
 
 export function isGitRepo(repo: string): boolean {
-  return tryGit(repo, ['rev-parse', '--is-inside-work-tree']) !== null;
+  return tryGit(repo, ["rev-parse", "--is-inside-work-tree"]) !== null;
 }
 
 /**
@@ -71,37 +121,57 @@ export function isGitRepo(repo: string): boolean {
  *   4. the empty tree (a fresh repo with no commits yet)
  */
 export function resolveBase(repo: string, override?: string): string {
-  if (override && tryGit(repo, ['rev-parse', '--verify', override]) !== null) {
-    return override;
+  if (override) {
+    try {
+      assertSafeRef(override);
+      if (
+        tryGit(repo, [
+          "rev-parse",
+          "--verify",
+          "--end-of-options",
+          override,
+        ]) !== null
+      ) {
+        return override;
+      }
+    } catch {
+      // Unsafe or malformed overrides are ignored; callers fall back to the
+      // ordinary review base instead of passing user text to git.
+    }
   }
 
-  const hasHead = tryGit(repo, ['rev-parse', '--verify', 'HEAD']) !== null;
+  const hasHead = tryGit(repo, ["rev-parse", "--verify", "HEAD"]) !== null;
   if (!hasHead) {
     // Empty tree object — diffs the whole working tree as "added".
-    return git(repo, ['hash-object', '-t', 'tree', '/dev/null']).trim();
+    return git(repo, ["hash-object", "-t", "tree", "/dev/null"]).trim();
   }
 
   for (const branch of defaultBranchCandidates(repo)) {
-    const mergeBase = tryGit(repo, ['merge-base', 'HEAD', branch]);
+    const mergeBase = tryGit(repo, ["merge-base", "HEAD", branch]);
     if (mergeBase) {
       const ref = mergeBase.trim();
       // If we're already on the default branch, merge-base == HEAD and the diff
       // would be empty; fall through to HEAD so uncommitted work still shows.
-      const head = tryGit(repo, ['rev-parse', 'HEAD'])?.trim();
+      const head = tryGit(repo, ["rev-parse", "HEAD"])?.trim();
       if (ref && ref !== head) return ref;
     }
   }
 
-  return 'HEAD';
+  return "HEAD";
 }
 
 function defaultBranchCandidates(repo: string): string[] {
   const out: string[] = [];
-  const originHead = tryGit(repo, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
-  if (originHead) out.push(originHead.trim().replace('refs/remotes/', ''));
-  for (const name of ['main', 'master', 'develop']) {
-    if (tryGit(repo, ['rev-parse', '--verify', name]) !== null) out.push(name);
-    if (tryGit(repo, ['rev-parse', '--verify', `origin/${name}`]) !== null) out.push(`origin/${name}`);
+  const originHead = tryGit(repo, [
+    "symbolic-ref",
+    "--quiet",
+    "refs/remotes/origin/HEAD",
+  ]);
+  if (originHead) out.push(originHead.trim().replace("refs/remotes/", ""));
+  for (const name of ["main", "master", "develop"]) {
+    if (tryGit(repo, ["rev-parse", "--verify", name]) !== null) out.push(name);
+    if (tryGit(repo, ["rev-parse", "--verify", `origin/${name}`]) !== null)
+      out.push(`origin/${name}`);
   }
   return out;
 }
@@ -119,9 +189,18 @@ function defaultBranchCandidates(repo: string): string[] {
  */
 export function getDiff(repo: string, base: string, head?: string): string {
   const noise = new Set(noiseFiles(repo, base, head));
-  const args = ['diff', '--no-color', '--no-ext-diff', `-U${DIFF_CONTEXT_LINES}`, base];
+  assertSafeRef(base);
+  if (head) assertSafeRef(head);
+  const args = [
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    `-U${DIFF_CONTEXT_LINES}`,
+    "--end-of-options",
+    base,
+  ];
   if (head) args.push(head);
-  args.push('--', APP_DATA_PATHSPEC, ...excludePathspecs([...noise]));
+  args.push("--", APP_DATA_PATHSPEC, ...excludePathspecs([...noise]));
   const tracked = git(repo, args);
   if (head) return tracked;
 
@@ -131,19 +210,22 @@ export function getDiff(repo: string, base: string, head?: string): string {
   // even though it still contains a staged change. Append only those missing
   // base→index paths so every staged change remains reviewable without
   // duplicating files already represented by the aggregate diff.
-  const stagedOnly = stagedOnlyReviewPaths(repo, base).filter((path) => !noise.has(path));
+  const stagedOnly = stagedOnlyReviewPaths(repo, base).filter(
+    (path) => !noise.has(path),
+  );
   const staged = stagedOnly.length
     ? git(repo, [
-        'diff',
-        '--cached',
-        '--no-color',
-        '--no-ext-diff',
+        "diff",
+        "--cached",
+        "--no-color",
+        "--no-ext-diff",
         `-U${DIFF_CONTEXT_LINES}`,
+        "--end-of-options",
         base,
-        '--',
+        "--",
         ...stagedOnly.map(literalPathspec),
       ])
-    : '';
+    : "";
 
   // An index deletion restored at the same path is reported by Git as both a
   // tracked deletion and an untracked file (`D  path` + `?? path`). The trust
@@ -171,7 +253,11 @@ interface ChangedPathMetadata {
  * diff bodies. Git may inspect changed files to calculate numstat and object
  * ids, but Node only receives bounded metadata regardless of changed-byte size.
  */
-export function reviewFileIndex(repo: string, base: string, head?: string): ReviewFileIndexEntry[] {
+export function reviewFileIndex(
+  repo: string,
+  base: string,
+  head?: string,
+): ReviewFileIndexEntry[] {
   return reviewFileIndexSnapshot(repo, base, head).fileIndex;
 }
 
@@ -211,32 +297,58 @@ export function reviewFileIndexSnapshot(
     untracked = untrackedFiles(repo);
     const worktree = new Set([...changedPaths(repo, []), ...untracked]);
     indexDivergent = new Set(
-      staged.filter((path) => worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path)),
+      staged.filter(
+        (path) =>
+          worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path),
+      ),
     );
     for (const path of untracked) {
       if (!indexDivergent.has(path)) {
-        entries.set(path, { oldPath: '/dev/null', path, status: 'added' });
+        entries.set(path, { oldPath: "/dev/null", path, status: "added" });
       }
     }
   }
 
   const counts = new Map(
-    reviewIndexNumstat(repo, base, head, stagedOnly, indexDivergent, untracked)
-      .map((file) => [file.path, file]),
+    reviewIndexNumstat(
+      repo,
+      base,
+      head,
+      stagedOnly,
+      indexDivergent,
+      untracked,
+    ).map((file) => [file.path, file]),
   );
   const changedFiles = [...entries.values()];
   const paths = changedFiles.map((file) => file.path);
-  const resolvedBase = tryGit(repo, ['rev-parse', '--verify', `${base}^{tree}`])?.trim() ?? base;
+  const resolvedBase =
+    tryGit(repo, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${base}^{tree}`,
+    ])?.trim() ?? base;
   const resolvedHead = head
-    ? tryGit(repo, ['rev-parse', '--verify', `${head}^{tree}`])?.trim() ?? head
-    : 'working-tree';
-  const workingIdentities = head ? new Map<string, string>() : workingPathIdentities(repo, paths);
-  const indexOids = head ? new Map<string, string>() : indexBlobOids(repo, paths);
+    ? (tryGit(repo, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${head}^{tree}`,
+      ])?.trim() ?? head)
+    : "working-tree";
+  const workingIdentities = head
+    ? new Map<string, string>()
+    : workingPathIdentities(repo, paths);
+  const indexOids = head
+    ? new Map<string, string>()
+    : indexBlobOids(repo, paths);
   const fileIndex = changedFiles
     .map((file) => {
       const count = counts.get(file.path) ?? { added: null, removed: null };
       const changedLines =
-        count.added == null || count.removed == null ? null : count.added + count.removed;
+        count.added == null || count.removed == null
+          ? null
+          : count.added + count.removed;
       const byteSize = reviewPathByteSize(repo, base, head, file.path);
       return {
         ...file,
@@ -260,12 +372,14 @@ export function reviewFileIndexSnapshot(
     })
     .sort((a, b) => a.path.localeCompare(b.path));
   const excludedFiles = fileIndex
-    .map((file) => reviewExclusionMetadata(
-      file.path,
-      file.added,
-      file.removed,
-      file.byteSize,
-    ))
+    .map((file) =>
+      reviewExclusionMetadata(
+        file.path,
+        file.added,
+        file.removed,
+        file.byteSize,
+      ),
+    )
     .filter((file): file is ReviewExclusionMetadata => file !== null)
     .sort((a, b) => a.path.localeCompare(b.path));
   return {
@@ -289,19 +403,28 @@ export function reviewChangeIndexSnapshot(
     const indexSnapshot = reviewFileIndexSnapshot(repo, base, head);
     const confirmed = reviewSourceMetadataFingerprint(repo, base, head);
     if (confirmed !== before) continue;
-    const changeFingerprint = createHash('sha256').update(JSON.stringify({
-      base,
-      head: head ?? 'working-tree',
-      source: confirmed,
-      files: indexSnapshot.fileIndex.map((file) => [file.path, file.reviewHash]),
-    })).digest('hex');
+    const changeFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          base,
+          head: head ?? "working-tree",
+          source: confirmed,
+          files: indexSnapshot.fileIndex.map((file) => [
+            file.path,
+            file.reviewHash,
+          ]),
+        }),
+      )
+      .digest("hex");
     return {
       ...indexSnapshot,
       sourceFingerprint: confirmed,
       changeFingerprint,
     };
   }
-  throw new Error('The change is moving too quickly to capture a stable review index. Try again.');
+  throw new Error(
+    "The change is moving too quickly to capture a stable review index. Try again.",
+  );
 }
 
 function reviewIndexNumstat(
@@ -312,21 +435,26 @@ function reviewIndexNumstat(
   indexDivergent: Set<string>,
   untracked: string[],
 ): Array<{ path: string; added: number | null; removed: number | null }> {
-  const args = ['diff', '--numstat', '--no-color', base];
+  assertSafeRef(base);
+  if (head) assertSafeRef(head);
+  const args = ["diff", "--numstat", "--no-color", "--end-of-options", base];
   if (head) args.push(head);
-  args.push('--', APP_DATA_PATHSPEC);
+  args.push("--", APP_DATA_PATHSPEC);
   const tracked = parseNumstat(tryGit(repo, args));
   if (head) return tracked;
   const staged = stagedOnly.length
-    ? parseNumstat(tryGit(repo, [
-        'diff',
-        '--cached',
-        '--numstat',
-        '--no-color',
-        base,
-        '--',
-        ...stagedOnly.map(literalPathspec),
-      ]))
+    ? parseNumstat(
+        tryGit(repo, [
+          "diff",
+          "--cached",
+          "--numstat",
+          "--no-color",
+          "--end-of-options",
+          base,
+          "--",
+          ...stagedOnly.map(literalPathspec),
+        ]),
+      )
     : [];
   const untrackedCounts = untracked
     .filter((path) => !indexDivergent.has(path))
@@ -339,33 +467,45 @@ function reviewIndexNumstat(
  * used by lazy file and story-step endpoints; initial-page code must use
  * reviewFileIndex() instead.
  */
-export function getFileDiff(repo: string, base: string, path: string, head?: string): string {
+export function getFileDiff(
+  repo: string,
+  base: string,
+  path: string,
+  head?: string,
+): string {
+  assertSafeRepoPath(path);
   const args = [
-    'diff',
-    '--no-color',
-    '--no-ext-diff',
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
     `-U${DIFF_CONTEXT_LINES}`,
+    "--end-of-options",
     base,
   ];
-  if (head) args.push(head);
-  args.push('--', literalPathspec(path));
+  assertSafeRef(base);
+  if (head) {
+    assertSafeRef(head);
+    args.push(head);
+  }
+  args.push("--", literalPathspec(path));
   const tracked = git(repo, args);
   if (head || tracked) return tracked;
 
   if (stagedOnlyReviewPaths(repo, base).includes(path)) {
     return git(repo, [
-      'diff',
-      '--cached',
-      '--no-color',
-      '--no-ext-diff',
+      "diff",
+      "--cached",
+      "--no-color",
+      "--no-ext-diff",
       `-U${DIFF_CONTEXT_LINES}`,
+      "--end-of-options",
       base,
-      '--',
+      "--",
       literalPathspec(path),
     ]);
   }
   if (untrackedFiles(repo).includes(path)) return untrackedFileDiff(repo, path);
-  return '';
+  return "";
 }
 
 function nameStatus(
@@ -375,23 +515,32 @@ function nameStatus(
   onlyPaths: string[] = [],
   cached = false,
 ): ChangedPathMetadata[] {
-  const args = ['diff'];
-  if (cached) args.push('--cached');
-  args.push('--name-status', '-z', '--no-renames', base);
+  const args = ["diff"];
+  if (cached) args.push("--cached");
+  assertSafeRef(base);
+  if (head) assertSafeRef(head);
+  args.push("--name-status", "-z", "--no-renames", "--end-of-options", base);
   if (head) args.push(head);
-  args.push('--', ...(onlyPaths.length ? onlyPaths.map(literalPathspec) : [APP_DATA_PATHSPEC]));
+  args.push(
+    "--",
+    ...(onlyPaths.length
+      ? onlyPaths.map(literalPathspec)
+      : [APP_DATA_PATHSPEC]),
+  );
   const out = tryGit(repo, args);
   if (!out) return [];
-  const fields = out.split('\0').filter(Boolean);
+  const fields = out.split("\0").filter(Boolean);
   const files: ChangedPathMetadata[] = [];
   for (let i = 0; i + 1 < fields.length; i += 2) {
     const code = fields[i]![0];
     const path = fields[i + 1]!;
     if (isAppDataPath(path)) continue;
-    const status: FileStatus =
-      code === 'A' ? 'added' : code === 'D' ? 'deleted' : code === 'R' ? 'renamed' : 'modified';
+    let status: FileStatus = "modified";
+    if (code === "A") status = "added";
+    else if (code === "D") status = "deleted";
+    else if (code === "R") status = "renamed";
     files.push({
-      oldPath: status === 'added' ? '/dev/null' : path,
+      oldPath: status === "added" ? "/dev/null" : path,
       path,
       status,
     });
@@ -406,26 +555,26 @@ function reviewFileIndexHash(
   indexOid: string | undefined,
   workingIdentity: string | undefined,
 ): string {
-  const hash = createHash('sha256');
-  hash.update('diffstory-file-index-v1\0');
+  const hash = createHash("sha256");
+  hash.update("diffstory-file-index-v1\0");
   hash.update(file.oldPath);
-  hash.update('\0');
+  hash.update("\0");
   hash.update(file.path);
-  hash.update('\0');
+  hash.update("\0");
   hash.update(file.status);
-  hash.update('\0');
+  hash.update("\0");
   hash.update(resolvedBase);
-  hash.update('\0');
+  hash.update("\0");
   hash.update(resolvedHead);
-  hash.update('\0');
-  if (resolvedHead !== 'working-tree') {
-    hash.update('fixed-ref');
+  hash.update("\0");
+  if (resolvedHead === "working-tree") {
+    hash.update(indexOid ?? "missing-index");
+    hash.update("\0");
+    hash.update(workingIdentity ?? "missing-worktree");
   } else {
-    hash.update(indexOid ?? 'missing-index');
-    hash.update('\0');
-    hash.update(workingIdentity ?? 'missing-worktree');
+    hash.update("fixed-ref");
   }
-  return hash.digest('hex');
+  return hash.digest("hex");
 }
 
 function indexBlobOids(repo: string, paths: string[]): Map<string, string> {
@@ -433,13 +582,13 @@ function indexBlobOids(repo: string, paths: string[]): Map<string, string> {
   for (let offset = 0; offset < paths.length; offset += 500) {
     const batch = paths.slice(offset, offset + 500);
     const out = tryGit(repo, [
-      'ls-files',
-      '--stage',
-      '-z',
-      '--',
+      "ls-files",
+      "--stage",
+      "-z",
+      "--",
       ...batch.map(literalPathspec),
     ]);
-    for (const entry of out?.split('\0').filter(Boolean) ?? []) {
+    for (const entry of out?.split("\0").filter(Boolean) ?? []) {
       const match = entry.match(/^\d+ ([0-9a-f]+) 0\t([\s\S]+)$/);
       if (match) identities.set(match[2], match[1]);
     }
@@ -447,26 +596,30 @@ function indexBlobOids(repo: string, paths: string[]): Map<string, string> {
   return identities;
 }
 
-function workingPathIdentities(repo: string, paths: string[]): Map<string, string> {
+function workingPathIdentities(
+  repo: string,
+  paths: string[],
+): Map<string, string> {
   const identities = new Map<string, string>();
   const regular: string[] = [];
   for (const path of paths) {
-    const abs = join(repo, path);
+    const abs = safeWorkingPath(repo, path);
     if (!existsSync(abs)) {
-      identities.set(path, 'missing');
+      identities.set(path, "missing");
       continue;
     }
     const stat = lstatSync(abs);
-    if (stat.isSymbolicLink()) identities.set(path, `symlink:${readlinkSync(abs)}`);
+    if (stat.isSymbolicLink())
+      identities.set(path, `symlink:${readlinkSync(abs)}`);
     else if (stat.isFile()) regular.push(path);
     else identities.set(path, `special:${stat.mode & 0o170000}`);
   }
   for (let offset = 0; offset < regular.length; offset += 500) {
     const batch = regular.slice(offset, offset + 500);
-    const out = tryGit(repo, ['hash-object', '--no-filters', '--', ...batch]);
-    const oids = out?.trim().split('\n') ?? [];
+    const out = tryGit(repo, ["hash-object", "--no-filters", "--", ...batch]);
+    const oids = out?.trim().split("\n") ?? [];
     for (let i = 0; i < batch.length; i++) {
-      identities.set(batch[i], oids[i] ? `blob:${oids[i]}` : 'unreadable');
+      identities.set(batch[i], oids[i] ? `blob:${oids[i]}` : "unreadable");
     }
   }
   return identities;
@@ -480,14 +633,18 @@ function reviewPathByteSize(
 ): number | null {
   if (!head) {
     try {
-      const stat = lstatSync(join(repo, path));
+      const stat = lstatSync(safeWorkingPath(repo, path));
       if (stat.isFile() || stat.isSymbolicLink()) return stat.size;
     } catch {
       // Deleted working-tree paths fall through to their base object.
     }
   }
   const ref = head ?? base;
-  const size = tryGit(repo, ['cat-file', '-s', `${ref}:${path}`])?.trim();
+  const size = tryGit(repo, [
+    "cat-file",
+    "-s",
+    safeObjectPath(ref, path),
+  ])?.trim();
   if (!size || !/^\d+$/.test(size)) return null;
   const parsed = Number(size);
   return Number.isSafeInteger(parsed) ? parsed : null;
@@ -498,7 +655,11 @@ function reviewPathByteSize(
  * that show review scope should use excludedReviewFiles() so the omission and
  * reason remain visible.
  */
-export function noiseFiles(repo: string, base: string, head?: string): string[] {
+export function noiseFiles(
+  repo: string,
+  base: string,
+  head?: string,
+): string[] {
   return excludedReviewFiles(repo, base, head).map((file) => file.path);
 }
 
@@ -507,7 +668,11 @@ export function noiseFiles(repo: string, base: string, head?: string): string[] 
  * callers can show the path, reason, and changed-line count without reading the
  * excluded file contents.
  */
-export function excludedReviewFiles(repo: string, base: string, head?: string): ReviewExclusionMetadata[] {
+export function excludedReviewFiles(
+  repo: string,
+  base: string,
+  head?: string,
+): ReviewExclusionMetadata[] {
   return numstat(repo, base, head)
     .map((file) =>
       reviewExclusionMetadata(
@@ -524,7 +689,11 @@ export function excludedReviewFiles(repo: string, base: string, head?: string): 
 /** Fingerprint the same complete review identity used by page leases. The
  * underlying index includes excluded paths plus index/worktree blob identities,
  * while `.diffstory/**` remains app state rather than product code. */
-export function reviewChangeFingerprint(repo: string, base: string, head?: string): string {
+export function reviewChangeFingerprint(
+  repo: string,
+  base: string,
+  head?: string,
+): string {
   return reviewChangeIndexSnapshot(repo, base, head).changeFingerprint;
 }
 
@@ -533,32 +702,38 @@ export function reviewChangeFingerprint(repo: string, base: string, head?: strin
  * changes are caught by per-path stat signatures; this companion catches new
  * paths, staging transitions, and moving refs without hashing file bodies.
  */
-export function reviewSourceMetadataFingerprint(repo: string, base: string, head?: string): string {
-  const hash = createHash('sha256');
-  const refs = [base, head ?? 'HEAD'];
-  const resolved = tryGit(repo, ['rev-parse', '--end-of-options', ...refs])
+export function reviewSourceMetadataFingerprint(
+  repo: string,
+  base: string,
+  head?: string,
+): string {
+  const hash = createHash("sha256");
+  assertSafeRef(base);
+  if (head) assertSafeRef(head);
+  const refs = [base, head ?? "HEAD"];
+  const resolved = tryGit(repo, ["rev-parse", "--end-of-options", ...refs])
     ?.trim()
-    .split('\n');
+    .split("\n");
   hash.update(resolved?.[0] ?? base);
-  hash.update('\0');
+  hash.update("\0");
   if (head) {
     hash.update(resolved?.[1] ?? head);
   } else {
-    hash.update(resolved?.[1] ?? 'no-head');
-    hash.update('\0');
+    hash.update(resolved?.[1] ?? "no-head");
+    hash.update("\0");
     hash.update(
       tryGit(repo, [
-        'status',
-        '--porcelain=v1',
-        '-z',
-        '--untracked-files=all',
-        '--',
-        '.',
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        ".",
         APP_DATA_PATHSPEC,
-      ]) ?? '',
+      ]) ?? "",
     );
   }
-  return hash.digest('hex');
+  return hash.digest("hex");
 }
 
 /** Git pathspecs that subtract the given paths from a diff (`:(exclude)<path>`). */
@@ -580,12 +755,21 @@ function literalPathspec(path: string): string {
  * reconciled.
  * Fixed-ref reviews have no mutable index boundary and therefore return none.
  */
-export function stagedWorktreeDivergentFiles(repo: string, base: string, head?: string): string[] {
+export function stagedWorktreeDivergentFiles(
+  repo: string,
+  base: string,
+  head?: string,
+): string[] {
   if (head) return [];
   const staged = new Set(stagedChangedPaths(repo, base));
-  const worktree = new Set([...changedPaths(repo, []), ...untrackedFiles(repo)]);
+  const worktree = new Set([
+    ...changedPaths(repo, []),
+    ...untrackedFiles(repo),
+  ]);
   return [...staged]
-    .filter((path) => worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path))
+    .filter(
+      (path) => worktree.has(path) || stagedDeletionRestoredOnDisk(repo, path),
+    )
     .sort();
 }
 
@@ -597,14 +781,21 @@ export function stagedWorktreeDivergentFiles(repo: string, base: string, head?: 
  * index-missing path that exists in any form is a real index/worktree split.
  */
 function stagedDeletionRestoredOnDisk(repo: string, path: string): boolean {
-  const entries = tryGit(repo, ['ls-files', '--stage', '-z', '--', literalPathspec(path)]);
+  assertSafeRepoPath(path);
+  const entries = tryGit(repo, [
+    "ls-files",
+    "--stage",
+    "-z",
+    "--",
+    literalPathspec(path),
+  ]);
   const hasStageZero = !!entries
-    ?.split('\0')
+    ?.split("\0")
     .filter(Boolean)
     .some((entry) => /^\d+ [0-9a-f]+ 0\t/.test(entry));
   if (hasStageZero) return false;
   try {
-    lstatSync(join(repo, path));
+    lstatSync(safeWorkingPath(repo, path));
     return true;
   } catch {
     return false;
@@ -618,28 +809,33 @@ function stagedOnlyReviewPaths(repo: string, base: string): string[] {
 
 /** Paths changed in the index itself, excluding commits already present at HEAD. */
 function stagedChangedPaths(repo: string, fallbackBase: string): string[] {
-  const indexBase = tryGit(repo, ['rev-parse', '--verify', 'HEAD^{commit}']) ? 'HEAD' : fallbackBase;
-  return changedPaths(repo, ['--cached', indexBase]);
+  const indexBase = tryGit(repo, ["rev-parse", "--verify", "HEAD^{commit}"])
+    ? "HEAD"
+    : fallbackBase;
+  return changedPaths(repo, ["--cached", indexBase]);
 }
 
 /** Run `git diff --name-only` for one boundary and return literal NUL paths. */
 function changedPaths(repo: string, boundary: string[]): string[] {
-  const out = tryGit(repo, [
-    'diff',
-    '--name-only',
-    '-z',
-    '--no-renames',
-    ...boundary,
-    '--',
-    APP_DATA_PATHSPEC,
-  ]);
+  const args = ["diff", "--name-only", "-z", "--no-renames"];
+  const cached = boundary[0] === "--cached";
+  const refs = cached ? boundary.slice(1) : boundary;
+  if (cached) args.push("--cached");
+  refs.forEach(assertSafeRef);
+  if (refs.length) args.push("--end-of-options", ...refs);
+  args.push("--", APP_DATA_PATHSPEC);
+  const out = tryGit(repo, args);
   if (!out) return [];
-  return out.split('\0').filter(Boolean).filter((path) => !isAppDataPath(path)).sort();
+  return out
+    .split("\0")
+    .filter(Boolean)
+    .filter((path) => !isAppDataPath(path))
+    .sort();
 }
 
 export interface BranchRef {
   name: string;
-  kind: 'local' | 'remote';
+  kind: "local" | "remote";
   remote?: string;
 }
 
@@ -660,42 +856,55 @@ export function listBranches(repo: string): string[] {
 /** Branch refs with enough metadata for the picker to avoid flattening everything together. */
 export function listBranchRefs(repo: string): BranchRef[] {
   const out = tryGit(repo, [
-    'for-each-ref',
-    '--format=%(refname)%09%(refname:short)',
-    '--sort=-committerdate',
-    'refs/heads',
-    'refs/remotes',
+    "for-each-ref",
+    "--format=%(refname)%09%(refname:short)",
+    "--sort=-committerdate",
+    "refs/heads",
+    "refs/remotes",
   ]);
   if (!out) return [];
   return out
-    .split('\n')
+    .split("\n")
     .map((s): BranchRef | null => {
-      const [full, short] = s.split('\t');
-      const name = (short ?? '').trim();
-      if (!full || !name || name.endsWith('/HEAD')) return null;
-      if (full.startsWith('refs/remotes/')) {
-        const remote = name.includes('/') ? name.slice(0, name.indexOf('/')) : undefined;
-        return { name, kind: 'remote' as const, remote };
+      const [full, short] = s.split("\t");
+      const name = (short ?? "").trim();
+      if (!full || !name || name.endsWith("/HEAD")) return null;
+      if (full.startsWith("refs/remotes/")) {
+        const remote = name.includes("/")
+          ? name.slice(0, name.indexOf("/"))
+          : undefined;
+        return { name, kind: "remote" as const, remote };
       }
-      return { name, kind: 'local' as const };
+      return { name, kind: "local" as const };
     })
     .filter((b): b is BranchRef => !!b);
 }
 
 /** Commits as {sha, subject, committedAt}, newest first. For the picker. Pass n <= 0 for all. */
-export function listRecentCommits(repo: string, n = 15, ref?: string): CommitRef[] {
-  const args = ['log'];
-  if (ref === '--all') args.push('--all');
-  else if (ref) args.push(ref);
+export function listRecentCommits(
+  repo: string,
+  n = 15,
+  ref?: string,
+): CommitRef[] {
+  const args = ["log"];
   if (n > 0) args.push(`-${n}`);
-  args.push('--no-merges', '--pretty=format:%h%x09%cI%x09%s%x09%D');
+  args.push("--no-merges", "--pretty=format:%h%x09%cI%x09%s%x09%D");
+  if (ref === "--all") args.push("--all");
+  else if (ref) {
+    try {
+      assertSafeRef(ref);
+    } catch {
+      return [];
+    }
+    args.push("--end-of-options", ref);
+  }
   const out = tryGit(repo, args);
   if (!out) return [];
   return out
-    .split('\n')
+    .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [sha, committedAt = '', subject = '', refs = ''] = line.split('\t');
+      const [sha, committedAt = "", subject = "", refs = ""] = line.split("\t");
       return {
         sha,
         committedAt,
@@ -709,15 +918,17 @@ export function listRecentCommits(repo: string, n = 15, ref?: string): CommitRef
 
 function commitTimeLabel(iso: string): string {
   const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-  return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}` : '';
+  return match
+    ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}`
+    : "";
 }
 
 function relativeCommitTime(iso: string, now = Date.now()): string {
   const then = Date.parse(iso);
-  if (!Number.isFinite(then)) return '';
+  if (!Number.isFinite(then)) return "";
   const seconds = Math.max(0, Math.floor((now - then) / 1000));
-  if (seconds < 45) return 'just now';
-  if (seconds < 90) return '1m ago';
+  if (seconds < 45) return "just now";
+  if (seconds < 90) return "1m ago";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
@@ -733,54 +944,113 @@ function relativeCommitTime(iso: string, now = Date.now()): string {
 
 /** Current branch name, or null when detached. */
 export function currentBranch(repo: string): string | null {
-  const b = tryGit(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])?.trim();
-  return b && b !== 'HEAD' ? b : null;
+  const b = tryGit(repo, ["rev-parse", "--abbrev-ref", "HEAD"])?.trim();
+  return b && b !== "HEAD" ? b : null;
 }
 
 /** A short human label for what we diffed against. */
 export function describeBase(repo: string, base: string): string {
-  const short = tryGit(repo, ['rev-parse', '--short', base])?.trim();
-  const name = tryGit(repo, ['name-rev', '--name-only', base])?.trim();
-  if (name && name !== 'undefined') return `${name} (${short ?? base})`;
+  try {
+    assertSafeRef(base);
+  } catch {
+    return base;
+  }
+  const short = tryGit(repo, [
+    "rev-parse",
+    "--short",
+    "--end-of-options",
+    base,
+  ])?.trim();
+  const name = tryGit(repo, [
+    "name-rev",
+    "--name-only",
+    "--end-of-options",
+    base,
+  ])?.trim();
+  if (name && name !== "undefined") return `${name} (${short ?? base})`;
   return short ?? base;
 }
 
 /** True when `ref` resolves to a commit object. */
 export function isCommitRef(repo: string, ref: string): boolean {
-  return tryGit(repo, ['rev-parse', '--verify', `${ref}^{commit}`]) !== null;
+  try {
+    assertSafeRef(ref);
+  } catch {
+    return false;
+  }
+  return (
+    tryGit(repo, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${ref}^{commit}`,
+    ]) !== null
+  );
 }
 
 /** Resolve a commit-ish ref to its full object id, or null if it is not a commit. */
 export function resolveCommit(repo: string, ref: string): string | null {
-  return tryGit(repo, ['rev-parse', '--verify', `${ref}^{commit}`])?.trim() ?? null;
+  try {
+    assertSafeRef(ref);
+  } catch {
+    return null;
+  }
+  return (
+    tryGit(repo, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${ref}^{commit}`,
+    ])?.trim() ?? null
+  );
 }
 
 /** First-parent base for a single commit diff; root commits diff against the empty tree. */
 export function commitParentBase(repo: string, commit: string): string {
-  if (tryGit(repo, ['rev-parse', '--verify', `${commit}^`]) !== null) return `${commit}^`;
+  assertSafeRef(commit);
+  if (
+    tryGit(repo, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${commit}^`,
+    ]) !== null
+  )
+    return `${commit}^`;
   return emptyTree(repo);
 }
 
 /** Short commit label for controls and headings. */
 export function describeCommit(repo: string, commit: string): string {
-  const out = tryGit(repo, ['show', '-s', '--format=%h %s', commit])?.trim();
+  try {
+    assertSafeRef(commit);
+  } catch {
+    return commit;
+  }
+  const out = tryGit(repo, [
+    "show",
+    "-s",
+    "--format=%h %s",
+    "--end-of-options",
+    commit,
+  ])?.trim();
   return out || commit;
 }
 
 /** True when the working tree has uncommitted changes (staged or unstaged, incl. untracked). */
 export function isDirty(repo: string): boolean {
-  const out = tryGit(repo, ['status', '--porcelain']);
+  const out = tryGit(repo, ["status", "--porcelain"]);
   return out != null && out.trim().length > 0;
 }
 
 /** True when HEAD has a parent commit (so HEAD~1 is a valid ref). */
 export function hasParentCommit(repo: string): boolean {
-  return tryGit(repo, ['rev-parse', '--verify', 'HEAD~1']) !== null;
+  return tryGit(repo, ["rev-parse", "--verify", "HEAD~1"]) !== null;
 }
 
 /** The empty-tree object — diffing against it shows a commit's whole content as added. */
 export function emptyTree(repo: string): string {
-  return git(repo, ['hash-object', '-t', 'tree', '/dev/null']).trim();
+  return git(repo, ["hash-object", "-t", "tree", "/dev/null"]).trim();
 }
 
 /**
@@ -792,9 +1062,11 @@ export function numstat(
   base: string,
   head?: string,
 ): Array<{ path: string; added: number | null; removed: number | null }> {
-  const args = ['diff', '--numstat', '--no-color', base];
+  assertSafeRef(base);
+  if (head) assertSafeRef(head);
+  const args = ["diff", "--numstat", "--no-color", "--end-of-options", base];
   if (head) args.push(head);
-  args.push('--', APP_DATA_PATHSPEC);
+  args.push("--", APP_DATA_PATHSPEC);
   const tracked = parseNumstat(tryGit(repo, args));
   if (head) return tracked;
 
@@ -805,12 +1077,13 @@ export function numstat(
   const staged = stagedOnly.length
     ? parseNumstat(
         tryGit(repo, [
-          'diff',
-          '--cached',
-          '--numstat',
-          '--no-color',
+          "diff",
+          "--cached",
+          "--numstat",
+          "--no-color",
+          "--end-of-options",
           base,
-          '--',
+          "--",
           ...stagedOnly.map(literalPathspec),
         ]),
       )
@@ -826,46 +1099,63 @@ export function numstat(
 function parseNumstat(
   out: string | null,
 ): Array<{ path: string; added: number | null; removed: number | null }> {
-  return !out ? [] : out
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split('\t');
-      const added = parts[0] === '-' ? null : Number(parts[0]);
-      const removed = parts[1] === '-' ? null : Number(parts[1]);
-      return { path: parts.slice(2).join('\t'), added, removed };
-    });
+  return out
+    ? out
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split("\t");
+          const added = parts[0] === "-" ? null : Number(parts[0]);
+          const removed = parts[1] === "-" ? null : Number(parts[1]);
+          return { path: parts.slice(2).join("\t"), added, removed };
+        })
+    : [];
 }
 
 function joinDiffs(parts: string[]): string {
   return parts
     .map((part) => part.trimEnd())
     .filter(Boolean)
-    .join('\n');
+    .join("\n");
 }
 
 function untrackedFiles(repo: string): string[] {
-  const out = tryGit(repo, ['ls-files', '--others', '--exclude-standard', '-z']);
+  const out = tryGit(repo, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ]);
   if (!out) return [];
-  return out.split('\0').filter(Boolean).filter((path) => !isAppDataPath(path)).sort();
+  return out
+    .split("\0")
+    .filter(Boolean)
+    .filter((path) => !isAppDataPath(path))
+    .sort();
 }
 
 function untrackedFileDiff(repo: string, path: string): string {
+  // Validate the path lexically, but pass it to git relative to `repo`. Using an
+  // absolute path is safe but changes the patch header, which then leaks a
+  // machine-local temp/repo path into the reviewed diff.
+  safeWorkingPath(repo, path);
   return (
     gitOutputAllowingDiffExit(repo, [
-      'diff',
-      '--no-color',
-      '--no-ext-diff',
-      '--no-index',
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-index",
       `-U${DIFF_CONTEXT_LINES}`,
-      '--',
-      '/dev/null',
+      "--",
+      "/dev/null",
       path,
-    ]) ?? ''
+    ]) ?? ""
   );
 }
 
-function untrackedNumstat(repo: string): Array<{ path: string; added: number | null; removed: number | null }> {
+function untrackedNumstat(
+  repo: string,
+): Array<{ path: string; added: number | null; removed: number | null }> {
   return untrackedFiles(repo).map((path) => {
     const added = countFileLines(repo, path);
     return { path, added, removed: 0 };
@@ -875,7 +1165,7 @@ function untrackedNumstat(repo: string): Array<{ path: string; added: number | n
 function countFileLines(repo: string, path: string): number | null {
   let fd: number | null = null;
   try {
-    fd = openSync(join(repo, path), 'r');
+    fd = openSync(safeWorkingPath(repo, path), "r");
     const bytes = Buffer.allocUnsafe(64 * 1024);
     let totalBytes = 0;
     let lines = 0;
@@ -912,10 +1202,14 @@ export function readFileRange(
   ref?: string,
 ): { lines: string[]; startLine: number } | null {
   if (ref) {
+    const from = Math.max(1, start);
+    const tooLarge = refBlobTooLargeForPreview(repo, ref, file);
+    if (tooLarge) {
+      return { lines: ["[file too large to preview safely]"], startLine: from };
+    }
     const text = readFileText(repo, file, ref);
     if (text == null) return null;
-    const all = text.split('\n');
-    const from = Math.max(1, start);
+    const all = text.split("\n");
     const to = Math.min(all.length, Math.max(from, end));
     return { lines: all.slice(from - 1, to), startLine: from };
   }
@@ -936,7 +1230,7 @@ function readWorkingFileRange(
   const to = Math.max(from, end);
   let fd: number | null = null;
   try {
-    fd = openSync(join(repo, file), 'r');
+    fd = openSync(safeWorkingPath(repo, file), "r");
     const chunk = Buffer.allocUnsafe(RANGE_READ_CHUNK_BYTES);
     const lines: string[] = [];
     let lineNo = 1;
@@ -948,7 +1242,12 @@ function readWorkingFileRange(
     let endedWithNewline = false;
 
     const append = (part: Buffer): void => {
-      if (lineNo < from || lineNo > to || resultBytes >= RANGE_READ_MAX_RESULT_BYTES) return;
+      if (
+        lineNo < from ||
+        lineNo > to ||
+        resultBytes >= RANGE_READ_MAX_RESULT_BYTES
+      )
+        return;
       const available = Math.min(
         RANGE_READ_MAX_LINE_BYTES - lineBytes,
         RANGE_READ_MAX_RESULT_BYTES - resultBytes,
@@ -967,9 +1266,9 @@ function readWorkingFileRange(
     };
     const finishLine = (): void => {
       if (lineNo >= from && lineNo <= to) {
-        let text = Buffer.concat(lineParts, lineBytes).toString('utf8');
-        if (text.endsWith('\r')) text = text.slice(0, -1);
-        if (lineTruncated) text += ' … [line truncated]';
+        let text = Buffer.concat(lineParts, lineBytes).toString("utf8");
+        if (text.endsWith("\r")) text = text.slice(0, -1);
+        if (lineTruncated) text += " … [line truncated]";
         lines.push(text);
       }
       lineNo++;
@@ -996,7 +1295,8 @@ function readWorkingFileRange(
         offset = newline + 1;
       }
     }
-    if (lineNo <= to && (lineParts.length || !sawBytes || endedWithNewline)) finishLine();
+    if (lineNo <= to && (lineParts.length || !sawBytes || endedWithNewline))
+      finishLine();
     return { lines, startLine: from };
   } catch {
     return null;
@@ -1010,21 +1310,45 @@ function readWorkingFileRange(
  * newlines). Returns null if the file is gone. Used to reconstruct the
  * complete-file ("Full file") view.
  */
-export function readWholeFile(repo: string, file: string, ref?: string): string[] | null {
+export function readWholeFile(
+  repo: string,
+  file: string,
+  ref?: string,
+): string[] | null {
+  if (ref && refBlobTooLargeForPreview(repo, ref, file)) return null;
   const text = readFileText(repo, file, ref);
   if (text == null) return null;
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   // Drop a single trailing empty element from a final newline so the line count
   // matches the file's real line count.
-  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
   return lines;
+}
+
+function refBlobTooLargeForPreview(
+  repo: string,
+  ref: string,
+  file: string,
+): boolean {
+  const size = tryGit(repo, [
+    "cat-file",
+    "-s",
+    safeObjectPath(ref, file),
+  ])?.trim();
+  return (
+    !!size && /^\d+$/.test(size) && Number(size) > RANGE_READ_MAX_RESULT_BYTES
+  );
 }
 
 function readFileText(repo: string, file: string, ref?: string): string | null {
   if (ref) {
-    return tryGit(repo, ['show', `${ref}:${file}`]);
+    return tryGit(repo, [
+      "show",
+      "--end-of-options",
+      safeObjectPath(ref, file),
+    ]);
   }
-  const abs = join(repo, file);
+  const abs = safeWorkingPath(repo, file);
   if (!existsSync(abs)) return null;
-  return readFileSync(abs, 'utf8');
+  return readFileSync(abs, "utf8");
 }
