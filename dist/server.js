@@ -52,8 +52,11 @@ export function serve(opts) {
         leaseActive: (token) => !!getReviewPageLease(session, token),
     });
     const aloud = opts.aloud ?? createAloudReader();
-    const openExternal = opts.openExternal ?? openExternalUrl;
-    const server = createServer((req, res) => handle(req, res, session, home, liveHub, aloud, openExternal));
+    const openEditor = opts.openEditor ??
+        (opts.openExternal
+            ? (target) => openVSCodeTargetWithUrls(target, opts.openExternal)
+            : openVSCodeTarget);
+    const server = createServer((req, res) => handle(req, res, session, home, liveHub, aloud, openEditor));
     // Dispose the hub when close is REQUESTED, not on the 'close' event: the
     // server cannot finish closing while the hub still holds SSE responses open.
     const requestClose = server.close.bind(server);
@@ -238,7 +241,7 @@ function setLocalResponseHeaders(res) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
 }
-function handle(req, res, session, home, liveHub, aloud, openExternal) {
+function handle(req, res, session, home, liveHub, aloud, openEditor) {
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = req.method ?? "GET";
     setLocalResponseHeaders(res);
@@ -416,12 +419,12 @@ function handle(req, res, session, home, liveHub, aloud, openExternal) {
                     return sendJson(res, 400, {
                         error: "That file is not part of this review.",
                     });
-                const editorUrl = vscodeNavigationUrl(page.repo, file, line, column);
-                if (!editorUrl)
+                const editorTarget = vscodeNavigationTarget(page.repo, file, line, column);
+                if (!editorTarget)
                     return sendJson(res, 400, {
                         error: "That file path cannot be opened safely.",
                     });
-                if (!openExternal(editorUrl)) {
+                if (!openEditor(editorTarget)) {
                     return sendJson(res, 503, {
                         error: "VS Code could not be opened. Install VS Code to jump to source from a review.",
                     });
@@ -2579,15 +2582,8 @@ function encodeFsPathForUri(target) {
         : encodeURIComponent(segment))
         .join("/");
 }
-/**
- * Build the system URI that opens a reviewed file at an exact location.
- *
- * This uses VS Code's built-in `vscode://file/<path>:<line>:<column>` handler,
- * so cmd-click navigation works against a stock editor with nothing extra
- * installed. The path is confined to the reviewed repository before it is
- * handed to the OS.
- */
-export function vscodeNavigationUrl(repo, file, line, column) {
+/** Resolve and confine a clicked source location to the reviewed repository. */
+export function vscodeNavigationTarget(repo, file, line, column) {
     if (!file ||
         isAbsolute(file) ||
         !Number.isInteger(line) ||
@@ -2605,7 +2601,59 @@ export function vscodeNavigationUrl(repo, file, line, column) {
         isAbsolute(fromRoot)) {
         return null;
     }
-    return `vscode://file${encodeFsPathForUri(target)}:${line}:${column}`;
+    return { repo: root, path: target, line, column };
+}
+/** Build the built-in file URI retained as a fallback for VS Code installs. */
+export function vscodeNavigationUrl(repo, file, line, column) {
+    const target = vscodeNavigationTarget(repo, file, line, column);
+    if (!target)
+        return null;
+    return vscodeFileUrl(target);
+}
+/**
+ * Arguments that make VS Code establish the repo as its workspace and then
+ * reveal the clicked source location in that same window.
+ */
+export function vscodeLaunchArgs(target) {
+    return [
+        "--reuse-window",
+        target.repo,
+        "--goto",
+        `${target.path}:${target.line}:${target.column}`,
+    ];
+}
+function vscodeFileUrl(target) {
+    return `vscode://file${encodeFsPathForUri(target.path)}:${target.line}:${target.column}`;
+}
+function vscodeFolderUrl(target) {
+    return `vscode://file${encodeFsPathForUri(target.repo)}`;
+}
+function openVSCodeTargetWithUrls(target, openExternal) {
+    if (!openExternal(vscodeFolderUrl(target)))
+        return false;
+    return openExternal(vscodeFileUrl(target));
+}
+function openVSCodeTarget(target) {
+    const commands = process.platform === "darwin"
+        ? [
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+            join(homedir(), "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
+            "code",
+        ]
+        : ["code"];
+    for (const command of commands) {
+        try {
+            execFileSync(command, vscodeLaunchArgs(target), {
+                stdio: "ignore",
+                timeout: 5_000,
+            });
+            return true;
+        }
+        catch {
+            // Try the next normal VS Code CLI location.
+        }
+    }
+    return openVSCodeTargetWithUrls(target, openExternalUrl);
 }
 function openExternalUrl(url) {
     const cmd = process.platform === "darwin"

@@ -135,6 +135,19 @@ test("desktop story stages reclaim redundant side-navigation gutters", () => {
   assert.doesNotMatch(source, /ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
 });
 
+test("the reading dock keeps its active sentence and step numerals comfortably legible", () => {
+  assert.match(
+    source,
+    /\.ds-beatdock-note\{[^}]*font-size:15px[^}]*line-height:1\.45/,
+  );
+  assert.match(source, /\.ds-beatdock-count b\{[^}]*font-size:13px/);
+  assert.match(
+    source,
+    /\.ds-filmnode-num\{[^}]*width:36px[^}]*height:36px[^}]*font-size:17px/,
+  );
+  assert.match(source, /\.ds-dock-transport\{[^}]*min-height:66px/);
+});
+
 test("a code step draws exactly one frame around the diff", () => {
   // DIFF_CSS is part of the review stylesheet now.
   const diffSource = reviewCss;

@@ -19,8 +19,8 @@ comment, then copy it or keep it in the review queue.
   moved, with accessible callouts only for facts neither pane can show.
 - Can use Claude or Codex to generate and repair walkthroughs.
 - Works without AI. Story-writing features are optional.
-- Command-click or Ctrl-click a current-code identifier to open its implementation
-  through the small VS Code navigation bridge.
+- Command-click or Ctrl-click a current-code identifier to open the reviewed
+  repository in VS Code and reveal that exact source location.
 
 ## Quickstart
 
@@ -162,11 +162,11 @@ unavailable until Claude or Codex is on your PATH.
 
 Command-click on macOS or Ctrl-click elsewhere on an identifier in the
 current-code side of a diff. diffStory opens the reviewed file in VS Code,
-places the caret at the clicked location, and brings that line into view
-without a success notification.
+opens the reviewed repository as the active workspace, places the caret at the
+clicked location, and brings that line into view without a success notification.
 
-This uses VS Code's built-in `vscode://file/…` handler, so a stock VS Code
-install is all you need — there is no companion extension.
+This uses the CLI bundled with a stock VS Code install, with its built-in
+`vscode://file/…` handler as a fallback. There is no companion extension.
 
 ## Review Files
 

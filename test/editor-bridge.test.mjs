@@ -10,9 +10,28 @@ import { readFileSync } from 'node:fs';
 // The Cmd/Ctrl-click bridge lives in the ported review engine now.
 const PAGE_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
 const PAGE_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
-import { serve, vscodeNavigationUrl } from '../dist/server.js';
+import {
+  serve,
+  vscodeLaunchArgs,
+  vscodeNavigationTarget,
+  vscodeNavigationUrl,
+} from '../dist/server.js';
 
-test('VS Code URL carries an absolute source location through the built-in file handler', () => {
+test('VS Code launch opens the reviewed repo and exact source location together', () => {
+  const target = vscodeNavigationTarget('/tmp/review repo', 'src/order flow.ts', 42, 17);
+  assert.deepEqual(target, {
+    repo: '/tmp/review repo',
+    path: '/tmp/review repo/src/order flow.ts',
+    line: 42,
+    column: 17,
+  });
+  assert.deepEqual(vscodeLaunchArgs(target), [
+    '--reuse-window',
+    '/tmp/review repo',
+    '--goto',
+    '/tmp/review repo/src/order flow.ts:42:17',
+  ]);
+
   const value = vscodeNavigationUrl('/tmp/review repo', 'src/order flow.ts', 42, 17);
   assert.equal(value, 'vscode://file/tmp/review%20repo/src/order%20flow.ts:42:17');
   const url = new URL(value);
@@ -44,7 +63,7 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
   writeFileSync(join(repo, 'order.ts'), 'export function executeOrder() { return 2; }\n');
 
   const opened = [];
-  const server = serve({ repo, port: 0, open: false, openExternal: (url) => { opened.push(url); return true; } });
+  const server = serve({ repo, port: 0, open: false, openEditor: (target) => { opened.push(target); return true; } });
   await once(server, 'listening');
   const address = server.address();
   const base = `http://127.0.0.1:${address.port}`;
@@ -68,10 +87,12 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
     });
     assert.equal(response.status, 200);
     assert.equal(opened.length, 1);
-    const target = new URL(opened[0]);
-    assert.equal(target.protocol, 'vscode:');
-    assert.equal(target.host, 'file');
-    assert.equal(decodeURIComponent(target.pathname), `${join(repo, 'order.ts')}:1:17`);
+    assert.deepEqual(opened[0], {
+      repo,
+      path: join(repo, 'order.ts'),
+      line: 1,
+      column: 17,
+    });
 
     const rejected = await fetch(`${base}/api/editor/open?page=${encodeURIComponent(token)}`, {
       method: 'POST',
