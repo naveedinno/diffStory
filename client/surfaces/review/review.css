@@ -1063,8 +1063,37 @@ body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:vi
 .ds-concept-diagram-output{display:flex;align-items:center;justify-content:center;min-height:210px;overflow:auto;padding:20px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-concept-diagram-output svg{display:block;max-width:100%;height:auto}.ds-concept-diagram-loading{color:var(--dim);font-size:12px}.ds-concept-diagram.is-error .ds-concept-diagram-output{min-height:0;padding:14px;color:var(--amber-text);font-size:12px}
 .ds-concept-diagram figcaption{margin-top:9px;color:var(--muted);font-size:11.5px;line-height:1.45}.ds-concept-diagram-source{margin-top:8px;color:var(--muted);font-size:11px}.ds-concept-diagram-source>summary{cursor:pointer}.ds-concept-diagram-source pre{overflow:auto;margin:8px 0 0;padding:12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel3);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:1.5}
 .ds-concept-next{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 18px;width:100%;margin-top:28px;padding:15px 17px;text-align:left;border:1px solid color-mix(in srgb,var(--accent-blue) 34%,var(--line));border-radius:11px;background:var(--accent-soft);color:var(--text);cursor:pointer}.ds-concept-next:hover{border-color:var(--accent-blue);background:color-mix(in srgb,var(--accent-soft) 84%,var(--panel2))}.ds-concept-next-kicker{grid-column:1;color:var(--accent-blue);font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}.ds-concept-next-title{grid-column:1;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13px;font-weight:700;white-space:nowrap}.ds-concept-next-arrow{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--accent-blue);font-size:18px}
+/* The scene vocabulary is derived from story facts, not authored layout hints.
+   Concept documents keep an editorial reading measure; a real diagram earns a
+   wider two-part composition so the mental model appears beside the prose
+   instead of below the fold. DOM order remains prose → figure → next action. */
+.ds-step[data-scene-layout="concept-document"] .ds-concept-document{width:min(100%,780px);padding:40px 50px 44px}
+.ds-step[data-scene-layout="concept-document"] .ds-concept-title{max-width:24ch;font-size:34px;line-height:1.08}
+.ds-step[data-scene-layout="concept-document"] .ds-concept-body{max-width:66ch;margin-top:24px}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:14px 24px 28px}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:grid;grid-template-columns:minmax(280px,.82fr) minmax(420px,1.18fr);grid-template-areas:"heading diagram" "title diagram" "body diagram" "next next";column-gap:42px;row-gap:0;width:min(100%,1180px);padding:28px 38px 22px;border-color:var(--line-soft);box-shadow:0 20px 52px rgba(0,0,0,.1)}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-heading{grid-area:heading;align-self:end}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{grid-area:title;max-width:18ch;font-size:34px;line-height:1.06}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{grid-area:body;max-width:52ch;margin-top:18px;font-size:14px;line-height:1.56}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h2,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h3,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h4{margin-top:19px}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body th,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body td{padding:7px 10px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body blockquote{margin:14px 0}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{grid-area:diagram;align-self:start;min-width:0;margin:0;padding:0;border:0}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:330px;padding:24px;background:var(--surface)}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-next{grid-area:next;margin-top:18px;padding-top:12px;padding-bottom:12px}
+.ds-step[data-scene-layout="logic-move"]>.ds-step-top,.ds-step[data-scene-layout="paired-code"]>.ds-step-top{padding-bottom:2px}
+.ds-step[data-scene-layout="paired-code"] .ds-diffscroll{--ds-scene-paired:1}
 .ds-diff{border-radius:10px;box-shadow:none}.ds-difftoolbar{background:var(--panel2)}
 .ds-introwrap{max-width:920px;padding:50px 48px 64px}.ds-intro-title{font-size:30px}.ds-intro-lede{max-width:68ch;margin-top:16px;color:color-mix(in srgb,var(--text) 72%,transparent);line-height:1.55}.ds-intro-context .ds-intro-design{margin-top:0;color:color-mix(in srgb,var(--text) 70%,transparent);line-height:1.54}.ds-intro-context .ds-intro-design+.ds-intro-design{margin-top:12px}
+/* The story overview is a title scene, not a dashboard. Center the existing
+   goal and entry action in the available stage and spend the extra room on a
+   stronger reading hierarchy rather than duplicate step previews. */
+.ds-step[data-scene-layout="opening"] .ds-introwrap{display:flex;flex-direction:column;justify-content:center;width:100%;max-width:1080px;min-height:100%;padding:clamp(58px,8vh,96px) 64px clamp(72px,10vh,112px)}
+.ds-step[data-scene-layout="opening"] .ds-intro-eyebrow{font-size:11px;letter-spacing:.16em}
+.ds-step[data-scene-layout="opening"] .ds-intro-title{max-width:24ch;margin-top:20px;font-family:var(--font-display);font-size:clamp(40px,4vw,58px);font-weight:650;letter-spacing:-.04em;line-height:1.03}
+.ds-step[data-scene-layout="opening"] .ds-intro-lede{max-width:58ch;margin-top:24px;font-size:18px;line-height:1.58}
+.ds-step[data-scene-layout="opening"] .ds-intro-actions{margin-top:30px}
+.ds-step[data-scene-layout="opening"] .ds-intro-actions .ds-intro-start{min-height:48px;padding:13px 20px;border-radius:12px}
+.ds-step[data-scene-layout="opening"] .ds-intro-utility{margin-top:18px}
 .ds-intro-facts{margin-top:26px;border-radius:11px}.ds-fact{padding:13px 15px}.ds-intro-start{margin-top:24px;border-radius:10px;transition:background-color 120ms ease-out,transform 100ms ease-out}.ds-intro-start:active{transform:scale(.98)}
 .ds-intro-actions{margin-top:22px}.ds-intro-actions .ds-intro-start{display:inline-flex;flex-direction:row;align-items:center;min-height:44px;margin:0;padding:11px 18px}
 .ds-intro-freshness{display:flex;align-items:center;gap:7px;margin-top:14px;color:var(--amber-text);font-size:11.5px;line-height:1.4}.ds-intro-freshness>span:first-child{font-size:8px}.ds-intro-freshness a{color:inherit;font-weight:650;text-decoration:underline;text-underline-offset:3px}.ds-intro-freshness a:hover{color:var(--text)}.ds-intro-freshness.is-current{color:var(--muted)}
@@ -1094,6 +1123,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 @media (prefers-reduced-motion:no-preference){
   .ds-reviewchrome{animation:ds-review-chrome-in var(--motion-duration-spatial) var(--motion-ease-out) backwards}.ds-layout{animation:ds-review-layout-in var(--motion-duration-spatial) var(--motion-ease-out) 35ms backwards}
   .ds-story-tune-pop,.ds-filefilter-menu[open] .ds-filefilters{transform-origin:calc(100% - 14px) -6px;animation:ds-review-pop-in var(--motion-duration-ui) var(--motion-ease-out) backwards}
+  .ds-concept-diagram[data-render-state="ready"] .ds-concept-diagram-output svg{animation:ds-concept-diagram-in var(--motion-duration-ui) var(--motion-ease-out) backwards}
   .is-workspace-entering[data-ds-enter-direction="1"]{animation:ds-workspace-new-next var(--motion-duration-spatial) var(--motion-ease-drawer) both}.is-workspace-entering[data-ds-enter-direction="-1"]{animation:ds-workspace-new-prev var(--motion-duration-spatial) var(--motion-ease-drawer) both}.is-workspace-entering[data-ds-enter-direction="0"]{animation:ds-workspace-new-fade var(--motion-duration-ui) var(--motion-ease-out) both}
   html[data-ds-motion="view"] .ds-view:not([hidden]),html[data-ds-motion="file"] .ds-filepanel:not([hidden]),html[data-ds-motion="step"] .ds-step:not([hidden]),html[data-ds-motion="mode"] .ds-filepanel-body>[data-diff-inner]:not([hidden]),html[data-ds-motion="mode"] .ds-filepanel-body>[data-split-inner]:not([hidden]),html[data-ds-motion="mode"] .ds-filepanel-body>[data-full-inner]:not([hidden]){view-transition-name:ds-workspace-surface}
   ::view-transition-group(ds-workspace-surface){animation-duration:var(--motion-duration-spatial);animation-timing-function:var(--motion-ease-drawer)}
@@ -1103,7 +1133,23 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
   html[data-ds-motion-direction="0"]::view-transition-old(ds-workspace-surface){animation-name:ds-workspace-old-fade}html[data-ds-motion-direction="0"]::view-transition-new(ds-workspace-surface){animation-name:ds-workspace-new-fade}
   @keyframes ds-review-chrome-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}@keyframes ds-review-layout-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
   @keyframes ds-review-pop-in{from{opacity:0;clip-path:inset(0 0 100% 72% round 10px);transform:translateY(-5px) scale(.97)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}
+  @keyframes ds-concept-diagram-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   @keyframes ds-workspace-old-next{to{opacity:0;transform:translateX(-6px)}}@keyframes ds-workspace-new-next{from{opacity:0;transform:translateX(10px)}}@keyframes ds-workspace-old-prev{to{opacity:0;transform:translateX(6px)}}@keyframes ds-workspace-new-prev{from{opacity:0;transform:translateX(-10px)}}@keyframes ds-workspace-old-fade{to{opacity:0;transform:scale(.997)}}@keyframes ds-workspace-new-fade{from{opacity:0;transform:scale(1.003)}}
+}
+@media (max-width:980px){
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:16px 24px 34px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:block;width:min(100%,780px);padding:34px 38px 38px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{max-width:22ch;font-size:32px;line-height:1.09}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{max-width:70ch}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{margin-top:26px;padding-top:22px;border-top:1px solid var(--line-soft)}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:300px;padding:20px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-next{margin-top:24px}
+  .ds-step[data-scene-layout="opening"] .ds-introwrap{padding-inline:48px}
+  .ds-step[data-scene-layout="opening"] .ds-intro-title{font-size:clamp(38px,6vw,50px)}
+}
+@media (max-height:760px) and (min-width:981px){
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:290px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{padding-top:28px;padding-bottom:24px}
 }
 @media (max-width:1080px){
   .ds-step.is-code-step{display:flex;overflow:hidden}.ds-step.is-code-step>.ds-step-top{padding:16px 24px 0}
@@ -1111,13 +1157,24 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:760px){.ds-symbols{display:none}}
 @media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}.ds-dock-transport{gap:8px;min-height:48px;padding:7px 8px 7px 7px}.ds-beatdock-note .ds-beat-text{display:block;overflow:visible;-webkit-line-clamp:unset}.ds-filmthread{gap:6px;padding:2px 6px 4px}.ds-filmthread.is-storyless{padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
+@media (max-width:620px){
+  .ds-step[data-scene-layout="opening"] .ds-introwrap{justify-content:flex-start;min-height:0;padding:38px 22px 54px}
+  .ds-step[data-scene-layout="opening"] .ds-intro-title{max-width:20ch;margin-top:16px;font-size:34px;line-height:1.04}
+  .ds-step[data-scene-layout="opening"] .ds-intro-lede{margin-top:19px;font-size:15.5px;line-height:1.55}
+  .ds-step[data-scene-layout="opening"] .ds-intro-actions{margin-top:24px}
+  .ds-step[data-scene-layout="concept-document"] .ds-concept-document,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{padding:25px 20px 28px}
+  .ds-step[data-scene-layout="concept-document"] .ds-concept-title,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{font-size:26px;line-height:1.08}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:12px 12px 28px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{margin-top:22px;padding-top:18px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:220px;padding:12px}
+}
 @media (max-width:620px){.ds-composer,.ds-composer[data-comment-side="left"]{width:calc(100% - 8px);margin:4px}.ds-feedback-actions{justify-content:flex-start}.ds-feedback-actions .ds-danger{margin-left:0}}
 @media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step-meta>.ds-dot,.ds-step-meta>.ds-flowchip{display:none}.ds-step.is-code-step .ds-full-diff{display:none}/* The beat row stays one line even here. Wrapping the arrows underneath left the
    play button centred against a two-row neighbour, which opened a dead square in
    the middle of the island — worse than tighter gaps. */
 .ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}
 @media (max-width:720px){.ds-back{min-width:36px}.ds-help{display:none}}
-@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-readaloud.is-loading .ds-readaloud-ico,.ds-composer{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-readaloud.is-loading .ds-readaloud-ico,.ds-composer{animation:none!important}.ds-concept-diagram-output svg{animation:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
 @media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}.ds-md caption{color:var(--text)}.ds-md thead th,.ds-md tbody{border-color:var(--text)}.ds-md tbody tr:nth-child(even){background:transparent}.ds-md tbody tr+tr{border-top:1px solid var(--line)}.ds-md hr{background:var(--text-3)}.ds-md kbd{border-color:var(--text-3)}}
 

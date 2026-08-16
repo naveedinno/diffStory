@@ -61,6 +61,7 @@ function LazyStepPanel({ step, index }: { step: ReviewStepView; index: number })
       className={`ds-step ds-step-lazy${step.kind === "concept" ? " ds-concept-step" : " is-code-step"}`}
       data-step-panel={index + 1}
       data-step-id={step.id}
+      data-scene-layout={step.sceneLayout}
       data-step-lazy="1"
       hidden
     >
@@ -131,7 +132,7 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
     : `${payload.storyFilesChanged} ${plural(payload.storyFilesChanged, "file")} in story`;
 
   return (
-    <section className="ds-step is-intro" data-step-panel="0">
+    <section className="ds-step is-intro" data-step-panel="0" data-scene-layout="opening">
       <div className="ds-introwrap">
         <span className="ds-intro-eyebrow">
           <StoryMark />

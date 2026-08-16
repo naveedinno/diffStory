@@ -118,6 +118,8 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.codeSteps, 1);
   assert.equal(model.conceptSteps, 1);
   assert.equal(model.steps[0].kind, 'concept');
+  assert.equal(model.steps[0].sceneLayout, 'concept-diagram');
+  assert.equal(model.steps[1].sceneLayout, 'code-focus');
   // Narrative arrives projected now, not raw: this plain-prose body is identical
   // in all three forms, which is exactly what it should be when there is no markup.
   assert.equal(model.steps[0].body.html, tour.steps[0].body);
@@ -157,10 +159,33 @@ test('code steps derive focus groups, chapters, and broad-step health', () => {
   }];
   const model = buildReviewModel(process.cwd(), tour, files);
   const step = model.steps[0];
+  assert.equal(step.sceneLayout, 'code-focus', 'version 1 code projects without migration');
   assert.equal(step.chapter, 'Execution');
   assert.deepEqual(step.focusGroups, [[[20, 22]]]);
   assert.equal(step.health.broad, true);
   assert.ok(step.health.reasons.includes('45 lines in one step'));
+});
+
+test('version 3 cross-file moves project a paired-code scene without changing the story', () => {
+  const parsed = parseUnifiedDiff(DIFF);
+  const tour = {
+    version: 3,
+    title: 'Cross-file extraction',
+    summary: 'Read the old owner beside the new one.',
+    steps: [{
+      id: 's1', order: 1, title: 'The helper gets a new owner',
+      file: 'a.ts', range: [1, 3], kind: 'changed', why: 'The behavior moved.',
+      moves: [{
+        id: 'extract-helper', kind: 'extracted', label: 'moved here',
+        before: { file: 'legacy.ts', range: [1, 2] },
+        after: { file: 'a.ts', range: [1, 2] },
+      }],
+    }],
+  };
+
+  const model = buildReviewModel(process.cwd(), tour, parsed);
+  assert.equal(model.steps[0].sceneLayout, 'paired-code');
+  assert.equal('sceneLayout' in tour.steps[0], false, 'scene identity remains a view projection');
 });
 
 test('hotspots resolve to ordered panels and flag their step views', () => {

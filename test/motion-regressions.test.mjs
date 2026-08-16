@@ -78,6 +78,31 @@ test("workspace handoffs are interruptible and scoped to the changing surface", 
   assert.doesNotMatch(PAGE_CSS, /ds-review-(?:chrome|layout)-in[^}]*\sboth/);
 });
 
+test("concept scenes get one interruptible first-visit entrance without moving code", () => {
+  assert.match(PAGE_JS, /var sceneEntered=\{0:true\},sceneAnimations=\[\],sceneEntranceToken=0/);
+  assert.match(PAGE_JS, /function cancelSceneEntrance\(\)/);
+  assert.match(PAGE_JS, /sceneAnimations\.forEach\(function\(animation\)\{try\{animation\.cancel\(\);\}catch\(e\)\{\}\}\)/);
+  assert.match(PAGE_JS, /function conceptSceneNeedsEntrance\(panel,index\)/);
+  assert.match(PAGE_JS, /panel\.hasAttribute\('data-step-lazy'\)/);
+  assert.match(PAGE_JS, /layout==='concept-document'\|\|layout==='concept-diagram'/);
+
+  const start = PAGE_JS.indexOf("function animateConceptScene");
+  const end = PAGE_JS.indexOf("function syncSidebarOverlay", start);
+  assert.ok(start >= 0 && end > start, "the concept entrance helper stays beside workspace transitions");
+  const entrance = PAGE_JS.slice(start, end);
+  assert.match(entrance, /prefersReducedMotion\(\)/);
+  assert.match(entrance, /translateY\(6px\)/);
+  assert.match(entrance, /position\*40/);
+  assert.match(entrance, /--motion-duration-ui/);
+  assert.match(entrance, /--motion-ease-out/);
+  assert.doesNotMatch(entrance, /\.ds-(?:row|urow|diffscroll|diff)(?:['",.]|\b)/);
+
+  assert.match(PAGE_JS, /cancelSceneEntrance\(\);\s*var entrancePanel=/);
+  assert.match(PAGE_JS, /if\(revealConcept\)\{[\s\S]*?skipTransition[\s\S]*?update\(\);animateConceptScene/);
+  assert.match(PAGE_CSS, /ds-concept-diagram-in var\(--motion-duration-ui\) var\(--motion-ease-out\)/);
+  assert.match(PAGE_CSS, /\.ds-concept-diagram-output svg\{animation:none!important\}/);
+});
+
 test("change navigation uses one stable marker without keyframes or cleanup timers", () => {
   assert.match(
     DIFF_CSS,

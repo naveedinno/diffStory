@@ -264,10 +264,13 @@ test("the payload is metadata-first: no step ships a rendered diff", async () =>
   const repo = fixtureRepo();
   const { server, base, route } = await boot(repo);
   try {
-    const payload = shellPayload(
-      await (await fetch(`${base}${route}/review?story=story.json`)).text(),
-    );
+    const html = await (await fetch(`${base}${route}/review?story=story.json`)).text();
+    const payload = shellPayload(html);
     assert.equal(payload.steps.length, 3);
+    assert.deepEqual(
+      payload.steps.map((step) => step.sceneLayout),
+      ["concept-document", "code-focus", "code-focus"],
+    );
     const serialized = JSON.stringify(payload);
     // The whole point of `files: []` + empty detail sets: a 300-step story
     // ships 300 stubs, not 300 highlighted diffs. If any of these appear the
@@ -289,6 +292,17 @@ test("the payload is metadata-first: no step ships a rendered diff", async () =>
         !("blocks" in step) && !("moves" in step) && !("focusGroups" in step),
       );
     }
+    const loaded = await fetch(
+      `${base}/api/review/step-panel?index=1&page=${encodeURIComponent(payload.pageToken)}`,
+    );
+    assert.equal(loaded.status, 200);
+    const loadedHtml = await loaded.text();
+    assert.match(loadedHtml, /data-scene-layout="concept-document"/);
+    assert.equal(
+      loadedHtml.match(/data-scene-layout="([^"]+)"/)?.[1],
+      payload.steps[0].sceneLayout,
+      "the lazy endpoint preserves the stub's projected scene identity",
+    );
     // Coverage is honestly unknown until the deferred check answers.
     assert.equal(payload.trust.pending, true);
   } finally {
@@ -451,6 +465,7 @@ test("hostile authored text cannot terminate the payload script element", async 
 // ---------------------------------------------------------------------------
 
 test("AT RISK 1: lazy step stubs still ship the speech cache", () => {
+  assert.match(storyView, /data-scene-layout=\{step\.sceneLayout\}/);
   assert.match(storyView, /data-step-speech-cache/);
   assert.match(storyView, /data-speech-beat=\{beat\.focusGroup\}/);
   assert.match(storyView, /data-speech-concept/);

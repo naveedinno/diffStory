@@ -19,6 +19,7 @@ import { claimedRanges } from './types.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
+import { projectStoryStepScene } from './story-scenes.js';
 import { createHash } from 'node:crypto';
 const STEP_KIND_LABEL = {
     changed: 'Changed',
@@ -138,6 +139,7 @@ function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, ordered
     const focusGroups = stepFocusGroups(viewport, highlights, beats);
     const focusExplicit = beats.length > 0 || highlights.length > 0;
     const moves = buildLogicMoves(step, diffFile?.oldPath ?? step.file, ordered ?? []);
+    const pairedView = pairedMoveFor(step)?.id;
     return {
         id: step.id,
         order: step.order,
@@ -152,6 +154,11 @@ function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, ordered
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
+        sceneLayout: projectStoryStepScene({
+            kind: 'code',
+            hasMoves: moves.length > 0,
+            paired: pairedView !== undefined,
+        }),
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
@@ -163,7 +170,7 @@ function buildCodeStep(repo, step, files, byId, total, headRef, hotspot, ordered
         blocks,
         note,
         moves,
-        pairedView: pairedMoveFor(step)?.id,
+        pairedView,
     };
 }
 /**
@@ -232,6 +239,7 @@ function buildConceptStep(step, byId) {
         chapter: chapterLabel(step),
         kind: 'concept',
         kindLabel: STEP_KIND_LABEL.concept,
+        sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined }),
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
         body: narrative(step.body, 'block'),
         diagram: step.diagram

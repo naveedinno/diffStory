@@ -19,6 +19,7 @@ import { claimedRanges } from './types.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
 import { narrative, narrativeText, type Narrative } from './narrative.js';
+import { projectStoryStepScene } from './story-scenes.js';
 import { createHash } from 'node:crypto';
 import type {
   CodeStepKind,
@@ -34,6 +35,7 @@ import type {
   Tour,
   TourStep,
   StepKind,
+  StoryStepSceneLayout,
 } from './types.js';
 
 export type RowType = 'add' | 'del' | 'ctx';
@@ -83,6 +85,8 @@ export interface StepViewBase {
   title: Narrative;
   kind: StepKind;
   kindLabel: string;
+  /** Derived presentation vocabulary; never authored in story.json. */
+  sceneLayout: StoryStepSceneLayout;
   /** Authored review cues carried through from story.json, markup stripped. */
   tags: string[];
   /** Grouping key for long reading paths, so text only — never markup. */
@@ -428,6 +432,7 @@ function buildCodeStep(
   const focusGroups = stepFocusGroups(viewport, highlights, beats);
   const focusExplicit = beats.length > 0 || highlights.length > 0;
   const moves = buildLogicMoves(step, diffFile?.oldPath ?? step.file, ordered ?? []);
+  const pairedView = pairedMoveFor(step)?.id;
   return {
     id: step.id,
     order: step.order,
@@ -442,6 +447,11 @@ function buildCodeStep(
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
+    sceneLayout: projectStoryStepScene({
+      kind: 'code',
+      hasMoves: moves.length > 0,
+      paired: pairedView !== undefined,
+    }),
     tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
@@ -453,7 +463,7 @@ function buildCodeStep(
     blocks,
     note,
     moves,
-    pairedView: pairedMoveFor(step)?.id,
+    pairedView,
   };
 }
 
@@ -526,6 +536,7 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
     chapter: chapterLabel(step),
     kind: 'concept',
     kindLabel: STEP_KIND_LABEL.concept,
+    sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined }),
     tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
     body: narrative(step.body, 'block'),
     diagram: step.diagram

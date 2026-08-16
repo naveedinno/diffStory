@@ -15,6 +15,17 @@ export type CodeStepKind =
 /** A stop in the reading path: either code evidence or a just-in-time mental model. */
 export type StepKind = CodeStepKind | 'concept';
 
+/**
+ * App-owned presentation layout derived from a validated step. This is a view
+ * projection, never an authored story.json field.
+ */
+export type StoryStepSceneLayout =
+  | 'concept-document'
+  | 'concept-diagram'
+  | 'code-focus'
+  | 'logic-move'
+  | 'paired-code';
+
 /** How much detail the authored story should carry. */
 export type StoryMode =
   | 'brief' // compact story: every changed hunk, grouped into the fewest useful stops

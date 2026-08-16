@@ -190,7 +190,7 @@ export interface StoriesPayload {
 // Everything the projection omits arrives later through the lazy endpoints,
 // each of which still returns server-rendered diff HTML.
 
-import type { Comment, ReviewFileIndexEntry } from "./types.js";
+import type { Comment, ReviewFileIndexEntry, StoryStepSceneLayout } from "./types.js";
 import type { ReviewExclusionMetadata } from "./noise.js";
 
 /** A projected narrative: sanitized HTML, flat text, and the spoken form. */
@@ -225,6 +225,8 @@ export interface ReviewBeatView {
 export interface ReviewStepView {
  id: string;
  kind: "changed" | "new-file" | "context" | "concept";
+ /** Derived presentation layout. It carries no diff or diagram detail. */
+ sceneLayout: StoryStepSceneLayout;
  /** 1-based position among code steps, as the step header prints it. */
  order: number;
  title: ReviewProse;

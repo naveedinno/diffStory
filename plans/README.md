@@ -1,4 +1,4 @@
-# Animation improvement plans
+# Animation and story-stage improvement plans
 
 Baseline: commit `b352778`, audited against the working tree on 2026-07-14. The working tree already contained unrelated uncommitted changes when these plans were written; executors must preserve them.
 
@@ -16,6 +16,7 @@ Baseline: commit `b352778`, audited against the working tree on 2026-07-14. The 
 | 010 | Restore reduced-motion and touch gating on the React surfaces | MEDIUM | DONE |
 | 011 | Unify press feedback to one scale | MEDIUM | DONE |
 | 012 | Give the floating progress panel an entrance and exit | MEDIUM | DONE |
+| 013 | Build the native presentation story stage | MEDIUM | DONE |
 
 ## Second audit — 2026-08-09, commit `2156520`
 
@@ -55,6 +56,19 @@ Not audited in depth this round: interruptibility and performance across
 from the code that passed the July audit, so they carry its findings forward, but
 they have not been re-examined against those two categories since the port.
 
+## Feature plan — 2026-08-16, commit `1e23de5`
+
+Plan 013 is an additive product plan for making the existing filmstrip Story
+view feel like a composed presentation while keeping the real diff viewer live.
+It deliberately does not embed Reveal.js or add a second slide/navigation
+runtime. The app derives a small scene-layout projection from existing story
+facts, then owns responsive composition and restrained first-visit motion.
+
+The plan is split into four passing slices: scene contract, static composition,
+first-visit choreography, and visual evidence. It preserves the metadata-first
+300-step lazy contract, the imperative review-engine ownership boundary, Tour
+v1/v2/v3 compatibility, narration, comments, and current keyboard behavior.
+
 ## Recommended execution order
 
 1. **001** establishes the shared curves and durations referenced by later CSS plans.
@@ -64,16 +78,26 @@ they have not been re-examined against those two categories since the port.
 5. **008** uses the movement token from 001 and the reduced-motion convention from 006.
 6. **007** uses the drawer curve from 001 and the accessibility convention from 006.
 7. **009** is independent and intentionally deletes motion rather than replacing it.
+8. **010–012** are complete follow-up findings from the React migration audit.
+9. **013** is complete. Its optional standalone export follow-up remains a
+   separate future decision after the native scene system has been used on real
+   stories.
 
 ## Dependencies
 
 - Plans 007 and 008 depend on the token names introduced by 001.
 - Plan 006 should follow 002 and 005, but remains safe if executed earlier because it explicitly handles their current keyframes.
 - Plans 002, 003, 004, 005, and 009 have no code dependency on one another.
+- Plan 013 depends on the shared tokens from 001, the reduced-motion contract
+  from 006, and the already-delivered filmstrip/View Transition/logic-move
+  behavior. It has no dependency on a presentation library.
 
 ## Scope note
 
-These plans cover every corrective finding selected from the audit. The three additive missed opportunities—folder-browser entrance, floating-progress-panel entrance, and anchored popover polish—remain deliberately out of scope until the corrective work is implemented and feel-checked.
+The July audit originally deferred three additive opportunities. Folder-browser
+and anchored-popover polish were delivered by the React rewrite; plan 012 has
+since delivered the floating progress-panel entrance. Plan 013 is a separate
+story-presentation feature, not an unresolved corrective audit finding.
 
 ## Execution
 

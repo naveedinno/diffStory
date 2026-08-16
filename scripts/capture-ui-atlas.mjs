@@ -60,8 +60,15 @@ const definitions = [
   ['pages','Raw diff — mobile','Story-free diff inspection on a phone viewport.','raw-diff-mobile','dark','mobile','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['pages','Raw diff — light','Story-free diff inspection in the light palette.','raw-diff-light','light','desktop','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['review','Guided review overview','Intent, reading path, scope, and walkthrough entry.','overview','dark','desktop','/repo/diffstory-atlas-fixture/review'],
-  ['review','Code walkthrough step','Focused code, narrative beats, and filmstrip.','code-step','dark','desktop','/repo/diffstory-atlas-fixture/review'],
-  ['review','Concept primer','Rendered mental model between code-review stops.','concept-step','light','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Logic-move walkthrough','Focused code with a local semantic move, narrative beats, and filmstrip.','code-step','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Focused code walkthrough','A deliberately quiet code scene without semantic-move annotation ink.','code-focus','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Paired-code walkthrough','A cross-file relationship presented as a before-and-after scene.','paired-code','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Concept primer with diagram','A mental model composed as copy and diagram rather than a long document.','concept-step','light','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Concept primer with diagram — tablet entry','The DOM-order concept stack opens at its thesis at the tablet breakpoint.','concept-step-tablet','dark','tablet','/repo/diffstory-atlas-fixture/review','concept-step'],
+  ['review','Concept primer with diagram — tablet evidence','The same tablet scene scrolled to prove its diagram, caption, and next action remain reachable.','concept-step-tablet-evidence','dark','tablet','/repo/diffstory-atlas-fixture/review','concept-step-evidence'],
+  ['review','Concept primer with diagram — mobile entry','The DOM-order concept stack opens at its thesis on a phone viewport.','concept-step-mobile','light','mobile','/repo/diffstory-atlas-fixture/review','concept-step'],
+  ['review','Concept primer with diagram — mobile evidence','The same phone scene scrolled to prove its diagram, caption, and next action remain reachable.','concept-step-mobile-evidence','light','mobile','/repo/diffstory-atlas-fixture/review','concept-step-evidence'],
+  ['review','Concept document','A document-led primer when the story has no diagram to compose beside it.','concept-document','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — unified','Complete file inventory in the primary unified-diff mode.','files-unified','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — split','Side-by-side review with the resizable before/after divider.','files-split','light','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Review page','Coverage, queued comments, challenge checks, and saved reviews — as a page.','review-menu','dark','desktop','/repo/diffstory-atlas-fixture/review'],
@@ -82,7 +89,7 @@ const definitions = [
   // with no story file present, not on /review.
   ['communication','Agent working — stage variant','The same panel node re-parented into the storyless intro as the stage variant.','pp-stage','dark','desktop','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','pp-stage'],
   ['responsive','Tablet review','The review workspace at the rail-collapse breakpoint.','tablet-review','dark','tablet','/repo/diffstory-atlas-fixture/review'],
-  ['responsive','Mobile walkthrough','Compact chrome and a focused code step on a phone viewport.','mobile-step','light','mobile','/repo/diffstory-atlas-fixture/review'],
+  ['responsive','Mobile focused-code walkthrough','Compact chrome and a quiet code-focus scene on a phone viewport.','mobile-step','light','mobile','/repo/diffstory-atlas-fixture/review','code-focus-mobile'],
   ['responsive','Mobile inline comment','The code-anchored composer in the mobile review flow.','mobile-comment-composer','dark','mobile','/repo/diffstory-atlas-fixture/review'],
   ['responsive','Mobile comments','The comment queue as a full-height mobile workspace.','mobile-comments','dark','mobile','/repo/diffstory-atlas-fixture/review']
 ].map(([category,title,description,state,theme,viewport,route,surface])=>({category,title,description,state,theme,viewport,route,surface:surface||state}))
@@ -104,6 +111,14 @@ const evidence = {
   'change-empty':'.file-card .empty-title',
   'change-refpicker':'#refPicker .refpick-row',
   'raw-diff':'.ds-filedetail',
+  'overview':'#ds-view-tour [data-scene-layout="opening"]',
+  'code-step':'#ds-view-tour [data-scene-layout="logic-move"]:not([hidden])',
+  'code-focus':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
+  'paired-code':'#ds-view-tour [data-scene-layout="paired-code"]:not([hidden])',
+  'concept-step':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden])',
+  'concept-step-evidence':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden]) [data-concept-diagram][data-render-state="ready"]',
+  'concept-document':'#ds-view-tour [data-scene-layout="concept-document"]:not([hidden])',
+  'code-focus-mobile':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
   // The React panel replaced the `ds-pp-*` class names with Tailwind utilities
   // and a deliberate `data-pp-*` hook set. `is-finished` became `data-state`.
   'pp-running':'[data-progress-panel][data-state="running"] [data-pp-plan] [data-pp-step-now]',
@@ -147,10 +162,29 @@ function seedBrowsableHome(){
   mkdirSync(join(HOME,'workbench-demo','.git'),{recursive:true});
 }
 function waitReady(url,child){return new Promise((resolve,reject)=>{let tries=0;const tick=async()=>{if(child.exitCode!==null)return reject(new Error('diffStory server exited before capture.'));try{const r=await fetch(url);if(r.ok)return resolve();}catch{}if(++tries>100)return reject(new Error('Timed out waiting for diffStory.'));setTimeout(tick,100);};tick();});}
-function setStory(visible){if(visible){if(existsSync(STORY_HOLD))copyFileSync(STORY_HOLD,STORY);return;}if(existsSync(STORY)){copyFileSync(STORY,STORY_HOLD);rmSync(STORY);}}
+function setStoryForSurface(surface){
+  if(surface==='history-empty'||surface==='pp-stage'){
+    if(existsSync(STORY)){copyFileSync(STORY,STORY_HOLD);rmSync(STORY);}
+    return;
+  }
+  if(existsSync(STORY_HOLD))copyFileSync(STORY_HOLD,STORY);
+  if(surface==='concept-document'){
+    const story=JSON.parse(readFileSync(STORY,'utf8'));
+    const concept=story.steps.find((step)=>step.kind==='concept');
+    if(!concept)throw new Error('The atlas fixture has no concept step to project as a document scene.');
+    delete concept.diagram;
+    writeFileSync(STORY,`${JSON.stringify(story,null,2)}\n`);
+  }
+}
 function themeInit(theme){return `(function(){try{localStorage.clear();localStorage.setItem('ds-theme','${theme}');localStorage.setItem('ds-sidebar-collapsed','0')}catch(e){}})()`;}
 async function settled(page){await page.waitForLoadState('domcontentloaded');await page.waitForFunction(()=>document.fonts?document.fonts.status==='loaded':true);await page.waitForTimeout(280);}
 async function click(page,selector){const target=page.locator(selector).first();await target.waitFor({state:'attached'});if(await target.isVisible())await target.click();else await target.evaluate((element)=>element.click());await page.waitForTimeout(240);}
+async function gotoStoryStep(page,index){
+  const target=page.locator(`[data-thread-node="${index}"]`).first();
+  await target.waitFor({state:'attached'});
+  await target.evaluate((element)=>element.click());
+  await page.waitForTimeout(240);
+}
 async function openFixtureRepo(page,origin,route){
   await page.evaluate(async(path)=>{await fetch('/api/repo/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path})});},FIXTURE);
   await page.goto(origin+route);await settled(page);
@@ -289,11 +323,93 @@ async function assertReviewStageGeometry(page){
     if(!chrome||!stage||!thread)return {valid:false,reason:'review chrome, active stage, or filmstrip is missing'};
     const chromeRect=chrome.getBoundingClientRect(),stageRect=stage.getBoundingClientRect(),threadRect=thread.getBoundingClientRect();
     const topGap=stageRect.top-chromeRect.bottom,bottomGap=threadRect.top-stageRect.bottom,widthShare=stageRect.width/innerWidth;
-    const valid=Math.abs(topGap-bottomGap)<=2&&widthShare>=.7;
-    return {valid,reason:`top gap ${Math.round(topGap)}px, bottom gap ${Math.round(bottomGap)}px, stage ${Math.round(widthShare*100)}% of viewport`};
+    const chromeVisible=chromeRect.top>=0&&chromeRect.bottom<=innerHeight;
+    const valid=chromeVisible&&Math.abs(topGap-bottomGap)<=2&&widthShare>=.7;
+    return {valid,reason:`chrome ${chromeVisible?'visible':'clipped'}, top gap ${Math.round(topGap)}px, bottom gap ${Math.round(bottomGap)}px, stage ${Math.round(widthShare*100)}% of viewport`};
   });
   if(!result.valid)throw new Error(`Review stage geometry is unbalanced: ${result.reason}`);
 }
+
+async function waitForStoryStep(page,index,layout){
+  await page.waitForFunction(({step,scene})=>{
+    const panel=document.querySelector(`.ds-step[data-step-panel="${step}"]:not([hidden])`);
+    return !!panel&&!panel.hasAttribute('data-step-lazy')&&panel.getAttribute('data-scene-layout')===scene&&!/Loading this review step/i.test(panel.textContent||'');
+  },{step:index,scene:layout},{timeout:15000});
+}
+
+async function sceneDockRect(page){
+  return page.evaluate(()=>{const dock=document.querySelector('.ds-dock');if(!dock)throw new Error('Story dock is missing.');const rect=dock.getBoundingClientRect();return {top:Math.round(rect.top),height:Math.round(rect.height)};});
+}
+
+async function assertStoryInteractionReplay(browser,origin){
+  setStoryForSurface('overview');
+  const route=`/repo/${encodeURIComponent(basename(FIXTURE))}/review?story=story.json`;
+  const context=await browser.newContext({viewport:viewports.desktop,colorScheme:'dark',reducedMotion:'no-preference'});
+  const page=await context.newPage();
+  const stepFetches=new Map();
+  page.on('request',(request)=>{const url=new URL(request.url());if(url.pathname!=='/api/review/step-panel')return;const index=url.searchParams.get('index')||'?';stepFetches.set(index,(stepFetches.get(index)||0)+1);});
+  await page.addInitScript(()=>{
+    window.__atlasSceneAnimations=[];
+    const original=Element.prototype.animate;
+    Element.prototype.animate=function(keyframes,options){
+      if(this.closest?.('[data-scene-layout]'))window.__atlasSceneAnimations.push({className:typeof this.className==='string'?this.className:'',keyframes,options});
+      return original.call(this,keyframes,options);
+    };
+  });
+  try{
+    await page.goto(origin+route,{waitUntil:'domcontentloaded'});await settled(page);
+    await gotoStoryStep(page,1);await waitForStoryStep(page,1,'logic-move');
+    const logicDock=await sceneDockRect(page);
+
+    await gotoStoryStep(page,2);await waitForStoryStep(page,2,'concept-diagram');
+    const conceptEntryScroll=await page.locator('.ds-step:not([hidden]) .ds-concept-scroll').evaluate((scroller)=>scroller.scrollTop);
+    if(conceptEntryScroll!==0)throw new Error(`Concept scene opened at scrollTop ${conceptEntryScroll} instead of its thesis.`);
+    await page.waitForFunction(()=>window.__atlasSceneAnimations.length>=4,undefined,{timeout:5000});
+    const firstEntrance=await page.evaluate(()=>window.__atlasSceneAnimations.slice());
+    const forbidden=firstEntrance.filter((entry)=>/ds-(?:diff|row|urow)/.test(entry.className));
+    if(forbidden.length)throw new Error(`Concept entrance touched live code: ${forbidden.map((entry)=>entry.className).join(', ')}`);
+    if(firstEntrance.some((entry)=>!JSON.stringify(entry.keyframes).includes('translateY(6px)')))throw new Error('A concept entrance used motion outside the opacity/6px contract.');
+    const firstEntranceCount=firstEntrance.length;
+
+    await gotoStoryStep(page,1);await waitForStoryStep(page,1,'logic-move');
+    await gotoStoryStep(page,2);await waitForStoryStep(page,2,'concept-diagram');
+    await page.waitForTimeout(80);
+    const revisitCount=await page.evaluate(()=>window.__atlasSceneAnimations.length);
+    if(revisitCount!==firstEntranceCount)throw new Error(`Concept entrance replayed on revisit (${firstEntranceCount} -> ${revisitCount}).`);
+
+    await gotoStoryStep(page,3);await waitForStoryStep(page,3,'paired-code');
+    const pairedDock=await sceneDockRect(page);
+    await gotoStoryStep(page,8);await waitForStoryStep(page,8,'code-focus');
+    const focusDock=await sceneDockRect(page);
+    if([pairedDock,focusDock].some((rect)=>Math.abs(rect.top-logicDock.top)>1||Math.abs(rect.height-logicDock.height)>1))throw new Error(`Dock geometry moved between code scenes: ${JSON.stringify({logicDock,pairedDock,focusDock})}`);
+
+    await gotoStoryStep(page,1);await waitForStoryStep(page,1,'logic-move');
+    for(const mode of ['diff','split','full']){
+      await click(page,`.ds-step:not([hidden]) [data-mode="${mode}"]`);
+      const active=await page.locator(`.ds-step:not([hidden]) [data-mode="${mode}"]`).first().getAttribute('class');
+      if(!active?.includes('is-active'))throw new Error(`Code mode ${mode} did not become active.`);
+    }
+
+    await gotoStoryStep(page,3);await waitForStoryStep(page,3,'paired-code');
+    for(let i=0;i<8;i++){await page.keyboard.press('j');await page.keyboard.press('k');}
+    await page.keyboard.press('j');await page.waitForTimeout(500);
+    const rapid=await page.evaluate(()=>{const panel=document.querySelector('.ds-step:not([hidden])'),node=document.querySelector('[data-thread-node].is-active');return {panel:Number(panel?.getAttribute('data-step-panel')),node:Number(node?.getAttribute('data-thread-node'))};});
+    if(rapid.panel!==4||rapid.node!==4)throw new Error(`Rapid navigation desynchronized scene and filmstrip: ${JSON.stringify(rapid)}`);
+    for(const [index,count] of stepFetches){if(count>1)throw new Error(`Lazy step ${index} fetched ${count} times during interaction replay.`);}
+  }finally{await context.close();}
+
+  const reduced=await browser.newContext({viewport:viewports.desktop,colorScheme:'dark',reducedMotion:'reduce'});
+  const reducedPage=await reduced.newPage();
+  await reducedPage.addInitScript(()=>{window.__atlasSceneAnimations=[];const original=Element.prototype.animate;Element.prototype.animate=function(keyframes,options){if(this.closest?.('[data-scene-layout]'))window.__atlasSceneAnimations.push({keyframes,options});return original.call(this,keyframes,options);};});
+  try{
+    await reducedPage.goto(origin+route,{waitUntil:'domcontentloaded'});await settled(reducedPage);
+    await gotoStoryStep(reducedPage,2);await waitForStoryStep(reducedPage,2,'concept-diagram');
+    const reducedCount=await reducedPage.evaluate(()=>window.__atlasSceneAnimations.length);
+    if(reducedCount)throw new Error(`Reduced motion still ran ${reducedCount} scene entrance animation(s).`);
+  }finally{await reduced.close();}
+  console.log('verified story-scene interaction replay (lazy fetches, modes, dock, rapid navigation, motion)');
+}
+
 async function main(){
   const executable=browserExecutable();if(!executable)throw new Error('Install Google Chrome or Microsoft Edge, or set DIFFSTORY_ATLAS_BROWSER.');
   mkdirSync(SHOTS,{recursive:true});for(const old of definitions)rmSync(join(SHOTS,`${old.category}-${old.state}.png`),{force:true});
@@ -307,7 +423,7 @@ async function main(){
     await waitReady(origin,server);browser=await chromium.launch({headless:true,executablePath:executable,args:['--font-render-hinting=none']});const context=await browser.newContext({viewport:viewports.desktop,colorScheme:'dark',reducedMotion:'reduce'});const page=await context.newPage();
     const shots=[];
     for(const def of definitions){
-      setStory(def.surface!=='history-empty'&&def.surface!=='pp-stage');
+      setStoryForSurface(def.surface);
       await page.setViewportSize(viewports[def.viewport]);await page.addInitScript(themeInit(def.theme));
       // Only the progress panel reads prefers-color-scheme; every other surface
       // is driven by ds-theme, so the emulation stays dark for them.
@@ -334,11 +450,16 @@ async function main(){
       }else if(def.surface==='raw-diff'){
         await page.waitForFunction(()=>{const panel=document.querySelector('.ds-filepanel:not([hidden])');if(!panel)return false;if(panel.querySelector('.ds-differror'))return true;return Array.from(panel.querySelectorAll('[data-comment-code]')).some((node)=>node.getBoundingClientRect().height>0);},undefined,{timeout:15000});
         await page.waitForTimeout(240);
-      }else if(def.surface==='code-step'||def.surface==='mobile-step'){
-        await click(page,'[data-goto-step="1"]');
-      }else if(def.surface==='concept-step'){
-        await click(page,'[data-goto-step="1"]');await click(page,'[data-step-index="2"]');
-        await page.waitForFunction(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]');return !!diagram&&['ready','error'].includes(diagram.getAttribute('data-render-state'));});
+      }else if(def.surface==='code-step'){
+        await gotoStoryStep(page,1);
+      }else if(def.surface==='code-focus'||def.surface==='code-focus-mobile'){
+        await gotoStoryStep(page,8);
+      }else if(def.surface==='paired-code'){
+        await gotoStoryStep(page,3);
+      }else if(def.surface==='concept-step'||def.surface==='concept-step-evidence'||def.surface==='concept-document'){
+        await gotoStoryStep(page,1);await gotoStoryStep(page,2);
+        if(def.surface!=='concept-document')await page.waitForFunction(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]');return !!diagram&&['ready','error'].includes(diagram.getAttribute('data-render-state'));});
+        if(def.surface==='concept-step-evidence')await page.evaluate(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]'),scroller=diagram?.closest('.ds-concept-scroll');if(!diagram||!scroller)throw new Error('Concept diagram or its scroller is missing.');const dr=diagram.getBoundingClientRect(),sr=scroller.getBoundingClientRect();scroller.scrollTop+=dr.top-sr.top-18;});
       }else if(def.surface==='files-unified'||def.surface==='files-split'){
         await click(page,'#ds-tab-files');if(def.surface==='files-split'){await click(page,'.ds-filepanel:not([hidden]) [data-mode="split"]');await page.waitForFunction(()=>document.querySelector('.ds-filepanel:not([hidden]) [data-split-inner]')?.getAttribute('aria-busy')==='false');}
       }else if(def.surface==='review-menu'){
@@ -368,7 +489,7 @@ async function main(){
         await progressState(page,def.surface.replace('pp-detail-','').replace('pp-',''));
       }
       await page.waitForFunction(()=>!/Loading (?:the split view|this review step)/i.test(document.body.innerText));
-      if(def.surface==='overview'||def.surface==='code-step')await assertReviewStageGeometry(page);
+      if(['overview','code-step','code-focus','paired-code'].includes(def.surface))await assertReviewStageGeometry(page);
       const degraded=await assertRendered(page,def);
       const file=`screenshots/${def.category}-${def.state}.png`,target=join(OUT,file);
       let size;
@@ -388,6 +509,7 @@ async function main(){
       shots.push({category:def.category,title:def.title,description:def.description,state:def.state,theme:def.theme,viewport:def.viewport,surface:def.surface,route,file,width:size.width,height:size.height,...(degraded?{degraded}:{})});
       console.log(`captured ${file} (${size.width}x${size.height}, ${bytes} bytes)`);
     }
+    await assertStoryInteractionReplay(browser,origin);
     const source=execFileSync('git',['rev-parse','--short','HEAD'],{cwd:ROOT,encoding:'utf8'}).trim();const dirty=execFileSync('git',['status','--porcelain'],{cwd:ROOT,encoding:'utf8'}).trim();const manifest={version:1,generatedAt:new Date().toISOString(),source:`commit ${source}${dirty?' + working tree':''} · deterministic demo`,shots};const json=JSON.stringify(manifest,null,2)+'\n';writeFileSync(join(OUT,'manifest.json'),json);writeFileSync(join(OUT,'manifest.js'),`window.DIFFSTORY_UI_ATLAS=${JSON.stringify(manifest)};\n`);console.log(`\nUI atlas: ${relative(ROOT,OUT)}/index.html (${shots.length} frames)`);
     const degradedShots=shots.filter((shot)=>shot.degraded);
     if(degradedShots.length)console.log(`\n${degradedShots.length} frame(s) captured a degraded surface:\n${degradedShots.map((shot)=>`  ${shot.state} — ${shot.degraded}`).join('\n')}`);

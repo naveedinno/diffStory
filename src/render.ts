@@ -138,7 +138,7 @@ function codeStepPanel(
         s.flow,
       )}</span>`
     : "";
-  return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}"${
+  return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}"${
     s.focusExplicit ? ' data-story-focus="authored"' : ""
   } hidden>
     <div class="ds-step-top">
@@ -378,7 +378,7 @@ function conceptStepPanel(
       </figure>`
     : "";
   const speech = conceptSpeechText(s);
-  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" hidden>
+  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
     <div class="ds-step-top">
       <div class="ds-step-meta">
         <span class="ds-step-count">Step ${s.order} of ${total}</span>
@@ -1323,6 +1323,7 @@ function stepView(step: StepView): ReviewStepView {
   const base: ReviewStepView = {
     id: step.id,
     kind: step.kind,
+    sceneLayout: step.sceneLayout,
     order: step.order,
     title: prose(step.title),
     kindLabel: step.kindLabel,

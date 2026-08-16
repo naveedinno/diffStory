@@ -145,6 +145,8 @@ const GLOBALS = new Set([
 // Bare words that look like calls but are CSS functions inside string literals
 // (`:not(…)`, `translate(…)`, `rotate(…)`) rather than JavaScript.
 const CSS_FUNCTIONS_IN_STRINGS = new Set([
+  // `cubic-bezier(...)` is matched from the segment after its hyphen.
+  "bezier",
   "not",
   "rotate",
   "translate",

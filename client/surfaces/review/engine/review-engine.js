@@ -78,6 +78,7 @@ export function startReviewEngine(options){
   var mermaidModulePromise=null,mermaidRenderId=0;
   var liveEventSource=null,liveDisconnectTimer=null,liveOriginalStoryFreshness='',liveIssues={diff:false,story:false,disconnected:false},liveGenerations={diff:0,story:0,disconnected:0},liveDismissed={diff:0,story:0,disconnected:0},storyReloadTimer=null,storyReloadToastSequence=0;
   var workspaceTransition=null,workspaceFallbackTimer=0,workspaceTransitionToken=0;
+  var sceneEntered={0:true},sceneAnimations=[],sceneEntranceToken=0;
   function $(s,r){return (r||document).querySelector(s);}
   function $all(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
   function closest(n,s){return n&&n.closest?n.closest(s):null;}
@@ -426,6 +427,51 @@ export function startReviewEngine(options){
     });
     return workspaceTransition;
   }
+  function cssMotionDuration(name,fallback){
+    var value=getComputedStyle(document.documentElement).getPropertyValue(name).trim(),amount=parseFloat(value);
+    if(!isFinite(amount))return fallback;
+    if(/ms$/i.test(value))return amount;
+    if(/s$/i.test(value))return amount*1000;
+    return fallback;
+  }
+  function cssMotionEasing(name,fallback){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback;
+  }
+  function cancelSceneEntrance(){
+    sceneEntranceToken++;
+    sceneAnimations.forEach(function(animation){try{animation.cancel();}catch(e){}});
+    sceneAnimations=[];
+  }
+  function conceptSceneNeedsEntrance(panel,index){
+    if(!panel||panel.hasAttribute('data-step-lazy')||sceneEntered[index])return false;
+    var layout=panel.getAttribute('data-scene-layout')||'';
+    return layout==='concept-document'||layout==='concept-diagram';
+  }
+  function animateConceptScene(panel,index){
+    sceneEntered[index]=true;
+    if(!panel||panel.hidden||prefersReducedMotion()||typeof panel.animate!=='function')return;
+    var targets=[
+      $('.ds-concept-heading',panel),
+      $('.ds-concept-title',panel),
+      $('.ds-concept-body',panel),
+      $('.ds-concept-diagram',panel),
+      $('.ds-concept-next',panel)
+    ].filter(Boolean);
+    if(!targets.length)return;
+    var token=++sceneEntranceToken,duration=cssMotionDuration('--motion-duration-ui',200),easing=cssMotionEasing('--motion-ease-out','cubic-bezier(0.23,1,0.32,1)');
+    var owned=targets.map(function(target,position){
+      return target.animate(
+        [{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],
+        {duration:duration,delay:position*40,easing:easing,fill:'both'}
+      );
+    });
+    sceneAnimations=owned;
+    Promise.all(owned.map(function(animation){return Promise.resolve(animation.finished).catch(function(){});})).then(function(){
+      if(token!==sceneEntranceToken)return;
+      owned.forEach(function(animation){try{animation.cancel();}catch(e){}});
+      sceneAnimations=[];
+    });
+  }
   function syncSidebarOverlay(collapsed){
     var open=compactScreen()&&!collapsed,main=$('.ds-main'),chrome=$('.ds-reviewchrome-main'),scrim=$('[data-sidebar-scrim]');
     if(main){if(open)main.setAttribute('inert','');else main.removeAttribute('inert');}
@@ -719,6 +765,8 @@ export function startReviewEngine(options){
   }
   function activateStep(i,autoSpeak){
     if(i<0)i=0;if(i>total-1)i=total-1;var previous=active;active=i;visited[i]=true;
+    cancelSceneEntrance();
+    var entrancePanel=stepPanels&&stepPanels[i],revealConcept=conceptSceneNeedsEntrance(entrancePanel,i);
     if(aloudIntent==='off')clearVoiceFocus();
     var update=function(){
       stepPanels.forEach(function(p,idx){p.hidden=idx!==i;});
@@ -748,7 +796,11 @@ export function startReviewEngine(options){
       // transition starts. Paint only after this visibility update has landed.
       syncActiveAnnotations();
     };
-    if(reviewPositionReady&&previous!==i)runWorkspaceTransition('step',i>previous?1:-1,update);else update();
+    if(revealConcept){
+      if(workspaceTransition&&typeof workspaceTransition.skipTransition==='function')workspaceTransition.skipTransition();
+      update();animateConceptScene(stepPanels[i],i);
+    }
+    else if(reviewPositionReady&&previous!==i)runWorkspaceTransition('step',i>previous?1:-1,update);else update();
     var steps=total-1; // real steps, with the Overview excluded
     var pt=$('#ds-progress-text');if(pt)pt.textContent=i===0?'Overview':(i+' / '+steps);
     var ratio=i===0||!steps?0:i/steps;ratio=Math.max(0,Math.min(1,ratio));
