@@ -116,9 +116,9 @@ test('story focus keeps every code row readable without partial-edge rails', () 
   assert.match(unifiedFocus, /background-image:linear-gradient/);
 });
 
-test('split placeholders and reading focus use one quiet visual signal', () => {
+test('split placeholders stay visually empty while reading focus remains quiet', () => {
   const emptyCell = cssRuleBody(DIFF_CSS, '.ds-cell-empty');
-  assert.match(emptyCell, /background:var\(--fill-1\)/);
+  assert.match(emptyCell, /background:transparent/);
   assert.doesNotMatch(emptyCell, /gradient|image/);
 
   assert.doesNotMatch(DIFF_CSS, /\.ds-(?:u?row)\.is-voice-focus::before/);
@@ -133,8 +133,8 @@ test('review status cues avoid cropped one-edge borders', () => {
   assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-change-jump,.ds-urow.is-change-jump'), /inset 0 0 0 1px/);
 });
 
-test('bare hunk gap matches the legacy markup exactly', () => {
-  assert.equal(renderHunkGap(), '<div class="ds-hunkgap"><span>⋯</span></div>');
+test('bare hunk gap names the skipped content without decorative dots', () => {
+  assert.equal(renderHunkGap(), '<div class="ds-hunkgap"><span class="ds-gaplabel">Skipped lines</span></div>');
 });
 
 test('split hunk gap keeps the middle control on the split divider', () => {
@@ -145,13 +145,16 @@ test('split hunk gap keeps the middle control on the split divider', () => {
   assert.match(html, /<span class="ds-gap-side ds-gap-side-r">/);
   assert.match(html, /data-gap-chunk="5"/);
   assert.match(html, /aria-label="Show 5 lines below"[^>]*>↓ 5</);
+  assert.match(html, /aria-label="Show all hidden lines"[^>]*>All</);
   assert.match(html, /aria-label="Show 5 lines above"[^>]*>↑ 5</);
+  assert.doesNotMatch(html, /⋯|ds-gapdots/);
 });
 
 test('bare split hunk gap uses the split divider scaffold', () => {
   const html = renderHunkGap(undefined, { split: true });
   assert.match(html, /^<div class="ds-hunkgap ds-hunkgap-split">/);
-  assert.match(html, /<span class="ds-gap-mid"><span>⋯<\/span><\/span>/);
+  assert.match(html, /<span class="ds-gap-mid"><span class="ds-gaplabel">Skipped lines<\/span><\/span>/);
+  assert.doesNotMatch(html, /⋯/);
   assert.doesNotMatch(html, /data-gap/);
 });
 
@@ -191,6 +194,8 @@ test('interactive hunk gap carries range data and expand buttons', () => {
   assert.match(html, /aria-label="Show 20 lines below"/);
   assert.match(html, /aria-label="Show all hidden lines"/);
   assert.match(html, /aria-label="Show 20 lines above"/);
+  assert.match(html, /aria-label="Show all hidden lines"[^>]*>All</);
+  assert.doesNotMatch(html, /⋯|ds-gapdots/);
 });
 
 test('eof gap omits the up button', () => {

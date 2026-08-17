@@ -94,6 +94,13 @@ function changeJumpControls(): string {
   </div>`;
 }
 
+function lineWrapToggle(): string {
+  return `<button class="ds-linewrap-toggle" data-line-wrap-toggle type="button" aria-pressed="false" aria-label="Wrap long lines" title="Wrap long lines">
+    <span class="ds-ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 6h12M4 11h14a3 3 0 0 1 0 6h-3"/><path d="m17 14-3 3 3 3M4 17h6"/></svg></span>
+    <span data-line-wrap-label>Wrap</span>
+  </button>`;
+}
+
 // ---- story tour ----
 
 /** Render one story step for the lazy review-step endpoint. */
@@ -169,10 +176,13 @@ function codeStepPanel(
           <span class="ds-flex"></span>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           ${changeJumpControls()}
-          <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
-            <button data-mode="diff" aria-pressed="false">Unified</button>
-            <button class="is-active" data-mode="split" aria-pressed="true">Split</button>
-            <button data-mode="full" aria-pressed="false">Full file</button>
+          <div class="ds-diffview-controls">
+            ${lineWrapToggle()}
+            <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
+              <button data-mode="diff" aria-pressed="false">Unified</button>
+              <button class="is-active" data-mode="split" aria-pressed="true">Split</button>
+              <button data-mode="full" aria-pressed="false">Full file</button>
+            </div>
           </div>
         </div>
         <div data-diff-inner hidden>${storyUnifiedDiffInner(s, comments)}</div>
@@ -366,7 +376,19 @@ function conceptStepPanel(
       : "";
   const diagram = s.diagram
     ? `<figure class="ds-concept-diagram" data-concept-diagram>
-        <div class="ds-concept-diagram-output" data-mermaid-output role="img" aria-label="${esc(
+        <div class="ds-concept-diagram-tools">
+          <span class="ds-concept-diagram-gesture" data-mermaid-gesture-hint>Drag to pan · Scroll to zoom</span>
+          <div class="ds-concept-diagram-zoom" role="group" aria-label="Diagram zoom controls">
+            <button type="button" data-mermaid-zoom="out" aria-label="Zoom out" title="Zoom out (−)"><span aria-hidden="true">−</span></button>
+            <button type="button" class="ds-concept-diagram-reset" data-mermaid-reset aria-label="Reset diagram view" title="Reset diagram view (0)"><span data-mermaid-zoom-label>100%</span></button>
+            <button type="button" data-mermaid-zoom="in" aria-label="Zoom in" title="Zoom in (+)"><span aria-hidden="true">+</span></button>
+          </div>
+          <button type="button" class="ds-concept-diagram-fullscreen" data-mermaid-fullscreen aria-label="Open diagram fullscreen" aria-pressed="false" title="Open diagram fullscreen">
+            <svg class="ds-concept-diagram-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+            <svg class="ds-concept-diagram-collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>
+          </button>
+        </div>
+        <div class="ds-concept-diagram-output" data-mermaid-output role="img" tabindex="0" aria-keyshortcuts="+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="${esc(
           s.diagram.caption.text,
         )}"><span class="ds-concept-diagram-loading">Drawing the mental model…</span></div>
         <pre data-mermaid-source hidden>${esc(s.diagram.source)}</pre>
@@ -819,6 +841,7 @@ export function renderFilePanelContent(
       <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(
         f.file,
       )} reviewed" title="Mark reviewed (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark reviewed</span></button>
+      ${lineWrapToggle()}
       ${toggle}
     </div>
     <div class="ds-filepanel-body">

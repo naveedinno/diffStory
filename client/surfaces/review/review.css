@@ -488,7 +488,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step.is-code-step .ds-beat:not(.is-selected) .ds-beat-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
 .ds-step.is-code-step .ds-beat:not(.is-selected){padding-top:5px;padding-bottom:5px}
 .ds-full-diff{height:29px;padding:0 8px;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;font-weight:700;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}
-.ds-step.is-code-step .ds-difftoolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 8px;align-items:center}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}.ds-step.is-code-step .ds-full-diff{justify-self:start}.ds-step.is-code-step .ds-modetoggle{justify-self:end}.ds-step.is-code-step .ds-changejump{display:none!important}
+.ds-step.is-code-step .ds-difftoolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 8px;align-items:center}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}.ds-step.is-code-step .ds-full-diff{justify-self:start}.ds-step.is-code-step .ds-diffview-controls{justify-self:end}.ds-step.is-code-step .ds-changejump{display:none!important}
 
 /* ---- review comments ---- */
 .ds-comment-pin{position:absolute;z-index:7;top:50%;right:8px;transform:translateY(-50%);height:44px;min-width:44px;padding:0 8px;border:1px solid color-mix(in srgb,var(--accent) 50%,transparent);border-radius:999px;
@@ -582,7 +582,12 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-filedetail{flex:1;container-type:inline-size;overflow:auto;background:var(--panel3)}
 .ds-filepanel{display:flex;flex-direction:column;width:100%;min-width:100%;min-height:100%}
 .ds-filepanel[hidden]{display:none}
-.ds-filepanel-head{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
+.ds-filepanel-head{--ds-filepanel-control-height:36px;position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
+.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-viewed-toggle,.ds-filepanel-head>.ds-linewrap-toggle,.ds-filepanel-head>.ds-modetoggle{box-sizing:border-box;height:var(--ds-filepanel-control-height)}
+.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:3px;padding-bottom:3px}
+.ds-filepanel-head>.ds-changejump .ds-changebtn{width:36px;height:30px}
+.ds-filepanel-head>.ds-viewed-toggle{padding-left:10px;padding-right:10px}
+.ds-filepanel-head>.ds-modetoggle button{height:30px;padding-left:9px;padding-right:9px}
 .ds-filepanel-body{position:relative;flex:1;width:max-content;min-width:100%;padding-bottom:40px}
 .ds-filepanel.ds-split-mode .ds-filepanel-body{width:100%;min-width:0}
 .ds-cardpath{font-family:var(--mono);font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -743,8 +748,8 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
    measured on the holder. Each file's head is stuck inside its own section, so
    scrolling to the next file hands the header over instead of stacking them. */
 .ds-diffhead{position:sticky;top:calc(var(--ds-stickytop,0px) - var(--ds-scrollpad-t,0px));z-index:8;display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
-.ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:9px 14px}
-.ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 14px;overflow:hidden}
+.ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:5px 14px}
+.ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:5px 14px;overflow:hidden}
 .ds-diffhead-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-diffhead-side-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-diffhead-ctx .ds-diffhead-side{padding:0}
@@ -825,7 +830,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-cell-paired{box-shadow:none}
 .ds-diffbody-paired-flow .ds-cell-l.ds-cell-paired{background:var(--panel3)}
 .ds-cell-untoured{background:var(--amber-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--amber) 62%,transparent)}
-.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:var(--fill-1)}
+.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:transparent}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}
@@ -914,18 +919,18 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-gap-side{min-width:0;display:flex;align-items:center;gap:10px}
 .ds-gap-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0;justify-content:flex-end}
 .ds-gap-side-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0;justify-content:flex-start}
-.ds-gap-side-l .ds-gapdots{margin-right:46px}
-.ds-gap-side-r .ds-gapdots{margin-left:46px}
+.ds-gap-side-l>.ds-gapbtn{margin-right:27px}
+.ds-gap-side-r>.ds-gapbtn{margin-left:27px}
 .ds-gap-mid{position:relative;flex:none;width:0;height:22px;display:flex;align-items:center;justify-content:center;color:var(--dim2)}
 .ds-gap-mid>.ds-gapbtn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
 .ds-gapbtn{font:inherit;font-size:10.5px;font-weight:600;padding:3px 11px;border-radius:var(--radius-pill);border:1px solid transparent;background:var(--fill-1);color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease}
-.ds-hunkgap-split .ds-gapbtn-context{opacity:1}
+.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1}
 .ds-hunkgap.is-expandable:hover .ds-gapbtn,.ds-gapbtn:focus-visible{opacity:1}
 .ds-gapbtn:hover{background:var(--fill-2);color:var(--text)}
 .ds-gapbtn:disabled{opacity:.4;cursor:default}
-.ds-gapdots{color:var(--dim2)}
+.ds-gaplabel{display:block;color:var(--dim2);font-family:var(--sans);font-size:10.5px;font-weight:600;text-align:center;white-space:nowrap}
 .ds-hunkgap.is-error{display:flex;align-items:center;justify-content:center;min-height:34px;padding:4px 10px}
-.ds-hunkgap.is-error>.ds-gapbtn,.ds-hunkgap.is-error>.ds-gapdots,.ds-hunkgap.is-error>.ds-gap-side,.ds-hunkgap.is-error>.ds-gap-mid{display:none}
+.ds-hunkgap.is-error>.ds-gapbtn,.ds-hunkgap.is-error>.ds-gap-side,.ds-hunkgap.is-error>.ds-gap-mid{display:none}
 .ds-gaperror{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--diff-del-text);font-family:var(--sans);font-size:11px}
 .ds-gapretry{opacity:1;min-height:26px;color:var(--text);border-color:var(--line)}
 @media (hover:none),(pointer:coarse){.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1;min-height:28px;padding-left:11px;padding-right:11px}}
@@ -950,10 +955,16 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head>.ds-changejump{order:7}
   .ds-filepanel-head>.ds-viewed-toggle{order:8;width:auto;padding:0 10px}
   .ds-filepanel-head>.ds-viewed-toggle .ds-viewed-toggle-label{display:inline}
-  .ds-filepanel-head>.ds-modetoggle{order:9;margin-left:auto}
+  .ds-filepanel-head>.ds-linewrap-toggle{order:9}
+  .ds-filepanel-head>.ds-modetoggle{order:10;margin-left:auto}
   .ds-filepanel-head .ds-modetoggle button{padding-left:8px;padding-right:8px}
+  .ds-hunkgap-split{justify-content:center;gap:6px}
+  .ds-hunkgap-split .ds-gap-side{flex:0 0 auto}
+  .ds-hunkgap-split .ds-gap-side>.ds-gapbtn{margin:0}
+  .ds-hunkgap-split .ds-gap-mid{width:auto;height:auto}
+  .ds-hunkgap-split .ds-gap-mid>.ds-gapbtn{position:static;transform:none}
 }
-@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}}
+@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
 @media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-row.is-voice-focus,.ds-urow.is-voice-focus,.ds-row.is-change-jump,.ds-urow.is-change-jump{animation:none!important;filter:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
 
 .ds-top{height:56px;padding:0 14px;gap:10px;background:var(--panel3);border-bottom-color:var(--line)}
@@ -1083,9 +1094,16 @@ body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:vi
    The wrap still owns overflow-x, so a wide table scrolls inside the measure and
    .ds-concept-scroll keeps its vertical-only axis. */
 .ds-concept-body .ds-md-tablewrap{margin:18px 0 20px}.ds-concept-body table{font-size:13.5px;line-height:1.55}.ds-concept-body caption{padding-bottom:9px;color:var(--muted);font-size:11.5px}.ds-concept-body th,.ds-concept-body td{padding:9px 14px}.ds-concept-body dl{margin:14px 0 18px}.ds-concept-body dt{margin-top:13px}.ds-concept-body dd{margin:4px 0 0 18px}.ds-concept-body hr{margin:24px 0;background:var(--line-soft)}.ds-concept-body kbd{font-size:.8em}.ds-concept-body pre{margin:16px 0;padding:13px 15px;border-radius:9px;background:var(--panel3);font-size:12px}
-.ds-concept-diagram{margin:26px 0 0;padding-top:22px;border-top:1px solid var(--line-soft)}
-.ds-concept-diagram-output{display:flex;align-items:center;justify-content:center;min-height:210px;overflow:auto;padding:20px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel3)}.ds-concept-diagram-output svg{display:block;max-width:100%;height:auto}.ds-concept-diagram-loading{color:var(--dim);font-size:12px}.ds-concept-diagram.is-error .ds-concept-diagram-output{min-height:0;padding:14px;color:var(--amber-text);font-size:12px}
-.ds-concept-diagram figcaption{margin-top:9px;color:var(--muted);font-size:11.5px;line-height:1.45}.ds-concept-diagram-source{margin-top:8px;color:var(--muted);font-size:11px}.ds-concept-diagram-source>summary{cursor:pointer}.ds-concept-diagram-source pre{overflow:auto;margin:8px 0 0;padding:12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel3);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:1.5}
+.ds-concept-diagram{position:relative;margin:26px 0 0;padding-top:22px;border-top:1px solid var(--line-soft)}
+.ds-concept-diagram-tools{position:absolute;top:32px;right:10px;z-index:3;display:flex;align-items:center;gap:8px}.ds-concept-diagram-gesture,.ds-concept-diagram-zoom{display:none}.ds-concept-diagram-tools button{display:inline-flex;align-items:center;justify-content:center;height:34px;min-width:34px;padding:0 9px;border:1px solid var(--line-soft);border-radius:9px;background:color-mix(in srgb,var(--material) 90%,transparent);box-shadow:0 4px 14px rgba(0,0,0,.12);color:var(--muted);font:inherit;font-size:14px;font-weight:700;cursor:pointer;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.ds-concept-diagram-tools button:hover{border-color:color-mix(in srgb,var(--accent-blue) 45%,var(--line));background:var(--fill-2);color:var(--text)}.ds-concept-diagram-tools button:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}.ds-concept-diagram-tools button:disabled{opacity:.36;cursor:default}.ds-concept-diagram-fullscreen svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.ds-concept-diagram-collapse{display:none}
+.ds-concept-diagram-output{display:flex;align-items:center;justify-content:center;min-height:210px;overflow:auto;padding:24px;border:1px solid color-mix(in srgb,var(--line) 78%,transparent);border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 3%,var(--panel3)),var(--panel3) 54%);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 3%,transparent)}.ds-concept-diagram-output:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}.ds-concept-diagram-output svg{display:block;max-width:100%;height:auto;font-family:var(--sans)}.ds-concept-diagram-output svg .node .label text{font-weight:550;letter-spacing:-.01em}.ds-concept-diagram-output svg .node rect.basic{rx:9px;ry:9px}.ds-concept-diagram-output svg .edgeLabel text{font-size:12px;font-weight:700}.ds-concept-diagram-output svg .edgeLabel rect,.ds-concept-diagram-output svg .labelBkg{rx:7px;ry:7px}.ds-concept-diagram-loading{color:var(--dim);font-size:12px}.ds-concept-diagram.is-error .ds-concept-diagram-output{min-height:0;padding:14px;color:var(--amber-text);font-size:12px}.ds-concept-diagram.is-error .ds-concept-diagram-tools{display:none}
+.ds-concept-diagram figcaption{margin-top:9px;color:var(--muted);font-size:11.5px;line-height:1.45}.ds-concept-diagram-source{display:none;margin-top:8px;color:var(--muted);font-size:11px}.ds-concept-diagram.is-error .ds-concept-diagram-source{display:block}.ds-concept-diagram-source>summary{cursor:pointer}.ds-concept-diagram-source pre{overflow:auto;margin:8px 0 0;padding:12px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel3);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:1.5}
+body.ds-mermaid-fullscreen-open{overflow:hidden}
+.ds-concept-diagram:fullscreen,.ds-concept-diagram.is-mermaid-fullscreen{box-sizing:border-box;width:100%;height:100%;margin:0;padding:0;border:0;background:var(--surface);color:var(--text)}
+.ds-concept-diagram.is-mermaid-fullscreen{position:fixed;inset:0;z-index:1000;width:100vw;height:100vh}
+.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-tools{top:18px;right:18px;left:18px;justify-content:flex-end}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-gesture{display:block;margin-right:auto;padding:7px 10px;border:1px solid var(--line-soft);border-radius:9px;background:color-mix(in srgb,var(--material) 90%,transparent);box-shadow:0 4px 14px rgba(0,0,0,.1);color:var(--muted);font-size:11px;font-weight:600;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-zoom{display:flex;gap:4px}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-reset{min-width:60px;font-size:11px;font-variant-numeric:tabular-nums}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-expand{display:none}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-collapse{display:block}
+.ds-concept-diagram:fullscreen .ds-concept-diagram-output,.ds-concept-diagram.is-mermaid-fullscreen .ds-concept-diagram-output{box-sizing:border-box;width:100%;height:100%;min-height:0;overflow:hidden;padding:64px 24px 24px;border:0;border-radius:0;background:var(--surface);box-shadow:none;cursor:grab;touch-action:none;user-select:none}.ds-concept-diagram.is-panning .ds-concept-diagram-output{cursor:grabbing}.ds-concept-diagram:fullscreen .ds-concept-diagram-output svg,.ds-concept-diagram.is-mermaid-fullscreen .ds-concept-diagram-output svg{width:100%;height:100%;max-width:none!important}.ds-concept-diagram:fullscreen figcaption,.ds-concept-diagram.is-mermaid-fullscreen figcaption{display:none}
+@media (pointer:coarse){.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-tools button{height:44px;min-width:44px}}
 .ds-concept-next{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 18px;width:100%;margin-top:28px;padding:15px 17px;text-align:left;border:1px solid color-mix(in srgb,var(--accent-blue) 34%,var(--line));border-radius:11px;background:var(--accent-soft);color:var(--text);cursor:pointer}.ds-concept-next:hover{border-color:var(--accent-blue);background:color-mix(in srgb,var(--accent-soft) 84%,var(--panel2))}.ds-concept-next-kicker{grid-column:1;color:var(--accent-blue);font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}.ds-concept-next-title{grid-column:1;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13px;font-weight:700;white-space:nowrap}.ds-concept-next-arrow{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--accent-blue);font-size:18px}
 /* The scene vocabulary is derived from story facts, not authored layout hints.
    Concept documents keep an editorial reading measure; a real diagram earns a
@@ -1218,6 +1236,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 .ds-linewrap-toggle:hover{background:var(--fill-2);color:var(--text)}
 .ds-linewrap-toggle.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
 .ds-linewrap-toggle:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.ds-diffview-controls{display:flex;align-items:center;gap:7px}.ds-diffview-controls>.ds-linewrap-toggle,.ds-filepanel-head>.ds-linewrap-toggle{flex:none}
 /* Story ⇄ Files rides in the chrome, not the rail: switching views is a
    top-level move and the rail is collapsed for most of the review. The pill
    here overrides the rail's light-theme underline tabs, which were drawn to

@@ -14,6 +14,7 @@ const PAGE_JS = DIFF_JS;
 const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 const PAGE_CSS = DIFF_CSS;
 const REVIEW_APP = readFileSync(new URL('../client/surfaces/review/ReviewApp.tsx', import.meta.url), 'utf8');
+const RENDER_SRC = readFileSync(new URL('../src/render.ts', import.meta.url), 'utf8');
 
 test('diff-assets exports the diff client functions', () => {
   assert.match(DIFF_JS, /function setMode\(/);
@@ -46,6 +47,11 @@ test('diff headers and context gaps follow the resolved color theme', () => {
   assert.match(DIFF_CSS, /\.ds-hunkgap\{[^}]*background:var\(--gutter\)/);
   assert.doesNotMatch(DIFF_CSS, /\.ds-diffhead\{[^}]*background:#[0-9a-f]+/i);
   assert.doesNotMatch(DIFF_CSS, /\.ds-hunkgap\{[^}]*background:#[0-9a-f]+/i);
+});
+
+test('diff file headers stay compact above the code', () => {
+  assert.match(DIFF_CSS, /\.ds-diffhead-ctx\{[^}]*padding:5px 14px/);
+  assert.match(DIFF_CSS, /\.ds-diffhead-side\{[^}]*padding:5px 14px/);
 });
 
 test('reviewed-file tracking is hash-bound, accessible, and wired through storage and the v key', () => {
@@ -125,7 +131,12 @@ test('expand-context client is wired', () => {
 
 test('hunk expansion remains discoverable without hover on touch devices', () => {
   assert.match(DIFF_CSS, /@media \(hover:none\),\(pointer:coarse\)\{\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1/);
-  assert.match(DIFF_CSS, /\.ds-hunkgap-split \.ds-gapbtn-context\{opacity:1\}/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1\}/);
+  assert.doesNotMatch(DIFF_CSS, /\.ds-gapdots/);
+  assert.match(DIFF_CSS, /\.ds-gap-side-l>\.ds-gapbtn\{margin-right:27px\}/);
+  assert.match(DIFF_CSS, /\.ds-gap-side-r>\.ds-gapbtn\{margin-left:27px\}/);
+  assert.match(DIFF_CSS, /@media \(max-width:720px\)\{[\s\S]*\.ds-hunkgap-split\{justify-content:center;gap:6px\}/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-split \.ds-gap-mid>\.ds-gapbtn\{position:static;transform:none\}/);
   assert.match(DIFF_JS, /data-gap-chunk/);
   assert.match(DIFF_JS, /from\+chunk-1/);
 });
@@ -153,14 +164,20 @@ test('review page consumes shared tokens and respects reduced motion', () => {
 });
 
 test('line wrapping is an accessible persisted option and defaults to off', () => {
-  assert.match(REVIEW_APP, /data-line-wrap-toggle/);
-  assert.match(REVIEW_APP, /aria-pressed="false"/);
+  assert.doesNotMatch(REVIEW_APP, /data-line-wrap-toggle/);
+  assert.match(RENDER_SRC, /function lineWrapToggle\(\)/);
+  assert.equal((RENDER_SRC.match(/\$\{lineWrapToggle\(\)\}/g) || []).length, 2);
+  assert.match(RENDER_SRC, /data-line-wrap-toggle/);
+  assert.match(RENDER_SRC, /aria-pressed="false"/);
   assert.match(DIFF_JS, /function setLineWrap\(on,persist\)/);
   assert.match(DIFF_JS, /localStorage\.getItem\('ds-line-wrap'\)==='1'/);
   assert.match(DIFF_JS, /localStorage\.setItem\('ds-line-wrap',on\?'1':'0'\)/);
   assert.match(DIFF_JS, /classList\.toggle\('ds-line-wrap',on\)/);
+  assert.ok((DIFF_JS.match(/setLineWrap\(document\.body\.classList\.contains\('ds-line-wrap'\),false\)/g) || []).length >= 2);
   assert.match(DIFF_CSS, /\.ds-code\{[^}]*white-space:pre;[^}]*overflow-wrap:normal/);
   assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-code\{white-space:pre-wrap;overflow-wrap:anywhere\}/);
+  assert.match(DIFF_CSS, /\.ds-diffview-controls>\.ds-linewrap-toggle/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-linewrap-toggle/);
 });
 
 test('unwrapped diffs scroll horizontally without disturbing vertical row navigation', () => {
@@ -206,8 +223,14 @@ test('split panes resize independently of line length and scroll their code loca
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {
+  assert.match(DIFF_CSS, /\.ds-filepanel-head\{--ds-filepanel-control-height:36px/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-changejump,\.ds-filepanel-head>\.ds-viewed-toggle,\.ds-filepanel-head>\.ds-linewrap-toggle,\.ds-filepanel-head>\.ds-modetoggle\{[^}]*height:var\(--ds-filepanel-control-height\)/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-changejump \.ds-changebtn\{width:36px;height:30px\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle button\{height:30px/);
+  assert.match(DIFF_CSS, /@media \(hover:none\),\(pointer:coarse\)\{[\s\S]*\.ds-filepanel-head\{--ds-filepanel-control-height:44px\}/);
   assert.match(DIFF_CSS, /@media \(max-width:720px\)[\s\S]*\.ds-filepanel-head\{flex-wrap:wrap/);
   assert.match(DIFF_CSS, /\.ds-filepanel-head::after\{content:'';order:6;flex-basis:100%/);
-  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:9;margin-left:auto\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-linewrap-toggle\{order:9\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:10;margin-left:auto\}/);
   assert.match(DIFF_CSS, /@media \(max-width:470px\)[\s\S]*\.ds-reviewchrome-main>\.ds-titlewrap\{display:none\}/);
 });

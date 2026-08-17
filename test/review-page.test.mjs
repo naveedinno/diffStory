@@ -64,6 +64,7 @@ const read = (relative) => stripComments(readRaw(relative));
 
 const engine = read("surfaces/review/engine/review-engine.js");
 const engineRaw = readRaw("surfaces/review/engine/review-engine.js");
+const reviewCss = readRaw("surfaces/review/review.css");
 const reviewApp = read("surfaces/review/ReviewApp.tsx");
 const sidebar = read("surfaces/review/Sidebar.tsx");
 const storyView = read("surfaces/review/StoryView.tsx");
@@ -658,6 +659,41 @@ test("AT RISK 9: the Mermaid sanitizer keeps every one of its rules", () => {
   assert.match(sanitize, /XMLSerializer/, "reparse-then-serialize round trip");
   assert.match(engine, /securityLevel:'strict'/);
   assert.match(engine, /htmlLabels:false/);
+});
+
+test("Mermaid diagrams use app typography and readable multiline spacing", () => {
+  assert.match(engine, /look:'neo'/);
+  assert.match(engine, /fontFamily:'IBM Plex Sans, sans-serif'/);
+  assert.match(engine, /flowchart:\{[^}]*nodeSpacing:32[^}]*rankSpacing:44[^}]*wrappingWidth:180/);
+  assert.match(engine, /function spaceMermaidLabelRows\(root\)/);
+  assert.match(engine, /spaceMermaidLabelRows\(root\)/);
+  assert.match(engine, /var lineSpacing=1\.7/);
+});
+
+test("Mermaid diagrams open as a fullscreen pan and zoom canvas", () => {
+  assert.match(renderSrc, /data-mermaid-fullscreen/);
+  assert.match(renderSrc, /data-mermaid-zoom="out"/);
+  assert.match(renderSrc, /data-mermaid-reset/);
+  assert.match(renderSrc, /data-mermaid-zoom="in"/);
+  assert.match(renderSrc, /aria-keyshortcuts="[^"]*ArrowLeft[^"]*"/);
+
+  assert.match(engine, /function prepareMermaidCanvas\(figure\)/);
+  assert.match(engine, /function mermaidDiagramSvg\(figure\)/);
+  assert.doesNotMatch(engine, /\$\('svg',figure\)/);
+  assert.match(engine, /requestFullscreen/);
+  assert.match(engine, /exitFullscreen/);
+  assert.match(engine, /fullscreenchange/);
+  assert.match(engine, /setPointerCapture/);
+  assert.match(engine, /releasePointerCapture/);
+  assert.match(engine, /addEventListener\('wheel',[\s\S]{0,500}?\{passive:false\}\)/);
+  assert.match(engine, /setAttribute\('viewBox'/);
+  assert.match(engine, /data-mermaid-zoom-label/);
+
+  assert.match(reviewCss, /\.ds-concept-diagram\.is-error \.ds-concept-diagram-source/);
+  assert.match(reviewCss, /\.ds-concept-diagram:fullscreen/);
+  assert.match(reviewCss, /\.ds-concept-diagram\.is-mermaid-fullscreen/);
+  assert.match(reviewCss, /cursor:grab/);
+  assert.match(reviewCss, /touch-action:none/);
 });
 
 test("AT RISK 10: scrollIntoView stays banned", () => {

@@ -95,13 +95,13 @@ export function renderUnifiedRow(row, target, intra) {
 }
 const UNIFIED_CONTEXT_CHUNK = 20;
 const SPLIT_CONTEXT_CHUNK = 5;
-/** The ⋯ separator between hunks. Bare (no gap info) matches the legacy markup;
- *  Task 6 passes GapInfo to make it expandable. */
+/** The skipped-lines separator between hunks. Bare gaps stay descriptive;
+ *  Task 6 passes GapInfo to make them expandable. */
 export function renderHunkGap(gap, opts = {}) {
     if (!gap) {
         return opts.split
-            ? `<div class="ds-hunkgap ds-hunkgap-split"><span class="ds-gap-side ds-gap-side-l"></span><span class="ds-gap-mid"><span>⋯</span></span><span class="ds-gap-side ds-gap-side-r"></span></div>`
-            : `<div class="ds-hunkgap"><span>⋯</span></div>`;
+            ? `<div class="ds-hunkgap ds-hunkgap-split"><span class="ds-gap-side ds-gap-side-l"></span><span class="ds-gap-mid"><span class="ds-gaplabel">Skipped lines</span></span><span class="ds-gap-side ds-gap-side-r"></span></div>`
+            : `<div class="ds-hunkgap"><span class="ds-gaplabel">Skipped lines</span></div>`;
     }
     const contextChunk = opts.split ? SPLIT_CONTEXT_CHUNK : UNIFIED_CONTEXT_CHUNK;
     const up = gap.to === 'eof'
@@ -114,15 +114,13 @@ export function renderHunkGap(gap, opts = {}) {
     if (!opts.split) {
         return (open +
             down +
-            `<span class="ds-gapdots">⋯</span>` +
-            `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">all</button>` +
-            `<span class="ds-gapdots">⋯</span>` +
+            `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">All</button>` +
             up +
             `</div>`);
     }
     return (open +
-        `<span class="ds-gap-side ds-gap-side-l">${down}<span class="ds-gapdots">⋯</span></span>` +
-        `<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">all</button></span>` +
-        `<span class="ds-gap-side ds-gap-side-r"><span class="ds-gapdots">⋯</span>${up}</span>` +
+        `<span class="ds-gap-side ds-gap-side-l">${down}</span>` +
+        `<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">All</button></span>` +
+        `<span class="ds-gap-side ds-gap-side-r">${up}</span>` +
         `</div>`);
 }
