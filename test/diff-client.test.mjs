@@ -13,6 +13,7 @@ const DIFF_JS = readFileSync(new URL('../client/surfaces/review/engine/review-en
 const PAGE_JS = DIFF_JS;
 const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 const PAGE_CSS = DIFF_CSS;
+const REVIEW_APP = readFileSync(new URL('../client/surfaces/review/ReviewApp.tsx', import.meta.url), 'utf8');
 
 test('diff-assets exports the diff client functions', () => {
   assert.match(DIFF_JS, /function setMode\(/);
@@ -150,16 +151,48 @@ test('review page consumes shared tokens and respects reduced motion', () => {
   assert.match(DIFF_CSS, /prefers-reduced-motion/);
 });
 
-test('story diff is width-contained and never creates a horizontal scroller', () => {
-  assert.match(DIFF_CSS, /\.ds-diffscroll\{[^}]*min-width:0[^}]*overflow-x:hidden[^}]*overflow-y:auto/);
-  assert.match(DIFF_CSS, /\.ds-diff\{[^}]*width:100%[^}]*min-width:0[^}]*max-width:100%/);
+test('line wrapping is an accessible persisted option and defaults to off', () => {
+  assert.match(REVIEW_APP, /data-line-wrap-toggle/);
+  assert.match(REVIEW_APP, /aria-pressed="false"/);
+  assert.match(DIFF_JS, /function setLineWrap\(on,persist\)/);
+  assert.match(DIFF_JS, /localStorage\.getItem\('ds-line-wrap'\)==='1'/);
+  assert.match(DIFF_JS, /localStorage\.setItem\('ds-line-wrap',on\?'1':'0'\)/);
+  assert.match(DIFF_JS, /classList\.toggle\('ds-line-wrap',on\)/);
+  assert.match(DIFF_CSS, /\.ds-code\{[^}]*white-space:pre;[^}]*overflow-wrap:normal/);
+  assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-code\{white-space:pre-wrap;overflow-wrap:anywhere\}/);
+});
+
+test('unwrapped diffs scroll horizontally without disturbing vertical row navigation', () => {
+  assert.match(DIFF_CSS, /\.ds-diffscroll\{[^}]*min-width:0[^}]*overflow:auto/);
+  assert.match(DIFF_CSS, /\.ds-diff\{[^}]*width:max-content[^}]*min-width:100%[^}]*max-width:none/);
+  assert.match(DIFF_CSS, /\.ds-difftoolbar\{[^}]*left:0[^}]*width:calc\(100cqw - 11px\)[^}]*max-width:calc\(100cqw - 11px\)/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-body\{[^}]*width:max-content[^}]*min-width:100%/);
+  assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-diffscroll\{overflow-x:hidden\}/);
+  assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-diff\{width:100%;min-width:0;max-width:100%\}/);
+  assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-filepanel-body\{width:100%;min-width:0\}/);
   assert.match(DIFF_JS, /function scrollReviewRowVertically\(row,opts\)/);
   assert.match(DIFF_JS, /scrollReviewRowVertically\(row,opts\)/);
   assert.doesNotMatch(DIFF_JS, /scrollIntoView/);
+});
+
+test('unwrapped split panes size for both sides and never paint through the divider', () => {
+  assert.match(DIFF_JS, /function syncNoWrapSplitWidth\(holder\)/);
+  assert.match(DIFF_JS, /Math\.max\(maxLeft\/ratio,maxRight\/\(1-ratio\)\)/);
+  assert.ok(
+    (DIFF_JS.match(/syncNoWrapSplitWidth\(/g) || []).length >= 6,
+    'initial, lazy, mode, context, keyboard, and resize paths must all resync pane width',
+  );
+  assert.match(
+    DIFF_CSS,
+    /body:not\(\.ds-line-wrap\) \[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden\}/,
+  );
+  assert.match(DIFF_CSS, /\.ds-diff\.ds-nowrap-split\{width:var\(--ds-nowrap-split-width\)\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-body\.ds-nowrap-split\{width:var\(--ds-nowrap-split-width\)\}/);
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {
   assert.match(DIFF_CSS, /@media \(max-width:720px\)[\s\S]*\.ds-filepanel-head\{flex-wrap:wrap/);
   assert.match(DIFF_CSS, /\.ds-filepanel-head::after\{content:'';order:6;flex-basis:100%/);
   assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:9;margin-left:auto\}/);
+  assert.match(DIFF_CSS, /@media \(max-width:470px\)[\s\S]*\.ds-reviewchrome-main>\.ds-titlewrap\{display:none\}/);
 });

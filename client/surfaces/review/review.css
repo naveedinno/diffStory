@@ -579,11 +579,12 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 /* ---- all files ---- */
 .ds-stat-add{font-family:var(--mono);color:var(--add);font-variant-numeric:tabular-nums}
 .ds-stat-del{font-family:var(--mono);color:var(--del);font-variant-numeric:tabular-nums}
-.ds-filedetail{flex:1;overflow-y:auto;background:var(--panel3)}
-.ds-filepanel{display:flex;flex-direction:column;min-height:100%}
+.ds-filedetail{flex:1;container-type:inline-size;overflow:auto;background:var(--panel3)}
+.ds-filepanel{display:flex;flex-direction:column;width:100%;min-width:100%;min-height:100%}
 .ds-filepanel[hidden]{display:none}
 .ds-filepanel-head{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
-.ds-filepanel-body{position:relative;flex:1;padding-bottom:40px}
+.ds-filepanel-body{position:relative;flex:1;width:max-content;min-width:100%;padding-bottom:40px}
+.ds-filepanel-body.ds-nowrap-split{width:var(--ds-nowrap-split-width)}
 .ds-cardpath{font-family:var(--mono);font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-cardpath .ds-dim{color:var(--dim)}
 .ds-cardpath-base{color:var(--text);font-weight:600}
@@ -705,7 +706,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-command-root{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-start;justify-content:center;padding-top:min(16vh,140px)}.ds-command-root[hidden]{display:none}.ds-command-scrim{position:absolute;inset:0;border:0;background:var(--scrim)}.ds-command{position:relative;width:520px;max-width:calc(100vw - 24px);max-height:74vh;overflow:auto;border:1px solid var(--line-soft);border-radius:var(--radius-island);background:var(--material);box-shadow:0 24px 80px rgba(0,0,0,.48)}
 .ds-command-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 16px;border-bottom:1px solid var(--line-soft)}.ds-command-head>div{display:grid;gap:3px}.ds-command-head strong{font-size:15px}.ds-command-head span{font-size:11.5px;color:var(--muted)}.ds-command-head>button{width:30px;height:30px;border:0;border-radius:var(--radius-pill);background:var(--fill-1);color:var(--muted);cursor:pointer}.ds-command-list{padding:8px}.ds-command-list>button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-radius:var(--radius);background:transparent;color:var(--text);font:inherit;text-align:left;padding:10px 11px;cursor:pointer}.ds-command-list>button:hover{background:var(--fill-2)}.ds-command-list>button>span{display:grid;gap:2px}.ds-command-list strong{font-size:12.5px}.ds-command-list small{font-size:11px;color:var(--muted)}.ds-command-list kbd{flex:none}.ds-command-foot{display:flex;gap:14px;flex-wrap:wrap;padding:10px 16px 13px;border-top:1px solid var(--line-soft);font-size:10.5px;color:var(--dim)}.ds-command-foot span{display:flex;align-items:center;gap:4px}
 .ds-green{color:var(--add)}
-.ds-diffscroll{flex:1;min-width:0;min-height:180px;overflow-x:hidden;overflow-y:auto;padding:18px 30px 26px;--ds-scrollpad-t:18px}
+.ds-diffscroll{flex:1;container-type:inline-size;min-width:0;min-height:180px;overflow:auto;padding:18px 30px 26px;--ds-scrollpad-t:18px}
 /* .ds-why (the step narrative, page chrome) rides along in this diff-scoped
    at-rule because it shares one short-viewport breakpoint with .ds-diffscroll —
    they trade vertical space together, so the rule stays coupled rather than
@@ -716,7 +717,8 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 /* overflow:clip (not hidden) rounds the corners without making the card a
    scroll container — the toolbar and file heads inside it stay sticky against
    .ds-diffscroll. Browsers without clip keep hidden and just lose the sticking. */
-.ds-diff{position:relative;width:100%;min-width:0;max-width:100%;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;overflow:clip;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
+.ds-diff{position:relative;width:max-content;min-width:100%;max-width:none;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;overflow:clip;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
+.ds-diff.ds-nowrap-split{width:var(--ds-nowrap-split-width)}
 /* In a story step the card runs full-bleed to the island's edges, so it draws no
    frame of its own — the island is the single border, the sticky toolbar and file
    head are the headers at the top of the code, and the island clips the corners.
@@ -727,7 +729,9 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-step.is-story-active:not(.is-voice-active) .ds-difthint::before{content:'Story focus';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--accent-blue);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 .ds-step.is-voice-active .ds-difthint{color:var(--md-primary);font-weight:700}
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--md-primary);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
-.ds-difftoolbar{position:sticky;top:calc(0px - var(--ds-scrollpad-t,0px));z-index:9;display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
+/* The toolbar stays inside the visible code viewport while unwrapped rows make
+   the card wider. The 11px deduction matches the declared review scrollbar. */
+.ds-difftoolbar{position:sticky;top:calc(0px - var(--ds-scrollpad-t,0px));left:0;z-index:9;width:calc(100cqw - 11px);max-width:calc(100cqw - 11px);display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
 .ds-modetoggle{display:inline-flex;align-items:center;gap:2px;padding:3px;border:0;border-radius:var(--radius-pill);background:var(--fill-1)}
 .ds-modetoggle button{min-width:44px;height:30px;padding:0 11px;border:0;border-radius:var(--radius-pill);background:transparent;color:var(--dim);font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
@@ -813,6 +817,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-urow.is-voice-focus{position:relative;box-shadow:none;background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
+body:not(.ds-line-wrap) [data-split-inner]:not([hidden]) .ds-cell{overflow:hidden}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:rgba(18,150,111,0.14);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-cell-del{background:rgba(224,68,94,0.14);box-shadow:inset 3px 0 0 var(--del-rail)}
@@ -836,7 +841,12 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-sign{width:12px;flex:none;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:4px 0;color:var(--faint);user-select:none}
 .ds-sign-add{color:var(--diff-add-text)}
 .ds-sign-del{color:var(--diff-del-text)}
-.ds-code{flex:1;min-width:0;padding:3px 14px 3px 7px;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+.ds-code{flex:1;min-width:0;padding:3px 14px 3px 7px;color:var(--text);white-space:pre;overflow-wrap:normal}
+body.ds-line-wrap .ds-filedetail{overflow-x:hidden}
+body.ds-line-wrap .ds-filepanel-body{width:100%;min-width:0}
+body.ds-line-wrap .ds-diffscroll{overflow-x:hidden}
+body.ds-line-wrap .ds-diff{width:100%;min-width:0;max-width:100%}
+body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-code-add{color:var(--diff-add-text)}
 .ds-code-del{color:var(--diff-del-text)}
 .ds-untoured-tag{flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
@@ -975,7 +985,7 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
 /* No side or bottom padding: the code is full-bleed to the island's edges, so the
    island rule is the only frame around it and the toolbar / file head read as its
    headers. Only the top gap survives, to part the title block from the toolbar. */
-.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:8px 0 0;--ds-scrollpad-t:8px;overflow-x:hidden;overflow-y:auto}
+.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:8px 0 0;--ds-scrollpad-t:8px;overflow:auto}
 /* The beat dock is rendered by its step but it lives in the bottom island — the
    client adopts it into .ds-dock-stage as the step comes up. So it draws no glass
    of its own: the island is the only floating surface, and this is one row in it. */
@@ -1190,6 +1200,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 .ds-reviewchrome-main .ds-titlewrap{gap:3px}.ds-reviewchrome-main .ds-title{font-size:15px;font-weight:700;letter-spacing:-.01em}.ds-reviewchrome-subtitle{overflow:hidden;color:var(--dim);font-size:10.5px;text-overflow:ellipsis;white-space:nowrap}.ds-reviewchrome-subtitle span{margin:0 3px;color:var(--faint)}.ds-reviewchrome-subtitle b{color:var(--muted);font-family:var(--mono);font-size:10px;font-weight:600}
 .ds-reviewchrome-mobile-nav{display:none;align-items:center;gap:1px;flex:none;margin-right:6px}.ds-reviewchrome-mobile-nav .ds-sidebar-toggle,.ds-reviewchrome-mobile-nav .ds-back{width:44px;min-height:44px;padding:0;justify-content:center}
 .ds-reviewchrome-utilities{display:flex;align-items:center;gap:10px;flex:none;margin-left:14px}.ds-reviewchrome-utilities .ds-theme-toggle{width:36px;height:36px;min-height:36px}
+.ds-linewrap-toggle{height:36px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border:1px solid transparent;border-radius:var(--radius-pill);background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:650;white-space:nowrap;cursor:pointer}
+.ds-linewrap-toggle:hover{background:var(--fill-2);color:var(--text)}
+.ds-linewrap-toggle.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
+.ds-linewrap-toggle:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
 /* Story ⇄ Files rides in the chrome, not the rail: switching views is a
    top-level move and the rail is collapsed for most of the review. The pill
    here overrides the rail's light-theme underline tabs, which were drawn to
@@ -1237,6 +1251,7 @@ body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}bo
 @media (max-width:720px){
   .ds-reviewchrome,body.ds-rail-collapsed .ds-reviewchrome{height:56px;grid-template-columns:minmax(0,1fr);grid-template-rows:56px}.ds-reviewchrome-main{grid-column:1;grid-row:1;padding:0 8px 0 7px}.ds-reviewchrome-mobile-nav{display:flex}.ds-reviewchrome-main .ds-title{font-size:13.5px}.ds-reviewchrome-subtitle{font-size:10px}.ds-reviewchrome-utilities{gap:5px;margin-left:6px}.ds-reviewchrome .ds-actions{gap:2px}.ds-reload-diff{min-width:44px;height:44px;justify-content:center;padding:0 10px}
   .ds-reviewchrome-utilities .ds-theme-toggle{width:44px;height:44px;min-height:44px}
+  .ds-linewrap-toggle{width:44px;height:44px;padding:0;justify-content:center}.ds-linewrap-toggle>[data-line-wrap-label]{display:none}
   .ds-reviewchrome-utilities .ds-viewtoggle{height:44px}.ds-reviewchrome-utilities .ds-tab{min-height:38px;padding:0 9px;font-size:11px}
   .ds-dock .ds-readaloud-primary{display:flex;width:44px;height:44px;min-height:44px;padding:0;justify-content:center;border-radius:12px}.ds-dock .ds-readaloud-primary .ds-readaloud-label{display:none}.ds-narration-actions{gap:3px}.ds-narration-stop{position:absolute;z-index:13;bottom:calc(100% + 14px);left:0;width:62px;height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:color-mix(in srgb,var(--md-error) 10%,var(--panel3));box-shadow:none;font-size:10px;font-weight:800}.ds-narration-stop::after{content:"Stop"}.ds-narration-stop span{width:7px;height:7px}
   .ds-reviewchrome>.ds-reviewchrome-rail{display:none;position:fixed;top:0;left:0;z-index:11;width:min(var(--ds-rail-width,240px),calc(100vw - 48px));height:56px;grid-template-columns:1fr;grid-template-rows:56px;border-bottom:1px solid var(--line);box-shadow:var(--shadow)}.ds-reviewchrome-rail .ds-reviewchrome-nav{padding-left:7px}body:not(.ds-rail-collapsed) .ds-reviewchrome-rail{display:grid}
@@ -1244,7 +1259,7 @@ body.ds-rail-collapsed .ds-reviewchrome{grid-template-columns:0 minmax(0,1fr)}bo
   body:not(.ds-rail-collapsed) .ds-reviewchrome-rail .ds-sidebar-toggle.is-active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
   .ds-layout>.ds-rail{top:56px}.ds-rail-scrim,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:56px}
 }
-@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-utilities .ds-tab{padding:0 7px;font-size:10.5px}.ds-reviewchrome-main .ds-titlewrap{flex:1 1 0;max-width:none;box-shadow:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}}
+@media (max-width:470px){.ds-reviewchrome-main{padding-inline:4px}.ds-reviewchrome-utilities .ds-tab{padding:0 7px;font-size:10.5px}.ds-reviewchrome-main>.ds-titlewrap{display:none}.ds-reviewchrome-subtitle{display:none}.ds-reviewchrome-mobile-nav{gap:0;margin-right:2px}.ds-reviewchrome-utilities{gap:2px;margin-left:2px}.ds-reviewchrome .ds-actions{gap:0}}
 @media (prefers-reduced-motion:reduce){.ds-reload-diff.is-loading .ds-reload-icon{animation:none}.ds-live-banner{transition:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-reviewchrome,.ds-reviewchrome-rail{background:var(--panel3)}}
 @media (prefers-contrast:more){.ds-reviewchrome-main,.ds-reviewchrome-rail{border-color:var(--line)}}

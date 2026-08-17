@@ -45,6 +45,12 @@ const ICONS = {
       <path d="M21 20v-6h-6" />
     </>
   ),
+  wrap: (
+    <>
+      <path d="M4 6h12M4 11h14a3 3 0 0 1 0 6h-3" />
+      <path d="m17 14-3 3 3 3M4 17h6" />
+    </>
+  ),
 };
 
 function ChromeIcon({ name }: { name: keyof typeof ICONS }) {
@@ -478,6 +484,19 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 </span>
               </button>
             </div>
+            <button
+              className="ds-linewrap-toggle"
+              data-line-wrap-toggle
+              type="button"
+              aria-pressed="false"
+              aria-label="Wrap long lines"
+              title="Wrap long lines"
+            >
+              <span className="ds-ui-icon" aria-hidden="true">
+                <ChromeIcon name="wrap" />
+              </span>
+              <span data-line-wrap-label>Wrap</span>
+            </button>
             <ThemeMenu />
             <div className="ds-actions">
               {storyless ? (
