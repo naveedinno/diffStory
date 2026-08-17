@@ -133,7 +133,8 @@ test('hunk expansion remains discoverable without hover on touch devices', () =>
 test('split divider and change rows have keyboard review foundations', () => {
   assert.match(DIFF_JS, /function prepareSplitDivider\(/);
   assert.match(DIFF_JS, /divider\.setAttribute\('role','separator'\)/);
-  assert.match(DIFF_JS, /divider\.setAttribute\('aria-valuemin','22'\)/);
+  assert.match(DIFF_JS, /divider\.setAttribute\('aria-valuemin','0'\)/);
+  assert.match(DIFF_JS, /divider\.setAttribute\('aria-valuemax','100'\)/);
   assert.match(DIFF_JS, /divider\.addEventListener\('keydown',handleSplitDividerKey\)/);
   assert.ok(DIFF_JS.includes("key!=='ArrowLeft'&&key!=='ArrowRight'&&key!=='Home'&&key!=='End'"));
   assert.match(DIFF_JS, /opts&&opts\.focus&&row\.focus/);
@@ -175,19 +176,33 @@ test('unwrapped diffs scroll horizontally without disturbing vertical row naviga
   assert.doesNotMatch(DIFF_JS, /scrollIntoView/);
 });
 
-test('unwrapped split panes size for both sides and never paint through the divider', () => {
-  assert.match(DIFF_JS, /function syncNoWrapSplitWidth\(holder\)/);
-  assert.match(DIFF_JS, /Math\.max\(maxLeft\/ratio,maxRight\/\(1-ratio\)\)/);
+test('split panes resize independently of line length and scroll their code locally', () => {
+  assert.match(DIFF_JS, /function syncSplitPaneLayout\(holder\)/);
+  assert.match(DIFF_JS, /function ensureSplitPaneScrollbars\(holder\)/);
+  assert.match(DIFF_JS, /Math\.max\(0,Math\.min\(100,pct\)\)/);
+  assert.match(DIFF_JS, /Math\.max\(0,Math\.min\(100,\(clientX-r\.left\)\/r\.width\*100\)\)/);
+  assert.match(DIFF_JS, /if\(key==='Home'\)pct=0;else if\(key==='End'\)pct=100/);
+  assert.match(DIFF_JS, /--ds-left-scroll/);
+  assert.match(DIFF_JS, /--ds-right-scroll/);
+  assert.match(DIFF_JS, /scroller\.setAttribute\('aria-keyshortcuts','ArrowLeft ArrowRight Home End'\)/);
+  assert.match(DIFF_JS, /if\(e\.key==='Home'\)next=0;else if\(e\.key==='End'\)next=max/);
   assert.ok(
-    (DIFF_JS.match(/syncNoWrapSplitWidth\(/g) || []).length >= 6,
-    'initial, lazy, mode, context, keyboard, and resize paths must all resync pane width',
+    (DIFF_JS.match(/syncSplitPaneLayout\(/g) || []).length >= 6,
+    'initial, lazy, mode, context, keyboard, and resize paths must all resync pane layout',
   );
+  assert.doesNotMatch(DIFF_JS, /Math\.max\(maxLeft\/ratio,maxRight\/\(1-ratio\)\)/);
   assert.match(
     DIFF_CSS,
-    /body:not\(\.ds-line-wrap\) \[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden\}/,
+    /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden\}/,
   );
-  assert.match(DIFF_CSS, /\.ds-diff\.ds-nowrap-split\{width:var\(--ds-nowrap-split-width\)\}/);
-  assert.match(DIFF_CSS, /\.ds-filepanel-body\.ds-nowrap-split\{width:var\(--ds-nowrap-split-width\)\}/);
+  assert.match(DIFF_CSS, /\.ds-split-mode \[data-split-inner\]:not\(\[hidden\]\) \.ds-diffbody\{overflow-x:clip\}/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-split\{[^}]*overflow:hidden/);
+  assert.match(DIFF_CSS, /\.ds-diff\.ds-split-mode\{width:100%;min-width:0;max-width:100%\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel\.ds-split-mode \.ds-filepanel-body\{width:100%;min-width:0\}/);
+  assert.match(DIFF_CSS, /\.ds-split-scrollbars\{[^}]*display:flex/);
+  assert.match(DIFF_CSS, /\.ds-pane-scroll-left\{flex-grow:var\(--ds-split,50\)/);
+  assert.match(DIFF_CSS, /\.ds-pane-scroll-right\{flex-grow:calc\(100 - var\(--ds-split,50\)\)/);
+  assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*left:-12px;right:-12px/);
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {

@@ -584,7 +584,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-filepanel[hidden]{display:none}
 .ds-filepanel-head{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
 .ds-filepanel-body{position:relative;flex:1;width:max-content;min-width:100%;padding-bottom:40px}
-.ds-filepanel-body.ds-nowrap-split{width:var(--ds-nowrap-split-width)}
+.ds-filepanel.ds-split-mode .ds-filepanel-body{width:100%;min-width:0}
 .ds-cardpath{font-family:var(--mono);font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-cardpath .ds-dim{color:var(--dim)}
 .ds-cardpath-base{color:var(--text);font-weight:600}
@@ -718,7 +718,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
    scroll container — the toolbar and file heads inside it stay sticky against
    .ds-diffscroll. Browsers without clip keep hidden and just lose the sticking. */
 .ds-diff{position:relative;width:max-content;min-width:100%;max-width:none;border:1px solid var(--diff-rule);border-radius:6px;overflow:hidden;overflow:clip;background:var(--panel3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.025)}
-.ds-diff.ds-nowrap-split{width:var(--ds-nowrap-split-width)}
+.ds-diff.ds-split-mode{width:100%;min-width:0;max-width:100%}
 /* In a story step the card runs full-bleed to the island's edges, so it draws no
    frame of its own — the island is the single border, the sticky toolbar and file
    head are the headers at the top of the code, and the island clips the corners.
@@ -817,7 +817,8 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-urow.is-voice-focus{position:relative;box-shadow:none;background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
-body:not(.ds-line-wrap) [data-split-inner]:not([hidden]) .ds-cell{overflow:hidden}
+[data-split-inner]:not([hidden]) .ds-cell{overflow:hidden}
+.ds-split-mode [data-split-inner]:not([hidden]) .ds-diffbody{overflow-x:clip}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:rgba(18,150,111,0.14);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-cell-del{background:rgba(224,68,94,0.14);box-shadow:inset 3px 0 0 var(--del-rail)}
@@ -828,7 +829,7 @@ body:not(.ds-line-wrap) [data-split-inner]:not([hidden]) .ds-cell{overflow:hidde
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}
-.ds-celldiv::after{content:'';position:absolute;top:0;bottom:0;left:-5px;right:-5px;z-index:2}
+.ds-celldiv::after{content:'';position:absolute;top:0;bottom:0;left:-12px;right:-12px;z-index:2}
 .ds-celldiv:hover{background:var(--add-rail)}
 .ds-celldiv[role="separator"]:focus-visible{outline:none;box-shadow:var(--shadow-focus);background:var(--accent-blue);z-index:4}
 body.ds-resizing{cursor:col-resize}
@@ -842,6 +843,19 @@ body.ds-selecting-left .ds-code[data-comment-side="right"]{-webkit-user-select:n
 .ds-sign-add{color:var(--diff-add-text)}
 .ds-sign-del{color:var(--diff-del-text)}
 .ds-code{flex:1;min-width:0;padding:3px 14px 3px 7px;color:var(--text);white-space:pre;overflow-wrap:normal}
+body:not(.ds-line-wrap) .ds-split-mode [data-split-inner]:not([hidden]) .ds-cell-l .ds-code{transform:translateX(calc(0px - var(--ds-left-scroll,0px)))}
+body:not(.ds-line-wrap) .ds-split-mode [data-split-inner]:not([hidden]) .ds-cell-r .ds-code{transform:translateX(calc(0px - var(--ds-right-scroll,0px)))}
+.ds-split-mode [data-split-inner]:not([hidden]) .ds-no,.ds-split-mode [data-split-inner]:not([hidden]) .ds-sign{position:relative;z-index:1}
+.ds-split-mode [data-split-inner]:not([hidden]) .ds-sign{background:inherit}
+.ds-split-scrollbars{position:sticky;bottom:0;z-index:7;display:flex;align-items:stretch;width:100%;height:13px;border-top:1px solid var(--diff-rule);background:var(--panel2)}
+.ds-split-scrollbars[hidden]{display:none}
+.ds-pane-scroll{height:13px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
+.ds-pane-scroll-left{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
+.ds-pane-scroll-right{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
+.ds-pane-scroll.is-idle{overflow-x:hidden}
+.ds-pane-scroll:focus-visible{outline:2px solid var(--accent-blue);outline-offset:-2px}
+.ds-pane-scroll-track{height:1px;pointer-events:none}
+.ds-split-scroll-divider{width:1px;flex:none;background:var(--diff-rule)}
 body.ds-line-wrap .ds-filedetail{overflow-x:hidden}
 body.ds-line-wrap .ds-filepanel-body{width:100%;min-width:0}
 body.ds-line-wrap .ds-diffscroll{overflow-x:hidden}
@@ -896,7 +910,7 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-fileitem.is-viewed .ds-fileitem-viewed,.ds-fileitem.is-reviewed .ds-fileitem-viewed{opacity:1;transform:scale(1)}
 .ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat,.ds-fileitem.is-reviewed .ds-fileitem-path,.ds-fileitem.is-reviewed .ds-fileitem-stat{opacity:.55}
 .ds-hunkgap.is-expandable:not(.ds-hunkgap-split){display:flex;align-items:center;justify-content:center;gap:10px}
-.ds-hunkgap-split{display:flex;align-items:center;justify-content:stretch;gap:0;padding-left:0;padding-right:0}
+.ds-hunkgap-split{display:flex;align-items:center;justify-content:stretch;gap:0;padding-left:0;padding-right:0;overflow:hidden}
 .ds-gap-side{min-width:0;display:flex;align-items:center;gap:10px}
 .ds-gap-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0;justify-content:flex-end}
 .ds-gap-side-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0;justify-content:flex-start}
