@@ -245,7 +245,7 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
               }}
               className={cn(
                 "relative flex h-auto w-full items-center justify-center rounded-[var(--radius-island)] border border-transparent bg-surface-2 text-text-3",
-                "transition-colors duration-[var(--motion-duration-fast)] hover:bg-del-soft hover:text-del disabled:opacity-55",
+                "transition-colors duration-[var(--motion-duration-fast)] hover:bg-del-soft hover:text-danger-text disabled:opacity-55",
                 "contrast-more:border-text",
                 // Compact layout: the control overlays the card's reserved right
                 // gutter, with a -5px inset hit-slop so it stays thumb-sized.
@@ -271,9 +271,8 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
           Open repository
         </ContextMenuItem>
         <ContextMenuItem
-          tone="destructive"
           disabled={busy}
-          className={cn(MENU_ITEM, "text-del focus:bg-del-soft")}
+          className={cn(MENU_ITEM, "text-danger-text focus:bg-del-soft")}
           onSelect={() => onRemove(row.path)}
         >
           Remove from recent repositories

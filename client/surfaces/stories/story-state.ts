@@ -100,20 +100,16 @@ export const GREEN_INK = "text-add light:text-diff-add-text";
 /**
  * `--story-red-ink`: the `−N` deletions fact and the `bad` badge.
  *
- * The mirror of GREEN_INK, and it was missing. Every tone in BADGE_CLASS below
- * carries a `light:` override because the light theme's rail hues (`--add`,
- * `--del`) are tuned for bars and fills, not for 11 px numerals — `src/theme.ts`
- * ships `--diff-add-text` / `--diff-del-text` as the AA-safe ink for exactly
- * that. Additions had the override and deletions did not, so `−N` and the `bad`
- * badge sat at 4.28:1 in light while `+N` beside them sat at 5.47:1. In dark
- * both tokens alias the rail hue, so this is a no-op there.
+ * Rail hues are tuned for bars and fills, not for 11 px text. The semantic
+ * danger ink resolves to the dark rail hue and the AA-safe light ink, so every
+ * destructive label gets the right value without a component-level variant.
  */
-export const RED_INK = "text-del light:text-diff-del-text";
+export const RED_INK = "text-danger-text";
 
 export const BADGE_CLASS: Record<StoryTone, string> = {
   bad: `${RED_INK} bg-del-soft`,
-  saved: "text-text-2 bg-fill-2",
+  saved: "text-neutral-status-text bg-fill-2",
   feedback: `${BLUE_INK} bg-accent-soft`,
-  warn: "text-amber light:text-[#875200] bg-amber-soft",
+  warn: "text-amber-text bg-amber-soft",
   ready: "text-add light:text-diff-add-text bg-add-soft",
 };

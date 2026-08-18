@@ -4,7 +4,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { addRecent, forgetRecent, loadRecents, recordRecent, removeRecent } from '../dist/recents.js';
+import {
+  addRecent,
+  forgetRecent,
+  loadRecents,
+  recordRecent,
+  removeRecent,
+  restoreRecent,
+  restoreRecentAt,
+} from '../dist/recents.js';
 
 test('addRecent moves an existing path to the front and dedupes', () => {
   const list = [
@@ -62,6 +70,26 @@ test('removeRecent drops only the matching path', () => {
   assert.deepEqual(removeRecent(list, '/missing'), list);
 });
 
+test('restoreRecentAt returns a removed entry to its former position without duplicates', () => {
+  const restored = { path: '/b', name: 'b', lastOpened: 2 };
+  assert.deepEqual(
+    restoreRecentAt(
+      [
+        { path: '/a', lastOpened: 3 },
+        { path: '/c', lastOpened: 1 },
+        { path: '/b', lastOpened: 99 },
+      ],
+      restored,
+      1,
+    ),
+    [
+      { path: '/a', lastOpened: 3 },
+      restored,
+      { path: '/c', lastOpened: 1 },
+    ],
+  );
+});
+
 test('recordRecent round-trips through a temp home', () => {
   const home = mkdtempSync(join(tmpdir(), 'ds-rec-'));
   try {
@@ -85,6 +113,25 @@ test('forgetRecent persists a removed repository', () => {
 
     assert.deepEqual(next, [{ path: '/y', lastOpened: 6 }]);
     assert.deepEqual(loadRecents(home), [{ path: '/y', lastOpened: 6 }]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('restoreRecent persists the original entry and position', () => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-rec-'));
+  try {
+    recordRecent(home, '/x', 5);
+    recordRecent(home, '/y', 6);
+    forgetRecent(home, '/y');
+
+    const next = restoreRecent(home, { path: '/y', name: 'y', lastOpened: 6 }, 0);
+
+    assert.deepEqual(next, [
+      { path: '/y', name: 'y', lastOpened: 6 },
+      { path: '/x', lastOpened: 5 },
+    ]);
+    assert.deepEqual(loadRecents(home), next);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

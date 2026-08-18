@@ -28,6 +28,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { ThemeMenu } from "../../shared/theme-menu";
+import { SkipLink } from "../../shared/nav";
 import type { ReviewPayload } from "../../../src/payloads";
 import { startReviewEngine } from "./engine/review-engine";
 import { FilesView, ReviewPage } from "./ReviewView";
@@ -382,6 +383,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
 
   return (
     <>
+      <SkipLink />
       <header
         className={`ds-reviewchrome${storyless ? "" : " is-storyful"}`}
         data-review-chrome
@@ -564,7 +566,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
 
       <div className="ds-layout">
         <Sidebar payload={payload} />
-        <main className="ds-main">
+        <main id="main-content" tabIndex={-1} className="ds-main">
           <StoryView payload={payload} />
           <FilesView payload={payload} />
           <ReviewPage payload={payload} />

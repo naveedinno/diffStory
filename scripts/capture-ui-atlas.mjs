@@ -28,6 +28,7 @@ const definitions = [
   ['pages','Repository picker','Recent local workspaces and the app front door.','picker-recent','dark','desktop','/repos'],
   ['pages','Repository picker — tablet','Recent workspaces at the tablet width.','picker-recent-tablet','dark','tablet','/repos','picker-recent'],
   ['pages','Repository picker — mobile','Recent workspaces with the icon-only add button and overlaid remove control.','picker-recent-mobile','dark','mobile','/repos','picker-recent'],
+  ['pages','Repository removal — undo','A removed workspace stays recoverable in the same visible status surface.','picker-remove-undo','dark','desktop','/repos'],
   ['pages','Repository picker — light','Recent workspaces in the light palette.','picker-recent-light','light','desktop','/repos','picker-recent'],
   ['pages','Repository picker — empty','The no-repositories-yet state before anything has been opened.','picker-empty','dark','desktop','/repos','picker-empty'],
   ['pages','Repository picker — empty, mobile','The no-repositories-yet state on a phone viewport.','picker-empty-mobile','dark','mobile','/repos','picker-empty'],
@@ -103,6 +104,7 @@ const evidence = {
   // Attribute, not a class: under Tailwind the class list is styling and churns,
   // so the React surfaces expose deliberate `data-*` hooks for this script.
   'picker-recent':'[data-repo-card]',
+  'picker-remove-undo':'[data-picker-status] button',
   'picker-empty':'[data-recents-empty]',
   'picker-modal':'.ds-scrim.is-shown .ds-sheet',
   'history-populated':'#storyList .story-row',
@@ -358,6 +360,12 @@ async function assertStoryInteractionReplay(browser,origin){
   });
   try{
     await page.goto(origin+route,{waitUntil:'domcontentloaded'});await settled(page);
+    await page.keyboard.press('Tab');
+    const firstFocus=await page.evaluate(()=>({text:document.activeElement?.textContent?.trim(),href:document.activeElement?.getAttribute?.('href')}));
+    if(firstFocus.text!=='Skip to content'||firstFocus.href!=='#main-content')throw new Error(`Skip link was not first in the review tab order: ${JSON.stringify(firstFocus)}`);
+    await page.keyboard.press('Enter');
+    const skipTarget=await page.evaluate(()=>({id:document.activeElement?.id,hash:location.hash}));
+    if(skipTarget.id!=='main-content'||skipTarget.hash!=='#main-content')throw new Error(`Skip link did not focus the main landmark: ${JSON.stringify(skipTarget)}`);
     await gotoStoryStep(page,1);await waitForStoryStep(page,1,'logic-move');
     const logicDock=await sceneDockRect(page);
 
@@ -433,6 +441,10 @@ async function main(){
       await page.goto(origin+runtimeRoute,{waitUntil:'domcontentloaded'});await settled(page);
       if(def.surface==='picker-recent'){
         await openFixtureRepo(page,origin,'/repos');
+      }else if(def.surface==='picker-remove-undo'){
+        await openFixtureRepo(page,origin,'/repos');
+        await click(page,'button[aria-label^="Remove "]');
+        await page.waitForFunction(()=>document.querySelector('[data-picker-status] button')?.textContent?.trim()==='Undo');
       }else if(def.surface==='picker-empty'){
         await forgetAllRecents(page);await page.goto(origin+'/repos');await settled(page);
       }else if(def.surface==='picker-modal'){

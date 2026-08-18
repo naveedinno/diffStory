@@ -278,7 +278,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
             "rounded-full border border-transparent bg-transparent text-text-3",
             "after:absolute after:-inset-1 after:content-['']",
             "transition-[border-color,background-color,color] duration-[var(--motion-duration-fast)] ease-out",
-            "hover:border-[color-mix(in_srgb,var(--del)_24%,transparent)] hover:bg-del-soft hover:text-del",
+            "hover:border-[color-mix(in_srgb,var(--del)_24%,transparent)] hover:bg-del-soft hover:text-danger-text",
             "disabled:opacity-55",
             "contrast-more:border-text",
             "motion-reduce:transition-none",

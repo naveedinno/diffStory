@@ -22,6 +22,13 @@ export function addRecent(list, path, now, cap = DEFAULT_CAP, snapshot) {
 export function removeRecent(list, path) {
     return list.filter((e) => e.path !== path);
 }
+/** Pure: restore an exact entry near its former position, without duplicating it. */
+export function restoreRecentAt(list, entry, index, cap = DEFAULT_CAP) {
+    const next = removeRecent(list, entry.path);
+    const target = Math.max(0, Math.min(Number.isInteger(index) ? index : 0, next.length));
+    next.splice(target, 0, entry);
+    return next.slice(0, cap);
+}
 /** Read the recents list; tolerate a missing or corrupt file by returning []. */
 export function loadRecents(home) {
     const file = recentsFile(home);
@@ -50,6 +57,12 @@ export function recordRecent(home, path, now, snapshot) {
 /** Load, remove `path`, persist, and return the new list. */
 export function forgetRecent(home, path) {
     const next = removeRecent(loadRecents(home), path);
+    saveRecents(home, next);
+    return next;
+}
+/** Restore a removed entry at its former position and persist the result. */
+export function restoreRecent(home, entry, index) {
+    const next = restoreRecentAt(loadRecents(home), entry, index);
     saveRecents(home, next);
     return next;
 }

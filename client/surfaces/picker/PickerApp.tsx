@@ -10,14 +10,12 @@
 // introduce one: opening a repository is `location.href = <server-chosen route>`,
 // which is what makes Back and Forward behave.
 //
-// Feedback is a screen-reader-only `role="status"` paragraph, matching the
-// vanilla picker. Sighted users get no visible confirmation for "Opening…" or
-// "Removed from recent repositories" — that is the current behaviour, and
-// changing it here would quietly change one third of the app's three unrelated
-// notification mechanisms.
+// Feedback stays mounted as one polite live region, but is also visible. That
+// gives every user the same progress and error state, and lets a removed recent
+// repository be restored without reopening the folder browser.
 
 import { useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { CircleAlert, CheckCircle2, LoaderCircle, Plus, RotateCcw, X } from "lucide-react";
 import type { PickerPayload, RecentRow } from "../../../src/payloads";
 import { Button } from "../../vendor/beui/motion/button/base";
 import { Tooltip } from "../../vendor/beui/motion/tooltip";
@@ -33,7 +31,87 @@ interface OpenResponse {
   route?: string;
 }
 
-type Status = { text: string; tone: "neutral" | "error" } | null;
+interface RecentUndo {
+  entry: RecentRow;
+  index: number;
+}
+
+interface RecentResponse {
+  recents?: RecentRow[];
+  undo?: RecentUndo | null;
+}
+
+type Status = {
+  text: string;
+  tone: "progress" | "success" | "error";
+  undo?: { payload: RecentUndo; name: string; actionLabel?: string };
+} | null;
+
+function StatusToast({
+  status,
+  onDismiss,
+  onUndo,
+}: {
+  status: Status;
+  onDismiss: () => void;
+  onUndo: () => void;
+}) {
+  const Icon = status?.tone === "error" ? CircleAlert : status?.tone === "progress" ? LoaderCircle : CheckCircle2;
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-4 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[70] flex justify-center"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {status ? (
+        <div
+          data-picker-status
+          className="pointer-events-auto flex w-fit max-w-[min(560px,100%)] items-center gap-3 rounded-[var(--radius-lg)] border border-line bg-surface-3 px-3 py-2.5 text-[13px] leading-[1.45] text-text shadow-signal contrast-more:border-text"
+        >
+          <Icon
+            className={cn(
+              "h-4 w-4 flex-none",
+              status.tone === "error"
+                ? "text-danger-text"
+                : status.tone === "success"
+                  ? "text-diff-add-text"
+                  : "text-accent-text",
+              status.tone === "progress" && "animate-spin motion-reduce:animate-none",
+            )}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 flex-1 text-pretty">{status.text}</span>
+          {status.undo ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              pressScale={0.96}
+              onClick={onUndo}
+              className="h-9 flex-none gap-1.5 rounded-full bg-fill-2 px-3 text-[12.5px] font-semibold text-text hover:bg-fill-3"
+            >
+              <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              {status.undo.actionLabel ?? "Undo"}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            pressScale={0.96}
+            onClick={onDismiss}
+            aria-label="Dismiss message"
+            className="h-9 w-9 flex-none rounded-full text-text-2 hover:bg-fill-2 hover:text-text"
+          >
+            <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function PickerApp({ payload }: { payload: PickerPayload }) {
   const [recents, setRecents] = useState<RecentRow[]>(payload.recents);
@@ -44,7 +122,7 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
 
   const openRepo = (path: string) => {
     if (!path) return;
-    setStatus({ text: "Opening…", tone: "neutral" });
+    setStatus({ text: "Opening repository…", tone: "progress" });
     requestJson<OpenResponse>("/api/repo/open", {
       method: "POST",
       body: { path },
@@ -64,23 +142,54 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
   };
 
   const removeRepo = (path: string) => {
+    const row = recents.find((recent) => recent.path === path);
     setRemoving(path);
-    requestJson("/api/repos/recent", {
+    requestJson<RecentResponse>("/api/repos/recent", {
       method: "DELETE",
       body: { path },
       fallback: "Could not remove repository.",
     })
-      .then(() => {
+      .then((data) => {
         // Dropping the row from state is what re-numbers the list, recounts the
         // unavailable group, collapses it when it empties, and swaps in the
         // empty state — all of which `syncRecentUi()` did by hand.
-        setRecents((rows) => rows.filter((row) => row.path !== path));
+        setRecents(data.recents ?? recents.filter((recent) => recent.path !== path));
         setRemoving(null);
-        setStatus({ text: "Removed from recent repositories.", tone: "neutral" });
+        setStatus({
+          text: `Removed ${row?.name ?? "repository"} from recent repositories.`,
+          tone: "success",
+          ...(data.undo
+            ? { undo: { payload: data.undo, name: row?.name ?? data.undo.entry.name } }
+            : {}),
+        });
       })
       .catch((cause: unknown) => {
         setRemoving(null);
         setStatus({ text: failureMessage(cause, "Could not remove repository."), tone: "error" });
+      });
+  };
+
+  const restoreRepo = () => {
+    const undo = status?.undo;
+    if (!undo) return;
+    setRemoving(undo.payload.entry.path);
+    requestJson<RecentResponse>("/api/repos/recent/restore", {
+      method: "POST",
+      body: { undo: undo.payload },
+      fallback: "Could not restore repository.",
+    })
+      .then((data) => {
+        if (data.recents) setRecents(data.recents);
+        setRemoving(null);
+        setStatus({ text: `Restored ${undo.name} to recent repositories.`, tone: "success" });
+      })
+      .catch(() => {
+        setRemoving(null);
+        setStatus({
+          text: `Could not restore ${undo.name}. Try again.`,
+          tone: "error",
+          undo: { ...undo, actionLabel: "Try again" },
+        });
       });
   };
 
@@ -109,7 +218,7 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
                 aria-label="Add repository"
                 pressScale={0.97}
                 onClick={(event) => browser.current?.open(event.currentTarget as HTMLElement)}
-                className="h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-3.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-hi max-[760px]:w-[var(--control-h)] max-[760px]:px-0"
+                className="h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-3.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-solid-hover max-[760px]:w-[var(--control-h)] max-[760px]:px-0"
               >
                 <Plus className="h-[15px] w-[15px]" strokeWidth={2} />
                 <span className="max-[760px]:hidden">Add repository</span>
@@ -127,14 +236,11 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
           />
 
           <SkillBanner />
-
-          <p className={cn("ds-sr-only", status?.tone === "error" && "text-del")} role="status">
-            {status?.text ?? ""}
-          </p>
         </section>
       </main>
 
       <FolderBrowser ref={browser} background={main} onOpenRepo={openRepo} />
+      <StatusToast status={status} onDismiss={() => setStatus(null)} onUndo={restoreRepo} />
     </>
   );
 }

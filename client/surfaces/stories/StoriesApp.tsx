@@ -111,7 +111,11 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
           }
         />
 
-        <main className="ds-reveal relative isolate mx-auto w-[min(960px,100%)] px-6 pt-7 pb-16 max-[760px]:px-4 max-[760px]:pt-[22px]">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="ds-reveal relative isolate mx-auto w-[min(960px,100%)] px-6 pt-7 pb-16 max-[760px]:px-4 max-[760px]:pt-[22px]"
+        >
           <header className="mb-[22px] flex items-end justify-between gap-7 border-b border-line-soft pb-[22px] max-[760px]:items-start max-[560px]:block">
             <div className="min-w-0">
               <p className="m-0 mb-1.5 font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase">
@@ -132,7 +136,7 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                   pressScale={0.97}
                   className={cn(
                     "h-[var(--control-h-lg)] rounded-full bg-accent px-4",
-                    "text-[13.5px] font-semibold text-on-accent no-underline hover:bg-accent-hi",
+                    "text-[13.5px] font-semibold text-on-accent no-underline hover:bg-accent-solid-hover",
                     "transition-colors duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none",
                   )}
                 >

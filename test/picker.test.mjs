@@ -208,7 +208,7 @@ test('a hostile repository name cannot break out of the payload script element',
   );
 });
 
-test('removing a recent answers with a fresh payload-shaped list', async () => {
+test('removing a recent returns a restorable snapshot and restoring rebuilds the list', async () => {
   await withPicker(
     [
       { path: '/one', name: 'one', lastOpened: 2, isGit: false, hasTour: false, currentBranch: null, changedFiles: 0 },
@@ -224,10 +224,27 @@ test('removing a recent answers with a fresh payload-shaped list', async () => {
       const body = await response.json();
       assert.equal(body.ok, true);
       assert.equal(body.removed, true);
+      assert.deepEqual(body.undo, {
+        entry: { path: '/one', name: 'one', lastOpened: 2, isGit: false, hasTour: false, currentBranch: null, changedFiles: 0 },
+        index: 0,
+      });
       assert.deepEqual(
         body.recents.map((row) => row.path),
         ['/two'],
         'the DELETE response is the same RecentRow projection the payload uses',
+      );
+
+      const restoreResponse = await fetch(`${base}/api/repos/recent/restore`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ undo: body.undo }),
+      });
+      assert.equal(restoreResponse.status, 200);
+      const restored = await restoreResponse.json();
+      assert.deepEqual(
+        restored.recents.map((row) => row.path),
+        ['/one', '/two'],
+        'undo returns the repository to its original position',
       );
     },
   );
@@ -388,13 +405,14 @@ test('every live-region carrier this surface adopts is quieted at the wrapper', 
   );
   assert.match(recentRepos, /import \{ useQuietSubtree \} from "\.\.\/\.\.\/shared\/quiet";/);
   assert.match(recentRepos, /useQuietSubtree\(root\);/);
-  // And the picker's own status paragraph is deliberately NOT inside either
+  // And the picker's own stable status region is deliberately NOT inside either
   // quieted subtree — it is the one thing on this surface that must announce.
-  assert.match(pickerApp, /className=\{cn\("ds-sr-only".*\)\}\s*role="status"/s);
+  assert.match(pickerApp, /role="status"\s+aria-live="polite"\s+aria-atomic="true"/);
+  assert.match(pickerApp, /data-picker-status/);
   assert.ok(!/useQuietSubtree/.test(pickerApp), 'PickerApp owns the announcer, so it quiets nothing');
 });
 
-test('the picker keeps its status wording, its ordering, and its sr-only feedback', () => {
+test('the picker keeps its status wording, ordering, and recoverable visible feedback', () => {
   // Repository selection comes before optional setup recovery.
   assert.ok(
     pickerApp.indexOf('<RecentRepos') < pickerApp.indexOf('<SkillBanner'),
@@ -424,10 +442,13 @@ test('the picker keeps its status wording, its ordering, and its sr-only feedbac
     !/vendor\/beui\/motion\/text-shimmer/.test(skillBanner),
     'the component would put its <style> back inside the region — the primitives are adopted instead',
   );
-  // Feedback is screen-reader-only, and it stays that way.
-  assert.match(pickerApp, /className=\{cn\("ds-sr-only".*\)\}\s*role="status"/s);
-  assert.match(pickerApp, /Removed from recent repositories\./);
-  assert.match(pickerApp, /Opening…/);
+  // Feedback is visible and announced from one stable carrier. Removal remains
+  // recoverable until the user dismisses or completes the undo.
+  assert.match(pickerApp, /data-picker-status/);
+  assert.match(pickerApp, /Removed \$\{row\?\.name \?\? "repository"\} from recent repositories\./);
+  assert.match(pickerApp, /Restored \$\{undo\.name\} to recent repositories\./);
+  assert.match(pickerApp, /actionLabel \?\? "Undo"/);
+  assert.match(pickerApp, /Opening repository…/);
   assert.match(pickerApp, /Could not open that path\./);
   assert.match(pickerApp, /Could not reach the server\./);
   // The open-route fallback when the server declines to name one.
@@ -562,7 +583,7 @@ test('the built bundle actually ships the picker behaviour', (t) => {
   }
   const js = readFileSync(bundle, 'utf8');
   // Endpoints. If one of these disappears the surface is silently inert.
-  for (const endpoint of ['/api/fs', '/api/repo/open', '/api/repos/recent', '/api/agents', '/api/skills/update']) {
+  for (const endpoint of ['/api/fs', '/api/repo/open', '/api/repos/recent', '/api/repos/recent/restore', '/api/agents', '/api/skills/update']) {
     assert.ok(js.includes(endpoint), `bundle should call ${endpoint}`);
   }
   // User-facing strings, including every branch a user only sees when something
@@ -577,7 +598,9 @@ test('the built bundle actually ships the picker behaviour', (t) => {
     'Open this folder',
     'Not a git repo',
     'No repositories yet',
-    'Removed from recent repositories.',
+    'from recent repositories.',
+    'Undo',
+    'Try again',
     'Could not open that path.',
     'Could not reach the server.',
     'review-tour was renamed to diffstory-storyteller',

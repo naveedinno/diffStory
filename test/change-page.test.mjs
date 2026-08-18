@@ -63,6 +63,13 @@ const format = read('surfaces/change/format.ts');
 const nav = read('shared/nav.tsx');
 const changeSource = [changeApp, scopeCard, refPicker, refs, fileSummary, format].join('\n');
 
+test('persistent navigation offers a first-focus skip link to the main landmark', () => {
+  assert.match(nav, /href=\{`#\$\{targetId\}`\}/);
+  assert.match(nav, />\s*Skip to content\s*<\/a>/);
+  assert.match(nav, /<SkipLink \/>/);
+  assert.match(changeApp, /<main\s+id="main-content"\s+tabIndex=\{-1\}/);
+});
+
 const PAYLOAD_BLOCK = /<script type="application\/json" id="__DIFFSTORY_DATA__">([\s\S]*?)<\/script>/;
 
 /**
@@ -464,6 +471,11 @@ test('selection comes from the URL and disclosure does not', () => {
   assert.match(scopeCard, /segmentClass\(active === "compare", openPanel === "compare"\)/);
   assert.match(scopeCard, /function segmentClass\(selected: boolean, open: boolean\)/);
   assert.match(scopeCard, /selected\s*\?\s*"border-accent-line bg-accent-soft/, 'selected wins over open');
+  assert.equal(
+    (scopeCard.match(/text-\[11\.5px\] leading-\[1\.3\] max-\[600px\]:hidden/g) ?? []).length,
+    3,
+    'scope descriptions inherit the segment state color instead of pinning muted ink over the selected tint',
+  );
   assert.match(scopeCard, /aria-current=\{active === "uncommitted" \? "true" : undefined\}/);
   // Only the disclosure buttons open panels; the uncommitted segment is a link.
   assert.match(scopeCard, /href=\{`\$\{routeBase\}\/change\?scope=uncommitted`\}/);

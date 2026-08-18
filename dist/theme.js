@@ -131,23 +131,24 @@ export function sharedTokens() {
 :root{color-scheme:dark;
   /* surfaces */
   --bg:#0a0c0f;--surface:#14171c;--surface-2:#181b20;--surface-3:#1e232b;
-  /* text — --text-3 is lifted from the 3b mockup's #5c6675 to keep WCAG AA 4.5:1
-     on elevated surfaces (the owner asked to keep AA); don't "sync" it back down. */
-  --text:#eef1f5;--text-2:#98a2b3;--text-3:#8792a2;
+  /* text — dark secondary body and muted labels clear the APCA Lc 75 / 60
+     targets on elevated surfaces without collapsing the three-step hierarchy. */
+  --text:#eef1f5;--text-2:#ccd1d9;--text-3:#b1b9c6;
   /* lines + fills (cool alpha neutrals) */
   --line:rgba(190,205,225,.11);--line-soft:rgba(190,205,225,.065);
   --fill-1:rgba(190,205,225,.07);--fill-2:rgba(190,205,225,.12);--fill-3:rgba(190,205,225,.18);
   /* signal accent */
-  --accent:#3fb2ff;--accent-hi:#7adfff;--on-accent:#06121c;--accent-soft:rgba(63,178,255,.12);--accent-line:rgba(63,178,255,.3);
-  --accent-text:var(--accent);
+  --accent:#49b7ff;--accent-hi:#7adfff;--accent-solid-hover:#7adfff;--on-accent:#06121c;--accent-soft:rgba(73,183,255,.12);--accent-line:rgba(73,183,255,.3);
+  --accent-text:#62c2ff;
   /* semantic: evidence + state */
-  --add:#3ddc97;--diff-add-text:var(--add);--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--diff-del-text:var(--del);--del-soft:rgba(255,107,98,.12);
-  --amber:#ffb224;--amber-soft:rgba(255,178,36,.14);--on-amber:#241600;
+  --add:#3ddc97;--diff-add-text:var(--add);--add-soft:rgba(61,220,151,.12);--del:#ff6b62;--diff-del-text:#ffa39d;--danger-text:var(--diff-del-text);--del-soft:rgba(255,107,98,.12);
+  --amber:#ffb224;--amber-text:var(--amber);--amber-soft:rgba(255,178,36,.14);--on-amber:#241600;
+  --neutral-status-text:#b8c0cc;
   /* thread + numerals */
-  --numeral:var(--accent);--numeral-dim:#3a4250;--thread:var(--accent);--thread-dim:rgba(63,178,255,.28);
-  --map-dot:rgba(190,205,225,.09);--accent-glow:rgba(63,178,255,.18);
+  --numeral:var(--accent-text);--numeral-dim:#3a4250;--thread:var(--accent);--thread-dim:rgba(73,183,255,.28);
+  --map-dot:rgba(190,205,225,.09);--accent-glow:rgba(73,183,255,.18);
   /* diff surfaces */
-  --gutter:#12151a;--add-bg:rgba(61,220,151,.09);--del-bg:rgba(255,107,98,.09);
+  --gutter:#12151a;--add-bg:rgba(61,220,151,.09);--del-bg:rgba(255,107,98,.09);--add-emphasis-bg:rgba(18,150,111,.38);--del-emphasis-bg:rgba(224,68,94,.36);
   /* syntax (cool dark) */
   --tk-k:#c79bff;--tk-t:#6fd2c2;--tk-f:#8fb4ff;--tk-s:#b7d59b;--tk-n:#e8a87c;--tk-c:#8a929e;
   /* misc */
@@ -170,10 +171,10 @@ export function sharedTokens() {
   --app-blue:var(--accent);--app-blue2:var(--accent-hi);--app-add:var(--add);--app-del:var(--del);--app-addbar:var(--add);--app-delbar:var(--del)}
 :root[data-theme="light"]{color-scheme:light;
   --bg:#edf0f4;--surface:#ffffff;--surface-2:#eef1f5;--surface-3:#e5eaf1;
-  --text:#14171c;--text-2:#5c6675;--text-3:#5f6976;
+  --text:#14171c;--text-2:#4f5967;--text-3:#5f6976;
   --line:rgba(20,30,45,.12);--line-soft:rgba(20,30,45,.065);
   --fill-1:rgba(20,30,45,.045);--fill-2:rgba(20,30,45,.075);--fill-3:rgba(20,30,45,.12);
-  --accent:#0072d6;--accent-hi:#0086f0;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
+  --accent:#0072d6;--accent-hi:#0086f0;--accent-solid-hover:#0067c2;--on-accent:#ffffff;--accent-soft:rgba(0,114,214,.1);--accent-line:rgba(0,114,214,.3);
   /* Signal blue as a FILL is fine at #0072d6 (white ink on it reads 4.8:1). As
      small INK on --bg it reads 4.20:1 — under AA — and this palette uses blue
      for exactly that: stage kickers, eyebrows, "Resume review", "In review".
@@ -182,8 +183,9 @@ export function sharedTokens() {
   /* Rails and fills keep the Signal semantic hues; the darker ink variants
      give small diff text AA contrast on header, split, and unified tints. */
   --add:#178a52;--diff-add-text:#116f43;--add-soft:rgba(23,138,82,.1);--del:#d2372e;--diff-del-text:#b52f2a;--del-soft:rgba(210,55,46,.09);
-  --amber:#a96800;--amber-soft:rgba(199,124,0,.13);--on-amber:#ffffff;
-  --numeral-dim:#c3ccd9;--thread-dim:rgba(0,114,214,.25);--map-dot:rgba(20,40,70,.13);--accent-glow:rgba(0,114,214,.14);
+  --amber:#a96800;--amber-text:#875200;--amber-soft:rgba(199,124,0,.13);--on-amber:#ffffff;
+  --neutral-status-text:#56606e;
+  --numeral:var(--accent-text);--numeral-dim:#c3ccd9;--thread-dim:rgba(0,114,214,.25);--map-dot:rgba(20,40,70,.13);--accent-glow:rgba(0,114,214,.14);
   --gutter:#edf0f5;--add-bg:rgba(23,138,82,.08);--del-bg:rgba(210,55,46,.07);
   --tk-k:#8628a5;--tk-t:#096882;--tk-f:#1d4ed8;--tk-s:#256f35;--tk-n:#9a460c;--tk-c:#515c69;
   --scrim:rgba(15,22,32,.32);--shadow:0 1px 2px rgba(15,22,32,.12),0 8px 24px rgba(15,22,32,.1);--scroll:rgba(60,70,85,.25)}

@@ -25,7 +25,7 @@ import { runStarted, contextEvent, phaseEvent, heartbeatEvent, warningEvent, err
 import { skillStatus, updateSkills } from "./repo-setup.js";
 import { createSession, openSession, closeSession, sessionEntryScreen, issueReviewPageLease, getReviewPageLease, } from "./session.js";
 import { inspectRepo } from "./repo-state.js";
-import { forgetRecent, recordRecent, loadRecents } from "./recents.js";
+import { forgetRecent, recordRecent, loadRecents, restoreRecent, } from "./recents.js";
 import { recallStorySelection, recordStorySelection, } from "./story-selection.js";
 import { listDirs } from "./fs-browse.js";
 import { deleteStory, diffFingerprint, hasStories, listStories, listStoryMetadata, storyIdForPath, storyPathForId, } from "./stories.js";
@@ -370,11 +370,52 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                 }
                 if (!path)
                     return sendJson(res, 400, { error: "Missing repository path." });
-                const removed = loadRecents(home).some((e) => e.path === path);
+                const before = loadRecents(home);
+                const index = before.findIndex((entry) => entry.path === path);
+                const removedEntry = index >= 0 ? before[index] : undefined;
                 forgetRecent(home, path);
                 return sendJson(res, 200, {
                     ok: true,
-                    removed,
+                    removed: Boolean(removedEntry),
+                    undo: removedEntry ? { entry: removedEntry, index } : null,
+                    recents: recentRowsForPicker(home),
+                });
+            });
+        }
+        if (method === "POST" && url.pathname === "/api/repos/recent/restore") {
+            return readBody(req, res, (body) => {
+                let raw;
+                try {
+                    raw = JSON.parse(body || "{}");
+                }
+                catch {
+                    return sendJson(res, 400, { error: "invalid JSON" });
+                }
+                const candidate = raw.undo?.entry;
+                const path = typeof candidate?.path === "string" ? candidate.path : "";
+                const lastOpened = Number(candidate?.lastOpened);
+                if (!path || !Number.isFinite(lastOpened)) {
+                    return sendJson(res, 400, {
+                        error: "A valid recent repository entry is required.",
+                    });
+                }
+                const entry = { path, lastOpened };
+                if (typeof candidate?.name === "string")
+                    entry.name = candidate.name;
+                if (typeof candidate?.isGit === "boolean")
+                    entry.isGit = candidate.isGit;
+                if (typeof candidate?.hasTour === "boolean")
+                    entry.hasTour = candidate.hasTour;
+                if (candidate?.currentBranch === null ||
+                    typeof candidate?.currentBranch === "string")
+                    entry.currentBranch = candidate.currentBranch;
+                if (typeof candidate?.changedFiles === "number" &&
+                    Number.isFinite(candidate.changedFiles))
+                    entry.changedFiles = candidate.changedFiles;
+                const index = Number(raw.undo?.index);
+                restoreRecent(home, entry, Number.isInteger(index) ? index : 0);
+                return sendJson(res, 200, {
+                    ok: true,
                     recents: recentRowsForPicker(home),
                 });
             });

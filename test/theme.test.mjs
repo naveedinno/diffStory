@@ -20,9 +20,9 @@ function hexVariable(block, name) {
   return match[1].slice(1).match(/.{2}/g).map((part) => Number.parseInt(part, 16));
 }
 
-function rgbaBackground(css, selector) {
-  const match = cssBlock(css, selector).match(/background:rgba\((\d+),(\d+),(\d+),([\d.]+)\)/);
-  assert.ok(match, `missing rgba background for ${selector}`);
+function rgbaVariable(block, name) {
+  const match = block.match(new RegExp(`${name}:rgba\\((\\d+),(\\d+),(\\d+),([\\d.]+)\\)`));
+  assert.ok(match, `missing rgba literal ${name}`);
   return {
     rgb: match.slice(1, 4).map((part) => Number.parseInt(part, 10)),
     alpha: Number.parseFloat(match[4]),
@@ -45,6 +45,23 @@ function contrastRatio(first, second) {
   const a = luminance(first);
   const b = luminance(second);
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+function apcaContrast(foreground, background) {
+  const apcaY = (rgb) =>
+    0.2126729 * (rgb[0] / 255) ** 2.4 +
+    0.7151522 * (rgb[1] / 255) ** 2.4 +
+    0.072175 * (rgb[2] / 255) ** 2.4;
+  const clamp = (value) => (value > 0.022 ? value : value + (0.022 - value) ** 1.414);
+  const text = clamp(apcaY(foreground));
+  const back = clamp(apcaY(background));
+  if (Math.abs(back - text) < 0.0005) return 0;
+  if (back > text) {
+    const sapc = (back ** 0.56 - text ** 0.57) * 1.14;
+    return sapc < 0.1 ? 0 : (sapc - 0.027) * 100;
+  }
+  const sapc = (back ** 0.65 - text ** 0.62) * 1.14;
+  return sapc > -0.1 ? 0 : (sapc + 0.027) * 100;
 }
 
 test('theme control offers persistent System, Light, and Dark choices', () => {
@@ -94,13 +111,15 @@ test('light semantic diff ink stays WCAG AA on header, split, and unified surfac
   const header = hexVariable(light, '--surface-2');
   const addText = hexVariable(light, '--diff-add-text');
   const delText = hexVariable(light, '--diff-del-text');
+  const addBackground = composite(rgbaVariable(light, '--add-bg'), surface);
+  const delBackground = composite(rgbaVariable(light, '--del-bg'), surface);
   const cases = [
     ['add header', addText, header],
     ['delete header', delText, header],
-    ['add split', addText, composite(rgbaBackground(DIFF_CSS, '.ds-cell-add'), surface)],
-    ['delete split', delText, composite(rgbaBackground(DIFF_CSS, '.ds-cell-del'), surface)],
-    ['add unified', addText, composite(rgbaBackground(DIFF_CSS, '.ds-urow.ds-row-add'), surface)],
-    ['delete unified', delText, composite(rgbaBackground(DIFF_CSS, '.ds-urow.ds-row-del'), surface)],
+    ['add split', addText, addBackground],
+    ['delete split', delText, delBackground],
+    ['add unified', addText, addBackground],
+    ['delete unified', delText, delBackground],
   ];
 
   for (const [label, foreground, background] of cases) {
@@ -115,12 +134,14 @@ test('light syntax tokens stay WCAG AA across plain and tinted diff surfaces', (
   const surface = hexVariable(light, '--surface');
   const foregrounds = ['--tk-k', '--tk-t', '--tk-f', '--tk-s', '--tk-n', '--tk-c']
     .map((name) => [name, hexVariable(light, name)]);
+  const addBackground = composite(rgbaVariable(light, '--add-bg'), surface);
+  const delBackground = composite(rgbaVariable(light, '--del-bg'), surface);
   const backgrounds = [
     ['plain', surface],
-    ['split add', composite(rgbaBackground(DIFF_CSS, '.ds-cell-add'), surface)],
-    ['split delete', composite(rgbaBackground(DIFF_CSS, '.ds-cell-del'), surface)],
-    ['unified add', composite(rgbaBackground(DIFF_CSS, '.ds-urow.ds-row-add'), surface)],
-    ['unified delete', composite(rgbaBackground(DIFF_CSS, '.ds-urow.ds-row-del'), surface)],
+    ['split add', addBackground],
+    ['split delete', delBackground],
+    ['unified add', addBackground],
+    ['unified delete', delBackground],
   ];
 
   for (const [token, foreground] of foregrounds) {
@@ -129,6 +150,52 @@ test('light syntax tokens stay WCAG AA across plain and tinted diff surfaces', (
       assert.ok(ratio >= 4.5, `${token} on ${surfaceName} is ${ratio.toFixed(2)}:1, below WCAG AA`);
     }
   }
+});
+
+test('semantic action and status inks stay WCAG AA in the light theme', () => {
+  const tokens = sharedTokens();
+  const light = cssBlock(tokens, ':root[data-theme="light"]');
+  const surface2 = hexVariable(light, '--surface-2');
+  const surface3 = hexVariable(light, '--surface-3');
+  const fill2 = composite(rgbaVariable(light, '--fill-2'), surface2);
+  const amberSoft = composite(rgbaVariable(light, '--amber-soft'), surface2);
+  const cases = [
+    ['solid action hover', hexVariable(light, '--on-accent'), hexVariable(light, '--accent-solid-hover')],
+    ['warning label', hexVariable(light, '--amber-text'), surface2],
+    ['warning badge', hexVariable(light, '--amber-text'), amberSoft],
+    ['danger action', hexVariable(light, '--diff-del-text'), surface3],
+    ['neutral status', hexVariable(light, '--neutral-status-text'), fill2],
+    ['decorative numeral', hexVariable(light, '--accent-text'), surface2],
+  ];
+
+  assert.match(light, /--numeral:var\(--accent-text\)/);
+  for (const [label, foreground, background] of cases) {
+    const ratio = contrastRatio(foreground, background);
+    assert.ok(ratio >= 4.5, `${label} contrast ${ratio.toFixed(2)}:1 is below WCAG AA`);
+  }
+  const bodyLc = Math.abs(apcaContrast(hexVariable(light, '--text-2'), surface2));
+  assert.ok(bodyLc >= 75, `light secondary body contrast Lc ${bodyLc.toFixed(1)} is below 75`);
+});
+
+test('dark secondary text keeps APCA body and label contrast on elevated surfaces', () => {
+  const dark = cssBlock(sharedTokens(), ':root');
+  const surface2 = hexVariable(dark, '--surface-2');
+  const surface3 = hexVariable(dark, '--surface-3');
+  const accentSoft = composite(rgbaVariable(dark, '--accent-soft'), surface2);
+  const neutralStatusBackground = composite(rgbaVariable(dark, '--fill-2'), surface3);
+  const bodyLc = Math.abs(apcaContrast(hexVariable(dark, '--text-2'), surface3));
+  const labelLc = Math.abs(apcaContrast(hexVariable(dark, '--text-3'), surface3));
+  const accentLc = Math.abs(apcaContrast(hexVariable(dark, '--accent-text'), accentSoft));
+  const dangerLc = Math.abs(apcaContrast(hexVariable(dark, '--diff-del-text'), surface3));
+  const neutralStatusLc = Math.abs(apcaContrast(hexVariable(dark, '--neutral-status-text'), neutralStatusBackground));
+  const onAccentLc = Math.abs(apcaContrast(hexVariable(dark, '--on-accent'), hexVariable(dark, '--accent')));
+
+  assert.ok(bodyLc >= 75, `secondary body contrast Lc ${bodyLc.toFixed(1)} is below 75`);
+  assert.ok(labelLc >= 60, `muted label contrast Lc ${labelLc.toFixed(1)} is below 60`);
+  assert.ok(accentLc >= 60, `accent label contrast Lc ${accentLc.toFixed(1)} is below 60`);
+  assert.ok(dangerLc >= 60, `danger label contrast Lc ${dangerLc.toFixed(1)} is below 60`);
+  assert.ok(neutralStatusLc >= 60, `neutral status contrast Lc ${neutralStatusLc.toFixed(1)} is below 60`);
+  assert.ok(onAccentLc >= 60, `on-accent label contrast Lc ${onAccentLc.toFixed(1)} is below 60`);
 });
 
 test('page atmosphere shares one map, thread pulse, compact, and reduced-motion contract', () => {

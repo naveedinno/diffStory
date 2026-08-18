@@ -63,6 +63,10 @@ const emptyHistory = read('surfaces/stories/EmptyHistory.tsx');
 const format = read('surfaces/stories/format.ts');
 const storiesSource = [storiesApp, storyRow, storyState, removeDialog, emptyHistory, format].join('\n');
 
+test('review history gives the shared skip link a focusable main target', () => {
+  assert.match(storiesApp, /<main\s+id="main-content"\s+tabIndex=\{-1\}/);
+});
+
 // Read a vendored beUI file as code. This surface now leans on three
 // properties of the vendored components rather than re-implementing them —
 // Button gating its press on reduced motion, ActionSwapText not animating on
@@ -415,7 +419,7 @@ test('the badge state machine keeps its order and its wording', () => {
   assert.match(storyState, /story\.outsideStoryDrift \? ` · \$\{plural\(story\.outsideStoryDrift, "side file"\)\} also changed` : ""/);
   assert.match(storyState, /Story current · \$\{plural\(story\.outsideStoryDrift, "side file"\)\} changed/);
   // "Saved" is the one tone with no colour of its own — neutral on purpose.
-  assert.match(storyState, /saved: "text-text-2 bg-fill-2"/);
+  assert.match(storyState, /saved: "text-neutral-status-text bg-fill-2"/);
 });
 
 test('unverified evidence is never dressed up as measured evidence', () => {

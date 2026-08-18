@@ -455,7 +455,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
             // unavailable more honestly than a washed-out blue anyway.
             className={cn(
               "h-[var(--control-h-lg)] flex-none rounded-full px-4 text-[13px] font-semibold",
-              "bg-accent text-on-accent hover:bg-accent-hi",
+              "bg-accent text-on-accent hover:bg-accent-solid-hover",
               "disabled:bg-fill-2 disabled:text-text-2 disabled:opacity-100",
             )}
           >

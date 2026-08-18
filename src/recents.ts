@@ -54,6 +54,19 @@ export function removeRecent(list: RecentEntry[], path: string): RecentEntry[] {
   return list.filter((e) => e.path !== path);
 }
 
+/** Pure: restore an exact entry near its former position, without duplicating it. */
+export function restoreRecentAt(
+  list: RecentEntry[],
+  entry: RecentEntry,
+  index: number,
+  cap = DEFAULT_CAP,
+): RecentEntry[] {
+  const next = removeRecent(list, entry.path);
+  const target = Math.max(0, Math.min(Number.isInteger(index) ? index : 0, next.length));
+  next.splice(target, 0, entry);
+  return next.slice(0, cap);
+}
+
 /** Read the recents list; tolerate a missing or corrupt file by returning []. */
 export function loadRecents(home: string): RecentEntry[] {
   const file = recentsFile(home);
@@ -88,6 +101,17 @@ export function recordRecent(
 /** Load, remove `path`, persist, and return the new list. */
 export function forgetRecent(home: string, path: string): RecentEntry[] {
   const next = removeRecent(loadRecents(home), path);
+  saveRecents(home, next);
+  return next;
+}
+
+/** Restore a removed entry at its former position and persist the result. */
+export function restoreRecent(
+  home: string,
+  entry: RecentEntry,
+  index: number,
+): RecentEntry[] {
+  const next = restoreRecentAt(loadRecents(home), entry, index);
   saveRecents(home, next);
   return next;
 }

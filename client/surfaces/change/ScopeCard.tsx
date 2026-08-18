@@ -432,7 +432,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "uncommitted", false)}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Uncommitted</span>
-          <span className="text-[11.5px] leading-[1.3] text-text-2 max-[600px]:hidden">Working tree vs HEAD</span>
+          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Working tree vs HEAD</span>
         </ButtonLink>
         <Button
           type="button"
@@ -445,7 +445,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "commit", openPanel === "commit")}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Single commit</span>
-          <span className="text-[11.5px] leading-[1.3] text-text-2 max-[600px]:hidden">Parent → selected commit</span>
+          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Parent → selected commit</span>
         </Button>
         <Button
           type="button"
@@ -458,7 +458,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "compare", openPanel === "compare")}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Compare any refs</span>
-          <span className="text-[11.5px] leading-[1.3] text-text-2 max-[600px]:hidden">
+          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">
             Source → target, any branch or commit
           </span>
         </Button>

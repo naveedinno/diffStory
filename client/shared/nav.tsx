@@ -45,7 +45,7 @@ export const navActionClass = cn(
 
 export const navPrimaryClass = cn(
   NAV_ACTION_BASE,
-  "text-on-accent bg-accent hover:bg-accent-hi active:scale-[.97] max-[560px]:px-2.5",
+  "text-on-accent bg-accent hover:bg-accent-solid-hover active:scale-[.97] max-[560px]:px-2.5",
 );
 
 export interface NavProps {
@@ -54,6 +54,23 @@ export interface NavProps {
   crumbs?: Crumb[];
   /** Page-specific actions, rendered after the theme control. */
   right?: ReactNode;
+}
+
+/** First-focus escape hatch for pages whose persistent chrome precedes content. */
+export function SkipLink({ targetId = "main-content" }: { targetId?: string }) {
+  return (
+    <a
+      href={`#${targetId}`}
+      className={cn(
+        "fixed start-3 top-3 z-[200] -translate-y-[calc(100%+24px)] rounded-full bg-accent px-4 py-2.5",
+        "text-[13px] font-semibold text-on-accent no-underline",
+        "focus-visible:translate-y-0 focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
+        "contrast-more:border contrast-more:border-text",
+      )}
+    >
+      Skip to content
+    </a>
+  );
 }
 
 export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
@@ -66,6 +83,8 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
         "contrast-more:border-text",
       )}
     >
+      <SkipLink />
+
       <a
         href={home}
         title="Home — your repositories"

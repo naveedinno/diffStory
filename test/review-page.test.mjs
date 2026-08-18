@@ -893,7 +893,13 @@ test("the accessibility contract the old renderer guaranteed is still in the mar
     sidebar,
     /<aside className="ds-rail" aria-label="Review navigation">/,
   );
-  assert.match(reviewApp, /<main className="ds-main">/);
+  assert.match(reviewApp, /<SkipLink \/>/);
+  assert.match(reviewApp, /<main id="main-content" tabIndex=\{-1\} className="ds-main">/);
+  assert.match(reviewViewSrc, /data-review-summary-count/);
+  assert.match(
+    engine,
+    /\$\('\[data-review-summary-count\]'\)[\s\S]{0,120}summary\.textContent=openN\+' queued '/,
+  );
   for (const view of ["tour", "files", "review"]) {
     assert.ok(
       markup.includes(
@@ -902,6 +908,14 @@ test("the accessibility contract the old renderer guaranteed is still in the mar
       `#ds-view-${view} is a labelled tabpanel`,
     );
   }
+});
+
+test("the review chrome fits the 320px supported viewport without shrinking hit targets", () => {
+  assert.match(
+    reviewCss,
+    /@media \(max-width:340px\)\{\.ds-reviewchrome-main\{padding-inline:0\}[\s\S]{0,280}\.ds-reviewchrome-utilities \.ds-theme-toggle::after\{inset:0\}\}/,
+  );
+  assert.match(reviewCss, /\.ds-reviewchrome-utilities \.ds-theme-toggle\{width:44px;height:44px;min-height:44px\}/);
 });
 
 // ---------------------------------------------------------------------------

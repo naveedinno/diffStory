@@ -378,7 +378,7 @@ export function ReviewPage({ payload }: { payload: ReviewPayload }) {
         <div className="ds-reviewsummary" data-review-section="status" tabIndex={-1}>
           <span className="ds-review-summary-label">
             <span className="ds-dot ds-dot-amber" />
-            <span>
+            <span data-review-summary-count>
               <b>{openCount}</b> queued {plural(openCount, "comment")}
             </span>
           </span>

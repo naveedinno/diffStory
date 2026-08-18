@@ -193,7 +193,7 @@ function bootPlaceholder() {
 function bootPlaceholderStyles() {
     return ('<style>' +
         '.ds-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:7px;pointer-events:none}' +
-        '.ds-boot-dot{width:7px;height:7px;border-radius:999px;background:var(--text-3,#8792a2);opacity:0}' +
+        '.ds-boot-dot{width:7px;height:7px;border-radius:999px;background:var(--text-3,#b1b9c6);opacity:0}' +
         '.ds-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}' +
         '@media (prefers-reduced-motion:no-preference){' +
         '.ds-boot-dot{animation:ds-boot-pulse 1.1s var(--motion-ease-in-out,cubic-bezier(.77,0,.175,1)) 240ms infinite}' +

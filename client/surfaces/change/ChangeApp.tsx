@@ -142,7 +142,11 @@ export function ChangeApp({ payload }: { payload: ChangePayload }) {
         }
       />
 
-      <main className="mx-auto max-w-[960px] px-6 pt-6 pb-10 max-[600px]:px-3.5 max-[600px]:pt-5 max-[600px]:pb-[26px]">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-[960px] px-6 pt-6 pb-10 max-[600px]:px-3.5 max-[600px]:pt-5 max-[600px]:pb-[26px]"
+      >
         <header className="mb-[18px] max-[600px]:mb-4">
           <div className="m-0 flex items-center justify-between gap-8 max-[600px]:block">
             <div>

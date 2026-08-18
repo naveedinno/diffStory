@@ -190,7 +190,7 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
           pressScale={0.97}
           whileHover={undefined}
           className={cn(
-            "ml-auto h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-[15px] text-[12.5px] font-semibold text-on-accent hover:bg-accent-hi",
+            "ml-auto h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-[15px] text-[12.5px] font-semibold text-on-accent hover:bg-accent-solid-hover",
             "max-[600px]:ml-0 max-[600px]:w-full",
           )}
         >
