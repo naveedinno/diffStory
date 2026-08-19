@@ -135,6 +135,47 @@ test("desktop story stages reclaim redundant side-navigation gutters", () => {
   assert.doesNotMatch(source, /ds-step-ghost|ds-ghost-prev|ds-ghost-next/);
 });
 
+test("concept steps use a plain full-stage canvas instead of an inner card", () => {
+  assert.match(
+    source,
+    /\.ds-concept-scroll\{[^}]*flex:1;min-height:0;display:flex;[^}]*overflow-y:auto/,
+  );
+  assert.match(
+    source,
+    /\.ds-concept-document\{[^}]*flex:1;width:100%;min-height:100%;margin:0[^}]*border:0;border-radius:0;background:transparent;box-shadow:none/,
+  );
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*width:100%/,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.ds-step\[data-scene-layout="concept-(?:document|diagram)"\] \.ds-concept-document\{[^}]*width:min\(100%,/,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*(?:border-color|box-shadow):/,
+  );
+  assert.doesNotMatch(source, /ds-concept-next|Next in code/);
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*grid-template-columns:minmax\(360px,720px\) minmax\(0,1fr\);grid-template-areas:"copy diagram";align-items:center/,
+  );
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-copy\{grid-area:copy;align-self:center\}/,
+  );
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram\{[^}]*align-self:stretch;display:flex[^}]*flex-direction:column/,
+  );
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram-output svg\{width:100%;height:100%;max-width:none!important;max-height:100%\}/,
+  );
+  assert.doesNotMatch(source, /grid-template-areas:"heading diagram"/);
+});
+
 test("the reading dock keeps its active sentence and step numerals comfortably legible", () => {
   assert.match(
     source,

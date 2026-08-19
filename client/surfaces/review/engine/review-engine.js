@@ -612,8 +612,7 @@ export function startReviewEngine(options){
       $('.ds-concept-heading',panel),
       $('.ds-concept-title',panel),
       $('.ds-concept-body',panel),
-      $('.ds-concept-diagram',panel),
-      $('.ds-concept-next',panel)
+      $('.ds-concept-diagram',panel)
     ].filter(Boolean);
     if(!targets.length)return;
     var token=++sceneEntranceToken,duration=cssMotionDuration('--motion-duration-ui',200),easing=cssMotionEasing('--motion-ease-out','cubic-bezier(0.23,1,0.32,1)');
@@ -846,7 +845,7 @@ export function startReviewEngine(options){
     if(panel){
       var host=beatHost(panel);
       target=active===0?$('.ds-intro-start',panel):$('[data-story-beat][aria-pressed="true"]',host);
-      if(!target)target=$('[data-story-beat]',host)||$('.ds-concept-next',panel);
+      if(!target)target=$('[data-story-beat]',host);
     }
     if(!target)target=$('[data-thread-node="'+active+'"]')||$('.ds-tab[aria-selected="true"]');
     focusElementWithoutScroll(target);
@@ -1142,8 +1141,7 @@ export function startReviewEngine(options){
       if(!ok||active!==stepIndex)return;
       var panel=stepPanels&&stepPanels[stepIndex],beats=panel?$all('[data-story-beat]',beatHost(panel)):[];
       if(!beats.length){
-        var boundaryTarget=panel&&atEnd?$('.ds-concept-next',panel):null;
-        if(!boundaryTarget&&panel)boundaryTarget=$('.ds-intro-start',panel)||$('[data-goto-step]',panel);
+        var boundaryTarget=panel?$('.ds-intro-start',panel)||$('[data-goto-step]',panel):null;
         if(!boundaryTarget)boundaryTarget=$('[data-thread-node="'+stepIndex+'"]');
         var conceptScroll=panel&&$('.ds-concept-scroll',panel);
         if(conceptScroll)conceptScroll.scrollTop=atEnd?conceptScroll.scrollHeight:0;

@@ -299,6 +299,16 @@ test("the payload is metadata-first: no step ships a rendered diff", async () =>
     assert.equal(loaded.status, 200);
     const loadedHtml = await loaded.text();
     assert.match(loadedHtml, /data-scene-layout="concept-document"/);
+    assert.match(
+      loadedHtml,
+      /class="ds-concept-copy">[\s\S]*class="ds-concept-heading"[\s\S]*class="ds-concept-title"[\s\S]*class="ds-concept-body ds-md"[\s\S]*<\/div>/,
+      "concept heading, title, and body stay together as one composition",
+    );
+    assert.doesNotMatch(
+      loadedHtml,
+      /ds-concept-next|Next in code/,
+      "the timeline is the single step-navigation surface",
+    );
     assert.equal(
       loadedHtml.match(/data-scene-layout="([^"]+)"/)?.[1],
       payload.steps[0].sceneLayout,

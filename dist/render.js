@@ -60,12 +60,11 @@ export function renderStoryStepPanel(_repo, model, comments, stepIndex) {
     const step = model.steps[stepIndex];
     if (!step)
         return '<div class="ds-diffnote">That story step does not exist.</div>';
-    const stepIndexById = new Map(model.steps.map((candidate, index) => [candidate.id, index + 1]));
-    return stepPanel(step, stepIndex, model.totalSteps, comments, stepIndexById);
+    return stepPanel(step, stepIndex, model.totalSteps, comments);
 }
-function stepPanel(step, i, total, comments, stepIndexById) {
+function stepPanel(step, i, total, comments) {
     return step.kind === "concept"
-        ? conceptStepPanel(step, i, total, stepIndexById)
+        ? conceptStepPanel(step, i, total)
         : codeStepPanel(step, i, total, comments);
 }
 function codeStepPanel(s, i, total, comments) {
@@ -235,16 +234,7 @@ function storyRepairMenu(step, iconOnly = false) {
     <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the claim and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each decision its own local camera.</small></button></div>
   </details>`;
 }
-function conceptStepPanel(s, i, total, stepIndexById) {
-    const next = s.preparesFor[0];
-    const nextIndex = next ? stepIndexById.get(next.id) : undefined;
-    const nextLink = next && nextIndex !== undefined
-        ? `<button class="ds-concept-next" type="button" data-goto-step="${nextIndex}">
-        <span class="ds-concept-next-kicker">Next in code · Step ${next.order}</span>
-        <span class="ds-concept-next-title">${next.title.html}</span>
-        <span class="ds-concept-next-arrow" aria-hidden="true">→</span>
-      </button>`
-        : "";
+function conceptStepPanel(s, i, total) {
     const diagram = s.diagram
         ? `<figure class="ds-concept-diagram" data-concept-diagram>
         <div class="ds-concept-diagram-tools">
@@ -280,13 +270,14 @@ function conceptStepPanel(s, i, total, stepIndexById) {
     </div>
     <div class="ds-concept-scroll">
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
-        <div class="ds-concept-heading">
-          <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+        <div class="ds-concept-copy">
+          <div class="ds-concept-heading">
+            <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+          </div>
+          <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
+          <div class="ds-concept-body ds-md">${s.body.html}</div>
         </div>
-        <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
-        <div class="ds-concept-body ds-md">${s.body.html}</div>
         ${diagram}
-        ${nextLink}
         <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
       </article>
     </div>

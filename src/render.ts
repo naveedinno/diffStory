@@ -113,10 +113,7 @@ export function renderStoryStepPanel(
   const step = model.steps[stepIndex];
   if (!step)
     return '<div class="ds-diffnote">That story step does not exist.</div>';
-  const stepIndexById = new Map(
-    model.steps.map((candidate, index) => [candidate.id, index + 1]),
-  );
-  return stepPanel(step, stepIndex, model.totalSteps, comments, stepIndexById);
+  return stepPanel(step, stepIndex, model.totalSteps, comments);
 }
 
 function stepPanel(
@@ -124,10 +121,9 @@ function stepPanel(
   i: number,
   total: number,
   comments: Comment[],
-  stepIndexById: Map<string, number>,
 ): string {
   return step.kind === "concept"
-    ? conceptStepPanel(step, i, total, stepIndexById)
+    ? conceptStepPanel(step, i, total)
     : codeStepPanel(step, i, total, comments);
 }
 
@@ -362,18 +358,7 @@ function conceptStepPanel(
   s: ConceptStepView,
   i: number,
   total: number,
-  stepIndexById: Map<string, number>,
 ): string {
-  const next = s.preparesFor[0];
-  const nextIndex = next ? stepIndexById.get(next.id) : undefined;
-  const nextLink =
-    next && nextIndex !== undefined
-      ? `<button class="ds-concept-next" type="button" data-goto-step="${nextIndex}">
-        <span class="ds-concept-next-kicker">Next in code · Step ${next.order}</span>
-        <span class="ds-concept-next-title">${next.title.html}</span>
-        <span class="ds-concept-next-arrow" aria-hidden="true">→</span>
-      </button>`
-      : "";
   const diagram = s.diagram
     ? `<figure class="ds-concept-diagram" data-concept-diagram>
         <div class="ds-concept-diagram-tools">
@@ -411,13 +396,14 @@ function conceptStepPanel(
     </div>
     <div class="ds-concept-scroll">
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
-        <div class="ds-concept-heading">
-          <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+        <div class="ds-concept-copy">
+          <div class="ds-concept-heading">
+            <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+          </div>
+          <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
+          <div class="ds-concept-body ds-md">${s.body.html}</div>
         </div>
-        <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
-        <div class="ds-concept-body ds-md">${s.body.html}</div>
         ${diagram}
-        ${nextLink}
         <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
       </article>
     </div>

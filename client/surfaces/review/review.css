@@ -1081,8 +1081,9 @@ body[data-read-view="tour"] .ds-main{background:transparent;border:0;overflow:vi
 .ds-stepcard.is-concept .ds-stepcard-file{font-family:var(--sans);font-weight:600;letter-spacing:.01em}
 .ds-concept-step{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .ds-concept-step>.ds-step-top{flex:none;padding:16px 22px 0}
-.ds-concept-scroll{flex:1;min-height:0;overflow-y:auto;padding:18px 28px 42px}
-.ds-concept-document{width:min(100%,860px);margin:0 auto;padding:34px 42px 38px;border:1px solid transparent;border-radius:var(--radius-island);background:var(--panel2);box-shadow:0 16px 42px rgba(0,0,0,.12)}
+.ds-concept-scroll{flex:1;min-height:0;display:flex;overflow-y:auto;padding:18px 28px 42px}
+.ds-concept-document{flex:1;width:100%;min-height:100%;margin:0;padding:34px 42px 38px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.ds-concept-copy{min-width:0}
 .ds-concept-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:11px}
 .ds-concept-eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--accent-blue);font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}.ds-concept-eyebrow span{font-size:14px;line-height:1}
 .ds-concept-title{max-width:22ch;margin:0;color:var(--text);font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.12}
@@ -1103,24 +1104,24 @@ body.ds-mermaid-fullscreen-open{overflow:hidden}
 .ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-tools{top:18px;right:18px;left:18px;justify-content:flex-end}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-gesture{display:block;margin-right:auto;padding:7px 10px;border:1px solid var(--line-soft);border-radius:9px;background:color-mix(in srgb,var(--material) 90%,transparent);box-shadow:0 4px 14px rgba(0,0,0,.1);color:var(--muted);font-size:11px;font-weight:600;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-zoom{display:flex;gap:4px}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-reset{min-width:60px;font-size:11px;font-variant-numeric:tabular-nums}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-expand{display:none}.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-collapse{display:block}
 .ds-concept-diagram:fullscreen .ds-concept-diagram-output,.ds-concept-diagram.is-mermaid-fullscreen .ds-concept-diagram-output{box-sizing:border-box;width:100%;height:100%;min-height:0;overflow:hidden;padding:64px 24px 24px;border:0;border-radius:0;background:var(--surface);box-shadow:none;cursor:grab;touch-action:none;user-select:none}.ds-concept-diagram.is-panning .ds-concept-diagram-output{cursor:grabbing}.ds-concept-diagram:fullscreen .ds-concept-diagram-output svg,.ds-concept-diagram.is-mermaid-fullscreen .ds-concept-diagram-output svg{width:100%;height:100%;max-width:none!important}.ds-concept-diagram:fullscreen figcaption,.ds-concept-diagram.is-mermaid-fullscreen figcaption{display:none}
 @media (pointer:coarse){.ds-concept-diagram.is-fullscreen-active .ds-concept-diagram-tools button{height:44px;min-width:44px}}
-.ds-concept-next{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 18px;width:100%;margin-top:28px;padding:15px 17px;text-align:left;border:1px solid color-mix(in srgb,var(--accent-blue) 34%,var(--line));border-radius:11px;background:var(--accent-soft);color:var(--text);cursor:pointer}.ds-concept-next:hover{border-color:var(--accent-blue);background:color-mix(in srgb,var(--accent-soft) 84%,var(--panel2))}.ds-concept-next-kicker{grid-column:1;color:var(--accent-blue);font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}.ds-concept-next-title{grid-column:1;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13px;font-weight:700;white-space:nowrap}.ds-concept-next-arrow{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--accent-blue);font-size:18px}
 /* The scene vocabulary is derived from story facts, not authored layout hints.
-   Concept documents keep an editorial reading measure; a real diagram earns a
-   wider two-part composition so the mental model appears beside the prose
-   instead of below the fold. DOM order remains prose → figure → next action. */
-.ds-step[data-scene-layout="concept-document"] .ds-concept-document{width:min(100%,780px);padding:40px 50px 44px}
+   Concept documents keep an editorial reading measure. A diagram scene is one
+   balanced composition: copy stays grouped in a bounded column while the
+   diagram earns the remaining stage instead of stretching the copy's rows. */
+.ds-step[data-scene-layout="concept-document"] .ds-concept-document{display:flex;align-items:center;justify-content:center;width:100%;padding:40px 50px 44px}
+.ds-step[data-scene-layout="concept-document"] .ds-concept-copy{width:min(100%,780px)}
 .ds-step[data-scene-layout="concept-document"] .ds-concept-title{max-width:24ch;font-size:34px;line-height:1.08}
 .ds-step[data-scene-layout="concept-document"] .ds-concept-body{max-width:66ch;margin-top:24px}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:14px 24px 28px}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:grid;grid-template-columns:minmax(280px,.82fr) minmax(420px,1.18fr);grid-template-areas:"heading diagram" "title diagram" "body diagram" "next next";column-gap:42px;row-gap:0;width:min(100%,1180px);padding:28px 38px 22px;border-color:var(--line-soft);box-shadow:0 20px 52px rgba(0,0,0,.1)}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-heading{grid-area:heading;align-self:end}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{grid-area:title;max-width:18ch;font-size:34px;line-height:1.06}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{grid-area:body;max-width:52ch;margin-top:18px;font-size:14px;line-height:1.56}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:grid;grid-template-columns:minmax(360px,720px) minmax(0,1fr);grid-template-areas:"copy diagram";align-items:center;column-gap:clamp(24px,2.5vw,56px);width:100%;padding:clamp(24px,4vh,64px) clamp(24px,2.5vw,64px)}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-copy{grid-area:copy;align-self:center}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{max-width:18ch;font-size:34px;line-height:1.06}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{max-width:52ch;margin-top:18px;font-size:14px;line-height:1.56}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h2,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h3,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h4{margin-top:19px}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body th,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body td{padding:7px 10px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body blockquote{margin:14px 0}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{grid-area:diagram;align-self:start;min-width:0;margin:0;padding:0;border:0}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:330px;padding:24px;background:var(--surface)}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-next{grid-area:next;margin-top:18px;padding-top:12px;padding-bottom:12px}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{grid-area:diagram;align-self:stretch;display:flex;min-width:0;margin:0;padding:0;border:0;flex-direction:column}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{flex:1;width:100%;min-height:330px;padding:24px;background:var(--surface)}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output svg{width:100%;height:100%;max-width:none!important;max-height:100%}
 .ds-step[data-scene-layout="logic-move"]>.ds-step-top,.ds-step[data-scene-layout="paired-code"]>.ds-step-top{padding-bottom:2px}
 .ds-step[data-scene-layout="paired-code"] .ds-diffscroll{--ds-scene-paired:1}
 .ds-diff{border-radius:10px;box-shadow:none}.ds-difftoolbar{background:var(--panel2)}
@@ -1179,12 +1180,12 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:980px){
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:16px 24px 34px}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:block;width:min(100%,780px);padding:34px 38px 38px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:block;width:100%;padding:34px 38px 38px}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{max-width:22ch;font-size:32px;line-height:1.09}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{max-width:70ch}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{margin-top:26px;padding-top:22px;border-top:1px solid var(--line-soft)}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{display:block;margin-top:26px;padding-top:22px;border-top:1px solid var(--line-soft)}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:300px;padding:20px}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-next{margin-top:24px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output svg{height:auto;max-width:100%!important}
   .ds-step[data-scene-layout="opening"] .ds-introwrap{padding-inline:48px}
   .ds-step[data-scene-layout="opening"] .ds-intro-title{font-size:clamp(38px,6vw,50px)}
 }
@@ -1215,7 +1216,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
    the middle of the island — worse than tighter gaps. */
 .ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}
 @media (max-width:720px){.ds-back{min-width:36px}.ds-help{display:none}}
-@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-tab,.ds-concept-next,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-readaloud.is-loading .ds-readaloud-ico,.ds-composer{animation:none!important}.ds-concept-diagram-output svg{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.ds-intro-start,.ds-sidebar-toggle,.ds-back,.ds-readaloud,.ds-tab,.ds-fileitem,.ds-filetree-dir>summary,.ds-filmnode,.ds-filmnode-num,.ds-filmnode-label,.ds-filmthread-tooltip{transition:none!important}.ds-intro-start:active{transform:none}.ds-command-root *{animation:none!important}.ds-toast{animation:none!important;transform:translateX(-50%);transition:opacity 200ms ease}.ds-toast.is-show{transform:translateX(-50%)}.ds-drawer{transform:none;opacity:0;transition:opacity 200ms ease}.ds-drawer-root.is-open .ds-drawer{transform:none;opacity:1}.ds-drawer-scrim{transition:opacity 200ms ease}.ds-readhead-fill{transition:none!important}.ds-readaloud.is-loading .ds-readaloud-ico,.ds-composer{animation:none!important}.ds-concept-diagram-output svg{animation:none!important}}
 @media (prefers-reduced-transparency:reduce){.ds-top,.ds-drawer,.ds-toast,.ds-dock,.ds-filmthread.is-storyless{background:var(--panel3);backdrop-filter:none;-webkit-backdrop-filter:none}.ds-dock,.ds-filmthread.is-storyless{border-color:var(--line-soft)}.ds-md :is(.ds-bit,.ds-slot,.ds-flag,.ds-val,.ds-warn){background:color-mix(in srgb,currentColor 14%,var(--panel3))}.ds-md tbody tr:nth-child(even){background:var(--panel3)}}
 @media (prefers-contrast:more){:root{--line:color-mix(in srgb,var(--text) 42%,transparent);--line-soft:color-mix(in srgb,var(--text) 28%,transparent)}.ds-top,.ds-reviewstatusbar{background:var(--panel3)}.ds-intro-lede{color:var(--text)}.ds-md caption{color:var(--text)}.ds-md thead th,.ds-md tbody{border-color:var(--text)}.ds-md tbody tr:nth-child(even){background:transparent}.ds-md tbody tr+tr{border-top:1px solid var(--line)}.ds-md hr{background:var(--text-3)}.ds-md kbd{border-color:var(--text-3)}}
 
