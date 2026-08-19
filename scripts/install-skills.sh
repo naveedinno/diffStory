@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # Install the diffStory storyteller skill into an agent's
-# skills directory, so any SKILL.md-aware agent (Codex, Cursor, Claude Code, …) can
+# skills directory, so any SKILL.md-aware agent (Zed Agent, Codex, Cursor, Claude Code, …) can
 # drive the review loop. Run it from a clone of the diffStory repo.
 #
-#   ./scripts/install-skills.sh            Install to ~/.agents/skills (Codex, Cursor, …)
+#   ./scripts/install-skills.sh            Install to ~/.agents/skills (Zed Agent, Codex, Cursor, …)
 #   ./scripts/install-skills.sh --claude   Also install to ~/.claude/skills (Claude Code)
 #   ./scripts/install-skills.sh --dir DIR  Install to a directory you choose
 #   ./scripts/install-skills.sh --help     Show this help
@@ -54,7 +54,7 @@ fi
 
 echo
 echo "Done. Skills are live for agents that read those directories:"
-echo "  ~/.agents/skills  ->  Codex (\$diffstory-storyteller), Cursor, etc."
+echo "  ~/.agents/skills  ->  Zed Agent (/diffstory-storyteller), Codex (\$diffstory-storyteller), Cursor, etc."
 echo "  ~/.claude/skills  ->  Claude Code (or just use the plugin)"
 echo
 echo "Open the installed diffStory app to review changes."

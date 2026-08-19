@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readFileSync } from 'node:fs';
@@ -11,10 +11,12 @@ import { readFileSync } from 'node:fs';
 const PAGE_JS = readFileSync(new URL('../client/surfaces/review/engine/review-engine.js', import.meta.url), 'utf8');
 const PAGE_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 import {
+  editorNavigationTarget,
   serve,
   vscodeLaunchArgs,
   vscodeNavigationTarget,
   vscodeNavigationUrl,
+  zedLaunchArgs,
 } from '../dist/server.js';
 
 test('VS Code launch opens the reviewed repo and exact source location together', () => {
@@ -46,6 +48,51 @@ test('VS Code bridge URL rejects absolute and escaping review paths', () => {
   assert.equal(vscodeNavigationUrl('/tmp/repo', 'src/a.ts', 1, 0), null);
 });
 
+test('Zed launch opens the reviewed workspace and exact source location together', () => {
+  const target = editorNavigationTarget('/tmp/review repo', 'src/order flow.ts', 42, 17);
+  assert.deepEqual(zedLaunchArgs(target), [
+    '/tmp/review repo',
+    '/tmp/review repo/src/order flow.ts:42:17',
+  ]);
+});
+
+test('source editor settings API reads and persists either supported editor', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'diffstory-editor-settings-home-'));
+  mkdirSync(join(home, '.diffstory'), { recursive: true });
+  writeFileSync(join(home, '.diffstory', 'settings.json'), '{"futureSetting":"kept","editor":"zed"}\n');
+  const server = serve({ repo: null, port: 0, open: false, homeOverride: home });
+  await once(server, 'listening');
+  const address = server.address();
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const current = await fetch(`${base}/api/settings/editor`);
+    assert.equal(current.status, 200);
+    assert.deepEqual(await current.json(), { editor: 'zed', label: 'Zed' });
+
+    const invalid = await fetch(`${base}/api/settings/editor`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ editor: 'vim' }),
+    });
+    assert.equal(invalid.status, 400);
+
+    const updated = await fetch(`${base}/api/settings/editor`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ editor: 'vscode' }),
+    });
+    assert.equal(updated.status, 200);
+    assert.deepEqual(await updated.json(), { ok: true, editor: 'vscode', label: 'VS Code' });
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(home, '.diffstory', 'settings.json'), 'utf8')),
+      { futureSetting: 'kept', version: 1, editor: 'vscode' },
+    );
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('review assets expose modifier-click navigation without taking ordinary clicks', () => {
   assert.match(PAGE_CSS, /\[data-vscode-symbol\][^{]*\{[^}]*cursor:alias/);
   assert.match(PAGE_JS, /b=closest\(t,'\[data-vscode-symbol\]'\);if\(b&&\(e\.metaKey\|\|e\.ctrlKey\)\)/);
@@ -54,6 +101,7 @@ test('review assets expose modifier-click navigation without taking ordinary cli
 
 test('leased editor endpoint dispatches only reviewed files to the bridge', async () => {
   const repo = mkdtempSync(join(tmpdir(), 'diffstory-editor-bridge-'));
+  const home = mkdtempSync(join(tmpdir(), 'diffstory-editor-home-'));
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
   execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
@@ -62,8 +110,16 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
   execFileSync('git', ['commit', '-qm', 'base'], { cwd: repo });
   writeFileSync(join(repo, 'order.ts'), 'export function executeOrder() { return 2; }\n');
 
+  mkdirSync(join(home, '.diffstory'), { recursive: true });
+  writeFileSync(join(home, '.diffstory', 'settings.json'), '{"version":1,"editor":"zed"}\n');
   const opened = [];
-  const server = serve({ repo, port: 0, open: false, openEditor: (target) => { opened.push(target); return true; } });
+  const server = serve({
+    repo,
+    port: 0,
+    open: false,
+    homeOverride: home,
+    openEditor: (target, editor) => { opened.push({ target, editor }); return true; },
+  });
   await once(server, 'listening');
   const address = server.address();
   const base = `http://127.0.0.1:${address.port}`;
@@ -86,12 +142,16 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
       body: JSON.stringify({ file: 'order.ts', line: 1, column: 17 }),
     });
     assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, editor: 'zed', label: 'Zed' });
     assert.equal(opened.length, 1);
     assert.deepEqual(opened[0], {
-      repo,
-      path: join(repo, 'order.ts'),
-      line: 1,
-      column: 17,
+      editor: 'zed',
+      target: {
+        repo,
+        path: join(repo, 'order.ts'),
+        line: 1,
+        column: 17,
+      },
     });
 
     const rejected = await fetch(`${base}/api/editor/open?page=${encodeURIComponent(token)}`, {
@@ -104,5 +164,6 @@ test('leased editor endpoint dispatches only reviewed files to the bridge', asyn
   } finally {
     server.close();
     rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   }
 });

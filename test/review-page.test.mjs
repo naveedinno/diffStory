@@ -24,7 +24,7 @@
 // Layers 3 and 4 cannot prove the DOM behaves. That was verified by driving the
 // real page in Chrome — step navigation, the filmstrip, unified↔split, lazy
 // panel loads, context expansion, full file, comment create/edit/delete,
-// Cmd-click to VS Code, all twenty keyboard bindings, reading-position
+// Cmd-click to the preferred source editor, all twenty keyboard bindings, reading-position
 // persistence across reload, and the theme toggle — with a clean console. See
 // the report accompanying this rewrite.
 import { test } from "node:test";
@@ -1069,7 +1069,7 @@ test("the built bundle actually ships the review behaviour", (t) => {
     "Story updated. Reloading in 10 seconds.",
     "Live updates interrupted.",
     "The review changed while this page was open",
-    "Opening implementation in VS Code…",
+    "Opening implementation in ",
     "Remove this queued comment?",
     "invalid diagram SVG",
     "ds-review-ui:",

@@ -26,3 +26,17 @@ jobs:
 
       - name: Check
         run: npm run check
+
+  zed-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Test and compile Zed extension
+        run: npm run check:zed

@@ -20,7 +20,7 @@ comment, then copy it or keep it in the review queue.
 - Can use Claude or Codex to generate and repair walkthroughs.
 - Works without AI. Story-writing features are optional.
 - Command-click or Ctrl-click a current-code identifier to open the reviewed
-  repository in VS Code and reveal that exact source location.
+  repository in Zed or VS Code and reveal that exact source location.
 
 ## Quickstart
 
@@ -145,8 +145,8 @@ Claude Code users can also install the plugin:
 /plugin install diffstory@diffstory
 ```
 
-For Codex, Cursor, and other agents that read local skills, you can also install
-the skills from a clone:
+For Zed Agent, Codex, Cursor, and other agents that read local skills, you can
+also install the skills from a clone:
 
 ```sh
 git clone git@github.com:naveedinno/diffStory.git
@@ -158,15 +158,42 @@ If no agent is installed, diffStory still opens and still works as a local diff
 viewer with the complete comment queue. Only story generation and repair are
 unavailable until Claude or Codex is on your PATH.
 
-## Jump To Source In VS Code
+## Zed Integration
+
+The bundled Zed extension adds a local diffStory MCP server to the Zed Agent
+panel. Its `diffstory` prompt and `start_diffstory` tool support `brief`,
+`guided`, and `detailed` story modes. Install the storyteller skill, select Zed
+for source jumps, and print the final extension-install step with:
+
+```sh
+./scripts/install-zed-integration.sh
+```
+
+Then open Zed's Extensions page, choose **Install Dev Extension**, select the
+checkout's `zed-extension` directory, and enable the **diffStory** server in the
+active Agent profile. Ask Zed Agent to “create a guided diffStory using
+diffStory”, or select the `diffstory` MCP prompt when the active Agent UI exposes
+prompts.
+
+Zed removed extension-provided slash commands and does not expose custom editor
+panels or webviews to extensions, so this integration uses Zed's supported MCP
+surface. The native diffStory desktop app remains the story player and review
+canvas; source jumps connect it back to the exact Zed workspace and location.
+
+## Jump To Source In Zed Or VS Code
 
 Command-click on macOS or Ctrl-click elsewhere on an identifier in the
-current-code side of a diff. diffStory opens the reviewed file in VS Code,
-opens the reviewed repository as the active workspace, places the caret at the
-clicked location, and brings that line into view without a success notification.
+current-code side of a diff. diffStory opens the reviewed repository as the
+active editor workspace, places the caret at the clicked location, and brings
+that line into view.
 
-This uses the CLI bundled with a stock VS Code install, with its built-in
-`vscode://file/…` handler as a fallback. There is no companion extension.
+Use the **Source editor** menu beside the theme control to choose Zed or VS Code.
+The choice is saved immediately and is available from the repository picker,
+repository navigation, and review toolbar. The Zed integration installer selects
+Zed initially. You can also switch from a terminal with
+`node scripts/set-source-editor.mjs zed` or
+`node scripts/set-source-editor.mjs vscode`. VS Code retains its built-in
+`vscode://file/…` fallback; Zed uses the CLI bundled with the stock app.
 
 ## Review Files
 
@@ -226,6 +253,7 @@ Useful development commands:
 | `npm run start` | Run the built internal development server. |
 | `npm run demo` | Build and open a sample review. |
 | `npm test` | Build and run the test suite. |
+| `npm run check:zed` | Test and compile the Zed extension to WebAssembly. |
 
 ## Narration With Aloud
 

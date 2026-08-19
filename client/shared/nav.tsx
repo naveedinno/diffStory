@@ -23,6 +23,7 @@
 import type { ReactNode } from "react";
 import { BrandMark } from "./brand";
 import { cn } from "./cn";
+import { EditorMenu } from "./editor-menu";
 import { ThemeMenu } from "./theme-menu";
 
 export interface Crumb {
@@ -145,6 +146,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
       ) : null}
 
       <span className="min-w-2 flex-1" />
+      <EditorMenu />
       <ThemeMenu />
       {right}
     </header>

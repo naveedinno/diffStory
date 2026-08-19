@@ -1,0 +1,10 @@
+id = "diffstory"
+name = "diffStory"
+description = "Create guided diffStory walkthroughs from the Zed Agent panel."
+version = "0.1.0"
+schema_version = 1
+authors = ["naveedinno <naveedinno@proton.me>"]
+repository = "https://github.com/naveedinno/diffStory"
+
+[context_servers.diffstory]
+name = "diffStory"

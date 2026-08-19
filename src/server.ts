@@ -8,7 +8,7 @@ import {
   type ServerResponse,
   type Server,
 } from "node:http";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   loadTour,
   orderedSteps,
@@ -65,9 +65,7 @@ import { resolveScope, type Scope } from "./scope.js";
 import {
   basename,
   dirname,
-  isAbsolute,
   join,
-  relative,
   resolve,
 } from "node:path";
 import {
@@ -183,6 +181,32 @@ import {
   type StoryDriftExpectedBinding,
   type StorySnapshotRef,
 } from "./story-drift.js";
+import {
+  editorLabel,
+  editorNavigationTarget,
+  openEditorTarget,
+  openVSCodeTargetWithUrls,
+  vscodeLaunchArgs,
+  vscodeNavigationTarget,
+  vscodeNavigationUrl,
+  zedLaunchArgs,
+  type EditorNavigationTarget,
+} from "./editor.js";
+import {
+  isSourceEditor,
+  loadEditorPreferences,
+  saveSourceEditor,
+  type SourceEditor,
+} from "./editor-preferences.js";
+
+export {
+  editorNavigationTarget,
+  vscodeLaunchArgs,
+  vscodeNavigationTarget,
+  vscodeNavigationUrl,
+  zedLaunchArgs,
+};
+export type { EditorNavigationTarget };
 
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
@@ -194,7 +218,7 @@ export interface ServeOptions {
   headOverride?: string;
   homeOverride?: string;
   aloud?: AloudReader;
-  openEditor?: (target: VSCodeNavigationTarget) => boolean;
+  openEditor?: (target: EditorNavigationTarget, editor: SourceEditor) => boolean;
   openExternal?: (url: string) => boolean;
   open: boolean;
 }
@@ -213,12 +237,10 @@ export function serve(opts: ServeOptions): Server {
     leaseActive: (token) => !!getReviewPageLease(session, token),
   });
   const aloud = opts.aloud ?? createAloudReader();
-  const openEditor =
-    opts.openEditor ??
-    (opts.openExternal
-      ? (target: VSCodeNavigationTarget) =>
-          openVSCodeTargetWithUrls(target, opts.openExternal!)
-      : openVSCodeTarget);
+  const openEditor = opts.openEditor ?? ((target, editor) =>
+    opts.openExternal && editor === "vscode"
+      ? openVSCodeTargetWithUrls(target, opts.openExternal)
+      : openEditorTarget(target, editor));
   const server = createServer((req, res) =>
     handle(req, res, session, home, liveHub, aloud, openEditor),
   );
@@ -453,7 +475,7 @@ function handle(
   home: string,
   liveHub: LiveEventHub,
   aloud: AloudReader,
-  openEditor: (target: VSCodeNavigationTarget) => boolean,
+  openEditor: (target: EditorNavigationTarget, editor: SourceEditor) => boolean,
 ): void {
   const url = new URL(req.url ?? "/", "http://localhost");
   const method = req.method ?? "GET";
@@ -652,6 +674,31 @@ function handle(
         skills: skillStatus(home),
       });
     }
+    if (method === "GET" && url.pathname === "/api/settings/editor") {
+      const editor = loadEditorPreferences(home).editor;
+      return sendJson(res, 200, { editor, label: editorLabel(editor) });
+    }
+    if (method === "PUT" && url.pathname === "/api/settings/editor") {
+      return readBody(req, res, (body) => {
+        let value: unknown;
+        try {
+          value = (JSON.parse(body || "{}") as { editor?: unknown }).editor;
+        } catch {
+          return sendJson(res, 400, { error: "invalid JSON" });
+        }
+        if (!isSourceEditor(value)) {
+          return sendJson(res, 400, {
+            error: "Choose Zed or VS Code as the source editor.",
+          });
+        }
+        saveSourceEditor(home, value);
+        return sendJson(res, 200, {
+          ok: true,
+          editor: value,
+          label: editorLabel(value),
+        });
+      });
+    }
     if (method === "POST" && url.pathname === "/api/editor/open") {
       if (!session.repo) return noRepo(res);
       return readBody(req, res, (body) => {
@@ -691,7 +738,7 @@ function handle(
           return sendJson(res, 400, {
             error: "That file is not part of this review.",
           });
-        const editorTarget = vscodeNavigationTarget(
+        const editorTarget = editorNavigationTarget(
           page.repo,
           file,
           line,
@@ -701,13 +748,14 @@ function handle(
           return sendJson(res, 400, {
             error: "That file path cannot be opened safely.",
           });
-        if (!openEditor(editorTarget)) {
+        const editor = loadEditorPreferences(home).editor;
+        const label = editorLabel(editor);
+        if (!openEditor(editorTarget, editor)) {
           return sendJson(res, 503, {
-            error:
-              "VS Code could not be opened. Install VS Code to jump to source from a review.",
+            error: `${label} could not be opened. Install ${label} or change the diffStory source editor preference.`,
           });
         }
-        return sendJson(res, 200, { ok: true });
+        return sendJson(res, 200, { ok: true, editor, label });
       });
     }
     if (method === "GET" && url.pathname === "/api/codex/models") {
@@ -3581,145 +3629,6 @@ code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</sty
 
 function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/**
- * Percent-encode an absolute filesystem path for the path portion of a URI.
- * Separators stay literal so the result still reads as a path; a Windows drive
- * letter keeps its colon, which VS Code's handler expects.
- */
-function encodeFsPathForUri(target: string): string {
-  const normalized = target.replace(/\\/g, "/");
-  const rooted = normalized.startsWith("/") ? normalized : `/${normalized}`;
-  return rooted
-    .split("/")
-    .map((segment, index) =>
-      index === 1 && /^[A-Za-z]:$/.test(segment)
-        ? segment
-        : encodeURIComponent(segment),
-    )
-    .join("/");
-}
-
-export interface VSCodeNavigationTarget {
-  repo: string;
-  path: string;
-  line: number;
-  column: number;
-}
-
-/** Resolve and confine a clicked source location to the reviewed repository. */
-export function vscodeNavigationTarget(
-  repo: string,
-  file: string,
-  line: number,
-  column: number,
-): VSCodeNavigationTarget | null {
-  if (
-    !file ||
-    isAbsolute(file) ||
-    !Number.isInteger(line) ||
-    line < 1 ||
-    !Number.isInteger(column) ||
-    column < 1
-  ) {
-    return null;
-  }
-  const root = resolve(repo);
-  const target = resolve(root, file);
-  const fromRoot = relative(root, target);
-  if (
-    !fromRoot ||
-    fromRoot === ".." ||
-    fromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-    isAbsolute(fromRoot)
-  ) {
-    return null;
-  }
-  return { repo: root, path: target, line, column };
-}
-
-/** Build the built-in file URI retained as a fallback for VS Code installs. */
-export function vscodeNavigationUrl(
-  repo: string,
-  file: string,
-  line: number,
-  column: number,
-): string | null {
-  const target = vscodeNavigationTarget(repo, file, line, column);
-  if (!target) return null;
-  return vscodeFileUrl(target);
-}
-
-/**
- * Arguments that make VS Code establish the repo as its workspace and then
- * reveal the clicked source location in that same window.
- */
-export function vscodeLaunchArgs(target: VSCodeNavigationTarget): string[] {
-  return [
-    "--reuse-window",
-    target.repo,
-    "--goto",
-    `${target.path}:${target.line}:${target.column}`,
-  ];
-}
-
-function vscodeFileUrl(target: VSCodeNavigationTarget): string {
-  return `vscode://file${encodeFsPathForUri(target.path)}:${target.line}:${target.column}`;
-}
-
-function vscodeFolderUrl(target: VSCodeNavigationTarget): string {
-  return `vscode://file${encodeFsPathForUri(target.repo)}`;
-}
-
-function openVSCodeTargetWithUrls(
-  target: VSCodeNavigationTarget,
-  openExternal: (url: string) => boolean,
-): boolean {
-  if (!openExternal(vscodeFolderUrl(target))) return false;
-  return openExternal(vscodeFileUrl(target));
-}
-
-function openVSCodeTarget(target: VSCodeNavigationTarget): boolean {
-  const commands =
-    process.platform === "darwin"
-      ? [
-          "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
-          join(
-            homedir(),
-            "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
-          ),
-          "code",
-        ]
-      : ["code"];
-  for (const command of commands) {
-    try {
-      execFileSync(command, vscodeLaunchArgs(target), {
-        stdio: "ignore",
-        timeout: 5_000,
-      });
-      return true;
-    } catch {
-      // Try the next normal VS Code CLI location.
-    }
-  }
-  return openVSCodeTargetWithUrls(target, openExternalUrl);
-}
-
-function openExternalUrl(url: string): boolean {
-  const cmd =
-    process.platform === "darwin"
-      ? "/usr/bin/open"
-      : process.platform === "win32"
-        ? "cmd"
-        : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
-  try {
-    execFileSync(cmd, args, { stdio: "ignore", timeout: 5_000 });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function openBrowser(url: string): void {

@@ -372,7 +372,7 @@ export interface ReviewChromeFacts {
 
 /** `GET /repo/<name>/review` and `GET /repo/<name>/diff`. */
 export interface ReviewPayload {
- /** Absolute repo path. Diagnostic only; VS Code links are resolved server-side. */
+ /** Absolute repo path. Diagnostic only; editor links are resolved server-side. */
  repo: string;
  repoName: string;
  routeBase: string;

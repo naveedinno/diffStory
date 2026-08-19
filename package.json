@@ -33,7 +33,8 @@
     "test": "npm run build && node --test test/*.test.mjs",
     "release:check": "npm run check && npm pack --dry-run --json",
     "prepublishOnly": "npm run check",
-    "eval:stories": "npm run build && node scripts/eval-stories.mjs"
+    "eval:stories": "npm run build && node scripts/eval-stories.mjs",
+    "check:zed": "node --test test/zed-mcp-server.test.mjs && cargo test --manifest-path zed-extension/Cargo.toml && cargo check --manifest-path zed-extension/Cargo.toml --target wasm32-wasip2"
   },
   "engines": {
     "node": ">=20"

@@ -27,6 +27,7 @@
 // surface imports none of them.
 
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { EditorMenu } from "../../shared/editor-menu";
 import { ThemeMenu } from "../../shared/theme-menu";
 import { SkipLink } from "../../shared/nav";
 import type { ReviewPayload } from "../../../src/payloads";
@@ -480,6 +481,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 </span>
               </button>
             </div>
+            <EditorMenu compact />
             <ThemeMenu />
             <div className="ds-actions">
               {storyless ? (

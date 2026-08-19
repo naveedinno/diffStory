@@ -3,7 +3,7 @@
 // is held in a mutable Session, so the same server can boot empty (app/picker
 // mode) and switch repos at runtime via /api/repo/open.
 import { createServer, } from "node:http";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGeneratedTour, } from "./tour.js";
 import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, reviewChangeIndexSnapshot, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, assertSafeRepoPath, } from "./git.js";
 import { parseUnifiedDiff } from "./diff.js";
@@ -14,7 +14,7 @@ import { renderShell } from "./shell.js";
 import { narrativeText } from "./narrative.js";
 import { summarizeChange } from "./change-view.js";
 import { resolveScope } from "./scope.js";
-import { basename, dirname, isAbsolute, join, relative, resolve, } from "node:path";
+import { basename, dirname, join, resolve, } from "node:path";
 import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange, } from "./view-model.js";
 import { buildReviewModel } from "./view-model.js";
 import { loadComments, loadCommentsWithHealth, commentsForStory, addComment, deleteComment, updateComment, InvalidCommentStoreError, } from "./comments.js";
@@ -36,6 +36,9 @@ import { listCodexStoryModels } from "./codex-tasks.js";
 import { LiveEventHub, storyFileFingerprint } from "./live.js";
 import { reviewStateSummary } from "./review-state.js";
 import { captureStorySnapshot, inspectStoryDrift, loadStoryDriftDiff, } from "./story-drift.js";
+import { editorLabel, editorNavigationTarget, openEditorTarget, openVSCodeTargetWithUrls, vscodeLaunchArgs, vscodeNavigationTarget, vscodeNavigationUrl, zedLaunchArgs, } from "./editor.js";
+import { isSourceEditor, loadEditorPreferences, saveSourceEditor, } from "./editor-preferences.js";
+export { editorNavigationTarget, vscodeLaunchArgs, vscodeNavigationTarget, vscodeNavigationUrl, zedLaunchArgs, };
 // Only one agent run at a time: concurrent runs editing the same working tree would collide.
 let agentBusy = false;
 export function serve(opts) {
@@ -52,10 +55,9 @@ export function serve(opts) {
         leaseActive: (token) => !!getReviewPageLease(session, token),
     });
     const aloud = opts.aloud ?? createAloudReader();
-    const openEditor = opts.openEditor ??
-        (opts.openExternal
-            ? (target) => openVSCodeTargetWithUrls(target, opts.openExternal)
-            : openVSCodeTarget);
+    const openEditor = opts.openEditor ?? ((target, editor) => opts.openExternal && editor === "vscode"
+        ? openVSCodeTargetWithUrls(target, opts.openExternal)
+        : openEditorTarget(target, editor));
     const server = createServer((req, res) => handle(req, res, session, home, liveHub, aloud, openEditor));
     // Dispose the hub when close is REQUESTED, not on the 'close' event: the
     // server cannot finish closing while the hub still holds SSE responses open.
@@ -426,6 +428,32 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                 skills: skillStatus(home),
             });
         }
+        if (method === "GET" && url.pathname === "/api/settings/editor") {
+            const editor = loadEditorPreferences(home).editor;
+            return sendJson(res, 200, { editor, label: editorLabel(editor) });
+        }
+        if (method === "PUT" && url.pathname === "/api/settings/editor") {
+            return readBody(req, res, (body) => {
+                let value;
+                try {
+                    value = JSON.parse(body || "{}").editor;
+                }
+                catch {
+                    return sendJson(res, 400, { error: "invalid JSON" });
+                }
+                if (!isSourceEditor(value)) {
+                    return sendJson(res, 400, {
+                        error: "Choose Zed or VS Code as the source editor.",
+                    });
+                }
+                saveSourceEditor(home, value);
+                return sendJson(res, 200, {
+                    ok: true,
+                    editor: value,
+                    label: editorLabel(value),
+                });
+            });
+        }
         if (method === "POST" && url.pathname === "/api/editor/open") {
             if (!session.repo)
                 return noRepo(res);
@@ -460,17 +488,19 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     return sendJson(res, 400, {
                         error: "That file is not part of this review.",
                     });
-                const editorTarget = vscodeNavigationTarget(page.repo, file, line, column);
+                const editorTarget = editorNavigationTarget(page.repo, file, line, column);
                 if (!editorTarget)
                     return sendJson(res, 400, {
                         error: "That file path cannot be opened safely.",
                     });
-                if (!openEditor(editorTarget)) {
+                const editor = loadEditorPreferences(home).editor;
+                const label = editorLabel(editor);
+                if (!openEditor(editorTarget, editor)) {
                     return sendJson(res, 503, {
-                        error: "VS Code could not be opened. Install VS Code to jump to source from a review.",
+                        error: `${label} could not be opened. Install ${label} or change the diffStory source editor preference.`,
                     });
                 }
-                return sendJson(res, 200, { ok: true });
+                return sendJson(res, 200, { ok: true, editor, label });
             });
         }
         if (method === "GET" && url.pathname === "/api/codex/models") {
@@ -2607,109 +2637,6 @@ code{background:#16181d;padding:2px 6px;border-radius:4px}h1{color:#f85149}</sty
 }
 function escapeText(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-/**
- * Percent-encode an absolute filesystem path for the path portion of a URI.
- * Separators stay literal so the result still reads as a path; a Windows drive
- * letter keeps its colon, which VS Code's handler expects.
- */
-function encodeFsPathForUri(target) {
-    const normalized = target.replace(/\\/g, "/");
-    const rooted = normalized.startsWith("/") ? normalized : `/${normalized}`;
-    return rooted
-        .split("/")
-        .map((segment, index) => index === 1 && /^[A-Za-z]:$/.test(segment)
-        ? segment
-        : encodeURIComponent(segment))
-        .join("/");
-}
-/** Resolve and confine a clicked source location to the reviewed repository. */
-export function vscodeNavigationTarget(repo, file, line, column) {
-    if (!file ||
-        isAbsolute(file) ||
-        !Number.isInteger(line) ||
-        line < 1 ||
-        !Number.isInteger(column) ||
-        column < 1) {
-        return null;
-    }
-    const root = resolve(repo);
-    const target = resolve(root, file);
-    const fromRoot = relative(root, target);
-    if (!fromRoot ||
-        fromRoot === ".." ||
-        fromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-        isAbsolute(fromRoot)) {
-        return null;
-    }
-    return { repo: root, path: target, line, column };
-}
-/** Build the built-in file URI retained as a fallback for VS Code installs. */
-export function vscodeNavigationUrl(repo, file, line, column) {
-    const target = vscodeNavigationTarget(repo, file, line, column);
-    if (!target)
-        return null;
-    return vscodeFileUrl(target);
-}
-/**
- * Arguments that make VS Code establish the repo as its workspace and then
- * reveal the clicked source location in that same window.
- */
-export function vscodeLaunchArgs(target) {
-    return [
-        "--reuse-window",
-        target.repo,
-        "--goto",
-        `${target.path}:${target.line}:${target.column}`,
-    ];
-}
-function vscodeFileUrl(target) {
-    return `vscode://file${encodeFsPathForUri(target.path)}:${target.line}:${target.column}`;
-}
-function vscodeFolderUrl(target) {
-    return `vscode://file${encodeFsPathForUri(target.repo)}`;
-}
-function openVSCodeTargetWithUrls(target, openExternal) {
-    if (!openExternal(vscodeFolderUrl(target)))
-        return false;
-    return openExternal(vscodeFileUrl(target));
-}
-function openVSCodeTarget(target) {
-    const commands = process.platform === "darwin"
-        ? [
-            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
-            join(homedir(), "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
-            "code",
-        ]
-        : ["code"];
-    for (const command of commands) {
-        try {
-            execFileSync(command, vscodeLaunchArgs(target), {
-                stdio: "ignore",
-                timeout: 5_000,
-            });
-            return true;
-        }
-        catch {
-            // Try the next normal VS Code CLI location.
-        }
-    }
-    return openVSCodeTargetWithUrls(target, openExternalUrl);
-}
-function openExternalUrl(url) {
-    const cmd = process.platform === "darwin"
-        ? "/usr/bin/open"
-        : process.platform === "win32"
-            ? "cmd"
-            : "xdg-open";
-    const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
-    try {
-        execFileSync(cmd, args, { stdio: "ignore", timeout: 5_000 });
-        return true;
-    }
-    catch {
-        return false;
-    }
 }
 function openBrowser(url) {
     const cmd = process.platform === "darwin"

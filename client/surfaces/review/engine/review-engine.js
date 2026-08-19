@@ -90,7 +90,7 @@ export function startReviewEngine(options){
   function sameOriginPath(path){
     try{var url=new URL(path,location.href);return url.origin===location.origin?url.pathname+url.search+url.hash:'';}catch(e){return '';}
   }
-  function openSymbolInVSCode(symbol){
+  function openSymbolInEditor(symbol){
     var code=closest(symbol,'[data-comment-code]');
     if(!code||(code.getAttribute('data-comment-side')||'right')!=='right')return;
     var file=code.getAttribute('data-comment-file')||'';
@@ -100,9 +100,9 @@ export function startReviewEngine(options){
     fetch(reviewPageUrl('/api/editor/open'),{
       method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({file:file,line:line,column:column})
-    }).then(function(r){return r.json().then(function(body){if(!r.ok)throw new Error(body.error||'Could not open VS Code.');return body;});})
-      .then(function(){toast('Opening implementation in VS Code…');})
-      .catch(function(error){toast(error&&error.message?error.message:'Could not open VS Code.','error');});
+    }).then(function(r){return r.json().then(function(body){if(!r.ok)throw new Error(body.error||'Could not open the source editor.');return body;});})
+      .then(function(body){toast('Opening implementation in '+(body.label||'your editor')+'…');})
+      .catch(function(error){toast(error&&error.message?error.message:'Could not open the source editor.','error');});
   }
   var LIVE_BANNER_KINDS=[
     {kind:'diff',message:'Diff changed.'},
@@ -3278,7 +3278,7 @@ export function startReviewEngine(options){
   function onClick(e){
     var t=e.target,b;
     if(!closest(t,'.ds-story-tune'))closeStoryTuneMenus();
-    b=closest(t,'[data-vscode-symbol]');if(b&&(e.metaKey||e.ctrlKey)){e.preventDefault();openSymbolInVSCode(b);return;}
+    b=closest(t,'[data-vscode-symbol]');if(b&&(e.metaKey||e.ctrlKey)){e.preventDefault();openSymbolInEditor(b);return;}
     b=closest(t,'[data-review-reload]');if(b){location.reload();return;}
     b=closest(t,'[data-move-target-file]');if(b){var targetStep=parseInt(b.getAttribute('data-move-target-step')||'0',10);if(targetStep>0){setActive(targetStep);return;}var targetFile=b.getAttribute('data-move-target-file')||'',targetLine=parseInt(b.getAttribute('data-move-target-line')||'0',10);if(targetFile){openMoveTargetFile(targetFile,targetLine);return;}}
     b=closest(t,'[data-selection-comment]');if(b){var ctx=selectionContext;closeSelectionMenu();if(ctx)openComposer(ctx.anchorRow,'change',ctx);return;}
