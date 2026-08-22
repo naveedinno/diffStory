@@ -342,12 +342,17 @@ test('the panel keeps all five of its states', () => {
 
   // The milestone pulse freezes once a run lands, in every state.
   assert.match(state, /finished: true/);
-  assert.match(milestones, /!state\.finished &&\n?\s*"animate-pulse/);
+  assert.match(milestones, /data-pp-segment=""/);
+  assert.match(milestones, /!state\.finished &&\n?\s*"after:animate-\[pp-segment-breathe_1\.1s_ease-in-out_infinite\]/);
+  assert.match(milestones, /motion-reduce:after:animate-none/);
   // Reduced motion removes all three CSS pulses. The spinner used to be a
   // fourth: it is now beUI's `Loader`, which reads the preference itself and
   // trades the rotation for a calm opacity pulse rather than freezing into a
   // solid ring that reads like a completion mark.
-  assert.equal(countOf(markup, 'motion-reduce:animate-none'), 3);
+  assert.equal(
+    countOf(markup, 'motion-reduce:animate-none') + countOf(markup, 'motion-reduce:after:animate-none'),
+    3,
+  );
   assert.ok(!/animate-spin/.test(markup), 'the hand-rolled spinner is gone, not duplicated');
   // And the shimmer, whose reduced-motion path is "do not render it".
   assert.match(activity, /return <span className=\{cn\(className, rest\)\}>\{children\}<\/span>;/);

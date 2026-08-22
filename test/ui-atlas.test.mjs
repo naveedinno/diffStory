@@ -81,3 +81,12 @@ test('the baseline captured before the React rewrite is preserved alongside the 
   const surfaces=new Set(frozen.shots.map(shot=>shot.surface));
   for(const surface of [...everyViewport,...panelStates])assert.ok(surfaces.has(surface),`the pre-rewrite baseline never captured ${surface}`);
 });
+
+test('scope motion is replayed through interruption and reduced motion',()=>{
+  const script=readFileSync(join(ROOT,'scripts','capture-ui-atlas.mjs'),'utf8');
+  assert.match(script,/async function assertChangeMotionReplay\(browser,origin\)/);
+  assert.match(script,/Panel switch did not retarget through the live presentation/);
+  assert.match(script,/Ref picker did not retrace its exit while becoming inert/);
+  assert.match(script,/Reduced motion left the compare editor between states/);
+  assert.match(script,/await assertChangeMotionReplay\(browser,origin\);/);
+});

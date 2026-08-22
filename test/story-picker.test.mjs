@@ -630,6 +630,16 @@ test('review history uses the shared spatial tier with no per-row stagger', () =
   assert.ok(!/state-rail/.test(storiesSource), 'the status badge replaced the partial-edge status strip');
 });
 
+test('saved reviews reveal a glance preview without hiding information on touch', () => {
+  assert.match(storyRow, /"story-glance inline-flex/);
+  assert.match(storyRow, /<Eye[^>]*aria-hidden="true"/s);
+  assert.match(storyRow, /story-glance-detail max-w-0 translate-x-1 overflow-hidden opacity-0/);
+  assert.match(storyRow, /group-focus-visible:max-w-\[150px\]/);
+  assert.match(storyRow, /\[@media_\(hover:hover\)_and_\(pointer:fine\)\]:group-hover:max-w-\[150px\]/);
+  assert.match(storyRow, /max-\[760px\]:hidden/);
+  assert.match(storyRow, /motion-reduce:transform-none motion-reduce:transition-none/);
+});
+
 test('review history has no keyboard map of its own', () => {
   // surface-inventory.md §2.3: none. Rows are anchors and buttons, so native
   // Tab/Enter/Space apply, and the only key handling is the shared theme menu

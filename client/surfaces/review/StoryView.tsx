@@ -541,11 +541,15 @@ function FilmstripThread({ steps }: { steps: ReviewStepView[] }) {
               aria-label="Play story"
               aria-pressed="false"
             >
-              <span className="ds-readaloud-ico" aria-hidden="true">
-                ▶
-              </span>
+              <span className="ds-readaloud-ico is-play" aria-hidden="true" />
               <span className="ds-readaloud-label" data-readaloud-label>
                 Play
+              </span>
+              <span className="ds-readaloud-wave" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
               </span>
             </button>
             <button

@@ -141,10 +141,14 @@ export function placePicker(input: HTMLElement, picker: HTMLElement): void {
   picker.style.maxHeight = `${maxHeight}px`;
   const height = Math.min(picker.offsetHeight || maxHeight, maxHeight);
   let top = rect.bottom + 7;
+  let placement = "bottom";
   if (top + height > window.innerHeight - 12) {
     top = rect.top - 7 - height;
+    placement = "top";
     if (top < 12) top = Math.max(12, window.innerHeight - height - 12);
   }
+  picker.dataset.placement = placement;
+  picker.style.transformOrigin = placement === "top" ? "50% 100%" : "50% 0%";
   picker.style.left = `${left}px`;
   picker.style.top = `${Math.round(top)}px`;
   picker.style.width = `${width}px`;

@@ -198,6 +198,13 @@ test("Copy all exports queued comments only, including exact code context", () =
     PAGE_JS,
     /commentTurnsToText|AI reply|paste them to your agent/,
   );
+  assert.match(PAGE_JS, /function showCopySuccess\(count\)/);
+  assert.match(PAGE_JS, /button\.classList\.add\('is-copied'\)/);
+  assert.match(PAGE_JS, /label\.textContent='Copied'/);
+  assert.match(PAGE_JS, /button\.classList\.remove\('is-copied'\)/);
+  assert.match(PAGE_JS, /label\.textContent='Copy all'/);
+  assert.match(PAGE_CSS, /\.ds-copy-action\.is-copied/);
+  assert.match(PAGE_CSS, /\.ds-copy-action\.is-copied \.ds-copy-action-check\{opacity:1;transform:scale\(1\) rotate\(0\)\}/);
 });
 
 test("the review-comment feature contains no AI delivery or conversation machinery", () => {

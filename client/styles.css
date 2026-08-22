@@ -24,6 +24,11 @@
 
 @source "./**/*.{ts,tsx}";
 
+@keyframes pp-segment-breathe {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;

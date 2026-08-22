@@ -431,6 +431,8 @@ test('the anchored listbox keeps its placement arithmetic', () => {
   assert.match(refs, /let top = rect\.bottom \+ 7;/);
   assert.match(refs, /top = rect\.top - 7 - height;/);
   assert.match(refs, /if \(top < 12\) top = Math\.max\(12, window\.innerHeight - height - 12\);/);
+  assert.match(refs, /picker\.dataset\.placement = placement;/);
+  assert.match(refs, /picker\.style\.transformOrigin = placement === "top" \? "50% 100%" : "50% 0%";/);
   // And it stays anchored while the page moves under it. `scroll` is captured.
   assert.match(refPicker, /window\.addEventListener\("scroll", reposition, true\)/);
   assert.match(refPicker, /window\.addEventListener\("resize", reposition\)/);
@@ -596,9 +598,14 @@ test('the surface does not animate its own arrival', () => {
   assert.ok(!/ds-scope-thread|ds-thread-layer/.test(changeSource), 'no decorative thread on this surface');
   // The one entrance that IS wanted, with the vanilla timing and Signal easing.
   assert.match(refPicker, /const EASE_SIGNAL_OUT = \[0\.23, 1, 0\.32, 1\] as const;/);
-  assert.match(refPicker, /clipPath: "inset\(0px 0px 100% round 10px\)", y: -4, scale: 0\.985/);
-  assert.match(refPicker, /transition=\{open && !reduce \? \{ duration: 0\.2, ease: EASE_SIGNAL_OUT \} : \{ duration: 0 \}\}/);
+  assert.match(refPicker, /clipPath: "inset\(0px 0px 100% round 10px\)"/);
+  assert.match(refPicker, /open\s*\? \{ duration: 0\.24, ease: EASE_SIGNAL_OUT \}/);
+  assert.match(refPicker, /\{ duration: 0\.18, ease: \[0\.68, 0, 0\.77, 0\] \}/);
+  assert.match(refPicker, /onAnimationComplete=\{\(\) => \{\s*if \(!open\) setPresent\(false\);/);
   assert.match(refPicker, /const reduce = useReducedMotion\(\);/, 'and it steps instead of animating under reduced motion');
+  assert.match(scopeCard, /height: open \? "auto" : 0/);
+  assert.match(scopeCard, /aria-hidden=\{openPanel !== "commit"\}\s+inert=\{openPanel !== "commit"\}/);
+  assert.match(scopeCard, /aria-hidden=\{openPanel !== "compare"\}\s+inert=\{openPanel !== "compare"\}/);
   // Press feedback keeps the vanilla scale and drops under reduced motion.
   // This used to be `/active:scale-\[\.985\]|max-\[600px\]/`, which the second
   // alternative satisfied on every version of this file — including the one

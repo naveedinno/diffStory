@@ -26,7 +26,7 @@
 // on `useHoverCapable()`, so a tap on a touch device does not strand an open
 // bubble the way a phantom `:hover` would.
 
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, Eye, Trash2 } from "lucide-react";
 import { AnimatedBadge, type AnimatedBadgeStatus } from "../../vendor/beui/motion/animated-badge";
 import { Button } from "../../vendor/beui/motion/button/base";
 import { Tooltip } from "../../vendor/beui/motion/tooltip";
@@ -221,15 +221,31 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
 
         <span
           className={cn(
-            "inline-flex min-h-[34px] items-center justify-center gap-[5px] rounded-full border border-transparent bg-accent-soft px-[13px]",
+            "story-glance inline-flex min-h-[36px] items-center justify-center gap-[6px] overflow-hidden rounded-full border border-transparent bg-accent-soft px-[12px]",
             "text-[12.5px] font-semibold whitespace-nowrap",
-            "transition-colors duration-[var(--motion-duration-fast)] ease-out",
+            "transition-[background-color,box-shadow,transform] duration-[var(--motion-duration-ui)] ease-[var(--motion-ease-out)]",
             "group-hover:bg-[color-mix(in_srgb,var(--accent-soft)_72%,var(--surface))]",
+            "[@media_(hover:hover)_and_(pointer:fine)]:group-hover:-translate-y-px [@media_(hover:hover)_and_(pointer:fine)]:group-hover:shadow-[0_8px_22px_rgba(0,0,0,.18)]",
             "max-[760px]:col-start-2 max-[760px]:mt-0.5 max-[760px]:justify-self-start",
+            "motion-reduce:transform-none motion-reduce:transition-none",
             BLUE_INK,
           )}
         >
+          <Eye className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} aria-hidden="true" />
           Resume review
+          <span
+            aria-hidden="true"
+            className={cn(
+              "story-glance-detail max-w-0 translate-x-1 overflow-hidden opacity-0",
+              "text-[11px] font-medium text-text-2",
+              "transition-[max-width,opacity,transform] duration-[var(--motion-duration-ui)] ease-[var(--motion-ease-out)]",
+              "[@media_(hover:hover)_and_(pointer:fine)]:group-hover:max-w-[150px] [@media_(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0 [@media_(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+              "group-focus-visible:max-w-[150px] group-focus-visible:translate-x-0 group-focus-visible:opacity-100",
+              "motion-reduce:transition-none max-[760px]:hidden",
+            )}
+          >
+            · {story.liveFiles || story.files} files · {codeStops} stops
+          </span>
           <ChevronRight
             // The nudge is behind hover:hover — a touch device fires a false
             // hover on tap, so without the gate the chevron jumps on every tap.

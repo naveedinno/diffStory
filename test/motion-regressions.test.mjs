@@ -228,6 +228,32 @@ test("read aloud focus is static and routine playback state stays in the control
   );
   assert.doesNotMatch(PAGE_JS, /Voice paused|Voice resumed/);
   assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading/);
+  assert.match(PAGE_CSS, /\.ds-readaloud\.is-active \.ds-readaloud-wave\{width:20px;opacity:\.82;transform:none\}/);
+  assert.match(PAGE_CSS, /\.ds-readaloud\.is-audible \.ds-readaloud-wave>span\{animation:ds-waveform/);
+  assert.match(PAGE_CSS, /\.ds-readaloud-ico\.is-play::before,\.ds-readaloud-ico\.is-pause::before\{animation:ds-transport-morph/);
+  assert.match(PAGE_JS, /classList\.toggle\('is-audible',speaking&&!loading\)/);
+});
+
+test("review navigation and logic annotations use semantic motion, not decoration", () => {
+  // The dock is a pointer-proximity field: neighbouring stops respond with a
+  // smooth falloff while the review order remains fixed and keyboard focus has
+  // an equivalent enlarged state.
+  assert.match(PAGE_JS, /distance=Math\.abs\(filmPointerX-/);
+  assert.match(PAGE_JS, /1-distance\/132/);
+  assert.match(PAGE_JS, /1\+\.36\*influence/);
+  assert.match(PAGE_JS, /-8\*influence/);
+  assert.match(PAGE_CSS, /\.ds-filmnode:focus-visible\{--ds-dock-scale:1\.36;--ds-dock-lift:-8px\}/);
+  assert.match(
+    PAGE_CSS,
+    /\.ds-filmnode:is\(:hover,:focus-visible\) \.ds-filmnode-num\{[^}]*border-color:transparent;background:transparent;box-shadow:none/,
+  );
+
+  // Logic-move overlays draw once when their step becomes active. Resize
+  // observers may repaint geometry, but must not replay the explanation.
+  assert.match(PAGE_JS, /pathLength:1/);
+  assert.match(PAGE_JS, /trace=!prefersReducedMotion\(\)&&panel\.getAttribute\('data-annot-traced'\)!=='1'/);
+  assert.match(PAGE_JS, /panel\.setAttribute\('data-annot-traced','1'\)/);
+  assert.match(PAGE_CSS, /@keyframes ds-circuit-trace\{to\{stroke-dashoffset:0\}\}/);
 });
 
 test("reduced motion keeps status feedback but removes movement and pulses", () => {
@@ -237,10 +263,8 @@ test("reduced motion keeps status feedback but removes movement and pulses", () 
     /\.ds-toast\{animation:none!important;transform:translateX\(-50%\);transition:opacity 200ms ease\}/,
   );
   assert.match(PAGE_CSS, /\.ds-readhead-fill\{transition:none!important\}/);
-  assert.match(
-    PAGE_CSS,
-    /\.ds-readaloud\.is-loading \.ds-readaloud-ico,\.ds-composer\{animation:none!important\}/,
-  );
+  assert.match(PAGE_CSS, /\.ds-readaloud\.is-loading \.ds-readaloud-ico,\.ds-readaloud-ico::before,\.ds-readaloud-wave>span,\.ds-composer,\.ds-annot \*\{animation:none!important\}/);
+  assert.match(PAGE_CSS, /\.ds-copy-action,\.ds-copy-action-icon>span\{transition:none!important\}/);
   assert.doesNotMatch(PAGE_CSS, /ds-voice-card/);
   assert.match(PAGE_CSS, /\.ds-live-banner\{transition:none!important\}/);
   assert.match(

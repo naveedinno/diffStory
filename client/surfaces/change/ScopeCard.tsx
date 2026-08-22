@@ -75,6 +75,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GitBranch, GitCommitHorizontal } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { Button, ButtonLink } from "../../vendor/beui/motion/button/base";
 import { Input, type InputClassNames } from "../../vendor/beui/motion/input";
 import { Loader } from "../../vendor/beui/motion/loader";
@@ -114,6 +115,9 @@ const SEGMENT_BASE = cn(
 
 /** The press scale the vanilla segments were written for and never got. */
 const SEGMENT_PRESS = 0.985;
+
+/** A critically damped-feeling unfold for disclosure content, never page arrival. */
+const PANEL_EASE = [0.32, 0.72, 0, 1] as const;
 
 /**
  * Selected and open are DIFFERENT things and now look it.
@@ -287,6 +291,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
   const targetIsWorktree = !inCompare || !head;
   const [headValue, setHeadValue] = useState(targetIsWorktree ? WORKTREE_LABEL : (head as string));
   const [headWorktree, setHeadWorktree] = useState(targetIsWorktree);
+  const reduceMotion = useReducedMotion();
 
   const navTimer = useRef(0);
   const focusValue = useRef<Record<FieldKind, string>>({ commit: "", base: "", head: "" });
@@ -407,6 +412,24 @@ export function ScopeCard({ payload }: ScopeCardProps) {
   // stays visible under whichever panel is open.
   const showSplitSummary = inCompare && openPanel !== "compare";
 
+  const panelMotion = (open: boolean) => ({
+    initial: false as const,
+    animate: {
+      height: open ? "auto" : 0,
+      opacity: open ? 1 : 0,
+      y: open ? 0 : -6,
+      scale: open ? 1 : 0.992,
+    },
+    transition: reduceMotion
+      ? { duration: 0 }
+      : {
+          height: { duration: 0.32, ease: PANEL_EASE },
+          opacity: { duration: open ? 0.2 : 0.14, ease: PANEL_EASE },
+          y: { duration: 0.24, ease: PANEL_EASE },
+          scale: { duration: 0.24, ease: PANEL_EASE },
+        },
+  });
+
   // `Input` bakes in a `role="alert"` error message and the listbox below owns a
   // `Loader` with `role="status"`; neither belongs inside a scope picker.
   const card = useRef<HTMLElement>(null);
@@ -464,63 +487,69 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         </Button>
       </div>
 
-      <div
+      <motion.div
         id="commitPanel"
         data-panel="commit"
-        hidden={openPanel !== "commit"}
-        className={cn("mt-3 grid grid-cols-[minmax(0,1fr)] gap-1.5", openPanel !== "commit" && "hidden")}
+        aria-hidden={openPanel !== "commit"}
+        inert={openPanel !== "commit"}
+        {...panelMotion(openPanel === "commit")}
+        style={{ transformOrigin: "50% 0" }}
+        className={cn("overflow-hidden", openPanel !== "commit" && "pointer-events-none")}
       >
-        <label className={SLOT_EDIT}>
-          <span className={KICKER_EDIT}>Commit</span>
-          <Input
-            {...commitField}
-            leftIcon={<GitCommitHorizontal strokeWidth={1.8} aria-hidden="true" />}
-            placeholder="HEAD or a commit SHA"
-            classNames={FIELD_CLASSNAMES}
-          />
-        </label>
-        <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
-          Shows that commit against its first parent; root commits are shown against the empty tree.
-        </p>
-      </div>
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-1.5 pb-px">
+          <label className={SLOT_EDIT}>
+            <span className={KICKER_EDIT}>Commit</span>
+            <Input
+              {...commitField}
+              leftIcon={<GitCommitHorizontal strokeWidth={1.8} aria-hidden="true" />}
+              placeholder="HEAD or a commit SHA"
+              classNames={FIELD_CLASSNAMES}
+            />
+          </label>
+          <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
+            Shows that commit against its first parent; root commits are shown against the empty tree.
+          </p>
+        </div>
+      </motion.div>
 
       {/* The editor and the resolved summary below share this grid verbatim, so
           the two refs never move sideways when one replaces the other. */}
-      <div
+      <motion.div
         id="comparePanel"
         data-panel="compare"
-        hidden={openPanel !== "compare"}
-        className={cn(
-          "mt-3 grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-stretch gap-2",
-          openPanel !== "compare" && "hidden",
-          "max-[700px]:grid-cols-[minmax(0,1fr)] max-[700px]:gap-2.5",
-        )}
+        aria-hidden={openPanel !== "compare"}
+        inert={openPanel !== "compare"}
+        {...panelMotion(openPanel === "compare")}
+        style={{ transformOrigin: "100% 0" }}
+        className={cn("overflow-hidden", openPanel !== "compare" && "pointer-events-none")}
       >
-        <label className={SLOT_EDIT}>
-          <span className={KICKER_EDIT}>
-            Source <i className={GLOSS}>older</i>
-          </span>
-          <Input
-            {...baseField}
-            leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
-            placeholder="branch, tag, or commit"
-            classNames={FIELD_CLASSNAMES}
-          />
-        </label>
-        <Arrow className="max-[700px]:hidden" />
-        <label className={SLOT_EDIT}>
-          <span className={KICKER_EDIT}>
-            Target <i className={GLOSS}>newer</i>
-          </span>
-          <Input
-            {...headField}
-            {...(headWorktree ? { "data-worktree": "1" } : {})}
-            leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
-            placeholder="branch, tag, or commit"
-            classNames={FIELD_CLASSNAMES}
-          />
-        </label>
-      </div>
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-stretch gap-2 pb-px max-[700px]:grid-cols-[minmax(0,1fr)] max-[700px]:gap-2.5">
+          <label className={SLOT_EDIT}>
+            <span className={KICKER_EDIT}>
+              Source <i className={GLOSS}>older</i>
+            </span>
+            <Input
+              {...baseField}
+              leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
+              placeholder="branch, tag, or commit"
+              classNames={FIELD_CLASSNAMES}
+            />
+          </label>
+          <Arrow className="max-[700px]:hidden" />
+          <label className={SLOT_EDIT}>
+            <span className={KICKER_EDIT}>
+              Target <i className={GLOSS}>newer</i>
+            </span>
+            <Input
+              {...headField}
+              {...(headWorktree ? { "data-worktree": "1" } : {})}
+              leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
+              placeholder="branch, tag, or commit"
+              classNames={FIELD_CLASSNAMES}
+            />
+          </label>
+        </div>
+      </motion.div>
 
       {showSplitSummary ? (
         <div

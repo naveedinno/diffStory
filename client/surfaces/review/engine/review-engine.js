@@ -543,7 +543,11 @@ export function startReviewEngine(options){
   }
   function renderFilmMagnification(){
     filmMagnifyFrame=0;if(!filmThread||filmPointerX===null)return;
-    $all('.ds-filmnode',filmThread).forEach(function(node){var r=node.getBoundingClientRect(),distance=Math.abs(filmPointerX-(r.left+r.width/2)),t=Math.max(0,1-distance/96),influence=t*t*(3-2*t);node.style.setProperty('--ds-dock-scale',(1+.24*influence).toFixed(3));node.style.setProperty('--ds-dock-lift',(-5*influence).toFixed(2)+'px');});
+    // Amicro's proximity dock uses the pointer as a continuous force rather than
+    // a hovered/not-hovered switch. The broader falloff lets neighbouring story
+    // stops bend with the selected one, while the fixed review order remains
+    // purely navigational — this is magnification, never drag-to-reorder.
+    $all('.ds-filmnode',filmThread).forEach(function(node){var r=node.getBoundingClientRect(),distance=Math.abs(filmPointerX-(r.left+r.width/2)),t=Math.max(0,1-distance/132),influence=t*t*(3-2*t);node.style.setProperty('--ds-dock-scale',(1+.36*influence).toFixed(3));node.style.setProperty('--ds-dock-lift',(-8*influence).toFixed(2)+'px');});
   }
   function onFilmPointerMove(e){
     var thread=closest(e.target,'[data-filmthread]');if(!thread||!closest(e.target,'.ds-filmthread-scroll')){clearFilmMagnification();return;}
@@ -1765,6 +1769,8 @@ export function startReviewEngine(options){
     if(loading&&aloudStateMessage)buttonLabel=buttonLabel+' — '+aloudStateMessage;
     btn.classList.toggle('is-active',playing);
     btn.classList.toggle('is-loading',loading||aloudControlPending);
+    btn.classList.toggle('is-paused',paused);
+    btn.classList.toggle('is-audible',speaking&&!loading);
     // An in-flight pause/resume now reads as busy instead of looking live and
     // swallowing every press through the aloudControlPending guard.
     btn.disabled=busy;
@@ -2031,10 +2037,10 @@ export function startReviewEngine(options){
     return {regions:regions,geom:{gutterLeft:annotationRound(left),gutterRight:annotationRound(Math.max(left,right)),width:annotationRound(bodyRect.width),height:annotationRound(bodyRect.height)}};
   }
   function annotationSvgElement(name,attrs){var node=document.createElementNS('http://www.w3.org/2000/svg',name);Object.keys(attrs).forEach(function(key){node.setAttribute(key,String(attrs[key]));});return node;}
-  function paintAnnotations(body,shapes,geom){
-    var svg=annotationSvgElement('svg',{class:'ds-annot','aria-hidden':'true',width:geom.width,height:geom.height,viewBox:'0 0 '+geom.width+' '+geom.height});
-    shapes.boxes.forEach(function(box){svg.appendChild(annotationSvgElement('rect',{class:'ds-annot-box ds-annot-box-'+box.side+(box.dashed?' is-dashed':''),x:box.x,y:box.y,width:box.w,height:box.h,rx:5,ry:5}));});
-    shapes.arrows.forEach(function(arrow){svg.appendChild(annotationSvgElement('path',{class:'ds-annot-arrow ds-annot-arrow-right'+(arrow.dashed?' is-dashed':''),d:arrow.d}));var h=arrow.head,open=h.open?'M-7 -5 L0 0 L-7 5':'M-7 -5 L0 0 L-7 5 Z';svg.appendChild(annotationSvgElement('path',{class:'ds-annot-head',d:open,transform:'translate('+h.x+' '+h.y+') rotate('+h.angle+')'}));});
+  function paintAnnotations(body,shapes,geom,trace){
+    var svg=annotationSvgElement('svg',{class:'ds-annot'+(trace?' is-tracing':''),'aria-hidden':'true',width:geom.width,height:geom.height,viewBox:'0 0 '+geom.width+' '+geom.height});
+    shapes.boxes.forEach(function(box){svg.appendChild(annotationSvgElement('rect',{class:'ds-annot-box ds-annot-box-'+box.side+(box.dashed?' is-dashed':''),pathLength:1,x:box.x,y:box.y,width:box.w,height:box.h,rx:5,ry:5}));});
+    shapes.arrows.forEach(function(arrow){svg.appendChild(annotationSvgElement('path',{class:'ds-annot-arrow ds-annot-arrow-right'+(arrow.dashed?' is-dashed':''),pathLength:1,d:arrow.d}));var h=arrow.head,open=h.open?'M-7 -5 L0 0 L-7 5':'M-7 -5 L0 0 L-7 5 Z';svg.appendChild(annotationSvgElement('path',{class:'ds-annot-head',d:open,transform:'translate('+h.x+' '+h.y+') rotate('+h.angle+')'}));});
     shapes.tags.forEach(function(tag){svg.appendChild(annotationSvgElement('rect',{class:'ds-annot-tag-bg-'+tag.side,x:tag.x,y:tag.y-8,width:tag.w,height:16,rx:3,ry:3}));var text=annotationSvgElement('text',{class:'ds-annot-tag-text',x:tag.x+9,y:tag.y+3.5});text.textContent=tag.text;svg.appendChild(text);});
     body.appendChild(svg);
   }
@@ -2050,7 +2056,7 @@ export function startReviewEngine(options){
     var body=$('.ds-diffbody',split),data=$('[data-annotations]',split);if(!body||!data)return;
     $('.ds-annot',body)?.remove();var spec;try{spec=JSON.parse(data.textContent||'{}');}catch(e){return;}
     prepareAnnotationTagLanes(body,spec);
-    var measured=measureAnnotations(body,spec),shapes=computeAnnotations(spec,measured.regions,measured.geom);paintAnnotations(body,shapes,measured.geom);
+    var measured=measureAnnotations(body,spec),shapes=computeAnnotations(spec,measured.regions,measured.geom),trace=!prefersReducedMotion()&&panel.getAttribute('data-annot-traced')!=='1';paintAnnotations(body,shapes,measured.geom,trace);panel.setAttribute('data-annot-traced','1');
     if(typeof ResizeObserver==='function'){
       if(annotationObserver)annotationObserver.disconnect();
       annotationObserver=new ResizeObserver(function(){scheduleAnnotations(panel);});annotationObserver.observe(body);
@@ -2060,7 +2066,7 @@ export function startReviewEngine(options){
     if(annotationFrame)cancelAnimationFrame(annotationFrame);
     annotationFrame=requestAnimationFrame(function(){annotationFrame=0;renderAnnotations(panel);});
   }
-  function syncActiveAnnotations(){var panel=stepPanels&&stepPanels[active];clearAnnotations();if(panel)scheduleAnnotations(panel);}
+  function syncActiveAnnotations(){var panel=stepPanels&&stepPanels[active];clearAnnotations();if(panel){panel.removeAttribute('data-annot-traced');scheduleAnnotations(panel);}}
   function openMoveTargetFile(file,line){
     if(!file)return false;setView('files');
     for(var i=0;i<filePanels.length;i++)if(filePanels[i].getAttribute('data-file')===file){
@@ -3266,8 +3272,16 @@ export function startReviewEngine(options){
     fetch(reviewPageUrl(API)).then(function(r){return r.json();}).then(function(list){
       var pick=(Array.isArray(list)?list:[]).filter(function(c){return c.status==='open';});
       if(!pick.length){toast('No queued comments to copy.');return;}
-      writeClipboard(commentsToText(pick),function(){toast('Copied '+pick.length+' queued '+(pick.length===1?'comment.':'comments.'));});
+      writeClipboard(commentsToText(pick),function(){showCopySuccess(pick.length);toast('Copied '+pick.length+' queued '+(pick.length===1?'comment.':'comments.'));});
     }).catch(function(){toast('Could not read comments to copy.','error');});
+  }
+  function showCopySuccess(count){
+    $all('[data-copy-comments]').forEach(function(button){
+      if(button._dsCopyTimer)clearTimeout(button._dsCopyTimer);
+      var label=$('[data-copy-comments-label]',button);button.classList.add('is-copied');button.setAttribute('aria-label','Copied '+count+' queued '+(count===1?'comment':'comments'));
+      if(label)label.textContent='Copied';
+      button._dsCopyTimer=setTimeout(function(){button.classList.remove('is-copied');button.setAttribute('aria-label','Copy all queued comments');if(label)label.textContent='Copy all';button._dsCopyTimer=0;},1800);
+    });
   }
   function closeStoryTuneMenus(){
     $all('.ds-story-tune[open]').forEach(function(menu){menu.open=false;});

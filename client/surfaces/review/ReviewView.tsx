@@ -460,8 +460,18 @@ export function ReviewPage({ payload }: { payload: ReviewPayload }) {
                 <p>Collect comments while you review, then copy the complete queue when you are ready.</p>
               </div>
               <div className="ds-queue-actions">
-                <button type="button" className="ds-btn ds-btn-solid" data-copy-comments="queued" disabled={!openCount}>
-                  Copy all
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-solid ds-copy-action"
+                  data-copy-comments="queued"
+                  disabled={!openCount}
+                  aria-label="Copy all queued comments"
+                >
+                  <span className="ds-copy-action-icon" aria-hidden="true">
+                    <span className="ds-copy-action-copy" />
+                    <span className="ds-copy-action-check">✓</span>
+                  </span>
+                  <span data-copy-comments-label>Copy all</span>
                 </button>
               </div>
             </div>

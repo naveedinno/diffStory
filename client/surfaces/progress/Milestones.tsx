@@ -26,9 +26,6 @@
 import { cn } from "../../shared/cn";
 import { milestoneTone, type ProgressState } from "./state";
 
-const CONNECTOR =
-  "before:absolute before:top-[3px] before:left-[calc(-50%+8px)] before:right-[calc(50%+8px)] before:h-0.5 before:content-['']";
-
 export function Milestones({ state, compact }: { state: ProgressState; compact: boolean }) {
   const { milestones } = state;
   if (!milestones) return null;
@@ -37,7 +34,7 @@ export function Milestones({ state, compact }: { state: ProgressState; compact: 
     <ol
       data-pp-miles=""
       className={cn(
-        "m-0 flex list-none items-start px-3.5 pt-3 pb-0.5",
+        "m-0 flex list-none items-start gap-1.5 px-3.5 pt-3 pb-0.5",
         compact && "px-4 pt-3.5 pb-1",
       )}
     >
@@ -51,12 +48,6 @@ export function Milestones({ state, compact }: { state: ProgressState; compact: 
               "relative flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center",
               "font-mono text-[8.5px] tracking-[0.05em] uppercase",
               compact && "text-[9.5px]",
-              index > 0 && CONNECTOR,
-              // The connector belongs to the segment BEHIND a node, so it lights
-              // up as soon as that node does.
-              tone === "done" || tone === "active"
-                ? "before:bg-[var(--pp-blue)]"
-                : "before:bg-[var(--pp-line)]",
               tone === "done" && "text-[var(--pp-muted)]",
               tone === "active" && "text-[var(--pp-text)]",
               tone === "error" && "text-[var(--pp-err)]",
@@ -64,17 +55,17 @@ export function Milestones({ state, compact }: { state: ProgressState; compact: 
             )}
           >
             <span
+              data-pp-segment=""
               aria-hidden="true"
               className={cn(
-                "z-[1] box-border h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
-                tone === "pending" && "border-[var(--pp-line)] bg-[var(--pp-bg)]",
-                (tone === "done" || tone === "active") &&
-                  "border-[var(--pp-blue)] bg-[var(--pp-blue)]",
-                tone === "error" && "border-[var(--pp-err)] bg-[var(--pp-err)]",
-                // Only the live node breathes, and only while the run is live.
+                "relative h-[5px] w-full flex-none overflow-hidden rounded-full bg-[var(--pp-line)]",
+                "after:absolute after:inset-0 after:origin-left after:scale-x-0 after:rounded-[inherit] after:content-['']",
+                "after:transition-transform after:duration-500 after:ease-[cubic-bezier(.23,1,.32,1)] motion-reduce:after:transition-none",
+                (tone === "done" || tone === "active") && "after:scale-x-100 after:bg-[var(--pp-blue)]",
+                tone === "error" && "after:scale-x-100 after:bg-[var(--pp-err)]",
                 tone === "active" &&
                   !state.finished &&
-                  "animate-pulse [animation-duration:1.1s] motion-reduce:animate-none",
+                  "after:animate-[pp-segment-breathe_1.1s_ease-in-out_infinite] motion-reduce:after:animate-none",
               )}
             />
             <span>{milestone.label}</span>

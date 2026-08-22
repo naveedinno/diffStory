@@ -340,14 +340,27 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
  * The shared listbox.
  *
  * Always in the document (the comboboxes' `aria-controls` points at it even
- * while it is closed) and toggled with `hidden`, which is how the vanilla
- * element behaved. The entrance is a Motion animation rather than a CSS
- * keyframe so the whole surface can stay utility-styled; the closing direction
- * is instant, because there was never an exit animation to preserve.
+ * while it is closed). `present` keeps it laid out just long enough to retrace
+ * its anchored opening path on dismissal, then restores `hidden`; `inert` and
+ * `aria-hidden` remove it from interaction and accessibility immediately. The
+ * transition is interruptible, so reopening during dismissal retargets the
+ * current material instead of waiting for a scripted exit to finish.
  */
 export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose }: ListboxProps) {
   const reduce = useReducedMotion();
-  const shown = { opacity: 1, clipPath: "inset(0px round 10px)", y: 0, scale: 1 };
+  const [present, setPresent] = useState(open);
+  const shown = { opacity: 1, clipPath: "inset(0px round 10px)", filter: "blur(0px)", y: 0, scale: 1 };
+  const concealed = {
+    opacity: 0,
+    clipPath: "inset(0px 0px 100% round 10px)",
+    filter: reduce ? "blur(0px)" : "blur(3px)",
+    y: -5,
+    scale: 0.985,
+  };
+  useEffect(() => {
+    if (open) setPresent(true);
+    else if (reduce) setPresent(false);
+  }, [open, reduce]);
   // `Loader` bakes in `role="status"`, and a live region inside a `role="option"`
   // inside a `role="listbox"` is both noise and broken structure. The card also
   // quiets this subtree — the listbox is a DOM descendant of it despite being
@@ -360,16 +373,24 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
       id="refPicker"
       role="listbox"
       aria-label="Available git references"
-      hidden={!open}
+      aria-hidden={!open}
+      inert={!open}
+      hidden={!open && !present}
       initial={false}
-      animate={
-        open || reduce ? shown : { opacity: 0, clipPath: "inset(0px 0px 100% round 10px)", y: -4, scale: 0.985 }
+      animate={open || reduce ? shown : concealed}
+      transition={
+        reduce
+          ? { duration: 0 }
+          : open
+            ? { duration: 0.24, ease: EASE_SIGNAL_OUT }
+            : { duration: 0.18, ease: [0.68, 0, 0.77, 0] }
       }
-      transition={open && !reduce ? { duration: 0.2, ease: EASE_SIGNAL_OUT } : { duration: 0 }}
-      style={{ transformOrigin: "50% 0" }}
+      onAnimationComplete={() => {
+        if (!open) setPresent(false);
+      }}
       className={cn(
-        "fixed z-50 max-h-[260px] overflow-auto rounded-[var(--radius-lg)] border border-line bg-surface p-1.5",
-        "shadow-[var(--shadow)] contrast-more:border-text",
+        "refpick-surface fixed z-50 max-h-[260px] overflow-auto rounded-[var(--radius-lg)] border border-line bg-surface p-1.5",
+        "shadow-[0_18px_44px_rgba(0,0,0,.28),0_2px_8px_rgba(0,0,0,.18)] contrast-more:border-text",
       )}
     >
       {rows.length === 0 ? (
@@ -394,7 +415,8 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
             }}
             className={cn(
               "refpick-row grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-left",
-              position === index && "bg-fill-2",
+              "transition-transform duration-[var(--motion-duration-press)] ease-out active:scale-[.995] motion-reduce:transition-none motion-reduce:active:transform-none",
+              position === index && "bg-fill-2 shadow-[inset_2px_0_0_var(--accent)]",
               "hover:bg-fill-2",
             )}
           >

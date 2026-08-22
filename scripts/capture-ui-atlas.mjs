@@ -14,7 +14,7 @@ const FIXTURE = mkdtempSync(join(tmpdir(), 'diffstory-atlas-fixture-'));
 const HOME = mkdtempSync(join(tmpdir(), 'diffstory-atlas-home-'));
 const STORY = join(FIXTURE, '.diffstory', 'story.json');
 const STORY_HOLD = join(FIXTURE, '.diffstory', 'story.atlas-hold.json');
-const viewports = { desktop: { width: 1440, height: 960 }, tablet: { width: 920, height: 820 }, mobile: { width: 390, height: 844 } };
+const viewports = { desktop: { width: 1440, height: 960 }, reported: { width: 868, height: 569 }, tablet: { width: 920, height: 820 }, mobile: { width: 390, height: 844 } };
 // The panel root is a `data-progress-panel` element after the React rewrite;
 // `.ds-pp` was a class name that no longer exists.
 const PANEL = '#ds-agentpanel [data-progress-panel], #ds-storystage [data-progress-panel]';
@@ -37,6 +37,7 @@ const definitions = [
   ['pages','Folder browser modal — mobile','The repository chooser sheet on a phone viewport.','picker-modal-mobile','dark','mobile','/repos','picker-modal'],
   ['pages','Folder browser modal — light','The repository chooser sheet in the light palette.','picker-modal-light','light','desktop','/repos','picker-modal'],
   ['pages','Review history','Saved review, scope health, and queued-comment status.','history-populated','dark','desktop','/repo/diffstory-atlas-fixture/stories'],
+  ['pages','Review history — glance preview','The saved-review action expands on precise hover to preview scope before navigation.','history-glance','dark','desktop','/repo/diffstory-atlas-fixture/stories'],
   ['pages','Review history — tablet','Saved reviews at the tablet width.','history-populated-tablet','dark','tablet','/repo/diffstory-atlas-fixture/stories','history-populated'],
   ['pages','Review history — mobile','Saved reviews with the stacked row footer on a phone viewport.','history-populated-mobile','dark','mobile','/repo/diffstory-atlas-fixture/stories','history-populated'],
   ['pages','Review history — light','Saved reviews in the light palette.','history-populated-light','light','desktop','/repo/diffstory-atlas-fixture/stories','history-populated'],
@@ -61,7 +62,9 @@ const definitions = [
   ['pages','Raw diff — mobile','Story-free diff inspection on a phone viewport.','raw-diff-mobile','dark','mobile','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['pages','Raw diff — light','Story-free diff inspection in the light palette.','raw-diff-light','light','desktop','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['review','Guided review overview','Intent, reading path, scope, and walkthrough entry.','overview','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Narration control — active','The narration action expands into its pause and waveform state while speech is audible.','narration-active','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Logic-move walkthrough','Focused code with a local semantic move, narrative beats, and filmstrip.','code-step','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Logic-move walkthrough — proximity dock','Pointer proximity magnifies the target stop and its neighbours without changing review order.','code-step-dock','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Focused code walkthrough','A deliberately quiet code scene without semantic-move annotation ink.','code-focus','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Paired-code walkthrough','A cross-file relationship presented as a before-and-after scene.','paired-code','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Concept primer with diagram','A mental model composed as copy and diagram rather than a long document.','concept-step','light','desktop','/repo/diffstory-atlas-fixture/review'],
@@ -72,8 +75,10 @@ const definitions = [
   ['review','Concept document','A document-led primer when the story has no diagram to compose beside it.','concept-document','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — unified','Complete file inventory in the primary unified-diff mode.','files-unified','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','All files — split','Side-by-side review with the resizable before/after divider.','files-split','light','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Source editor chooser','The anchored source-editor chooser clears the sticky diff controls beneath it.','editor-menu-open','dark','reported','/repo/diffstory-atlas-fixture/review'],
   ['review','Review page','Coverage, queued comments, challenge checks, and saved reviews — as a page.','review-menu','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Review comments','Queued comments grouped by file with code anchors, editing, removal, and Copy all.','comment-queue','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Review comments — copied','Copy all confirms completion in the action itself before returning to its resting label.','comment-copy-success','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Inline comment','A compact selected-code composer with Copy as the default and Queue as persistence.','comment-composer','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Comment anchor','A queued comment traced back to highlighted code without opening a modal.','comment-anchor','light','desktop','/repo/diffstory-atlas-fixture/review'],
   ['communication','Agent working','Floating progress panel mid-run: milestones, plan, activity, and the stop control.','pp-running','dark','desktop','/repo/diffstory-atlas-fixture/review','pp-running'],
@@ -108,19 +113,24 @@ const evidence = {
   'picker-empty':'[data-recents-empty]',
   'picker-modal':'.ds-scrim.is-shown .ds-sheet',
   'history-populated':'#storyList .story-row',
+  'history-glance':'#storyList .story-row .story-glance-detail',
   'history-empty':'main .empty',
   'change-populated':'.file-card .frow',
   'change-empty':'.file-card .empty-title',
   'change-refpicker':'#refPicker .refpick-row',
   'raw-diff':'.ds-filedetail',
   'overview':'#ds-view-tour [data-scene-layout="opening"]',
+  'narration-active':'.ds-readaloud.is-active.is-audible .ds-readaloud-wave',
   'code-step':'#ds-view-tour [data-scene-layout="logic-move"]:not([hidden])',
+  'code-step-dock':'.ds-filmnode[style*="--ds-dock-scale"]',
+  'comment-copy-success':'[data-copy-comments].is-copied',
   'code-focus':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
   'paired-code':'#ds-view-tour [data-scene-layout="paired-code"]:not([hidden])',
   'concept-step':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden])',
   'concept-step-evidence':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden]) [data-concept-diagram][data-render-state="ready"]',
   'concept-document':'#ds-view-tour [data-scene-layout="concept-document"]:not([hidden])',
   'code-focus-mobile':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
+  'editor-menu-open':'.ds-editor-menu:not([hidden])',
   // The React panel replaced the `ds-pp-*` class names with Tailwind utilities
   // and a deliberate `data-pp-*` hook set. `is-finished` became `data-state`.
   'pp-running':'[data-progress-panel][data-state="running"] [data-pp-plan] [data-pp-step-now]',
@@ -418,6 +428,57 @@ async function assertStoryInteractionReplay(browser,origin){
   console.log('verified story-scene interaction replay (lazy fetches, modes, dock, rapid navigation, motion)');
 }
 
+async function assertChangeMotionReplay(browser,origin){
+  const route=`/repo/${encodeURIComponent(basename(FIXTURE))}/change?scope=uncommitted`;
+  const context=await browser.newContext({viewport:viewports.desktop,colorScheme:'dark',reducedMotion:'no-preference'});
+  const page=await context.newPage();
+  const panelState=()=>page.evaluate(()=>{
+    const read=(id)=>{const node=document.getElementById(id);if(!node)throw new Error(`${id} is missing`);const style=getComputedStyle(node),rect=node.getBoundingClientRect();return {height:rect.height,opacity:Number(style.opacity),hidden:node.hidden,inert:node.inert,ariaHidden:node.getAttribute('aria-hidden')};};
+    return {commit:read('commitPanel'),compare:read('comparePanel')};
+  });
+  try{
+    await page.goto(origin+route,{waitUntil:'domcontentloaded'});await settled(page);
+    const resting=await panelState();
+    if(resting.compare.height>1||!resting.compare.inert)throw new Error(`Closed compare editor is still interactive: ${JSON.stringify(resting.compare)}`);
+
+    await page.locator('[data-open-panel="compare"]').click();
+    await page.waitForTimeout(70);
+    const opening=await panelState();
+    if(opening.compare.height<=1||opening.compare.opacity<=0)throw new Error(`Compare editor did not unfold from its trigger: ${JSON.stringify(opening.compare)}`);
+
+    await page.locator('[data-open-panel="commit"]').click();
+    await page.waitForTimeout(70);
+    const interrupted=await panelState();
+    if(interrupted.commit.height<=1||interrupted.compare.height<=1)throw new Error(`Panel switch did not retarget through the live presentation: ${JSON.stringify(interrupted)}`);
+    await page.waitForTimeout(360);
+    const settledPanels=await panelState();
+    if(settledPanels.commit.height<60||settledPanels.commit.inert||settledPanels.compare.height>1||!settledPanels.compare.inert)throw new Error(`Panel switch did not settle on the commit editor: ${JSON.stringify(settledPanels)}`);
+
+    await page.locator('#commitRef').focus();
+    await page.waitForTimeout(70);
+    const pickerOpening=await page.locator('#refPicker').evaluate((node)=>{const style=getComputedStyle(node);return {hidden:node.hidden,opacity:Number(style.opacity),placement:node.dataset.placement,origin:style.transformOrigin};});
+    if(pickerOpening.hidden||pickerOpening.opacity<=0||!pickerOpening.placement)throw new Error(`Ref picker did not materialize from its field: ${JSON.stringify(pickerOpening)}`);
+    await page.waitForTimeout(240);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(60);
+    const pickerClosing=await page.locator('#refPicker').evaluate((node)=>({hidden:node.hidden,inert:node.inert,ariaHidden:node.getAttribute('aria-hidden'),opacity:Number(getComputedStyle(node).opacity)}));
+    if(pickerClosing.hidden||!pickerClosing.inert||pickerClosing.ariaHidden!=='true'||pickerClosing.opacity>=1)throw new Error(`Ref picker did not retrace its exit while becoming inert: ${JSON.stringify(pickerClosing)}`);
+    await page.waitForTimeout(220);
+    if(!(await page.locator('#refPicker').evaluate((node)=>node.hidden)))throw new Error('Ref picker stayed laid out after its exit finished.');
+  }finally{await context.close();}
+
+  const reduced=await browser.newContext({viewport:viewports.desktop,colorScheme:'dark',reducedMotion:'reduce'});
+  const reducedPage=await reduced.newPage();
+  try{
+    await reducedPage.goto(origin+route,{waitUntil:'domcontentloaded'});await settled(reducedPage);
+    await reducedPage.locator('[data-open-panel="compare"]').click();
+    await reducedPage.waitForTimeout(30);
+    const reducedPanel=await reducedPage.locator('#comparePanel').evaluate((node)=>({height:node.getBoundingClientRect().height,opacity:Number(getComputedStyle(node).opacity)}));
+    if(reducedPanel.height<60||reducedPanel.opacity!==1)throw new Error(`Reduced motion left the compare editor between states: ${JSON.stringify(reducedPanel)}`);
+  }finally{await reduced.close();}
+  console.log('verified change-page motion replay (open, midpoint, interruption, exit, reduced motion)');
+}
+
 async function main(){
   const executable=browserExecutable();if(!executable)throw new Error('Install Google Chrome or Microsoft Edge, or set DIFFSTORY_ATLAS_BROWSER.');
   mkdirSync(SHOTS,{recursive:true});for(const old of definitions)rmSync(join(SHOTS,`${old.category}-${old.state}.png`),{force:true});
@@ -435,7 +496,8 @@ async function main(){
       await page.setViewportSize(viewports[def.viewport]);await page.addInitScript(themeInit(def.theme));
       // Only the progress panel reads prefers-color-scheme; every other surface
       // is driven by ds-theme, so the emulation stays dark for them.
-      await page.emulateMedia({colorScheme:def.surface.startsWith('pp-')&&def.theme==='light'?'light':'dark'});
+      const motionEvidence=['history-glance','narration-active','code-step-dock','comment-copy-success','change-refpicker'].includes(def.surface);
+      await page.emulateMedia({colorScheme:def.surface.startsWith('pp-')&&def.theme==='light'?'light':'dark',reducedMotion:motionEvidence?'no-preference':'reduce'});
       let runtimeRoute=def.route.replace('/repo/diffstory-atlas-fixture',`/repo/${encodeURIComponent(basename(FIXTURE))}`);
       if(runtimeRoute.endsWith('/review'))runtimeRoute+='?story=story.json';
       await page.goto(origin+runtimeRoute,{waitUntil:'domcontentloaded'});await settled(page);
@@ -452,8 +514,12 @@ async function main(){
         await click(page,'#quickAddBtn');
         await page.waitForFunction(()=>{const scrim=document.querySelector('.ds-scrim');const list=document.querySelector('#fslist');return !!scrim&&!scrim.hidden&&scrim.classList.contains('is-shown')&&!!list&&!/Loading…/.test(list.textContent||'');},undefined,{timeout:5000});
         await page.waitForTimeout(240);
-      }else if(def.surface==='history-populated'||def.surface==='history-empty'){
+      }else if(def.surface==='history-populated'||def.surface==='history-empty'||def.surface==='history-glance'){
         await openFixtureRepo(page,origin,runtimeRoute);
+        if(def.surface==='history-glance'){
+          await page.locator('#storyList .row-main').first().hover();
+          await page.waitForFunction(()=>{const detail=document.querySelector('.story-glance-detail');return !!detail&&parseFloat(getComputedStyle(detail).opacity)>.95;});
+        }
       }else if(def.surface==='change-refpicker'){
         await click(page,'[data-open-panel="compare"]');
         await page.locator('#cmpBase').focus();
@@ -462,8 +528,20 @@ async function main(){
       }else if(def.surface==='raw-diff'){
         await page.waitForFunction(()=>{const panel=document.querySelector('.ds-filepanel:not([hidden])');if(!panel)return false;if(panel.querySelector('.ds-differror'))return true;return Array.from(panel.querySelectorAll('[data-comment-code]')).some((node)=>node.getBoundingClientRect().height>0);},undefined,{timeout:15000});
         await page.waitForTimeout(240);
+      }else if(def.surface==='narration-active'){
+        await page.evaluate(()=>{
+          const button=document.querySelector('[data-readaloud]');if(!button)throw new Error('The narration control is missing.');
+          button.classList.add('is-active','is-audible');button.setAttribute('aria-pressed','true');button.setAttribute('aria-label','Pause narration');
+          const label=button.querySelector('[data-readaloud-label]'),icon=button.querySelector('.ds-readaloud-ico');if(label)label.textContent='Pause';if(icon){icon.classList.remove('is-play');icon.classList.add('is-pause');}
+        });
+        await page.waitForTimeout(180);
       }else if(def.surface==='code-step'){
         await gotoStoryStep(page,1);
+      }else if(def.surface==='code-step-dock'){
+        await gotoStoryStep(page,1);await waitForStoryStep(page,1,'logic-move');
+        const target=page.locator('[data-thread-node="4"]').first();
+        const box=await target.boundingBox();if(!box)throw new Error('The proximity-dock target is not visible.');
+        await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(180);
       }else if(def.surface==='code-focus'||def.surface==='code-focus-mobile'){
         await gotoStoryStep(page,8);
       }else if(def.surface==='paired-code'){
@@ -474,10 +552,20 @@ async function main(){
         if(def.surface==='concept-step-evidence')await page.evaluate(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]'),scroller=diagram?.closest('.ds-concept-scroll');if(!diagram||!scroller)throw new Error('Concept diagram or its scroller is missing.');const dr=diagram.getBoundingClientRect(),sr=scroller.getBoundingClientRect();scroller.scrollTop+=dr.top-sr.top-18;});
       }else if(def.surface==='files-unified'||def.surface==='files-split'){
         await click(page,'#ds-tab-files');if(def.surface==='files-split'){await click(page,'.ds-filepanel:not([hidden]) [data-mode="split"]');await page.waitForFunction(()=>document.querySelector('.ds-filepanel:not([hidden]) [data-split-inner]')?.getAttribute('aria-busy')==='false');}
+      }else if(def.surface==='editor-menu-open'){
+        await gotoStoryStep(page,1);
+        await waitForStoryStep(page,1,'logic-move');
+        await click(page,'.ds-editor-toggle');
+        await page.waitForSelector('.ds-editor-menu:not([hidden])',{state:'visible',timeout:5000});
       }else if(def.surface==='review-menu'){
         await click(page,'#ds-tab-review');await assertReviewPageVisible(page);
-      }else if(def.surface==='comment-queue'||def.surface==='mobile-comments'){
+      }else if(def.surface==='comment-queue'||def.surface==='mobile-comments'||def.surface==='comment-copy-success'){
         await click(page,'#ds-tab-review');await click(page,'[data-review-tab-select="notes"]');
+        if(def.surface==='comment-copy-success'){
+          await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.resolve()}}));
+          await click(page,'[data-copy-comments]');
+          await page.waitForSelector('[data-copy-comments].is-copied',{state:'attached',timeout:5000});
+        }
       }else if(def.surface==='comment-composer'||def.surface==='mobile-comment-composer'){
         await click(page,'[data-goto-step="1"]');
         // The step's diff body is lazily loaded, so a fixed 240ms after the
@@ -501,7 +589,7 @@ async function main(){
         await progressState(page,def.surface.replace('pp-detail-','').replace('pp-',''));
       }
       await page.waitForFunction(()=>!/Loading (?:the split view|this review step)/i.test(document.body.innerText));
-      if(['overview','code-step','code-focus','paired-code'].includes(def.surface))await assertReviewStageGeometry(page);
+      if(['overview','code-step','code-step-dock','code-focus','paired-code'].includes(def.surface))await assertReviewStageGeometry(page);
       const degraded=await assertRendered(page,def);
       const file=`screenshots/${def.category}-${def.state}.png`,target=join(OUT,file);
       let size;
@@ -521,6 +609,7 @@ async function main(){
       shots.push({category:def.category,title:def.title,description:def.description,state:def.state,theme:def.theme,viewport:def.viewport,surface:def.surface,route,file,width:size.width,height:size.height,...(degraded?{degraded}:{})});
       console.log(`captured ${file} (${size.width}x${size.height}, ${bytes} bytes)`);
     }
+    await assertChangeMotionReplay(browser,origin);
     await assertStoryInteractionReplay(browser,origin);
     const source=execFileSync('git',['rev-parse','--short','HEAD'],{cwd:ROOT,encoding:'utf8'}).trim();const dirty=execFileSync('git',['status','--porcelain'],{cwd:ROOT,encoding:'utf8'}).trim();const manifest={version:1,generatedAt:new Date().toISOString(),source:`commit ${source}${dirty?' + working tree':''} · deterministic demo`,shots};const json=JSON.stringify(manifest,null,2)+'\n';writeFileSync(join(OUT,'manifest.json'),json);writeFileSync(join(OUT,'manifest.js'),`window.DIFFSTORY_UI_ATLAS=${JSON.stringify(manifest)};\n`);console.log(`\nUI atlas: ${relative(ROOT,OUT)}/index.html (${shots.length} frames)`);
     const degradedShots=shots.filter((shot)=>shot.degraded);

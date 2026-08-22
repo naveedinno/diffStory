@@ -39,3 +39,24 @@ test("source editor choice is reachable from every primary product surface", () 
   assert.match(review, /<EditorMenu compact \/>/);
   assert.match(reviewCss, /max-width:470px[\s\S]{0,420}\.ds-editor-wrap\{display:none\}/);
 });
+
+test("source editor menu clears sticky review controls", () => {
+  const ruleZIndex = (css, selector) => {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rules = css.matchAll(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "g"));
+    for (const rule of rules) {
+      const match = rule[1].match(/z-index:\s*(\d+)/);
+      if (match) return Number(match[1]);
+    }
+    assert.fail(`missing z-index in ${selector}`);
+  };
+
+  const menuZIndex = ruleZIndex(sharedCss, ".ds-editor-menu");
+  const chromeZIndex = ruleZIndex(reviewCss, ".ds-reviewchrome");
+  const toolbarZIndex = ruleZIndex(reviewCss, ".ds-difftoolbar");
+  const fileHeaderZIndex = ruleZIndex(reviewCss, ".ds-filepanel-head");
+
+  assert.ok(menuZIndex > 0, "editor picker should establish a local overlay layer");
+  assert.ok(chromeZIndex > toolbarZIndex, "editor picker parent should clear the diff toolbar");
+  assert.ok(chromeZIndex > fileHeaderZIndex, "editor picker parent should clear the file header");
+});
