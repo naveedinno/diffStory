@@ -176,6 +176,25 @@ test("concept steps use a plain full-stage canvas instead of an inner card", () 
   assert.doesNotMatch(source, /grid-template-areas:"heading diagram"/);
 });
 
+test("spacious concept scenes fit their content typography to real stage capacity", () => {
+  assert.match(
+    source,
+    /\.ds-concept-title\{[^}]*font-size:var\(--ds-concept-title-size,30px\)/,
+  );
+  assert.match(
+    source,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-body\{[^}]*font-size:var\(--ds-concept-body-size,14px\)/,
+  );
+  assert.match(source, /function fitConceptTypography\(panel\)/);
+  assert.match(source, /targetHeight=availableHeight\*\.92/);
+  assert.match(source, /targetHeight-baseHeight<Math\.max\(40,targetHeight\*\.06\)/);
+  assert.match(source, /for\(var pass=0;pass<7;pass\+\+\)/);
+  assert.match(source, /window\.innerWidth<=980/);
+  assert.match(source, /new ResizeObserver\(function\(\)\{scheduleConceptTypographyFit/);
+  assert.match(source, /watchConceptTypographyFit\(stepPanels\[i\]\)/);
+  assert.match(source, /scheduleConceptTypographyFit\(stepPanels&&stepPanels\[active\]\)/);
+});
+
 test("the reading dock keeps its active sentence and step numerals comfortably legible", () => {
   assert.match(
     source,

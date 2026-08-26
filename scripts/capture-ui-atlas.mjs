@@ -395,6 +395,19 @@ async function assertStoryInteractionReplay(browser,origin){
     const revisitCount=await page.evaluate(()=>window.__atlasSceneAnimations.length);
     if(revisitCount!==firstEntranceCount)throw new Error(`Concept entrance replayed on revisit (${firstEntranceCount} -> ${revisitCount}).`);
 
+    // Exercise the content-aware branch directly: a short primer on this same
+    // desktop canvas should spend the newly empty space on type, then release
+    // the fit when the scene crosses into the compact stacked layout.
+    await page.evaluate(()=>{const body=document.querySelector('.ds-step:not([hidden]) .ds-concept-body');if(!body)throw new Error('Concept body is missing.');body.replaceChildren(Object.assign(document.createElement('p'),{textContent:'A short mental model should read at presentation scale when the stage has room.'}));window.dispatchEvent(new Event('resize'));});
+    await page.waitForFunction(()=>Number(document.querySelector('.ds-step:not([hidden]) .ds-concept-copy')?.getAttribute('data-concept-type-scale')||0)>1.2);
+    const spaciousType=await page.evaluate(()=>{const panel=document.querySelector('.ds-step:not([hidden])'),copy=panel?.querySelector('.ds-concept-copy'),body=panel?.querySelector('.ds-concept-body'),scroller=panel?.querySelector('.ds-concept-scroll');return {scale:Number(copy?.getAttribute('data-concept-type-scale')||0),bodySize:Number(getComputedStyle(body).fontSize.replace('px','')),scrollHeight:scroller?.scrollHeight||0,clientHeight:scroller?.clientHeight||0};});
+    if(spaciousType.bodySize<=14||spaciousType.scrollHeight>spaciousType.clientHeight+1)throw new Error(`Spacious concept typography did not fit cleanly: ${JSON.stringify(spaciousType)}`);
+    await page.setViewportSize(viewports.tablet);
+    await page.waitForFunction(()=>!document.querySelector('.ds-step:not([hidden]) .ds-concept-copy')?.hasAttribute('data-concept-type-scale'));
+    const compactBodySize=await page.locator('.ds-step:not([hidden]) .ds-concept-body').evaluate((body)=>Number(getComputedStyle(body).fontSize.replace('px','')));
+    if(compactBodySize!==14)throw new Error(`Compact concept typography retained a desktop fit: ${compactBodySize}px`);
+    await page.setViewportSize(viewports.desktop);await page.waitForTimeout(80);
+
     await gotoStoryStep(page,3);await waitForStoryStep(page,3,'paired-code');
     const pairedDock=await sceneDockRect(page);
     await gotoStoryStep(page,8);await waitForStoryStep(page,8,'code-focus');
