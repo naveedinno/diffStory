@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { buildFullFileRows, buildPairedBlocks, buildReviewModel, hunksToSbsBlocks } from '../dist/view-model.js';
+import { buildFullFileRows, buildPairedBlocks, buildReviewModel, hunksToSbsBlocks, pairChangeRows } from '../dist/view-model.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -279,4 +279,54 @@ test('lazy file indexes keep the authored story file count truthful before diff 
 
   assert.equal(model.filesChanged, 2, 'All Files still reports every indexed change');
   assert.equal(model.storyFilesChanged, 1, 'only authored changed paths count as story files while coverage is lazy');
+});
+
+test('pairChangeRows merges a del-run and add-run into side-by-side rows', () => {
+  const rows = [
+    { type: 'ctx', oldNo: 1, newNo: 1, content: 'a' },
+    { type: 'del', oldNo: 2, content: 'uint256 fee = solverFee * filled / uncapped;' },
+    { type: 'del', oldNo: 3, content: 'old only line' },
+    { type: 'add', newNo: 2, content: 'uint256 fee = solverFee * filled / plan.uncapped;' },
+    { type: 'add', newNo: 3, content: 'completely rewritten other thing();' },
+    { type: 'add', newNo: 4, content: 'extra added line' },
+  ];
+  const { rows: out, sides } = pairChangeRows(rows);
+  assert.equal(out.length, 4, 'ctx + two merged pairs + one leftover add');
+  assert.equal(out[1].changePair, true);
+  assert.equal(out[1].paired, true);
+  assert.equal(out[1].oldNo, 2);
+  assert.equal(out[1].newNo, 2);
+  assert.equal(out[1].leftContent, 'uint256 fee = solverFee * filled / uncapped;');
+  assert.equal(out[1].rightContent, 'uint256 fee = solverFee * filled / plan.uncapped;');
+  assert.ok(sides.get(out[1])?.left, 'similar pair carries intra-line marks');
+  assert.equal(sides.get(out[2]), undefined, 'dissimilar pair gets no intra marks');
+  assert.equal(out[3].type, 'add', 'unpaired excess keeps its single-sided row');
+  assert.equal(out[3].changePair, undefined);
+});
+
+test('pairChangeRows leaves already-paired story rows untouched', () => {
+  const rows = [{ type: 'ctx', paired: true, leftContent: 'x', rightContent: 'y', content: 'y' }];
+  const { rows: out } = pairChangeRows(rows);
+  assert.equal(out[0], rows[0]);
+});
+
+test('pairChangeRows carries the untoured flag from the added side', () => {
+  const rows = [
+    { type: 'del', oldNo: 4, content: 'const a = compute(x);' },
+    { type: 'add', newNo: 4, content: 'const a = compute(y);', untoured: true },
+  ];
+  const { rows: out } = pairChangeRows(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].untoured, true);
+});
+
+test('pairChangeRows leaves a pure deletion run single-sided', () => {
+  const rows = [
+    { type: 'del', oldNo: 7, content: 'gone();' },
+    { type: 'ctx', oldNo: 8, newNo: 7, content: 'kept();' },
+  ];
+  const { rows: out } = pairChangeRows(rows);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].type, 'del');
+  assert.equal(out[0].changePair, undefined);
 });

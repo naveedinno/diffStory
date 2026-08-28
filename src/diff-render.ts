@@ -34,9 +34,12 @@ function reviewRowAttrs(
   type: SbsRow['type'] | UnifiedRow['type'],
   content: string | undefined,
   step?: string,
+  changePair?: boolean,
 ): string {
   if (!target) return '';
-  const action = type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
+  const action = changePair
+    ? 'Changed'
+    : type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
   const version = target.side === 'left' ? 'before' : 'after';
   // Keep the renderer tolerant of the legacy full-file row shape used by old
   // callers while still giving modern rows a useful accessible description.
@@ -80,7 +83,10 @@ function cell(side: RowSide, row: SbsRow, target?: RowTarget, intra?: string): s
   if (row.paired) tint = side === 'left' ? ' ds-cell-del ds-cell-paired' : ' ds-cell-add ds-cell-paired';
   else if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
-  const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
+  const flag =
+    side === 'right' && row.untoured && (add || row.changePair)
+      ? '<span class="ds-untoured-tag">UNEXPLAINED</span>'
+      : '';
   return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
     (intra ?? highlightedCode(sideContent ?? '', target)) || ' '
   }</span>${flag}</span>`;
@@ -115,7 +121,13 @@ export interface SplitRowOpts {
 
 export function renderSplitRow(row: SbsRow, opts: SplitRowOpts = {}): string {
   const primaryTarget = opts.rightTarget ?? opts.leftTarget;
-  const attrs = reviewRowAttrs(primaryTarget, row.type, row.rightContent ?? row.leftContent ?? row.content, primaryTarget ? opts.stepId : undefined);
+  const attrs = reviewRowAttrs(
+    primaryTarget,
+    row.type,
+    row.rightContent ?? row.leftContent ?? row.content,
+    primaryTarget ? opts.stepId : undefined,
+    row.changePair,
+  );
   const focusAttr =
     opts.focusIndex === null || opts.focusIndex === undefined ? '' : ` data-step-focus="${opts.focusIndex}"`;
   const moveAttr = opts.moveTokens?.length ? ` data-move="${esc(opts.moveTokens.join(' '))}"` : '';
@@ -124,7 +136,9 @@ export function renderSplitRow(row: SbsRow, opts: SplitRowOpts = {}): string {
     : `${cell('left', row, opts.leftTarget, opts.sides?.left)}<span class="ds-celldiv" aria-hidden="true"></span>${cell(
         'right', row, opts.rightTarget, opts.sides?.right,
       )}`;
-  return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}${moveAttr}>${cells}</div>`;
+  return `<div class="ds-row ds-row-${row.type}${
+    row.changePair ? ' ds-row-pair' : ''
+  }"${attrs}${focusAttr}${moveAttr}>${cells}</div>`;
 }
 
 export function renderUnifiedRow(row: UnifiedRow, target?: RowTarget, intra?: string): string {

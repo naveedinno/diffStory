@@ -16,10 +16,12 @@ export function rowAttrs(target, step) {
         ? ` data-file="${esc(target.file)}" data-line="${target.line}" data-side="${target.side}"${step ? ` data-step="${esc(step)}"` : ''}`
         : '';
 }
-function reviewRowAttrs(target, type, content, step) {
+function reviewRowAttrs(target, type, content, step, changePair) {
     if (!target)
         return '';
-    const action = type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
+    const action = changePair
+        ? 'Changed'
+        : type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
     const version = target.side === 'left' ? 'before' : 'after';
     // Keep the renderer tolerant of the legacy full-file row shape used by old
     // callers while still giving modern rows a useful accessible description.
@@ -63,7 +65,9 @@ function cell(side, row, target, intra) {
         tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
     else if (side === 'left' && del)
         tint = ' ds-cell-del';
-    const flag = side === 'right' && add && row.untoured ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';
+    const flag = side === 'right' && row.untoured && (add || row.changePair)
+        ? '<span class="ds-untoured-tag">UNEXPLAINED</span>'
+        : '';
     return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${(intra ?? highlightedCode(sideContent ?? '', target)) || ' '}</span>${flag}</span>`;
 }
 /** Context/new-file steps render one full-width cell. Verbatim from singleCell()
@@ -79,13 +83,13 @@ function singleCell(row, target) {
 }
 export function renderSplitRow(row, opts = {}) {
     const primaryTarget = opts.rightTarget ?? opts.leftTarget;
-    const attrs = reviewRowAttrs(primaryTarget, row.type, row.rightContent ?? row.leftContent ?? row.content, primaryTarget ? opts.stepId : undefined);
+    const attrs = reviewRowAttrs(primaryTarget, row.type, row.rightContent ?? row.leftContent ?? row.content, primaryTarget ? opts.stepId : undefined, row.changePair);
     const focusAttr = opts.focusIndex === null || opts.focusIndex === undefined ? '' : ` data-step-focus="${opts.focusIndex}"`;
     const moveAttr = opts.moveTokens?.length ? ` data-move="${esc(opts.moveTokens.join(' '))}"` : '';
     const cells = opts.single
         ? singleCell(row, opts.rightTarget)
         : `${cell('left', row, opts.leftTarget, opts.sides?.left)}<span class="ds-celldiv" aria-hidden="true"></span>${cell('right', row, opts.rightTarget, opts.sides?.right)}`;
-    return `<div class="ds-row ds-row-${row.type}"${attrs}${focusAttr}${moveAttr}>${cells}</div>`;
+    return `<div class="ds-row ds-row-${row.type}${row.changePair ? ' ds-row-pair' : ''}"${attrs}${focusAttr}${moveAttr}>${cells}</div>`;
 }
 export function renderUnifiedRow(row, target, intra) {
     const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';

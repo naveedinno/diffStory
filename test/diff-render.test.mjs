@@ -240,3 +240,36 @@ test('hunk gap buttons carry readable labels', () => {
   assert.match(html, />↓ 5 lines</);
   assert.match(html, />Show all</);
 });
+
+test('a merged change pair renders both sides on one row', () => {
+  const row = {
+    type: 'ctx', changePair: true, paired: true,
+    oldNo: 154, newNo: 158,
+    content: 'new;', leftContent: 'old;', rightContent: 'new;', comment: true,
+  };
+  const html = renderSplitRow(row, {
+    leftTarget: { side: 'left', file: 'a.sol', line: 154 },
+    rightTarget: { side: 'right', file: 'a.sol', line: 158 },
+  });
+  assert.match(html, /class="ds-row ds-row-ctx ds-row-pair"/);
+  assert.match(html, /ds-cell-del ds-cell-paired/);
+  assert.match(html, /ds-cell-add ds-cell-paired/);
+  assert.match(html, /aria-label="Changed after line 158/);
+  assert.match(html, /data-comment-side="left" [^>]*data-comment-line="154"/);
+  assert.match(html, /data-comment-side="right" [^>]*data-comment-line="158"/);
+  assert.match(html, /<span class="ds-no">154<\/span>/);
+  assert.match(html, /<span class="ds-no">158<\/span>/);
+});
+
+test('a merged change pair can still carry the unexplained flag', () => {
+  const row = {
+    type: 'ctx', changePair: true, paired: true, untoured: true,
+    oldNo: 3, newNo: 3,
+    content: 'new;', leftContent: 'old;', rightContent: 'new;', comment: true,
+  };
+  const html = renderSplitRow(row, {
+    leftTarget: { side: 'left', file: 'a.sol', line: 3 },
+    rightTarget: { side: 'right', file: 'a.sol', line: 3 },
+  });
+  assert.match(html, /UNEXPLAINED/);
+});

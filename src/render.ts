@@ -20,7 +20,7 @@
 // Authored text and code are escaped here, server-side. The one client-side
 // HTML insertion remains locally rendered Mermaid SVG, parsed and sanitized in
 // the browser before it reaches the DOM.
-import { buildReviewModel } from "./view-model.js";
+import { buildReviewModel, pairChangeRows } from "./view-model.js";
 import { intraLineMap, type IntraSides } from "./intra-line.js";
 import {
   renderSplitRow,
@@ -1112,12 +1112,8 @@ export function renderFullFile(
   if (!rows.length) {
     return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
   }
-  const intra = intraLineMap(
-    rows,
-    (r) => r.type,
-    (r) => r.content,
-  );
-  const body = rows.map((r) => fullRow(r, opts, intra)).join("");
+  const { rows: pairedRows, sides } = pairChangeRows(rows);
+  const body = pairedRows.map((r) => fullRow(r, opts, sides)).join("");
   return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
 }
 
@@ -1173,13 +1169,10 @@ export function renderSplitHunks(
   const body =
     blocks
       .map((block, bi) => {
-        const intra = intraLineMap(
-          block,
-          (r) => r.type,
-          (r) => r.content,
-        );
+        const { rows: pairedRows, sides } = pairChangeRows(block);
         return (
-          gapBefore(bi) + block.map((row) => fullRow(row, opts, intra)).join("")
+          gapBefore(bi) +
+          pairedRows.map((row) => fullRow(row, opts, sides)).join("")
         );
       })
       .join("") + gapAfterLast;

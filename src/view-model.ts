@@ -19,6 +19,7 @@ import { claimedRanges } from './types.js';
 import { computeCoverage } from './coverage.js';
 import { isCodeStep } from './types.js';
 import { narrative, narrativeText, type Narrative } from './narrative.js';
+import { diffLineTokens, type IntraSides } from './intra-line.js';
 import { projectStoryStepScene } from './story-scenes.js';
 import { createHash } from 'node:crypto';
 import type {
@@ -50,6 +51,8 @@ export interface SbsRow {
   leftContent?: string;
   rightContent?: string;
   paired?: boolean;
+  /** A del/add pair merged onto one row (All-files split + full file). */
+  changePair?: boolean;
   /** Commentable when it has a post-change line number. */
   comment?: boolean;
   /** Flagged by the trust check (changed but no step explains it). */
@@ -947,6 +950,52 @@ export function hunksToSbsBlocks(
       return row;
     }),
   );
+}
+
+/** GitHub-style change pairing: within each run of deleted lines immediately
+ *  followed by added lines, merge the k-th del with the k-th add onto one
+ *  side-by-side row and word-diff the pair, so a rewritten statement reads as
+ *  one before/after row instead of two islands separated by empty space.
+ *  Excess lines on either side keep their single-sided rows; rows already
+ *  paired by a story move view pass through untouched. */
+export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<SbsRow, IntraSides> } {
+  const out: SbsRow[] = [];
+  const sides = new Map<SbsRow, IntraSides>();
+  let i = 0;
+  while (i < rows.length) {
+    if (rows[i].type !== 'del' || rows[i].paired) {
+      out.push(rows[i]);
+      i++;
+      continue;
+    }
+    const delStart = i;
+    while (i < rows.length && rows[i].type === 'del' && !rows[i].paired) i++;
+    const addStart = i;
+    while (i < rows.length && rows[i].type === 'add' && !rows[i].paired) i++;
+    const dels = rows.slice(delStart, addStart);
+    const adds = rows.slice(addStart, i);
+    const n = Math.min(dels.length, adds.length);
+    for (let k = 0; k < n; k++) {
+      const merged: SbsRow = {
+        type: 'ctx',
+        changePair: true,
+        paired: true,
+        oldNo: dels[k].oldNo,
+        newNo: adds[k].newNo,
+        content: adds[k].content,
+        leftContent: dels[k].content,
+        rightContent: adds[k].content,
+        comment: true,
+        untoured: adds[k].untoured,
+      };
+      const intra = diffLineTokens(dels[k].content, adds[k].content);
+      if (intra) sides.set(merged, intra);
+      out.push(merged);
+    }
+    for (let k = n; k < dels.length; k++) out.push(dels[k]);
+    for (let k = n; k < adds.length; k++) out.push(adds[k]);
+  }
+  return { rows: out, sides };
 }
 
 // ---- helpers ----

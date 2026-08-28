@@ -1254,7 +1254,7 @@ export function startReviewEngine(options){
   }
   function activeVoiceFocusRows(panel,group){
     var focused=focusRowsForGroup(panel,group);if(focused.length)return focused;
-    var rows=$all('.ds-row-add,.ds-row-del',panel);
+    var rows=$all('.ds-row-add,.ds-row-del,.ds-row-pair',panel);
     return rows.length?rows:$all('.ds-row',panel);
   }
   function applyVoiceFocusGroup(stepIndex,group){
@@ -2258,7 +2258,7 @@ export function startReviewEngine(options){
   }
   function changeRows(holder){
     var root=visibleDiffRoot(holder);if(!root)return [];
-    return $all('.ds-row-add,.ds-row-del',root);
+    return $all('.ds-row-add,.ds-row-del,.ds-row-pair',root);
   }
   function updateChangeNav(holder){
     if(!holder)return;
@@ -2284,7 +2284,7 @@ export function startReviewEngine(options){
     holder.setAttribute('data-change-index',String(idx));
     updateChangeNav(holder);
     var row=rows[idx];if(!row)return false;
-    $all('.ds-row-add,.ds-row-del',holder).forEach(function(r){r.classList.remove('is-change-jump');r.removeAttribute('aria-current');});
+    $all('.ds-row-add,.ds-row-del,.ds-row-pair',holder).forEach(function(r){r.classList.remove('is-change-jump');r.removeAttribute('aria-current');});
     row.classList.add('is-change-jump');
     row.setAttribute('aria-current','true');
     scrollReviewRowVertically(row,opts);

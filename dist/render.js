@@ -20,7 +20,7 @@
 // Authored text and code are escaped here, server-side. The one client-side
 // HTML insertion remains locally rendered Mermaid SVG, parsed and sanitized in
 // the browser before it reaches the DOM.
-import { buildReviewModel } from "./view-model.js";
+import { buildReviewModel, pairChangeRows } from "./view-model.js";
 import { intraLineMap } from "./intra-line.js";
 import { renderSplitRow, renderUnifiedRow, renderHunkGap, } from "./diff-render.js";
 import { renderShell } from "./shell.js";
@@ -799,8 +799,8 @@ export function renderFullFile(rows, opts) {
     if (!rows.length) {
         return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
     }
-    const intra = intraLineMap(rows, (r) => r.type, (r) => r.content);
-    const body = rows.map((r) => fullRow(r, opts, intra)).join("");
+    const { rows: pairedRows, sides } = pairChangeRows(rows);
+    const body = pairedRows.map((r) => fullRow(r, opts, sides)).join("");
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
 }
 /** The lazily-loaded Split view for one All-files panel: hunks only,
@@ -836,8 +836,9 @@ export function renderSplitHunks(blocks, opts) {
         : "";
     const body = blocks
         .map((block, bi) => {
-        const intra = intraLineMap(block, (r) => r.type, (r) => r.content);
-        return (gapBefore(bi) + block.map((row) => fullRow(row, opts, intra)).join(""));
+        const { rows: pairedRows, sides } = pairChangeRows(block);
+        return (gapBefore(bi) +
+            pairedRows.map((row) => fullRow(row, opts, sides)).join(""));
     })
         .join("") + gapAfterLast;
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
