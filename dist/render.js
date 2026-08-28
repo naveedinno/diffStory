@@ -573,8 +573,13 @@ export function renderFilePanelContent(f, _stepIndexById) {
             : f.hunks.length
                 ? `<div class="ds-modetoggle" role="group" aria-label="Diff display mode"><button data-mode="diff" aria-pressed="false">Unified</button><button class="is-active" data-mode="split" aria-pressed="true">Split</button></div>`
                 : "";
+    // A context-only file has no add/del counts worth showing.
+    const stat = f.kind === "context"
+        ? ""
+        : `<span class="ds-diffstat" title="${f.add} added, ${f.del} deleted"><span class="ds-diffstat-add">+${f.add}</span><span class="ds-diffstat-del">−${f.del}</span></span>`;
     return `<div class="ds-filepanel-head">
       <span class="ds-cardpath"><span class="ds-dim">${esc(dir)}</span><span class="ds-cardpath-base">${esc(base)}</span></span>
+      ${stat}
       <span class="ds-flex"></span>
       ${changeJumpControls()}
       <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(f.file)} reviewed" title="Mark reviewed (V)"><span class="ds-viewed-toggle-icon" aria-hidden="true">✓</span><span class="ds-viewed-toggle-label" data-viewed-label>Mark reviewed</span></button>
@@ -780,10 +785,14 @@ function trustCard(u, stepIndexById) {
 function splitHead(opts) {
     const leftLabel = opts.newFile ? "Did not exist" : "Before";
     const rightLabel = opts.newFile ? "New file" : "After";
+    const oldPath = opts.oldFile ?? opts.file;
+    // The panel head above already names the file, so repeating the path on both
+    // sides is noise. It earns its place only when the sides genuinely differ.
+    const renamed = !opts.newFile && oldPath !== opts.file;
     return `<div class="ds-diffhead">
-    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${opts.newFile ? " ds-dim" : ""}">${leftLabel}</span>${opts.newFile ? "" : `<span class="ds-diffhead-path">${esc(opts.oldFile ?? opts.file)}</span>`}</span>
+    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${opts.newFile ? " ds-dim" : ""}">${leftLabel}</span>${renamed ? `<span class="ds-diffhead-path">${esc(oldPath)}</span>` : ""}</span>
     <span class="ds-diffhead-divider"></span>
-    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${opts.newFile ? " ds-green" : ""}">${rightLabel}</span><span class="ds-diffhead-path">${esc(opts.file)}</span></span>
+    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${opts.newFile ? " ds-green" : ""}">${rightLabel}</span>${renamed ? `<span class="ds-diffhead-path">${esc(opts.file)}</span>` : ""}</span>
   </div>`;
 }
 export function renderFullFile(rows, opts) {

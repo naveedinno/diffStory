@@ -156,10 +156,10 @@ export function renderHunkGap(gap?: GapInfo, opts: HunkGapOpts = {}): string {
   const up =
     gap.to === 'eof'
       ? ''
-      : `<button type="button" class="ds-gapbtn ds-gapbtn-context" data-expand="up" title="Show ${contextChunk} lines above" aria-label="Show ${contextChunk} lines above">↑ ${contextChunk}</button>`;
+      : `<button type="button" class="ds-gapbtn ds-gapbtn-context" data-expand="up" title="Show ${contextChunk} lines above" aria-label="Show ${contextChunk} lines above">↑ ${contextChunk} lines</button>`;
   const down = opts.edge === 'before'
     ? ''
-    : `<button type="button" class="ds-gapbtn ds-gapbtn-context" data-expand="down" title="Show ${contextChunk} lines below" aria-label="Show ${contextChunk} lines below">↓ ${contextChunk}</button>`;
+    : `<button type="button" class="ds-gapbtn ds-gapbtn-context" data-expand="down" title="Show ${contextChunk} lines below" aria-label="Show ${contextChunk} lines below">↓ ${contextChunk} lines</button>`;
   const open = `<div class="ds-hunkgap is-expandable${
     opts.split ? ' ds-hunkgap-split' : ''
   }" data-gap data-gap-file="${esc(gap.file)}" data-gap-from="${gap.from}" data-gap-to="${gap.to}" data-gap-chunk="${contextChunk}">`;
@@ -167,7 +167,7 @@ export function renderHunkGap(gap?: GapInfo, opts: HunkGapOpts = {}): string {
     return (
       open +
       down +
-      `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">All</button>` +
+      `<button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">Show all</button>` +
       up +
       `</div>`
     );
@@ -175,7 +175,7 @@ export function renderHunkGap(gap?: GapInfo, opts: HunkGapOpts = {}): string {
   return (
     open +
     `<span class="ds-gap-side ds-gap-side-l">${down}</span>` +
-    `<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">All</button></span>` +
+    `<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all" title="Show all hidden lines" aria-label="Show all hidden lines">Show all</button></span>` +
     `<span class="ds-gap-side ds-gap-side-r">${up}</span>` +
     `</div>`
   );

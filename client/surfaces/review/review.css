@@ -587,6 +587,9 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-filepanel[hidden]{display:none}
 .ds-filepanel-head{--ds-filepanel-control-height:36px;position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--material);border-bottom:1px solid var(--line)}
 .ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-viewed-toggle,.ds-filepanel-head>.ds-linewrap-toggle,.ds-filepanel-head>.ds-modetoggle{box-sizing:border-box;height:var(--ds-filepanel-control-height)}
+.ds-diffstat{display:inline-flex;align-items:baseline;gap:6px;flex:none;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.ds-diffstat-add{color:var(--diff-add-text)}
+.ds-diffstat-del{color:var(--diff-del-text)}
 .ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:3px;padding-bottom:3px}
 .ds-filepanel-head>.ds-changejump .ds-changebtn{width:36px;height:30px}
 .ds-filepanel-head>.ds-viewed-toggle{padding-left:10px;padding-right:10px}

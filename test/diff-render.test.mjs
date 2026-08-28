@@ -4,6 +4,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const DIFF_CSS = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
 import { renderUnifiedRow, renderSplitRow, renderHunkGap, rowAttrs, targetAttrs } from '../dist/diff-render.js';
+import { renderSplitHunks } from '../dist/render.js';
+
+/** Exercise the split header through its only public entry point. */
+function renderHeadForTest(opts) {
+  return renderSplitHunks([[{ type: 'ctx', content: 'x', oldNo: 1, newNo: 1 }]], {
+    ...opts,
+    hunkRanges: [[1, 1]],
+    canExpand: false,
+  });
+}
 
 function cssRuleBody(css, selector) {
   const start = css.indexOf(`${selector}{`);
@@ -144,9 +154,9 @@ test('split hunk gap keeps the middle control on the split divider', () => {
   assert.match(html, /<span class="ds-gap-mid"><button type="button" class="ds-gapbtn" data-expand="all"/);
   assert.match(html, /<span class="ds-gap-side ds-gap-side-r">/);
   assert.match(html, /data-gap-chunk="5"/);
-  assert.match(html, /aria-label="Show 5 lines below"[^>]*>↓ 5</);
-  assert.match(html, /aria-label="Show all hidden lines"[^>]*>All</);
-  assert.match(html, /aria-label="Show 5 lines above"[^>]*>↑ 5</);
+  assert.match(html, /aria-label="Show 5 lines below"[^>]*>↓ 5 lines</);
+  assert.match(html, /aria-label="Show all hidden lines"[^>]*>Show all</);
+  assert.match(html, /aria-label="Show 5 lines above"[^>]*>↑ 5 lines</);
   assert.doesNotMatch(html, /⋯|ds-gapdots/);
 });
 
@@ -194,7 +204,7 @@ test('interactive hunk gap carries range data and expand buttons', () => {
   assert.match(html, /aria-label="Show 20 lines below"/);
   assert.match(html, /aria-label="Show all hidden lines"/);
   assert.match(html, /aria-label="Show 20 lines above"/);
-  assert.match(html, /aria-label="Show all hidden lines"[^>]*>All</);
+  assert.match(html, /aria-label="Show all hidden lines"[^>]*>Show all</);
   assert.doesNotMatch(html, /⋯|ds-gapdots/);
 });
 
@@ -202,4 +212,31 @@ test('eof gap omits the up button', () => {
   const html = renderHunkGap({ file: 'a.ts', from: 50, to: 'eof' });
   assert.match(html, /data-gap-to="eof"/);
   assert.doesNotMatch(html, /data-expand="up"/);
+});
+
+test('split head omits duplicate paths for a plain modification', () => {
+  const html = renderHeadForTest({ file: 'a/b.sol', oldFile: 'a/b.sol', newFile: false });
+  assert.match(html, /Before/);
+  assert.match(html, /After/);
+  assert.doesNotMatch(html, /ds-diffhead-path/);
+});
+
+test('split head keeps both paths for a rename', () => {
+  const html = renderHeadForTest({ file: 'a/new.sol', oldFile: 'a/old.sol', newFile: false });
+  assert.match(html, /ds-diffhead-path">a\/old\.sol/);
+  assert.match(html, /ds-diffhead-path">a\/new\.sol/);
+});
+
+test('split head keeps the did-not-exist labels for a new file', () => {
+  const html = renderHeadForTest({ file: 'a/new.sol', newFile: true });
+  assert.match(html, /Did not exist/);
+  assert.match(html, /New file/);
+  assert.doesNotMatch(html, /ds-diffhead-path/);
+});
+
+test('hunk gap buttons carry readable labels', () => {
+  const html = renderHunkGap({ file: 'a.ts', from: 10, to: 40 }, { split: true });
+  assert.match(html, />↑ 5 lines</);
+  assert.match(html, />↓ 5 lines</);
+  assert.match(html, />Show all</);
 });
