@@ -309,3 +309,12 @@ test('the sticky scope row clears the split head it sits under', () => {
   assert.match(cssRuleBody(DIFF_CSS, '.ds-scoperow'), /--ds-diffhead-h/);
   assert.match(cssRuleBody(DIFF_CSS, '.ds-diffhead'), /--ds-diffhead-h/);
 });
+
+test('gap buttons never wrap their label', () => {
+  // The middle control is absolutely centered inside a zero-width slot, so any
+  // multi-word label wraps unless this is pinned. "All" survived by being one
+  // word; "Show all" did not.
+  // Anchored to the standalone rule: cssRuleBody's indexOf would match inside
+  // the earlier `.ds-gap-side-l>.ds-gapbtn{...}` descendant rule instead.
+  assert.match(DIFF_CSS, /^\.ds-gapbtn\{[^}]*white-space:nowrap/m);
+});

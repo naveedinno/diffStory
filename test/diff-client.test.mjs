@@ -133,8 +133,10 @@ test('hunk expansion remains discoverable without hover on touch devices', () =>
   assert.match(DIFF_CSS, /@media \(hover:none\),\(pointer:coarse\)\{\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1/);
   assert.match(DIFF_CSS, /\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1\}/);
   assert.doesNotMatch(DIFF_CSS, /\.ds-gapdots/);
-  assert.match(DIFF_CSS, /\.ds-gap-side-l>\.ds-gapbtn\{margin-right:27px\}/);
-  assert.match(DIFF_CSS, /\.ds-gap-side-r>\.ds-gapbtn\{margin-left:27px\}/);
+  // These must clear half the absolutely-centred middle button, which straddles
+  // the divider; at 27px the wider "Show all" label overlapped both neighbours.
+  assert.match(DIFF_CSS, /\.ds-gap-side-l>\.ds-gapbtn\{margin-right:46px\}/);
+  assert.match(DIFF_CSS, /\.ds-gap-side-r>\.ds-gapbtn\{margin-left:46px\}/);
   assert.match(DIFF_CSS, /@media \(max-width:720px\)\{[\s\S]*\.ds-hunkgap-split\{justify-content:center;gap:6px\}/);
   assert.match(DIFF_CSS, /\.ds-hunkgap-split \.ds-gap-mid>\.ds-gapbtn\{position:static;transform:none\}/);
   assert.match(DIFF_JS, /data-gap-chunk/);

@@ -943,11 +943,14 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-gap-side{min-width:0;display:flex;align-items:center;gap:10px}
 .ds-gap-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0;justify-content:flex-end}
 .ds-gap-side-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0;justify-content:flex-start}
-.ds-gap-side-l>.ds-gapbtn{margin-right:27px}
-.ds-gap-side-r>.ds-gapbtn{margin-left:27px}
+/* These clear the absolutely-centred middle control, which straddles the
+   divider: the margin must exceed half that button's width or the pills
+   overlap. Renaming the middle label means re-checking these two numbers. */
+.ds-gap-side-l>.ds-gapbtn{margin-right:46px}
+.ds-gap-side-r>.ds-gapbtn{margin-left:46px}
 .ds-gap-mid{position:relative;flex:none;width:0;height:22px;display:flex;align-items:center;justify-content:center;color:var(--dim2)}
 .ds-gap-mid>.ds-gapbtn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
-.ds-gapbtn{font:inherit;font-size:10.5px;font-weight:600;padding:3px 11px;border-radius:var(--radius-pill);border:1px solid transparent;background:var(--fill-1);color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease}
+.ds-gapbtn{font:inherit;font-size:10.5px;font-weight:600;line-height:16px;white-space:nowrap;padding:3px 11px;border-radius:var(--radius-pill);border:1px solid transparent;background:var(--fill-1);color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease}
 .ds-hunkgap.is-expandable .ds-gapbtn{opacity:1}
 .ds-hunkgap.is-expandable:hover .ds-gapbtn,.ds-gapbtn:focus-visible{opacity:1}
 .ds-gapbtn:hover{background:var(--fill-2);color:var(--text)}
