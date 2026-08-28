@@ -33,7 +33,7 @@
 - Consumes: `hunksToSbsBlocks(file, uncoveredRanges)` from `dist/view-model.js`, `renderSplitHunks(blocks, opts)` from `dist/render.js` (both already exported).
 - Produces: nothing for later tasks — pure guardrail. Later tasks must keep this test green.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```js
 // Performance tripwire for the All-files Split renderer. The budget is
@@ -87,12 +87,12 @@ test('split renderer handles a 300-hunk file within budget', () => {
 });
 ```
 
-- [ ] **Step 2: Run it — must pass against current code**
+- [x] **Step 2: Run it — must pass against current code**
 
 Run: `npm run build && node --test test/perf-split-render.test.mjs`
 Expected: PASS (this is a baseline, not TDD red — it documents current behavior).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/perf-split-render.test.mjs
@@ -113,7 +113,7 @@ git commit -m "test: add split-render performance tripwire"
 - Consumes: the `.ds-cell-empty` class emitted by `cell()` in `src/diff-render.ts:61` (unchanged).
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Update the failing CSS assertion first**
+- [x] **Step 1: Update the failing CSS assertion first**
 
 In `test/diff-render.test.mjs`, find the test that reads `cssRuleBody(DIFF_CSS, '.ds-cell-empty')` (~line 120) and replace its assertions with:
 
@@ -123,12 +123,12 @@ assert.match(emptyCell, /repeating-linear-gradient/);
 assert.match(emptyCell, /var\(--line\)/);
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/diff-render.test.mjs`
 Expected: FAIL — current rule body is `background:transparent`.
 
-- [ ] **Step 3: Apply the CSS change**
+- [x] **Step 3: Apply the CSS change**
 
 In `client/surfaces/review/review.css`, replace:
 
@@ -144,16 +144,16 @@ with:
 
 Keep it faint: the hatch must sit visually *below* the red/green tints, and `color-mix` against `--line` adapts to both themes automatically. Do not add a solid base color — the panel background stays visible through it.
 
-- [ ] **Step 4: Build and run the suite**
+- [x] **Step 4: Build and run the suite**
 
 Run: `npm run build && node --test test/diff-render.test.mjs test/diff-client.test.mjs`
 Expected: PASS. If another test asserts the old `background:transparent` body, update it to the new body — same intent, new treatment.
 
-- [ ] **Step 5: Visual check**
+- [x] **Step 5: Visual check**
 
 Run `npm run demo`, open a file with a large added block in Split view, confirm the hatch is visible but quiet in both light and dark themes (theme toggle in the app chrome).
 
-- [ ] **Step 6: Commit (dist included)**
+- [x] **Step 6: Commit (dist included)**
 
 ```bash
 git add client/surfaces/review/review.css test/diff-render.test.mjs dist
@@ -177,7 +177,7 @@ git commit -m "feat: hatch absent-side cells in split view"
 - Consumes: `FileView.add` / `FileView.del` (already computed in `src/view-model.ts`); `splitHead` opts `{ file, oldFile?, newFile }` (shape unchanged).
 - Produces: `.ds-diffstat`, `.ds-diffstat-add`, `.ds-diffstat-del` class names; gap buttons now read `↑ N lines`, `↓ N lines`, `Show all` (Task 6's gap markup must not regress these).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `test/diff-render.test.mjs`:
 
@@ -207,12 +207,12 @@ test('hunk gap buttons carry readable labels', () => {
 
 Also update the existing assertions in this file that expect `>All<` and `aria-label="Show all hidden lines"` buttons (~lines 144, 148, 195, 197): the label becomes `Show all`; keep the aria-label as is.
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npm run build && node --test test/diff-render.test.mjs`
 Expected: FAIL on all three new tests.
 
-- [ ] **Step 3: Implement `splitHead` dedupe**
+- [x] **Step 3: Implement `splitHead` dedupe**
 
 Replace the body of `splitHead` in `src/render.ts`:
 
@@ -240,14 +240,14 @@ function splitHead(opts: {
 }
 ```
 
-- [ ] **Step 4: Implement gap button labels**
+- [x] **Step 4: Implement gap button labels**
 
 In `src/diff-render.ts` `renderHunkGap`, change the three button texts (leave `data-expand`, `title`, and `aria-label` attributes exactly as they are):
 - up button text: `↑ ${contextChunk} lines`
 - down button text: `↓ ${contextChunk} lines`
 - all button text (both unified and split branches): `Show all`
 
-- [ ] **Step 5: Add the stats chip to the panel head**
+- [x] **Step 5: Add the stats chip to the panel head**
 
 In `renderFilePanelContent` (`src/render.ts:821`), insert after the `ds-cardpath` span:
 
@@ -268,16 +268,16 @@ and place `${stat}` immediately after the closing `</span>` of `ds-cardpath` in 
 
 (`--diff-add-text` is already used at `review.css` for `.ds-sign-add`; confirm the matching `--diff-del-text` token name by checking the `.ds-sign-del` rule and use whatever token it uses.)
 
-- [ ] **Step 6: Make expanders visible at rest**
+- [~] **Step 6: Make expanders visible at rest** — SKIPPED, premise was wrong
 
-Find the `.ds-gapbtn` rules in `review.css`. Change the resting state from fully hidden to `opacity:.55`, keep hover/focus at `opacity:1`. Update `test/diff-client.test.mjs` (~lines 133–134) which currently pins the hover-reveal rules — the coarse-pointer `opacity:1` override stays; the assertion that only matches the old resting rule changes to match the new one.
+NOT APPLIED. `.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1}` (review.css) already made expanders fully visible at rest; only the unused base rule was `opacity:0`. Dropping them to `.55` would have dimmed working controls, so the label change in Step 4 was kept and this was skipped. Original instruction: Find the `.ds-gapbtn` rules in `review.css`. Change the resting state from fully hidden to `opacity:.55`, keep hover/focus at `opacity:1`. Update `test/diff-client.test.mjs` (~lines 133–134) which currently pins the hover-reveal rules — the coarse-pointer `opacity:1` override stays; the assertion that only matches the old resting rule changes to match the new one.
 
-- [ ] **Step 7: Build, run the affected suites, then the full check**
+- [x] **Step 7: Build, run the affected suites, then the full check**
 
 Run: `npm run build && node --test test/diff-render.test.mjs test/diff-client.test.mjs test/review-page.test.mjs && npm run check`
 Expected: PASS. Any other test pinning the old gap-button text gets the same one-line label update.
 
-- [ ] **Step 8: Commit (dist included)**
+- [x] **Step 8: Commit (dist included)**
 
 ```bash
 git add src/render.ts src/diff-render.ts client/surfaces/review/review.css test/diff-render.test.mjs test/diff-client.test.mjs dist
@@ -301,7 +301,7 @@ git commit -m "feat: dedupe split headers, add change stats, clarify expanders"
 - Consumes: `SbsRow` (fields `type/oldNo/newNo/content/leftContent/rightContent/paired/comment/untoured`), `diffLineTokens(oldLine, newLine): { left, right } | null` and `IntraSides` from `src/intra-line.ts`.
 - Produces: `export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<SbsRow, IntraSides> }` in `src/view-model.ts`; new optional `SbsRow.changePair?: boolean`; merged rows render with class `ds-row-ctx ds-row-pair`, both line numbers, both comment anchors, and aria action `Changed`. Task 6 renders these same rows inside hunk wrappers.
 
-- [ ] **Step 1: Write the failing view-model tests**
+- [x] **Step 1: Write the failing view-model tests**
 
 Add to `test/view-model.test.mjs`:
 
@@ -338,12 +338,12 @@ test('pairChangeRows leaves already-paired story rows untouched', () => {
 
 (Import `pairChangeRows` from `../dist/view-model.js` alongside the file's existing imports.)
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npm run build && node --test test/view-model.test.mjs`
 Expected: FAIL — `pairChangeRows` is not exported.
 
-- [ ] **Step 3: Implement `pairChangeRows`**
+- [x] **Step 3: Implement `pairChangeRows`**
 
 In `src/view-model.ts`, add `changePair?: boolean;` to the `SbsRow` interface with the doc comment `/** A del/add pair merged onto one row (All-files split + full file). */`, import `diffLineTokens` and `IntraSides` from `./intra-line.js`, and add near `hunksToSbsBlocks`:
 
@@ -393,12 +393,12 @@ export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<Sbs
 }
 ```
 
-- [ ] **Step 4: Run the view-model tests**
+- [x] **Step 4: Run the view-model tests**
 
 Run: `npm run build && node --test test/view-model.test.mjs`
 Expected: PASS.
 
-- [ ] **Step 5: Write the failing renderer tests**
+- [x] **Step 5: Write the failing renderer tests**
 
 Add to `test/diff-render.test.mjs`:
 
@@ -424,7 +424,7 @@ test('a merged change pair renders both sides on one row', () => {
 
 Adjust the attribute regexes to the exact attribute order `targetAttrs` emits (`data-comment-code="1" data-comment-side="…" data-comment-file="…" data-comment-line="…"`) — copy the order from the existing anchor assertions in this file.
 
-- [ ] **Step 6: Run to verify it fails, then implement the renderer changes**
+- [x] **Step 6: Run to verify it fails, then implement the renderer changes**
 
 Run: `node --test test/diff-render.test.mjs` — expect FAIL on the new test (no `ds-row-pair` class, aria says `Context`).
 
@@ -436,7 +436,7 @@ In `src/diff-render.ts`:
 3. `cell()`: the UNEXPLAINED flag currently requires `add` — widen it so a merged pair can carry it:
    `const flag = side === 'right' && row.untoured && (add || row.changePair) ? '<span class="ds-untoured-tag">UNEXPLAINED</span>' : '';`
 
-- [ ] **Step 7: Wire pairing into the two render entry points**
+- [x] **Step 7: Wire pairing into the two render entry points**
 
 In `src/render.ts`, import `pairChangeRows` from `./view-model.js`.
 
@@ -461,20 +461,20 @@ const body = pairedRows.map((r) => fullRow(r, opts, sides)).join("");
 
 `fullRow` needs no change — its `intra?: Map<SbsRow, IntraSides>` lookup and left/right target construction (from `oldNo`/`newNo`) already handle merged rows. `intraLineMap` stays imported for the unified panel path.
 
-- [ ] **Step 8: Update the change-jump selectors in the engine**
+- [x] **Step 8: Update the change-jump selectors in the engine**
 
 In `client/surfaces/review/engine/review-engine.js`, at the three sites (~lines 1257, 2261, 2287) change `'.ds-row-add,.ds-row-del'` to `'.ds-row-add,.ds-row-del,.ds-row-pair'` so next/prev-change navigation still lands on merged rows. Do not touch anything else in the engine.
 
-- [ ] **Step 9: Build, syntax-check the emitted client, run the full suite**
+- [x] **Step 9: Build, syntax-check the emitted client, run the full suite**
 
 Run: `npm run build && node --check dist/client/review.js && npm run check`
 Expected: PASS, including the Task 1 perf tripwire. Existing tests that assert separate del/add rows in split output (search `test/` for `ds-row-del` and `ds-row-add` against `renderSplitHunks`/full-file output) get updated to the merged shape — the intent of those tests (anchors, tints, ordering) is preserved on the paired row.
 
-- [ ] **Step 10: Interactive verification**
+- [x] **Step 10: Interactive verification**
 
 Run `npm run demo`; in Split view confirm: paired rows show old/new side-by-side with word-level marks on both sides; selecting text on the left side produces a Before-anchored comment and on the right an After-anchored one; `n`/`p` change-jump lands on merged rows; unified and story views are unchanged.
 
-- [ ] **Step 11: Commit (dist included)**
+- [x] **Step 11: Commit (dist included)**
 
 ```bash
 git add src/view-model.ts src/diff-render.ts src/render.ts client/surfaces/review/engine/review-engine.js test/view-model.test.mjs test/diff-render.test.mjs dist
@@ -496,7 +496,7 @@ git commit -m "feat: pair del/add runs onto side-by-side rows in split and full 
 - Consumes: raw unified diff text (unchanged input).
 - Produces: `DiffHunk.context?: string` — the trimmed funcname text from the `@@` header, `undefined` when absent. Task 6 reads it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `test/diff.test.mjs` (match the file's existing fixture style):
 
@@ -524,12 +524,12 @@ test('hunk headers without context leave it undefined', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run build && node --test test/diff.test.mjs`
 Expected: FAIL — `context` is undefined in the first test only because the regex drops it; assert exposes it.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/diff.ts`:
 
@@ -551,12 +551,12 @@ In `src/types.ts`, add to `DiffHunk`:
 context?: string;
 ```
 
-- [ ] **Step 4: Build and run**
+- [x] **Step 4: Build and run**
 
 Run: `npm run build && node --test test/diff.test.mjs && npm run check`
 Expected: PASS.
 
-- [ ] **Step 5: Commit (dist included)**
+- [x] **Step 5: Commit (dist included)**
 
 ```bash
 git add src/diff.ts src/types.ts test/diff.test.mjs dist
@@ -579,7 +579,7 @@ git commit -m "feat: parse hunk function context from diff headers"
 - Consumes: `DiffHunk.context` (Task 5), `readWholeFile(repo, file, head)` already used in `renderFullFileResponse` (`src/server.ts:2202`), `renderSplitHunks` opts (Task 3/4 shape).
 - Produces: `export function enclosingScopeLabel(lines: string[], startLine: number): string | undefined` in `src/enclosing-scope.ts`; `renderSplitHunks` gains `opts.scopes?: Array<string | undefined>` and wraps each hunk in `<div class="ds-hunk">`, prepending `<div class="ds-scoperow">` when a label exists.
 
-- [ ] **Step 1: Write the failing scope-label tests**
+- [x] **Step 1: Write the failing scope-label tests**
 
 Create `test/enclosing-scope.test.mjs`:
 
@@ -629,12 +629,12 @@ test('long labels are truncated with an ellipsis', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npm run build && node --test test/enclosing-scope.test.mjs`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement `src/enclosing-scope.ts`**
+- [x] **Step 3: Implement `src/enclosing-scope.ts`**
 
 ```ts
 // Language-agnostic "where am I" label for a diff hunk: scan upward from the
@@ -682,7 +682,7 @@ export function enclosingScopeLabel(lines: string[], startLine: number): string 
 
 Run: `npm run build && node --test test/enclosing-scope.test.mjs` — expect PASS. If an assertion disagrees with the implementation on an edge (e.g. the multi-line signature case returning `function fillCloseRequest(`), fix the TEST expectation only if the implemented behavior is genuinely more useful; otherwise fix the code.
 
-- [ ] **Step 4: Write the failing renderer test**
+- [x] **Step 4: Write the failing renderer test**
 
 Add to `test/diff-render.test.mjs` (again via `renderSplitHunks`):
 
@@ -710,7 +710,7 @@ test('a hunk without a scope label gets the wrapper but no scope row', () => {
 
 Run: `node --test test/diff-render.test.mjs` — expect FAIL.
 
-- [ ] **Step 5: Implement the renderer + server wiring**
+- [x] **Step 5: Implement the renderer + server wiring**
 
 `src/render.ts` — `renderSplitHunks`: add `scopes?: Array<string | undefined>` to the opts interface and wrap each block (building on Task 4's shape):
 
@@ -740,7 +740,7 @@ const scopes = df
 
 and pass `scopes` in the `renderSplitHunks` opts. (Match the exact `readWholeFile` call shape used at `src/server.ts:2202` — destructure `repo`/`head` from `page` the way `renderFullFileResponse` does.)
 
-- [ ] **Step 6: Add the CSS**
+- [x] **Step 6: Add the CSS**
 
 In `review.css`:
 1. Give the split header a fixed height so the scope row can stack under it: on `.ds-diffhead` add `height:var(--ds-diffhead-h)` and define `--ds-diffhead-h:26px` on the same rule. Verify the labels still center (add `align-items:center` if they don't).
@@ -754,16 +754,16 @@ In `review.css`:
 
 The sticky `top` mirrors `.ds-diffhead`'s own formula (`review.css:753`) plus the header height, and z-index 6 sits below the header (8) and toolbar (9). Each `.ds-hunk` is the sticky containing block, so the label releases when its hunk scrolls past and the next hunk's label takes over.
 
-- [ ] **Step 7: Build and run everything**
+- [x] **Step 7: Build and run everything**
 
 Run: `npm run build && node --check dist/client/review.js && npm run check`
 Expected: PASS, perf tripwire included. If any test pins the old flat split-body structure (rows as direct children of `ds-diffbody`), update it to expect the `ds-hunk` wrappers.
 
-- [ ] **Step 8: Interactive verification**
+- [x] **Step 8: Interactive verification**
 
 Run `npm run demo` and open a long file in Split view. Confirm: scope labels are correct for nested Solidity/TS code; a label sticks under the Before/After header while its hunk scrolls and hands off at the next hunk; expand-context (`↑ 5 lines` / `Show all`) still inserts rows correctly around the gaps (expanded context lands between hunk wrappers — verify no visual seam); comment selection across rows inside a wrapper still works.
 
-- [ ] **Step 9: Commit (dist included)**
+- [x] **Step 9: Commit (dist included)**
 
 ```bash
 git add src/enclosing-scope.ts src/server.ts src/render.ts client/surfaces/review/review.css test/enclosing-scope.test.mjs test/diff-render.test.mjs dist
@@ -782,7 +782,7 @@ git commit -m "feat: sticky enclosing-scope row on split hunks"
 **Interfaces:**
 - Consumes: everything above. Produces: nothing.
 
-- [ ] **Step 1: Add changelog entries**
+- [x] **Step 1: Add changelog entries**
 
 Under `## Unreleased` in `CHANGELOG.md`, add (match the existing bullet voice):
 
@@ -798,12 +798,12 @@ Under `## Unreleased` in `CHANGELOG.md`, add (match the existing bullet voice):
   and labeled.
 ```
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run: `npm run check`
 Expected: all tests PASS. Then `npm run demo` for a last visual pass over: light + dark themes, a renamed file's header, a new file (hatched left pane, "Did not exist" label, no scope rows misbehaving), and change-jump across paired rows.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CHANGELOG.md
