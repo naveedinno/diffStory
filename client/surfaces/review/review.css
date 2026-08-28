@@ -835,7 +835,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-cell-paired{box-shadow:none}
 .ds-diffbody-paired-flow .ds-cell-l.ds-cell-paired{background:var(--panel3)}
 .ds-cell-untoured{background:var(--amber-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--amber) 62%,transparent)}
-.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:transparent}
+.ds-cell-empty{flex:1;min-width:0;align-self:stretch;background:repeating-linear-gradient(-45deg,transparent 0 5px,color-mix(in srgb,var(--line) 45%,transparent) 5px 6px)}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}

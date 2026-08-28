@@ -118,8 +118,8 @@ test('story focus keeps every code row readable without partial-edge rails', () 
 
 test('split placeholders stay visually empty while reading focus remains quiet', () => {
   const emptyCell = cssRuleBody(DIFF_CSS, '.ds-cell-empty');
-  assert.match(emptyCell, /background:transparent/);
-  assert.doesNotMatch(emptyCell, /gradient|image/);
+  assert.match(emptyCell, /repeating-linear-gradient/);
+  assert.match(emptyCell, /var\(--line\)/);
 
   assert.doesNotMatch(DIFF_CSS, /\.ds-(?:u?row)\.is-voice-focus::before/);
   assert.match(cssRuleBody(DIFF_CSS, '.ds-row.is-voice-focus'), /box-shadow:none/);
