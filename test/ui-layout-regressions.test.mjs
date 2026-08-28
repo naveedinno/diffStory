@@ -159,7 +159,7 @@ test("concept steps use a plain full-stage canvas instead of an inner card", () 
   assert.doesNotMatch(source, /ds-concept-next|Next in code/);
   assert.match(
     source,
-    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*grid-template-columns:minmax\(360px,720px\) minmax\(0,1fr\);grid-template-areas:"copy diagram";align-items:center/,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*grid-template-columns:minmax\(360px,720px\) minmax\(0,1fr\);grid-template-rows:minmax\(0,1fr\);grid-template-areas:"copy diagram";align-items:center[^}]*height:100%;min-height:100%/,
   );
   assert.match(
     source,
@@ -167,12 +167,29 @@ test("concept steps use a plain full-stage canvas instead of an inner card", () 
   );
   assert.match(
     source,
-    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram\{[^}]*align-self:stretch;display:flex[^}]*flex-direction:column/,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram\{[^}]*align-self:stretch;display:flex[^}]*min-height:0[^}]*flex-direction:column/,
   );
   assert.match(
     source,
     /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram-output svg\{width:100%;height:100%;max-width:none!important;max-height:100%\}/,
   );
+  assert.match(
+    source,
+    /\.ds-concept-diagram\.is-portrait:not\(\.is-fullscreen-active\) \.ds-concept-diagram-output\{[^}]*overflow:auto;scrollbar-gutter:stable/,
+  );
+  assert.match(
+    source,
+    /\.ds-concept-diagram\.is-portrait:not\(\.is-fullscreen-active\) \.ds-concept-diagram-output>svg\{flex:none;width:min\(76%,680px\);height:auto;max-height:none;margin-inline:auto\}/,
+  );
+  assert.match(
+    source,
+    /@media \(max-width:980px\)\{[\s\S]*?\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*height:auto;min-height:100%[\s\S]*?\.ds-concept-diagram-output\{[^}]*height:min\(58vh,520px\);min-height:300px;overflow:hidden[\s\S]*?\.ds-concept-diagram-output svg\{width:100%;height:100%;max-width:none!important;max-height:100%\}/,
+  );
+  assert.match(
+    source,
+    /@media \(max-width:620px\)\{[\s\S]*?\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-diagram-output\{height:min\(52vh,420px\);min-height:240px/,
+  );
+  assert.match(source, /\.ds-concept-diagram\.is-portrait:not\(\.is-fullscreen-active\) \.ds-concept-diagram-output>svg\{width:360px;min-width:360px\}/);
   assert.doesNotMatch(source, /grid-template-areas:"heading diagram"/);
 });
 

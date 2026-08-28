@@ -366,6 +366,11 @@ export function startReviewEngine(options){
     return {x:0,y:0,width:width>0?width:1,height:height>0?height:1};
   }
   function mermaidDiagramSvg(figure){var output=figure?$('[data-mermaid-output]',figure):null;return output?$('svg',output):null;}
+  function classifyMermaidInlineShape(figure){
+    var svg=mermaidDiagramSvg(figure);if(!figure||!svg)return;
+    var base=mermaidBaseView(svg);
+    figure.classList.toggle('is-portrait',base.height>base.width*1.35);
+  }
   function mermaidCanvasIsFullscreen(figure){return !!figure&&(document.fullscreenElement===figure||figure.classList.contains('is-mermaid-fullscreen'));}
   function applyMermaidView(figure){
     var view=figure&&figure._dsMermaidView,svg=mermaidDiagramSvg(figure);if(!view||!svg)return;
@@ -470,7 +475,7 @@ export function startReviewEngine(options){
         if(!output)return;
         // pi-lens-ignore: ast-grep:no-inner-html-js
         output.innerHTML=sanitizeMermaidSvg(result.svg);
-        figure.setAttribute('data-render-state','ready');prepareMermaidCanvas(figure);
+        classifyMermaidInlineShape(figure);figure.setAttribute('data-render-state','ready');prepareMermaidCanvas(figure);
       }).catch(function(){
         figure.setAttribute('data-render-state','error');figure.classList.add('is-error');
         if(output)output.textContent='The diagram could not be drawn. Its caption and source are preserved below.';
@@ -481,7 +486,7 @@ export function startReviewEngine(options){
   document.addEventListener('ds-theme-change',function(){
     mermaidModulePromise=null;
     $all('[data-concept-diagram]').forEach(function(figure){
-      figure.removeAttribute('data-render-state');figure.classList.remove('is-error');
+      figure.removeAttribute('data-render-state');figure.classList.remove('is-error','is-portrait');
       var output=$('[data-mermaid-output]',figure);if(output)output.textContent='';
     });
     renderConceptDiagrams(document.body);

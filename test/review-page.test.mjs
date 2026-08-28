@@ -681,6 +681,9 @@ test("Mermaid diagrams use app typography and readable multiline spacing", () =>
   assert.match(engine, /function spaceMermaidLabelRows\(root\)/);
   assert.match(engine, /spaceMermaidLabelRows\(root\)/);
   assert.match(engine, /var lineSpacing=1\.7/);
+  assert.match(engine, /function classifyMermaidInlineShape\(figure\)/);
+  assert.match(engine, /classList\.toggle\('is-portrait',base\.height>base\.width\*1\.35\)/);
+  assert.match(engine, /classifyMermaidInlineShape\(figure\);figure\.setAttribute\('data-render-state','ready'\)/);
 });
 
 test("Mermaid diagrams open as a fullscreen pan and zoom canvas", () => {

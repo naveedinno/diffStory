@@ -14,7 +14,7 @@ const FIXTURE = mkdtempSync(join(tmpdir(), 'diffstory-atlas-fixture-'));
 const HOME = mkdtempSync(join(tmpdir(), 'diffstory-atlas-home-'));
 const STORY = join(FIXTURE, '.diffstory', 'story.json');
 const STORY_HOLD = join(FIXTURE, '.diffstory', 'story.atlas-hold.json');
-const viewports = { desktop: { width: 1440, height: 960 }, reported: { width: 868, height: 569 }, tablet: { width: 920, height: 820 }, mobile: { width: 390, height: 844 } };
+const viewports = { desktop: { width: 1440, height: 960 }, diagramWide: { width: 1896, height: 857 }, reported: { width: 868, height: 569 }, tablet: { width: 920, height: 820 }, mobile: { width: 390, height: 844 } };
 // The panel root is a `data-progress-panel` element after the React rewrite;
 // `.ds-pp` was a class name that no longer exists.
 const PANEL = '#ds-agentpanel [data-progress-panel], #ds-storystage [data-progress-panel]';
@@ -68,6 +68,9 @@ const definitions = [
   ['review','Focused code walkthrough','A deliberately quiet code scene without semantic-move annotation ink.','code-focus','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Paired-code walkthrough','A cross-file relationship presented as a before-and-after scene.','paired-code','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Concept primer with diagram','A mental model composed as copy and diagram rather than a long document.','concept-step','light','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Tall concept diagram','A portrait flowchart remains bounded by the wide desktop stage instead of stretching the scene.','concept-tall','dark','diagramWide','/repo/diffstory-atlas-fixture/review','concept-tall'],
+  ['review','Tall concept diagram — tablet','The same portrait flowchart uses a bounded canvas in the stacked tablet layout.','concept-tall-tablet','dark','tablet','/repo/diffstory-atlas-fixture/review','concept-tall'],
+  ['review','Tall concept diagram — mobile','The same portrait flowchart uses a bounded canvas in the stacked mobile layout.','concept-tall-mobile','dark','mobile','/repo/diffstory-atlas-fixture/review','concept-tall'],
   ['review','Concept primer with diagram — tablet entry','The DOM-order concept stack opens at its thesis at the tablet breakpoint.','concept-step-tablet','dark','tablet','/repo/diffstory-atlas-fixture/review','concept-step'],
   ['review','Concept primer with diagram — tablet evidence','The same tablet scene scrolled to prove its diagram, caption, and next action remain reachable.','concept-step-tablet-evidence','dark','tablet','/repo/diffstory-atlas-fixture/review','concept-step-evidence'],
   ['review','Concept primer with diagram — mobile entry','The DOM-order concept stack opens at its thesis on a phone viewport.','concept-step-mobile','light','mobile','/repo/diffstory-atlas-fixture/review','concept-step'],
@@ -127,6 +130,7 @@ const evidence = {
   'code-focus':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
   'paired-code':'#ds-view-tour [data-scene-layout="paired-code"]:not([hidden])',
   'concept-step':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden])',
+  'concept-tall':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden]) [data-concept-diagram][data-render-state="ready"]',
   'concept-step-evidence':'#ds-view-tour [data-scene-layout="concept-diagram"]:not([hidden]) [data-concept-diagram][data-render-state="ready"]',
   'concept-document':'#ds-view-tour [data-scene-layout="concept-document"]:not([hidden])',
   'code-focus-mobile':'#ds-view-tour [data-scene-layout="code-focus"]:not([hidden])',
@@ -180,6 +184,16 @@ function setStoryForSurface(surface){
     return;
   }
   if(existsSync(STORY_HOLD))copyFileSync(STORY_HOLD,STORY);
+  if(surface==='concept-tall'){
+    const story=JSON.parse(readFileSync(STORY,'utf8'));
+    const concept=story.steps.find((step)=>step.kind==='concept');
+    if(!concept?.diagram)throw new Error('The atlas fixture has no concept diagram to project as a tall flowchart.');
+    concept.title='How the moving liquidation boundary is planned';
+    concept.body='<p>The execution path is shared. A zero-rate calculation finds the legacy amount, applies the quantity ceiling, then checks whether the remaining quote is still valid.</p>';
+    concept.diagram.source='flowchart TB\n  Start[Read ordered quote batch] --> Rate{Quote rate is zero?}\n  Rate -->|yes| Legacy[Calculate zero-rate amount]\n  Rate -->|no| Requested[Use requested close amount]\n  Legacy --> Ceiling[Apply maxQuantity ceiling]\n  Requested --> Ceiling\n  Ceiling --> Valid{Remaining quote value valid?}\n  Valid -->|yes| Keep[Keep quote in liquidation plan]\n  Valid -->|no| Stop[Stop at the ordered boundary]\n  Keep --> Update[Update remaining capacity]\n  Update --> More{More quotes?}\n  More -->|yes| Start\n  More -->|no| Return[Return deterministic close vector]';
+    concept.diagram.caption='Each quote is capped and validated before the ordered plan advances.';
+    writeFileSync(STORY,`${JSON.stringify(story,null,2)}\n`);
+  }
   if(surface==='concept-document'){
     const story=JSON.parse(readFileSync(STORY,'utf8'));
     const concept=story.steps.find((step)=>step.kind==='concept');
@@ -309,6 +323,23 @@ async function assertRendered(page,def){
     return {ok:true,reason:''};
   },selector);
   if(!result.ok)throw new Error(`${def.state} did not render its surface: ${result.reason}`);
+  if(def.surface==='concept-tall'){
+    const geometry=await page.evaluate(()=>{
+      const panel=document.querySelector('.ds-step:not([hidden])'),scroller=panel?.querySelector('.ds-concept-scroll'),figure=panel?.querySelector('.ds-concept-diagram'),output=panel?.querySelector('.ds-concept-diagram-output'),svg=output?.querySelector(':scope>svg');
+      if(!scroller||!figure||!output||!svg)return {valid:false,reason:'concept scroller, figure, output, or SVG is missing'};
+      const compact=innerWidth<=980,mobile=innerWidth<=620,overflowX=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth;
+      const outputHeight=output.getBoundingClientRect().height,svgHeight=svg.getBoundingClientRect().height;
+      if(overflowX>1)return {valid:false,reason:`page has ${Math.round(overflowX)}px horizontal overflow`};
+      if(!compact&&scroller.scrollHeight>scroller.clientHeight+1)return {valid:false,reason:`desktop scene scrolls ${scroller.scrollHeight-scroller.clientHeight}px vertically`};
+      const compactLimit=mobile?422:522;
+      if(compact&&outputHeight>compactLimit)return {valid:false,reason:`compact diagram is ${Math.round(outputHeight)}px tall (limit ${compactLimit}px)`};
+      if(!figure.classList.contains('is-portrait'))return {valid:false,reason:'tall flowchart was not classified as portrait'};
+      if(svgHeight<=outputHeight+1||output.scrollHeight<=output.clientHeight+1)return {valid:false,reason:`portrait SVG ${Math.round(svgHeight)}px was fitted into the ${Math.round(outputHeight)}px canvas instead of remaining readable and internally scrollable`};
+      return {valid:true,reason:`canvas ${Math.round(outputHeight)}px; SVG ${Math.round(svgHeight)}px; scene ${scroller.clientWidth}x${scroller.clientHeight}; canvas scroll ${output.scrollWidth}x${output.scrollHeight}`};
+    });
+    if(!geometry.valid)throw new Error(`${def.state} did not keep its tall diagram bounded: ${geometry.reason}`);
+    console.log(`  verified ${def.state}: ${geometry.reason}`);
+  }
   return failure?(expected||failure):'';
 }
 async function assertReviewPageVisible(page){
@@ -559,7 +590,7 @@ async function main(){
         await gotoStoryStep(page,8);
       }else if(def.surface==='paired-code'){
         await gotoStoryStep(page,3);
-      }else if(def.surface==='concept-step'||def.surface==='concept-step-evidence'||def.surface==='concept-document'){
+      }else if(def.surface==='concept-step'||def.surface==='concept-step-evidence'||def.surface==='concept-document'||def.surface==='concept-tall'){
         await gotoStoryStep(page,1);await gotoStoryStep(page,2);
         if(def.surface!=='concept-document')await page.waitForFunction(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]');return !!diagram&&['ready','error'].includes(diagram.getAttribute('data-render-state'));});
         if(def.surface==='concept-step-evidence')await page.evaluate(()=>{const diagram=document.querySelector('.ds-step:not([hidden]) [data-concept-diagram]'),scroller=diagram?.closest('.ds-concept-scroll');if(!diagram||!scroller)throw new Error('Concept diagram or its scroller is missing.');const dr=diagram.getBoundingClientRect(),sr=scroller.getBoundingClientRect();scroller.scrollTop+=dr.top-sr.top-18;});

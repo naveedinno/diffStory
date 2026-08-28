@@ -1142,15 +1142,17 @@ body.ds-mermaid-fullscreen-open{overflow:hidden}
 .ds-step[data-scene-layout="concept-document"] .ds-concept-title{max-width:24ch;font-size:var(--ds-concept-title-size,34px);line-height:1.08}
 .ds-step[data-scene-layout="concept-document"] .ds-concept-body{max-width:66ch;margin-top:24px}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:14px 24px 28px}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:grid;grid-template-columns:minmax(360px,720px) minmax(0,1fr);grid-template-areas:"copy diagram";align-items:center;column-gap:clamp(24px,2.5vw,56px);width:100%;padding:clamp(24px,4vh,64px) clamp(24px,2.5vw,64px)}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:grid;grid-template-columns:minmax(360px,720px) minmax(0,1fr);grid-template-rows:minmax(0,1fr);grid-template-areas:"copy diagram";align-items:center;column-gap:clamp(24px,2.5vw,56px);width:100%;height:100%;min-height:100%;padding:clamp(24px,4vh,64px) clamp(24px,2.5vw,64px)}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-copy{grid-area:copy;align-self:center}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{max-width:18ch;font-size:var(--ds-concept-title-size,34px);line-height:1.06}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{max-width:52ch;margin-top:18px;font-size:var(--ds-concept-body-size,14px);line-height:1.56}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h2,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h3,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body h4{margin-top:19px}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body th,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body td{padding:7px 10px}.ds-step[data-scene-layout="concept-diagram"] .ds-concept-body blockquote{margin:14px 0}
-.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{grid-area:diagram;align-self:stretch;display:flex;min-width:0;margin:0;padding:0;border:0;flex-direction:column}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{grid-area:diagram;align-self:stretch;display:flex;min-width:0;min-height:0;margin:0;padding:0;border:0;flex-direction:column}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{flex:1;width:100%;min-height:330px;padding:24px;background:var(--surface)}
 .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output svg{width:100%;height:100%;max-width:none!important;max-height:100%}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram.is-portrait:not(.is-fullscreen-active) .ds-concept-diagram-output{align-items:flex-start;justify-content:flex-start;overflow:auto;scrollbar-gutter:stable}
+.ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram.is-portrait:not(.is-fullscreen-active) .ds-concept-diagram-output>svg{flex:none;width:min(76%,680px);height:auto;max-height:none;margin-inline:auto}
 .ds-step[data-scene-layout="logic-move"]>.ds-step-top,.ds-step[data-scene-layout="paired-code"]>.ds-step-top{padding-bottom:2px}
 .ds-step[data-scene-layout="paired-code"] .ds-diffscroll{--ds-scene-paired:1}
 .ds-diff{border-radius:10px;box-shadow:none}.ds-difftoolbar{background:var(--panel2)}
@@ -1209,12 +1211,12 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:980px){
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:16px 24px 34px}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:block;width:100%;padding:34px 38px 38px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-document{display:block;width:100%;height:auto;min-height:100%;padding:34px 38px 38px}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{max-width:22ch;font-size:32px;line-height:1.09}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-body{max-width:70ch}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{display:block;margin-top:26px;padding-top:22px;border-top:1px solid var(--line-soft)}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:300px;padding:20px}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output svg{height:auto;max-width:100%!important}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{flex:none;width:100%;height:min(58vh,520px);min-height:300px;overflow:hidden;padding:20px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output svg{width:100%;height:100%;max-width:none!important;max-height:100%}
   .ds-step[data-scene-layout="opening"] .ds-introwrap{padding-inline:48px}
   .ds-step[data-scene-layout="opening"] .ds-intro-title{font-size:clamp(38px,6vw,50px)}
 }
@@ -1237,7 +1239,8 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
   .ds-step[data-scene-layout="concept-document"] .ds-concept-title,.ds-step[data-scene-layout="concept-diagram"] .ds-concept-title{font-size:26px;line-height:1.08}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-scroll{padding:12px 12px 28px}
   .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram{margin-top:22px;padding-top:18px}
-  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{min-height:220px;padding:12px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram-output{height:min(52vh,420px);min-height:240px;padding:12px}
+  .ds-step[data-scene-layout="concept-diagram"] .ds-concept-diagram.is-portrait:not(.is-fullscreen-active) .ds-concept-diagram-output>svg{width:360px;min-width:360px}
   .ds-concept-diagram-output svg .node .label text{font-size:14px}
   .ds-concept-diagram-output svg .edgeLabel text{font-size:12px}
 }
