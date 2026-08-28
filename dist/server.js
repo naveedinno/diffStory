@@ -16,7 +16,7 @@ import { narrativeText } from "./narrative.js";
 import { summarizeChange } from "./change-view.js";
 import { resolveScope } from "./scope.js";
 import { basename, dirname, join, resolve, } from "node:path";
-import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange, } from "./view-model.js";
+import { buildFullFileRows, hunksToSbsBlocks, hunkNewRange, rowsInNewRange, } from "./view-model.js";
 import { buildReviewModel } from "./view-model.js";
 import { loadComments, loadCommentsWithHealth, commentsForStory, addComment, deleteComment, updateComment, InvalidCommentStoreError, } from "./comments.js";
 import { resolveStoryPath, APP_BRAND, DATA_DIR } from "./config.js";
@@ -1811,8 +1811,7 @@ function metadataOnlyDriftDescription(result) {
         return `File mode changed from ${modes[1]} to ${modes[2]}; file contents did not change.`;
     return "File metadata changed without textual content changes.";
 }
-/** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
- *  file, clamped to [from, to] new-file line numbers. */
+/** Rows for expand-a-hunk-gap, clamped to [from, to] new-file line numbers. */
 function renderContextResponse(page, params) {
     const { repo, tour, head, storyless } = page;
     const file = params.get("file") ?? "";
@@ -1842,15 +1841,16 @@ function renderContextResponse(page, params) {
     // never invented ones. Defense-in-depth — the parser now bounds hunks by
     // their header counts, so it no longer leaks a phantom row past EOF.
     const last = newLines.length;
-    const rows = buildFullFileRows(df, newLines, []).filter((r) => r.type === "ctx" &&
-        r.newNo !== undefined &&
-        r.newNo >= from &&
-        r.newNo <= to &&
-        r.newNo <= last);
+    const servedTo = Math.min(to, last);
+    const rows = rowsInNewRange(buildFullFileRows(df, newLines, []), [
+        from,
+        servedTo,
+    ]);
     return renderContextRows(rows, layout, {
         file,
         oldFile: df?.oldPath,
         newFile: df?.status === "added",
+        servedRange: [from, servedTo],
     });
 }
 function nowMs() {

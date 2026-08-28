@@ -1124,7 +1124,7 @@ test("the engine is one module with one entry point and two seams", () => {
   assert.match(reviewApp, /startReviewEngine\(\{/);
 });
 
-test("a code step leads with its title and demotes the reference chips", () => {
+test("a code step leads with its title and omits redundant call-flow metadata", () => {
   const tour = {
     version: 1,
     title: "t",
@@ -1138,6 +1138,16 @@ test("a code step leads with its title and demotes the reference chips", () => {
         range: [1, 2],
         kind: "changed",
         why: "I changed this so the next helper receives the value it needs.",
+        calls: ["s2"],
+      },
+      {
+        id: "s2",
+        order: 2,
+        title: "The helper receives the value",
+        file: "a.ts",
+        range: [1, 2],
+        kind: "changed",
+        why: "This is the next authored stop in the story.",
       },
     ],
   };
@@ -1176,6 +1186,12 @@ test("a code step leads with its title and demotes the reference chips", () => {
       panel.slice(rowAt, metaAt).indexOf("ds-step-top") === -1,
     "meta sits inside the title row, not in a band of its own",
   );
+
+  // Authored call links still shape the story, but repeating "Calls step 2"
+  // beside every title adds no useful decision context. The story prose and
+  // reading order should explain a relationship when it matters.
+  assert.doesNotMatch(panel, /ds-flowchip|Calls step|Returns to step/);
+  assert.doesNotMatch(reviewCss, /\.ds-flowchip/);
 
   // Change navigation is hidden by CSS in code steps; it should not ship at all.
   assert.doesNotMatch(panel, /data-change-nav/);

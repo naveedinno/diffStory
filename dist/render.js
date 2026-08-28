@@ -69,11 +69,6 @@ function stepPanel(step, i, total, comments) {
 }
 function codeStepPanel(s, i, total, comments) {
     const diffRegionId = `ds-story-diff-${i + 1}`;
-    // Call-flow lives here now (not on every rail card). Only show the meaningful
-    // cross-references — "Standalone"/"Final step" carry no navigation cue.
-    const flow = /^(Calls|Returns)/.test(s.flow)
-        ? `<span class="ds-flowchip" title="Call flow — where this step leads in the walkthrough"><span class="ds-flowico">↳</span>${esc(s.flow)}</span>`
-        : "";
     return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}"${s.focusExplicit ? ' data-story-focus="authored"' : ""} hidden>
     <div class="ds-step-top">
       <div class="ds-step-titlerow">
@@ -81,7 +76,6 @@ function codeStepPanel(s, i, total, comments) {
         <div class="ds-step-meta">
           <span class="ds-step-count">Step ${s.order} of ${total}</span>
           <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
-          ${flow}
         </div>
         ${storyRepairMenu(s, true)}
       </div>
@@ -870,17 +864,33 @@ export function renderUnifiedHunks(file) {
     return `<div class="ds-diffbody ds-diffbody-unified ds-drift-unified">${body}</div>`;
 }
 /** Rows served by /api/diff/context, wrapped so the client can read the
- *  actually-served range. Context rows only. */
+ *  actually-served range. A story expander may cross another changed hunk, so
+ *  row types must survive this response instead of becoming visual holes. */
 export function renderContextRows(rows, layout, opts) {
     if (!rows.length)
         return `<div data-ctx-rows data-from="0" data-to="0"></div>`;
-    const from = rows[0].newNo ?? 0;
-    const to = rows[rows.length - 1].newNo ?? 0;
-    const body = layout === "split"
-        ? rows.map((r) => fullRow(r, opts)).join("")
-        : rows
-            .map((r) => unifiedRow({ type: "ctx", no: r.newNo, content: r.content }, opts.file, opts.oldFile ?? opts.file))
+    const numberedRows = rows.filter((row) => row.newNo !== undefined);
+    const from = opts.servedRange?.[0] ?? numberedRows[0]?.newNo ?? 0;
+    const to = opts.servedRange?.[1] ??
+        numberedRows[numberedRows.length - 1]?.newNo ??
+        from;
+    let body;
+    if (layout === "split") {
+        const { rows: pairedRows, sides } = pairChangeRows(rows);
+        body = pairedRows.map((row) => fullRow(row, opts, sides)).join("");
+    }
+    else {
+        const unifiedRows = rows.map((row) => ({
+            type: row.type,
+            no: row.type === "del" ? row.oldNo : row.newNo,
+            content: row.content,
+            untoured: row.untoured,
+        }));
+        const intra = intraLineMap(unifiedRows, (row) => row.type, (row) => row.content);
+        body = unifiedRows
+            .map((row) => unifiedRow(row, opts.file, opts.oldFile ?? opts.file, unifiedIntra(row, intra)))
             .join("");
+    }
     return `<div data-ctx-rows data-from="${from}" data-to="${to}">${body}</div>`;
 }
 function fullRow(row, opts, intra) {

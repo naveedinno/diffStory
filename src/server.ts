@@ -73,6 +73,7 @@ import {
   buildFullFileRows,
   hunksToSbsBlocks,
   hunkNewRange,
+  rowsInNewRange,
 } from "./view-model.js";
 import { buildReviewModel } from "./view-model.js";
 import {
@@ -2465,8 +2466,7 @@ function metadataOnlyDriftDescription(result: StoryDriftFileDiff): string {
   return "File metadata changed without textual content changes.";
 }
 
-/** Context rows for expand-a-hunk-gap: ctx rows of the reconstructed full
- *  file, clamped to [from, to] new-file line numbers. */
+/** Rows for expand-a-hunk-gap, clamped to [from, to] new-file line numbers. */
 function renderContextResponse(
   page: LeasedReviewPage,
   params: URLSearchParams,
@@ -2500,18 +2500,16 @@ function renderContextResponse(
   // never invented ones. Defense-in-depth — the parser now bounds hunks by
   // their header counts, so it no longer leaks a phantom row past EOF.
   const last = newLines.length;
-  const rows = buildFullFileRows(df, newLines, []).filter(
-    (r) =>
-      r.type === "ctx" &&
-      r.newNo !== undefined &&
-      r.newNo >= from &&
-      r.newNo <= to &&
-      r.newNo <= last,
-  );
+  const servedTo = Math.min(to, last);
+  const rows = rowsInNewRange(buildFullFileRows(df, newLines, []), [
+    from,
+    servedTo,
+  ]);
   return renderContextRows(rows, layout, {
     file,
     oldFile: df?.oldPath,
     newFile: df?.status === "added",
+    servedRange: [from, servedTo],
   });
 }
 

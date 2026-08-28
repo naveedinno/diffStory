@@ -1000,15 +1000,55 @@ test('/api/diff/context serves clamped context rows', async () => {
     // Inverted numeric range (to < from) hits the guard, not the row filter.
     const inverted = await fetch(context('file=notes.txt&from=10&to=5&layout=unified'));
     assert.match(await inverted.text(), /^<div data-ctx-rows data-from="0" data-to="0"><\/div>$/);
-    // A numeric range past EOF clamps to the file's last context line — that's
-    // 39 here (line 40 is the added line, not a ctx row) — instead of erroring.
+    // A numeric range past EOF clamps to the file's last line, including a
+    // changed row, instead of dropping that row or inventing lines past EOF.
     const past = await fetch(context('file=notes.txt&from=38&to=58&layout=unified'));
-    assert.match(await past.text(), /^<div data-ctx-rows data-from="38" data-to="39">/);
+    const pastHtml = await past.text();
+    assert.match(pastHtml, /^<div data-ctx-rows data-from="38" data-to="40">/);
+    assert.match(pastHtml, /ds-row-add/);
+    assert.match(pastHtml, /forty/);
     // A file that's in the diff but unreadable from the working tree gets the note.
     const unreadable = await fetch(context('file=gone.txt&from=1&to=5&layout=unified'));
     assert.match(await unreadable.text(), /Couldn't read gone\.txt from the working tree\./);
     const bad = await fetch(context('file=nope.md&from=1&to=2&layout=unified'));
     assert.match(await bad.text(), /isn't part of this change/);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('/api/diff/context keeps changed rows inside an expanded story range', async () => {
+  const repo = gitRepo();
+  const before = Array.from({ length: 40 }, (_, i) => 'line ' + (i + 1));
+  writeFileSync(join(repo, 'notes.txt'), before.join('\n') + '\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'add notes'], { cwd: repo });
+  const after = [...before];
+  after[19] = 'changed line 20';
+  after[39] = 'changed line 40';
+  writeFileSync(join(repo, 'notes.txt'), after.join('\n') + '\n');
+
+  const { server, base } = await boot();
+  try {
+    await fetch(`${base}/api/repo/open`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: repo }),
+    });
+    const page = await (await fetch(`${base}/repo/${encodeURIComponent(basename(repo))}/diff`)).text();
+    const token = reviewPageToken(page);
+    const res = await fetch(leased(
+      `${base}/api/diff/context?file=notes.txt&from=18&to=22&layout=split`,
+      token,
+    ));
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /line 18/);
+    assert.match(html, /changed line/);
+    assert.match(html, /line 22/);
+    assert.match(html, /ds-cell-del/);
+    assert.match(html, /ds-cell-add/);
   } finally {
     server.close();
     rmSync(repo, { recursive: true, force: true });

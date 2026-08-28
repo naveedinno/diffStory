@@ -141,8 +141,6 @@ export interface CodeStepView extends StepViewBase {
   hotspot?: Narrative;
   health: StepHealthView;
   beats: StepBeatView[];
-  /** Plain-English call-flow summary, e.g. "Calls step 3 · returns to 1". */
-  flow: string;
   /** Diff rows grouped by hunk (rendered with a ⋯ separator between blocks). */
   blocks: SbsRow[][];
   note?: string;
@@ -324,8 +322,6 @@ export function buildReviewModel(
           repo,
           step,
           files,
-          byId,
-          steps.length,
           headRef,
           hotspotByStep.get(step.id),
           steps,
@@ -419,8 +415,6 @@ function buildCodeStep(
   repo: string,
   step: CodeTourStep,
   files: DiffFile[],
-  byId: Map<string, TourStep>,
-  total: number,
   headRef?: string,
   hotspot?: Narrative,
   ordered?: TourStep[],
@@ -462,7 +456,6 @@ function buildCodeStep(
     hotspot,
     health: stepHealth(step, viewport, focusGroups),
     beats,
-    flow: flowLabel(step, byId, total),
     blocks,
     note,
     moves,
@@ -704,6 +697,30 @@ export function buildPairedBlocks(
 
 function rowsInViewport(rows: SbsRow[], [start, end]: [number, number]): SbsRow[] {
   return rows.filter((row, index) => rowInViewport(row, rows, index, start, end));
+}
+
+/**
+ * Select every diff row anchored to a range of post-change line numbers.
+ *
+ * Unlike a plain `newNo` filter, this keeps deleted rows: a deletion is
+ * anchored to the next surviving/added line, or one line after the previous
+ * post-change line at EOF. Expanders use post-change ranges, so this produces
+ * a complete slice without leaking a neighboring hunk into a context-only
+ * gap.
+ */
+export function rowsInNewRange(
+  rows: SbsRow[],
+  [start, end]: [number, number],
+): SbsRow[] {
+  return rows.filter((row, index) => {
+    if (row.newNo !== undefined)
+      return row.newNo >= start && row.newNo <= end;
+    if (row.type !== 'del') return false;
+    const next = nearestNewLine(rows, index, 1);
+    const previous = nearestNewLine(rows, index, -1);
+    const anchor = next ?? (previous === undefined ? undefined : previous + 1);
+    return anchor !== undefined && anchor >= start && anchor <= end;
+  });
 }
 
 function rowInViewport(row: SbsRow, rows: SbsRow[], index: number, start: number, end: number): boolean {
@@ -999,18 +1016,6 @@ export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<Sbs
 }
 
 // ---- helpers ----
-
-function flowLabel(step: CodeTourStep, byId: Map<string, TourStep>, total: number): string {
-  const calls = (step.calls ?? []).map((id) => byId.get(id)).filter((t): t is TourStep => !!t);
-  const ret = step.returnsTo ? byId.get(step.returnsTo) : undefined;
-  if (calls.length) {
-    let label = 'Calls step ' + calls.map((t) => t.order).join(', ');
-    if (ret) label += ' · returns to ' + ret.order;
-    return label;
-  }
-  if (ret) return 'Returns to step ' + ret.order;
-  return step.order === total ? 'Final step' : 'Standalone';
-}
 
 function toSbs(l: DiffLine): SbsRow {
   return { type: l.type, oldNo: l.oldNo, newNo: l.newNo, content: l.content, comment: l.newNo !== undefined };
