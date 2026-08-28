@@ -4,6 +4,12 @@ All notable changes to diffStory are tracked here.
 
 ## Unreleased
 
+- Tightened the story step header: the step title now leads its own line with
+  the step number, kind, and call flow demoted to quiet reference marks at the
+  end of the same row, instead of sitting in a band of filled chips above it.
+  Story diff heads no longer spell out an unrenamed path twice, and the step
+  toolbar dropped controls it never showed. Together this returns about 30px of
+  vertical space per step and puts the title first in reading order.
 - Paired deleted and added lines onto single side-by-side rows in the Split and
   full-file views, with word-level change marks on both sides of each pair, so a
   rewritten statement reads as one before/after row instead of two separate

@@ -76,15 +76,13 @@ function codeStepPanel(s, i, total, comments) {
         : "";
     return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}"${s.focusExplicit ? ' data-story-focus="authored"' : ""} hidden>
     <div class="ds-step-top">
-      <div class="ds-step-meta">
-        <span class="ds-step-count">Step ${s.order} of ${total}</span>
-        <span class="ds-dot"></span>
-        <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
-        ${flow}
-        <span class="ds-flex"></span>
-      </div>
       <div class="ds-step-titlerow">
         <h1 class="ds-step-title">${s.title.html}</h1>
+        <div class="ds-step-meta">
+          <span class="ds-step-count">Step ${s.order} of ${total}</span>
+          <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
+          ${flow}
+        </div>
         ${storyRepairMenu(s, true)}
       </div>
     </div>
@@ -96,7 +94,6 @@ function codeStepPanel(s, i, total, comments) {
         <div class="ds-difftoolbar">
           <span class="ds-flex"></span>
           <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
-          ${changeJumpControls()}
           <div class="ds-diffview-controls">
             ${lineWrapToggle()}
             <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
@@ -451,15 +448,18 @@ function diffHead(s) {
     }
     const leftLabel = s.newFile ? "Did not exist" : "Before";
     const rightLabel = s.newFile ? "New file" : "After";
+    // Both sides of an ordinary edit name the same file, and the step head above
+    // already carries it. Only a rename earns the path on both sides.
+    const renamed = !s.newFile && s.oldFile !== s.file;
     return `<div class="ds-diffhead">
     <span class="ds-diffhead-side ds-diffhead-side-l">
       <span class="ds-diffhead-label${s.newFile ? " ds-dim" : ""}">${leftLabel}</span>
-      ${s.newFile ? "" : `<span class="ds-diffhead-path">${esc(s.file)}</span>`}
+      ${renamed ? `<span class="ds-diffhead-path">${esc(s.oldFile)}</span>` : ""}
     </span>
     <span class="ds-diffhead-divider"></span>
     <span class="ds-diffhead-side ds-diffhead-side-r">
       <span class="ds-diffhead-label${s.newFile ? " ds-green" : ""}">${rightLabel}</span>
-      <span class="ds-diffhead-path">${esc(s.file)}</span>
+      ${renamed ? `<span class="ds-diffhead-path">${esc(s.file)}</span>` : ""}
     </span>
   </div>`;
 }

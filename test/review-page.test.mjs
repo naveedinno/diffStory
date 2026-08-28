@@ -1120,3 +1120,109 @@ test("the engine is one module with one entry point and two seams", () => {
   assert.doesNotMatch(engine, /DOMContentLoaded/);
   assert.match(reviewApp, /startReviewEngine\(\{/);
 });
+
+test("a code step leads with its title and demotes the reference chips", () => {
+  const tour = {
+    version: 1,
+    title: "t",
+    summary: "s",
+    steps: [
+      {
+        id: "s1",
+        order: 1,
+        title: "The digest nests the setup inside the intent",
+        file: "a.ts",
+        range: [1, 2],
+        kind: "changed",
+        why: "I changed this so the next helper receives the value it needs.",
+      },
+    ],
+  };
+  const files = [
+    {
+      oldPath: "a.ts",
+      newPath: "a.ts",
+      status: "modified",
+      hunks: [
+        {
+          oldStart: 1, oldLines: 1, newStart: 1, newLines: 2,
+          lines: [
+            { type: "del", content: "old", oldNo: 1 },
+            { type: "add", content: "new1", newNo: 1 },
+            { type: "add", content: "new2", newNo: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  const model = buildReviewModel(process.cwd(), tour, files, undefined, {});
+  const panel = renderStoryStepPanel(process.cwd(), model, [], 0);
+
+  // The heading must come before the step counter and kind badge, so the
+  // sentence a reader needs is both first in the DOM and first on the line.
+  const titleAt = panel.indexOf('class="ds-step-title"');
+  const metaAt = panel.indexOf('class="ds-step-meta"');
+  assert.ok(titleAt > -1 && metaAt > -1, "title and meta both render");
+  assert.ok(titleAt < metaAt, "the title precedes the reference chips");
+
+  // Meta rides inside the title row rather than claiming a band of its own.
+  const rowAt = panel.indexOf('class="ds-step-titlerow"');
+  assert.ok(rowAt > -1 && rowAt < titleAt, "meta and title share one row");
+  assert.ok(
+    metaAt < panel.indexOf("</div>", metaAt) &&
+      panel.slice(rowAt, metaAt).indexOf("ds-step-top") === -1,
+    "meta sits inside the title row, not in a band of its own",
+  );
+
+  // Change navigation is hidden by CSS in code steps; it should not ship at all.
+  assert.doesNotMatch(panel, /data-change-nav/);
+});
+
+test("a story step head names the file once when both sides share a path", () => {
+  const tour = {
+    version: 1,
+    title: "t",
+    summary: "s",
+    steps: [
+      {
+        id: "s1", order: 1, title: "c", file: "a.ts", range: [1, 2],
+        kind: "changed",
+        why: "I changed this so the next helper receives the value it needs.",
+      },
+    ],
+  };
+  const files = [
+    {
+      oldPath: "a.ts", newPath: "a.ts", status: "modified",
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: [
+        { type: "del", content: "old", oldNo: 1 },
+        { type: "add", content: "new1", newNo: 1 },
+      ] }],
+    },
+  ];
+  const model = buildReviewModel(process.cwd(), tour, files, undefined, {});
+  const panel = renderStoryStepPanel(process.cwd(), model, [], 0);
+  const head = panel.slice(panel.indexOf('class="ds-diffhead"'));
+  const paths = head.slice(0, head.indexOf("</div>")).match(/ds-diffhead-path/g) || [];
+  assert.equal(paths.length, 0, "an unrenamed file is not spelled out twice");
+});
+
+test("concept steps keep their standalone meta band", () => {
+  const tour = {
+    version: 2,
+    title: "t",
+    summary: "s",
+    steps: [
+      {
+        id: "primer", order: 1, title: "A primer", kind: "concept",
+        body: "A request is normalized before the policy receives it.",
+        preparesFor: [],
+      },
+    ],
+  };
+  const model = buildReviewModel(process.cwd(), tour, []);
+  const panel = renderStoryStepPanel(process.cwd(), model, [], 0);
+  assert.match(panel, /ds-concept-step/);
+  assert.match(panel, /<div class="ds-step-meta">/);
+  assert.doesNotMatch(panel, /ds-step-titlerow/, "concept titles live in the document");
+});
