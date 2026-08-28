@@ -6,6 +6,7 @@ import { createServer, } from "node:http";
 import { spawn } from "node:child_process";
 import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGeneratedTour, } from "./tour.js";
 import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, reviewChangeIndexSnapshot, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, assertSafeRepoPath, } from "./git.js";
+import { enclosingScopeLabel } from "./enclosing-scope.js";
 import { parseUnifiedDiff } from "./diff.js";
 import { computeCoverage } from "./coverage.js";
 import { renderReviewShell, renderFullFile, renderSplitHunks, renderUnifiedHunks, renderContextRows, renderFilePanelContent, renderStoryStepPanel, renderTrustEvidence, } from "./render.js";
@@ -1615,7 +1616,7 @@ function renderFullFileResponse(page, file) {
 function renderSplitResponse(page, file) {
     if (!file)
         return `<div class="ds-diffnote">No file requested.</div>`;
-    const { tour, storyless } = page;
+    const { repo, tour, head, storyless } = page;
     const allowed = new Set([
         ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
         ...(storyless ? [] : storyReviewFiles(tour)),
@@ -1629,12 +1630,20 @@ function renderSplitResponse(page, file) {
         : computeCoverage(tour, files)
             .uncovered.filter((u) => u.file === file)
             .map((u) => u.range);
+    // Prefer a scope read from the post-change file; git's own funcname is the
+    // fallback when the file cannot be read at this revision.
+    const newLines = df && df.status !== "deleted" ? readWholeFile(repo, file, head) : undefined;
+    const scopes = df
+        ? df.hunks.map((h) => (newLines ? enclosingScopeLabel(newLines, h.newStart) : undefined) ??
+            h.context)
+        : [];
     return renderSplitHunks(hunksToSbsBlocks(df, ranges), {
         file,
         oldFile: df?.oldPath,
         newFile: df?.status === "added",
         hunkRanges: df ? df.hunks.map(hunkNewRange) : [],
         canExpand: df ? df.status !== "deleted" : false,
+        scopes,
     });
 }
 /** Render one All-files detail on demand so large reviews do not ship every

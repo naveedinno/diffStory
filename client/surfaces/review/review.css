@@ -753,7 +753,13 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
    a story step, the panel head in Files view) — --ds-stickytop is that height,
    measured on the holder. Each file's head is stuck inside its own section, so
    scrolling to the next file hands the header over instead of stacking them. */
-.ds-diffhead{position:sticky;top:calc(var(--ds-stickytop,0px) - var(--ds-scrollpad-t,0px));z-index:8;display:flex;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
+.ds-diffhead{--ds-diffhead-h:26px;position:sticky;top:calc(var(--ds-stickytop,0px) - var(--ds-scrollpad-t,0px));z-index:8;display:flex;align-items:center;height:var(--ds-diffhead-h);background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule)}
+/* One label per hunk, stuck just under the Before/After head. Each .ds-hunk is
+   the sticky containing block, so a label releases when its own hunk scrolls
+   past and the next hunk's label takes over instead of stacking. */
+.ds-hunk{display:block}
+.ds-scoperow{position:sticky;top:calc(var(--ds-stickytop,0px) - var(--ds-scrollpad-t,0px) + var(--ds-diffhead-h,26px));z-index:6;display:flex;align-items:center;min-width:0;padding:3px 10px 3px 14px;background:var(--gutter-hi);border-bottom:1px solid var(--diff-rule);color:var(--muted);font-size:10.5px}
+.ds-scoperow code{font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ds-diffhead-ctx{justify-content:space-between;align-items:center;padding:5px 14px}
 .ds-diffhead-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:5px 14px;overflow:hidden}
 .ds-diffhead-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}

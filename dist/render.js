@@ -837,8 +837,16 @@ export function renderSplitHunks(blocks, opts) {
     const body = blocks
         .map((block, bi) => {
         const { rows: pairedRows, sides } = pairChangeRows(block);
+        const scope = opts.scopes?.[bi];
+        const scopeRow = scope
+            ? `<div class="ds-scoperow"><code>${esc(scope)}</code></div>`
+            : "";
+        // Each hunk is its own sticky containing block, so a scope label
+        // releases when its hunk scrolls past instead of stacking.
         return (gapBefore(bi) +
-            pairedRows.map((row) => fullRow(row, opts, sides)).join(""));
+            `<div class="ds-hunk">${scopeRow}${pairedRows
+                .map((row) => fullRow(row, opts, sides))
+                .join("")}</div>`);
     })
         .join("") + gapAfterLast;
     return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;

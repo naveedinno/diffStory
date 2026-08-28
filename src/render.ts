@@ -1127,6 +1127,8 @@ export function renderSplitHunks(
     newFile: boolean;
     hunkRanges?: Array<[number, number]>;
     canExpand?: boolean;
+    /** Enclosing-declaration label per hunk, aligned with `blocks`. */
+    scopes?: Array<string | undefined>;
   },
 ): string {
   if (!blocks.length) return `<div class="ds-diffnote">No diff to show.</div>`;
@@ -1170,9 +1172,17 @@ export function renderSplitHunks(
     blocks
       .map((block, bi) => {
         const { rows: pairedRows, sides } = pairChangeRows(block);
+        const scope = opts.scopes?.[bi];
+        const scopeRow = scope
+          ? `<div class="ds-scoperow"><code>${esc(scope)}</code></div>`
+          : "";
+        // Each hunk is its own sticky containing block, so a scope label
+        // releases when its hunk scrolls past instead of stacking.
         return (
           gapBefore(bi) +
-          pairedRows.map((row) => fullRow(row, opts, sides)).join("")
+          `<div class="ds-hunk">${scopeRow}${pairedRows
+            .map((row) => fullRow(row, opts, sides))
+            .join("")}</div>`
         );
       })
       .join("") + gapAfterLast;

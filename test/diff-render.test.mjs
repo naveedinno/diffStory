@@ -273,3 +273,39 @@ test('a merged change pair can still carry the unexplained flag', () => {
   });
   assert.match(html, /UNEXPLAINED/);
 });
+
+test('split hunks wrap in ds-hunk and carry a scope row when a label exists', () => {
+  const block = [[{ type: 'ctx', content: 'x', oldNo: 5, newNo: 5 }]];
+  const html = renderSplitHunks(block, {
+    file: 'a.sol', oldFile: 'a.sol', newFile: false,
+    hunkRanges: [[5, 5]], canExpand: false,
+    scopes: ['function fillCloseRequest('],
+  });
+  assert.match(html, /<div class="ds-hunk"><div class="ds-scoperow"><code>function fillCloseRequest\(<\/code><\/div>/);
+});
+
+test('a hunk without a scope label gets the wrapper but no scope row', () => {
+  const block = [[{ type: 'ctx', content: 'x', oldNo: 5, newNo: 5 }]];
+  const html = renderSplitHunks(block, {
+    file: 'a.sol', oldFile: 'a.sol', newFile: false,
+    hunkRanges: [[5, 5]], canExpand: false,
+  });
+  assert.match(html, /<div class="ds-hunk">/);
+  assert.doesNotMatch(html, /ds-scoperow/);
+});
+
+test('scope labels are escaped like any other untrusted source text', () => {
+  const block = [[{ type: 'ctx', content: 'x', oldNo: 5, newNo: 5 }]];
+  const html = renderSplitHunks(block, {
+    file: 'a.sol', oldFile: 'a.sol', newFile: false,
+    hunkRanges: [[5, 5]], canExpand: false,
+    scopes: ['function f(a < b) "x"'],
+  });
+  assert.match(html, /<code>function f\(a &lt; b\) &quot;x&quot;<\/code>/);
+});
+
+test('the sticky scope row clears the split head it sits under', () => {
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-scoperow'), /position:sticky/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-scoperow'), /--ds-diffhead-h/);
+  assert.match(cssRuleBody(DIFF_CSS, '.ds-diffhead'), /--ds-diffhead-h/);
+});

@@ -40,6 +40,7 @@ import {
   numstat,
   assertSafeRepoPath,
 } from "./git.js";
+import { enclosingScopeLabel } from "./enclosing-scope.js";
 import { parseUnifiedDiff } from "./diff.js";
 import type { ReviewExclusionMetadata } from "./noise.js";
 import { computeCoverage } from "./coverage.js";
@@ -2218,7 +2219,7 @@ function renderFullFileResponse(page: LeasedReviewPage, file: string): string {
  *  files (referenced by a context step but absent from the diff itself). */
 function renderSplitResponse(page: LeasedReviewPage, file: string): string {
   if (!file) return `<div class="ds-diffnote">No file requested.</div>`;
-  const { tour, storyless } = page;
+  const { repo, tour, head, storyless } = page;
   const allowed = new Set<string>([
     ...boundedReviewIndex(page.fileIndex).map((entry) => entry.path),
     ...(storyless ? [] : storyReviewFiles(tour)),
@@ -2233,12 +2234,24 @@ function renderSplitResponse(page: LeasedReviewPage, file: string): string {
     : computeCoverage(tour, files)
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
+  // Prefer a scope read from the post-change file; git's own funcname is the
+  // fallback when the file cannot be read at this revision.
+  const newLines =
+    df && df.status !== "deleted" ? readWholeFile(repo, file, head) : undefined;
+  const scopes = df
+    ? df.hunks.map(
+        (h) =>
+          (newLines ? enclosingScopeLabel(newLines, h.newStart) : undefined) ??
+          h.context,
+      )
+    : [];
   return renderSplitHunks(hunksToSbsBlocks(df, ranges), {
     file,
     oldFile: df?.oldPath,
     newFile: df?.status === "added",
     hunkRanges: df ? df.hunks.map(hunkNewRange) : [],
     canExpand: df ? df.status !== "deleted" : false,
+    scopes,
   });
 }
 
