@@ -675,6 +675,9 @@ test("Mermaid diagrams use app typography and readable multiline spacing", () =>
   assert.match(engine, /look:'neo'/);
   assert.match(engine, /fontFamily:'IBM Plex Sans, sans-serif'/);
   assert.match(engine, /flowchart:\{[^}]*nodeSpacing:32[^}]*rankSpacing:44[^}]*wrappingWidth:180/);
+  assert.match(reviewCss, /\.ds-concept-diagram-output svg \.node \.label text\{font-size:10\.5px/);
+  assert.match(reviewCss, /\.ds-concept-diagram figcaption\{[^}]*font-size:var\(--ds-concept-diagram-caption-size,14px\)/);
+  assert.match(engine, /canvas\.style\.setProperty\('--ds-concept-diagram-caption-size',\(11\.5\*scale\)/);
   assert.match(engine, /function spaceMermaidLabelRows\(root\)/);
   assert.match(engine, /spaceMermaidLabelRows\(root\)/);
   assert.match(engine, /var lineSpacing=1\.7/);

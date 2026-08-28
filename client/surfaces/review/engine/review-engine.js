@@ -640,6 +640,8 @@ export function startReviewEngine(options){
   function clearConceptTypographyFit(copy){
     if(!copy)return;
     ['--ds-concept-title-size','--ds-concept-body-size','--ds-concept-heading-size','--ds-concept-table-size','--ds-concept-caption-size','--ds-concept-pre-size'].forEach(function(name){copy.style.removeProperty(name);});
+    var canvas=copy.closest('.ds-concept-document');
+    if(canvas)canvas.style.removeProperty('--ds-concept-diagram-caption-size');
     copy.removeAttribute('data-concept-type-scale');
   }
   function setConceptTypographyScale(copy,layout,scale){
@@ -650,6 +652,8 @@ export function startReviewEngine(options){
     copy.style.setProperty('--ds-concept-table-size',((layout==='concept-diagram'?13.5:bodyBase*.9)*scale).toFixed(2)+'px');
     copy.style.setProperty('--ds-concept-caption-size',((layout==='concept-diagram'?11.5:bodyBase*(11.5/15))*scale).toFixed(2)+'px');
     copy.style.setProperty('--ds-concept-pre-size',((layout==='concept-diagram'?12:bodyBase*.8)*scale).toFixed(2)+'px');
+    var canvas=copy.closest('.ds-concept-document');
+    if(canvas&&layout==='concept-diagram')canvas.style.setProperty('--ds-concept-diagram-caption-size',(11.5*scale).toFixed(2)+'px');
     copy.setAttribute('data-concept-type-scale',scale.toFixed(3));
   }
   function fitConceptTypography(panel){
