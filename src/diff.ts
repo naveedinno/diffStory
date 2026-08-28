@@ -2,7 +2,7 @@
 // Handles the common cases: modified, added, deleted, renamed.
 import type { DiffFile, DiffHunk, DiffLine } from './types.js';
 
-const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: (.+))?$/;
 
 export function parseUnifiedDiff(raw: string): DiffFile[] {
   const lines = raw.split('\n');
@@ -73,7 +73,8 @@ export function parseUnifiedDiff(raw: string): DiffFile[] {
       const oldLines = hm[2] === undefined ? 1 : Number(hm[2]);
       const newStart = Number(hm[3]);
       const newLines = hm[4] === undefined ? 1 : Number(hm[4]);
-      hunk = { oldStart, oldLines, newStart, newLines, lines: [] };
+      const context = hm[5]?.trim() || undefined;
+      hunk = { oldStart, oldLines, newStart, newLines, context, lines: [] };
       oldNo = oldStart;
       newNo = newStart;
       oldRemain = oldLines;

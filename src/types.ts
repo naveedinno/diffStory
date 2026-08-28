@@ -353,6 +353,8 @@ export interface DiffHunk {
   oldLines: number;
   newStart: number;
   newLines: number;
+  /** git's funcname text after the second @@ — the nearest enclosing declaration. */
+  context?: string;
   lines: DiffLine[];
 }
 

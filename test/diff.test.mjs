@@ -83,3 +83,25 @@ test('rangesOverlap is inclusive', () => {
   assert.equal(rangesOverlap([1, 2], [2, 4]), true);
   assert.equal(rangesOverlap([1, 2], [3, 4]), false);
 });
+
+test('hunk headers keep the trailing function context', () => {
+  const raw = [
+    'diff --git a/a.sol b/a.sol',
+    '--- a/a.sol',
+    '+++ b/a.sol',
+    '@@ -10,2 +10,3 @@ contract PartyBExecutionFacet {',
+    ' ctx',
+    '-old',
+    '+new',
+    '+newer',
+    '',
+  ].join('\n');
+  const [file] = parseUnifiedDiff(raw);
+  assert.equal(file.hunks[0].context, 'contract PartyBExecutionFacet {');
+});
+
+test('hunk headers without context leave it undefined', () => {
+  const raw = ['diff --git a/a.ts b/a.ts', '--- a/a.ts', '+++ b/a.ts', '@@ -1 +1 @@', '-a', '+b', ''].join('\n');
+  const [file] = parseUnifiedDiff(raw);
+  assert.equal(file.hunks[0].context, undefined);
+});
