@@ -60,24 +60,23 @@ export function renderStoryStepPanel(_repo, model, comments, stepIndex) {
     const step = model.steps[stepIndex];
     if (!step)
         return '<div class="ds-diffnote">That story step does not exist.</div>';
-    return stepPanel(step, stepIndex, model.totalSteps, comments);
+    return stepPanel(step, stepIndex, comments);
 }
-function stepPanel(step, i, total, comments) {
+function stepPanel(step, i, comments) {
     return step.kind === "concept"
-        ? conceptStepPanel(step, i, total)
-        : codeStepPanel(step, i, total, comments);
+        ? conceptStepPanel(step, i)
+        : codeStepPanel(step, i, comments);
 }
-function codeStepPanel(s, i, total, comments) {
+function codeStepPanel(s, i, comments) {
     const diffRegionId = `ds-story-diff-${i + 1}`;
     return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}"${s.focusExplicit ? ' data-story-focus="authored"' : ""} hidden>
     <div class="ds-step-top">
       <div class="ds-step-titlerow">
         <h1 class="ds-step-title">${s.title.html}</h1>
-        <div class="ds-step-meta">
-          <span class="ds-step-count">Step ${s.order} of ${total}</span>
+        <div class="ds-step-actions">
           <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
+          ${storyRepairMenu(s, true)}
         </div>
-        ${storyRepairMenu(s, true)}
       </div>
     </div>
     ${s.hotspot
@@ -87,8 +86,8 @@ function codeStepPanel(s, i, total, comments) {
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ""}>
         <div class="ds-difftoolbar">
           <span class="ds-flex"></span>
-          <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           <div class="ds-diffview-controls">
+            <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
             ${lineWrapToggle()}
             <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
               <button data-mode="diff" aria-pressed="false">Unified</button>
@@ -225,7 +224,7 @@ function storyRepairMenu(step, iconOnly = false) {
     <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the claim and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each decision its own local camera.</small></button></div>
   </details>`;
 }
-function conceptStepPanel(s, i, total) {
+function conceptStepPanel(s, i) {
     const diagram = s.diagram
         ? `<figure class="ds-concept-diagram" data-concept-diagram>
         <div class="ds-concept-diagram-tools">
@@ -251,14 +250,6 @@ function conceptStepPanel(s, i, total) {
         : "";
     const speech = conceptSpeechText(s);
     return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
-    <div class="ds-step-top">
-      <div class="ds-step-meta">
-        <span class="ds-step-count">Step ${s.order} of ${total}</span>
-        <span class="ds-dot"></span>
-        <span class="ds-badge ds-badge-concept">Concept</span>
-        <span class="ds-flex"></span>
-      </div>
-    </div>
     <div class="ds-concept-scroll">
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
         <div class="ds-concept-copy">

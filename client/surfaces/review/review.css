@@ -460,20 +460,16 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step{flex:1;min-height:0;display:flex;flex-direction:column}
 .ds-step[hidden]{display:none}
 .ds-step-top{padding:20px 30px 0;flex:none}
-.ds-step-meta{display:flex;align-items:center;gap:10px;margin-bottom:11px}
-.ds-step-count{font-size:11.5px;color:var(--dim2);font-variant-numeric:tabular-nums}
 .ds-flex{flex:1}
-.ds-step-titlerow{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;margin-bottom:9px}
-/* The title owns the head of its line; step number and kind ride along at the
-   end of the same row as quiet reference marks. They used to sit
-   in a band above the title, where their fills outweighed it and the sentence a
-   reader actually needs was the last thing the eye reached. */
-.ds-step-titlerow>.ds-step-meta{margin-left:auto;margin-bottom:0;gap:9px;align-self:center}
-.ds-step-titlerow>.ds-step-meta .ds-badge{padding:0;background:none;font-size:10.5px}
-/* Repair moved up here when the review-question row went away; it stays a quiet
-   icon parked at the end of the title line. */
-.ds-step-titlerow .ds-story-tune{margin-left:0;align-self:center}
-.ds-step-title{min-width:0;max-width:100%;font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
+.ds-step-titlerow{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+/* Story position already lives in the rail. Keep only the file state and repair
+   action beside the title, where they stay useful without becoming a second
+   header row on narrow cards. */
+.ds-step-actions{display:flex;align-items:center;flex:none;gap:5px;margin-left:auto}
+.ds-step-actions .ds-badge{padding:0;background:none;font-size:10.5px}
+.ds-step-actions .ds-story-tune>summary{width:34px;min-height:34px;padding:0;background:transparent}
+.ds-step-actions .ds-story-tune>summary:hover,.ds-step-actions .ds-story-tune[open]>summary{background:var(--fill-2)}
+.ds-step-title{flex:1;min-width:0;max-width:100%;font-size:19px;font-weight:600;margin:0;letter-spacing:-0.01em;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
 .ds-why{margin:17px 30px 0;padding:15px 17px;border-radius:13px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);flex:none;max-height:min(24vh,190px);overflow-y:auto}
 .ds-why-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ds-why-ico{width:15px;height:15px;border-radius:4px;background:color-mix(in srgb,var(--accent) 20%,transparent);display:flex;align-items:center;justify-content:center;position:relative}
@@ -496,10 +492,14 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-step.is-code-step .ds-beat:not(.is-selected) .ds-beat-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
 .ds-step.is-code-step .ds-beat:not(.is-selected){padding-top:5px;padding-bottom:5px}
 .ds-full-diff{height:29px;padding:0 8px;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;font-weight:700;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}
-.ds-step.is-code-step .ds-difftoolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 8px;align-items:center;padding:4px 10px}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}.ds-step.is-code-step .ds-full-diff{justify-self:start}.ds-step.is-code-step .ds-diffview-controls{justify-self:end}
+.ds-step.is-code-step .ds-difftoolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center;padding:4px 10px}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}
 /* The wrap toggle is the tallest control here and alone set the toolbar's
    height. Coarse pointers keep their 44px target via the min-height above. */
 .ds-step.is-code-step .ds-difftoolbar .ds-linewrap-toggle{height:30px}
+/* The card, not the browser viewport, owns this toolbar's available width. The
+   global Files tab remains the scope escape when its local duplicate disappears. */
+@container (max-width:420px){.ds-step.is-code-step .ds-full-diff{display:none}}
+@container (max-width:340px){.ds-step.is-code-step .ds-linewrap-toggle [data-line-wrap-label]{display:none}.ds-step.is-code-step .ds-diffview-controls{width:100%;gap:4px}.ds-step.is-code-step .ds-linewrap-toggle{width:34px;padding:0;justify-content:center}.ds-step.is-code-step .ds-modetoggle{flex:1;min-width:0}.ds-step.is-code-step .ds-modetoggle button{flex:1;min-width:0;padding:0 6px}}
 
 /* ---- review comments ---- */
 .ds-comment-pin{position:absolute;z-index:7;top:50%;right:8px;transform:translateY(-50%);height:44px;min-width:44px;padding:0 8px;border:1px solid color-mix(in srgb,var(--accent) 50%,transparent);border-radius:999px;
@@ -844,7 +844,10 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-urow.is-voice-focus{position:relative;box-shadow:none;background-image:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent) 7%,transparent))}
 .ds-urow.is-voice-focus .ds-no{color:var(--md-primary);font-weight:700}
 .ds-cell{flex:1;min-width:0;display:flex;align-items:stretch}
-[data-split-inner]:not([hidden]) .ds-cell{overflow:hidden}
+/* Long transformed lines must never paint through the draggable divider. The
+   overflow boundary handles layout; the paint clip also holds when a browser
+   composites each horizontally scrolled code span onto its own layer. */
+[data-split-inner]:not([hidden]) .ds-cell{overflow:hidden;clip-path:inset(0)}
 .ds-split-mode [data-split-inner]:not([hidden]) .ds-diffbody{overflow-x:clip}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:var(--add-bg);box-shadow:inset 3px 0 0 var(--add-rail)}
@@ -1243,7 +1246,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
   .ds-concept-diagram-output svg .edgeLabel text{font-size:12px}
 }
 @media (max-width:620px){.ds-composer,.ds-composer[data-comment-side="left"]{width:calc(100% - 8px);margin:4px}.ds-feedback-actions{justify-content:flex-start}.ds-feedback-actions .ds-danger{margin-left:0}}
-@media (max-width:470px){.ds-step-meta{gap:6px}.ds-step-count{white-space:nowrap}.ds-step.is-code-step .ds-full-diff{display:none}/* The beat row stays one line even here. Wrapping the arrows underneath left the
+@media (max-width:470px){/* The beat row stays one line even here. Wrapping the arrows underneath left the
    play button centred against a two-row neighbour, which opened a dead square in
    the middle of the island — worse than tighter gaps. */
 .ds-beatdock{gap:8px}.ds-beatdock-count{min-width:0}.ds-beatdock-actions{gap:3px}.ds-beatdock-actions button{width:40px;height:40px}}

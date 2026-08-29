@@ -113,24 +113,22 @@ export function renderStoryStepPanel(
   const step = model.steps[stepIndex];
   if (!step)
     return '<div class="ds-diffnote">That story step does not exist.</div>';
-  return stepPanel(step, stepIndex, model.totalSteps, comments);
+  return stepPanel(step, stepIndex, comments);
 }
 
 function stepPanel(
   step: StepView,
   i: number,
-  total: number,
   comments: Comment[],
 ): string {
   return step.kind === "concept"
-    ? conceptStepPanel(step, i, total)
-    : codeStepPanel(step, i, total, comments);
+    ? conceptStepPanel(step, i)
+    : codeStepPanel(step, i, comments);
 }
 
 function codeStepPanel(
   s: CodeStepView,
   i: number,
-  total: number,
   comments: Comment[],
 ): string {
   const diffRegionId = `ds-story-diff-${i + 1}`;
@@ -140,11 +138,10 @@ function codeStepPanel(
     <div class="ds-step-top">
       <div class="ds-step-titlerow">
         <h1 class="ds-step-title">${s.title.html}</h1>
-        <div class="ds-step-meta">
-          <span class="ds-step-count">Step ${s.order} of ${total}</span>
+        <div class="ds-step-actions">
           <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
+          ${storyRepairMenu(s, true)}
         </div>
-        ${storyRepairMenu(s, true)}
       </div>
     </div>
     ${
@@ -160,8 +157,8 @@ function codeStepPanel(
       )} story diff"${s.newFile ? ' data-newfile="1"' : ""}>
         <div class="ds-difftoolbar">
           <span class="ds-flex"></span>
-          <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
           <div class="ds-diffview-controls">
+            <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
             ${lineWrapToggle()}
             <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
               <button data-mode="diff" aria-pressed="false">Unified</button>
@@ -346,7 +343,6 @@ function storyRepairMenu(step: CodeStepView, iconOnly = false): string {
 function conceptStepPanel(
   s: ConceptStepView,
   i: number,
-  total: number,
 ): string {
   const diagram = s.diagram
     ? `<figure class="ds-concept-diagram" data-concept-diagram>
@@ -375,14 +371,6 @@ function conceptStepPanel(
     : "";
   const speech = conceptSpeechText(s);
   return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
-    <div class="ds-step-top">
-      <div class="ds-step-meta">
-        <span class="ds-step-count">Step ${s.order} of ${total}</span>
-        <span class="ds-dot"></span>
-        <span class="ds-badge ds-badge-concept">Concept</span>
-        <span class="ds-flex"></span>
-      </div>
-    </div>
     <div class="ds-concept-scroll">
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
         <div class="ds-concept-copy">

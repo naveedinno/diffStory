@@ -1171,21 +1171,23 @@ test("a code step leads with its title and omits redundant call-flow metadata", 
   const model = buildReviewModel(process.cwd(), tour, files, undefined, {});
   const panel = renderStoryStepPanel(process.cwd(), model, [], 0);
 
-  // The heading must come before the step counter and kind badge, so the
-  // sentence a reader needs is both first in the DOM and first on the line.
+  // The heading must come before the kind badge, so the sentence a reader
+  // needs is both first in the DOM and first on the line.
   const titleAt = panel.indexOf('class="ds-step-title"');
-  const metaAt = panel.indexOf('class="ds-step-meta"');
-  assert.ok(titleAt > -1 && metaAt > -1, "title and meta both render");
-  assert.ok(titleAt < metaAt, "the title precedes the reference chips");
+  const actionsAt = panel.indexOf('class="ds-step-actions"');
+  assert.ok(titleAt > -1 && actionsAt > -1, "title and actions both render");
+  assert.ok(titleAt < actionsAt, "the title precedes the quiet step actions");
 
-  // Meta rides inside the title row rather than claiming a band of its own.
+  // File state and repair ride inside the title row rather than claiming a
+  // band of their own. Position is already available in the story rail.
   const rowAt = panel.indexOf('class="ds-step-titlerow"');
-  assert.ok(rowAt > -1 && rowAt < titleAt, "meta and title share one row");
+  assert.ok(rowAt > -1 && rowAt < titleAt, "actions and title share one row");
   assert.ok(
-    metaAt < panel.indexOf("</div>", metaAt) &&
-      panel.slice(rowAt, metaAt).indexOf("ds-step-top") === -1,
-    "meta sits inside the title row, not in a band of its own",
+    actionsAt < panel.indexOf("</div>", actionsAt) &&
+      panel.slice(rowAt, actionsAt).indexOf("ds-step-top") === -1,
+    "actions sit inside the title row, not in a band of their own",
   );
+  assert.doesNotMatch(panel, /ds-step-count|Step 1 of 1/);
 
   // Authored call links still shape the story, but repeating "Calls step 2"
   // beside every title adds no useful decision context. The story prose and
@@ -1226,7 +1228,7 @@ test("a story step head names the file once when both sides share a path", () =>
   assert.equal(paths.length, 0, "an unrenamed file is not spelled out twice");
 });
 
-test("concept steps keep their standalone meta band", () => {
+test("concept steps do not repeat story position or type above the document", () => {
   const tour = {
     version: 2,
     title: "t",
@@ -1242,6 +1244,7 @@ test("concept steps keep their standalone meta band", () => {
   const model = buildReviewModel(process.cwd(), tour, []);
   const panel = renderStoryStepPanel(process.cwd(), model, [], 0);
   assert.match(panel, /ds-concept-step/);
-  assert.match(panel, /<div class="ds-step-meta">/);
+  assert.doesNotMatch(panel, /ds-step-meta|ds-step-count|Step 1 of 1/);
+  assert.doesNotMatch(panel, /ds-badge-concept/, "the Mental model eyebrow already identifies the scene");
   assert.doesNotMatch(panel, /ds-step-titlerow/, "concept titles live in the document");
 });

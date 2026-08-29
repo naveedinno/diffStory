@@ -182,6 +182,23 @@ test('line wrapping is an accessible persisted option and defaults to off', () =
   assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-linewrap-toggle/);
 });
 
+test('story diff actions stay together and split panes cannot paint through the divider', () => {
+  assert.match(
+    RENDER_SRC,
+    /<div class="ds-diffview-controls">\s*<button class="ds-full-diff"[^>]*>All files<\/button>\s*\$\{lineWrapToggle\(\)\}/,
+  );
+  assert.match(
+    DIFF_CSS,
+    /\.ds-step\.is-code-step \.ds-difftoolbar\{[^}]*display:flex[^}]*justify-content:flex-end/,
+  );
+  assert.match(
+    DIFF_CSS,
+    /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden;clip-path:inset\(0\)\}/,
+  );
+  assert.match(DIFF_CSS, /@container \(max-width:420px\)\{\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
+  assert.match(DIFF_CSS, /@container \(max-width:340px\)\{\.ds-step\.is-code-step \.ds-linewrap-toggle \[data-line-wrap-label\]\{display:none\}/);
+});
+
 test('unwrapped diffs scroll horizontally without disturbing vertical row navigation', () => {
   assert.match(DIFF_CSS, /\.ds-diffscroll\{[^}]*min-width:0[^}]*overflow:auto/);
   assert.match(DIFF_CSS, /\.ds-diff\{[^}]*width:max-content[^}]*min-width:100%[^}]*max-width:none/);
@@ -212,7 +229,7 @@ test('split panes resize independently of line length and scroll their code loca
   assert.doesNotMatch(DIFF_JS, /Math\.max\(maxLeft\/ratio,maxRight\/\(1-ratio\)\)/);
   assert.match(
     DIFF_CSS,
-    /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden\}/,
+    /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden[^}]*\}/,
   );
   assert.match(DIFF_CSS, /\.ds-split-mode \[data-split-inner\]:not\(\[hidden\]\) \.ds-diffbody\{overflow-x:clip\}/);
   assert.match(DIFF_CSS, /\.ds-hunkgap-split\{[^}]*overflow:hidden/);
