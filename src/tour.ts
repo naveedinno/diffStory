@@ -14,11 +14,34 @@ import type {
   TourStep,
   StepKind,
   StoryMode,
+  StoryChangeType,
+  StoryNarrativeShape,
 } from "./types.js";
 
 const CODE_KINDS: CodeStepKind[] = ["changed", "context", "new-file"];
 const KINDS: StepKind[] = [...CODE_KINDS, "concept"];
 const MODES: StoryMode[] = ["brief", "guided", "detailed"];
+const CHANGE_TYPES: StoryChangeType[] = [
+  "feature",
+  "bug-fix",
+  "refactor",
+  "security",
+  "performance",
+  "migration",
+  "maintenance",
+  "mixed",
+];
+const NARRATIVE_SHAPES: StoryNarrativeShape[] = [
+  "cause-effect",
+  "entry-implementation",
+  "before-after",
+  "core-supporting",
+  "rule-instances",
+];
+const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/i;
+const COMMIT_PREFIX = /^[0-9a-f]{7,40}$/i;
+const READING_PATH_MAX_CHARS = 200;
+const EVOLUTION_MAX_PHASES = 6;
 const MOVE_KINDS = [
   "moved",
   "extracted",
@@ -480,6 +503,95 @@ function validateStoryScope(
     "text",
     errors,
   );
+}
+
+function validateStoryArc(t: Record<string, unknown>, errors: string[]): void {
+  if (t.storyArc === undefined) return;
+  if (
+    typeof t.storyArc !== "object" ||
+    t.storyArc === null ||
+    Array.isArray(t.storyArc)
+  ) {
+    errors.push("storyArc must be an object");
+    return;
+  }
+  const arc = t.storyArc as Record<string, unknown>;
+  if (!CHANGE_TYPES.includes(arc.changeType as StoryChangeType)) {
+    errors.push(`storyArc.changeType must be one of ${CHANGE_TYPES.join(", ")}`);
+  }
+  if (!NARRATIVE_SHAPES.includes(arc.shape as StoryNarrativeShape)) {
+    errors.push(`storyArc.shape must be one of ${NARRATIVE_SHAPES.join(", ")}`);
+  }
+  if (typeof arc.readingPath !== "string" || !arc.readingPath.trim()) {
+    errors.push("storyArc.readingPath is required");
+  } else if (arc.readingPath.length > READING_PATH_MAX_CHARS) {
+    errors.push(
+      `storyArc.readingPath must be at most ${READING_PATH_MAX_CHARS} characters`,
+    );
+  }
+  validateNarrative(
+    arc.readingPath,
+    "storyArc.readingPath",
+    "text",
+    errors,
+  );
+}
+
+/** Shape-only evolution checks; repository history is verified after loading. */
+function validateEvolution(t: Record<string, unknown>, errors: string[]): void {
+  if (t.evolution === undefined) return;
+  if (
+    typeof t.evolution !== "object" ||
+    t.evolution === null ||
+    Array.isArray(t.evolution)
+  ) {
+    errors.push("evolution must be an object");
+    return;
+  }
+  const evolution = t.evolution as Record<string, unknown>;
+  for (const field of ["baseSha", "headSha"] as const) {
+    if (!FULL_COMMIT_SHA.test(String(evolution[field] ?? ""))) {
+      errors.push(`evolution.${field} must be a full 40-character commit SHA`);
+    }
+  }
+  if (!Array.isArray(evolution.phases) || evolution.phases.length === 0) {
+    errors.push("evolution.phases must be a non-empty array");
+    return;
+  }
+  if (evolution.phases.length > EVOLUTION_MAX_PHASES) {
+    errors.push(
+      `evolution.phases must contain at most ${EVOLUTION_MAX_PHASES} phases`,
+    );
+  }
+  evolution.phases.forEach((raw, index) => {
+    const where = `evolution.phases[${index}]`;
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      errors.push(`${where} must be an object`);
+      return;
+    }
+    const phase = raw as Record<string, unknown>;
+    if (typeof phase.title !== "string" || !phase.title.trim()) {
+      errors.push(`${where}.title is required`);
+    }
+    validateNarrative(phase.title, `${where}.title`, "text", errors);
+    if (isBlankNarrative(phase.summary)) {
+      errors.push(`${where}.summary is required`);
+    }
+    validateNarrative(phase.summary, `${where}.summary`, "inline", errors);
+    for (const field of ["firstCommit", "lastCommit"] as const) {
+      if (!COMMIT_PREFIX.test(String(phase[field] ?? ""))) {
+        errors.push(
+          `${where}.${field} must be a 7- to 40-character commit SHA`,
+        );
+      }
+    }
+    validateStringArray(
+      phase.relatedSteps,
+      `${where}.relatedSteps`,
+      errors,
+      { nonEmpty: true },
+    );
+  });
 }
 
 function validateConceptDiagram(
@@ -971,6 +1083,8 @@ export function validateTour(obj: unknown): string[] {
   validateIntent(t, errors);
   validateHotspots(t, errors);
   validateStoryScope(t, errors);
+  validateStoryArc(t, errors);
+  validateEvolution(t, errors);
   if (!Array.isArray(t.steps) || t.steps.length === 0) {
     errors.push("steps must be a non-empty array");
     return errors;
@@ -1144,6 +1258,28 @@ export function validateTour(obj: unknown): string[] {
         );
       }
     });
+  }
+
+  if (
+    typeof t.evolution === "object" &&
+    t.evolution !== null &&
+    !Array.isArray(t.evolution) &&
+    Array.isArray((t.evolution as Record<string, unknown>).phases)
+  ) {
+    ((t.evolution as Record<string, unknown>).phases as unknown[]).forEach(
+      (raw, phaseIndex) => {
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
+        const related = (raw as Record<string, unknown>).relatedSteps;
+        if (!Array.isArray(related)) return;
+        related.forEach((ref, refIndex) => {
+          if (typeof ref === "string" && ref.trim() && !ids.has(ref)) {
+            errors.push(
+              `evolution.phases[${phaseIndex}].relatedSteps[${refIndex}] references unknown step id "${ref}"`,
+            );
+          }
+        });
+      },
+    );
   }
 
   return errors;
@@ -1421,6 +1557,13 @@ export function validateGeneratedTour(tour: Tour): string[] {
     }
   });
 
+  return errors;
+}
+
+/** Requirements added only to fresh app-generated stories, never legacy repair detection. */
+export function validateNewGeneratedStory(tour: Tour): string[] {
+  const errors = validateGeneratedTour(tour);
+  if (!tour.storyArc) errors.push("storyArc is required for a newly generated story");
   return errors;
 }
 

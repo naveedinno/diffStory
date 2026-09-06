@@ -38,7 +38,7 @@ test('the diff assets ship as one review stylesheet and one review engine', () =
 test('diff CSS moved out of page-assets core', () => {
   assert.match(DIFF_CSS, /\.ds-row\b/);
   assert.match(DIFF_CSS, /\.ds-hunkgap\b/);
-  assert.match(DIFF_CSS, /\.ds-hunkgap-split\b/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-side\b/);
   assert.match(DIFF_CSS, /\.ds-modetoggle\b/);
 });
 
@@ -133,12 +133,12 @@ test('hunk expansion remains discoverable without hover on touch devices', () =>
   assert.match(DIFF_CSS, /@media \(hover:none\),\(pointer:coarse\)\{\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1/);
   assert.match(DIFF_CSS, /\.ds-hunkgap\.is-expandable \.ds-gapbtn\{opacity:1\}/);
   assert.doesNotMatch(DIFF_CSS, /\.ds-gapdots/);
-  // These must clear half the absolutely-centred middle button, which straddles
-  // the divider; at 27px the wider "Show all" label overlapped both neighbours.
-  assert.match(DIFF_CSS, /\.ds-gap-side-l>\.ds-gapbtn\{margin-right:46px\}/);
-  assert.match(DIFF_CSS, /\.ds-gap-side-r>\.ds-gapbtn\{margin-left:46px\}/);
-  assert.match(DIFF_CSS, /@media \(max-width:720px\)\{[\s\S]*\.ds-hunkgap-split\{justify-content:center;gap:6px\}/);
-  assert.match(DIFF_CSS, /\.ds-hunkgap-split \.ds-gap-mid>\.ds-gapbtn\{position:static;transform:none\}/);
+  // Split gaps are two column halves of one fixed height so the columns stay
+  // paired through them; nothing straddles the divider any more.
+  assert.match(DIFF_CSS, /\.ds-hunkgap-side\{[^}]*height:30px[^}]*overflow:hidden/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-l\{justify-content:flex-end\}/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-r\{justify-content:flex-start\}/);
+  assert.doesNotMatch(DIFF_CSS, /ds-gap-mid|ds-gap-side/);
   assert.match(DIFF_JS, /data-gap-chunk/);
   assert.match(DIFF_JS, /from\+chunk-1/);
 });
@@ -202,7 +202,16 @@ test('story diff actions stay together and split panes cannot paint through the 
 test('unwrapped diffs scroll horizontally without disturbing vertical row navigation', () => {
   assert.match(DIFF_CSS, /\.ds-diffscroll\{[^}]*min-width:0[^}]*overflow:auto/);
   assert.match(DIFF_CSS, /\.ds-diff\{[^}]*width:max-content[^}]*min-width:100%[^}]*max-width:none/);
-  assert.match(DIFF_CSS, /\.ds-difftoolbar\{[^}]*left:0[^}]*width:calc\(100cqw - 11px\)[^}]*max-width:calc\(100cqw - 11px\)/);
+  // The toolbar is sized from the measured scroller viewport, never a fixed
+  // scrollbar deduction — that left a strip of code past the toolbar's right
+  // edge whenever the diff was too short to need a vertical scrollbar.
+  assert.match(DIFF_CSS, /\.ds-difftoolbar\{[^}]*left:0[^}]*width:var\(--ds-diffviewport-w,100cqw\)[^}]*max-width:var\(--ds-diffviewport-w,100cqw\)/);
+  assert.doesNotMatch(DIFF_CSS, /\.ds-difftoolbar\{[^}]*100cqw - 11px/);
+  // The step's tune menu opens over the sticky toolbar (9) and file head (10).
+  assert.match(DIFF_CSS, /\.ds-story-tune-pop\{[^}]*z-index:11/);
+  assert.match(DIFF_JS, /function measureViewport\(scroller\)/);
+  assert.match(DIFF_JS, /--ds-diffviewport-w/);
+  assert.match(DIFF_JS, /\$all\('\.ds-difftoolbar,\.ds-filepanel-head,\.ds-diffscroll'\)\.forEach\(function\(el\)\{stickyObserver\.observe\(el\);\}\);/);
   assert.match(DIFF_CSS, /\.ds-filepanel-body\{[^}]*width:max-content[^}]*min-width:100%/);
   assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-diffscroll\{overflow-x:hidden\}/);
   assert.match(DIFF_CSS, /body\.ds-line-wrap \.ds-diff\{width:100%;min-width:0;max-width:100%\}/);
@@ -232,13 +241,71 @@ test('split panes resize independently of line length and scroll their code loca
     /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden[^}]*\}/,
   );
   assert.match(DIFF_CSS, /\.ds-split-mode \[data-split-inner\]:not\(\[hidden\]\) \.ds-diffbody\{overflow-x:clip\}/);
-  assert.match(DIFF_CSS, /\.ds-hunkgap-split\{[^}]*overflow:hidden/);
+  assert.match(DIFF_CSS, /\.ds-hunkgap-side\{[^}]*overflow:hidden/);
   assert.match(DIFF_CSS, /\.ds-diff\.ds-split-mode\{width:100%;min-width:0;max-width:100%\}/);
   assert.match(DIFF_CSS, /\.ds-filepanel\.ds-split-mode \.ds-filepanel-body\{width:100%;min-width:0\}/);
   assert.match(DIFF_CSS, /\.ds-split-scrollbars\{[^}]*display:flex/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-left\{flex-grow:var\(--ds-split,50\)/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-right\{flex-grow:calc\(100 - var\(--ds-split,50\)\)/);
   assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*left:-12px;right:-12px/);
+});
+
+test('split columns flow independently and are kept in step by the engine', () => {
+  // No filler: one column per side, the divider between them hosts the bands.
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols\{position:relative;display:flex;align-items:flex-start;overflow:clip\}/);
+  assert.match(DIFF_CSS, /\.ds-col\{position:relative;min-width:0;flex-shrink:1;flex-basis:0;will-change:transform\}/);
+  assert.match(DIFF_CSS, /\.ds-col-l\{flex-grow:var\(--ds-split,50\)\}/);
+  assert.match(DIFF_CSS, /\.ds-col-r\{flex-grow:calc\(100 - var\(--ds-split,50\)\)\}/);
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv\{width:var\(--ds-divider-w,26px\);align-self:stretch/);
+  // A short column fills its pane with real context, trailing lines first, at most three rounds.
+  assert.match(DIFF_JS, /function autoFillFlow\(body,flow\)/);
+  assert.match(DIFF_JS, /short>=winH-40\|\|\(body\._dsFillTries\|\|0\)>=3/);
+  assert.match(DIFF_JS, /expandGapBy\(gap,tail\?'down':'up',need\)/);
+  assert.match(DIFF_JS, /applySplitFlow\(body\);autoFillFlow\(body,flow\);/);
+  // The unexplained tag stays in view while long lines scroll the card sideways.
+  assert.match(DIFF_CSS, /\.ds-untoured-tag\{position:sticky;right:10px;/);
+  assert.match(DIFF_CSS, /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell-single\{overflow:visible;clip-path:none\}/);
+  // A single-column body (new file) is not split mode: the card keeps content width.
+  assert.match(DIFF_JS, /active=!!split&&!!\$\('\.ds-diffbody-cols',split\)/);
+  // Move annotations re-shift on the same frame as the columns; no lag, no jump.
+  assert.match(DIFF_JS, /flow\.shift=shift;\s*paintFlowBands\(flow,shift,winTop,winH\);\s*shiftAnnotations\(body,shift\);/);
+  assert.match(DIFF_JS, /function cacheAnnotationFlow\(body,spec,measured\)/);
+  assert.match(DIFF_JS, /cacheAnnotationFlow\(body,spec,measured\);/);
+  assert.match(DIFF_CSS, /\.ds-bands\{position:absolute;left:0;top:0[^}]*pointer-events:none\}/);
+  // The step is its own stacking context, so the sticky diff chrome cannot
+  // paint over the dock's step tooltip.
+  assert.match(DIFF_CSS, /\.ds-step\.is-code-step\{position:relative;isolation:isolate;/);
+  // The wide divider never fills on hover or focus; only its edge rules change.
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv:hover\{background:var\(--panel2\);border-color:var\(--line\)\}/);
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv\[role="separator"\]:focus-visible\{background:var\(--panel2\);border-color:var\(--accent-blue\);box-shadow:none\}/);
+  assert.match(DIFF_CSS, /\.ds-band-add\{fill:color-mix\(in srgb,var\(--add-rail\) 36%,transparent\)/);
+  assert.match(DIFF_CSS, /\.ds-band-del\{fill:color-mix\(in srgb,var\(--del-rail\) 36%,transparent\)/);
+  assert.match(DIFF_CSS, /\.ds-band-pair\{fill:color-mix\(in srgb,var\(--accent-blue\) 30%,transparent\)/);
+  // Sticky offsets resolve before transforms, so nothing sticky lives in a column.
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols \.ds-scoperow\{position:static\}/);
+  // The timeline: paired rows advance by the taller half, one-sided content by its own.
+  assert.match(DIFF_JS, /function measureSplitFlow\(body\)/);
+  assert.match(DIFF_JS, /e\.h=Math\.max\(e\.l\?e\.l\.h:0,e\.r\?e\.r\.h:0\)/);
+  assert.match(DIFF_JS, /body\.style\.height=t\?t\+'px':''/);
+  // Anchored at the viewport centre; a column freezes across content it lacks.
+  assert.match(DIFF_JS, /var Ta=winTop\+winH\/2/);
+  assert.match(DIFF_JS, /for\(var k=lo\+1;k<es\.length;k\+\+\)\{var n=es\[k\]\[side\];if\(n\)return n\.y;\}/);
+  assert.match(DIFF_JS, /flow\[side\]\.style\.transform=s\?'translateY\('\+s\.toFixed\(2\)\+'px\)':''/);
+  // Scroll is coalesced to one frame through a single capturing listener, and
+  // a visible body that was synced while hidden heals on its first scroll.
+  assert.match(DIFF_JS, /document\.addEventListener\('scroll',function\(e\)\{[\s\S]*?scheduleFlow\(\);[\s\S]*?\},\{capture:true,passive:true\}\);/);
+  assert.match(DIFF_JS, /if\(!body\._dsFlow\)\{if\(!measureSplitFlow\(body\)\)return;watchFlow\(body\);\}/);
+  // A step's columns are measured inside the visibility update, not before it.
+  assert.match(DIFF_JS, /stepPanels\.forEach\(function\(p,idx\)\{p\.hidden=idx!==i;\}\);\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*syncSplitPaneLayouts\(stepPanels\[i\]\);/);
+  // Change navigation reads the timeline index, not column-major DOM order.
+  assert.match(DIFF_JS, /\(a\.ri-b\.ri\)\|\|\(a\.i-b\.i\)/);
+  assert.match(DIFF_JS, /var twin=flowTwin\(row\);if\(twin\)twin\.classList\.add\('is-change-jump'\)/);
+  // Row centring uses the timeline position rather than a transient rect.
+  assert.match(DIFF_JS, /ft=flowRowTop\(row\)/);
+  assert.match(DIFF_JS, /ft=flowRowTop\(target\)/);
+  // Expanded context lands per side next to the matching gap half.
+  assert.match(DIFF_JS, /insertFlowFragments\(gap,mirrorGap,leftFrag,rightFrag,mode\)/);
+  assert.match(DIFF_JS, /flowCanonicalGap\(mirrorHalf\)/);
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {

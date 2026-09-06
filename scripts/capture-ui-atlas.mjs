@@ -62,6 +62,9 @@ const definitions = [
   ['pages','Raw diff — mobile','Story-free diff inspection on a phone viewport.','raw-diff-mobile','dark','mobile','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['pages','Raw diff — light','Story-free diff inspection in the light palette.','raw-diff-light','light','desktop','/repo/diffstory-atlas-fixture/diff?base=main&head=feat%2Fspending-limit','raw-diff'],
   ['review','Guided review overview','Intent, reading path, scope, and walkthrough entry.','overview','dark','desktop','/repo/diffstory-atlas-fixture/review'],
+  ['review','Guided review overview — mobile','The same reading path remains quiet above the walkthrough action on a phone viewport.','overview-mobile','dark','mobile','/repo/diffstory-atlas-fixture/review','overview'],
+  ['review','Commit evolution — open','The native disclosure shows frozen first-parent phases without competing with the walkthrough.','evolution-open','dark','desktop','/repo/diffstory-atlas-fixture/review','evolution-open'],
+  ['review','Commit evolution — open, mobile','Commit phases stay readable and full-width on a phone viewport.','evolution-open-mobile','dark','mobile','/repo/diffstory-atlas-fixture/review','evolution-open'],
   ['review','Narration control — active','The narration action expands into its pause and waveform state while speech is audible.','narration-active','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Logic-move walkthrough','Focused code with a local semantic move, narrative beats, and filmstrip.','code-step','dark','desktop','/repo/diffstory-atlas-fixture/review'],
   ['review','Logic-move walkthrough — proximity dock','Pointer proximity magnifies the target stop and its neighbours without changing review order.','code-step-dock','dark','desktop','/repo/diffstory-atlas-fixture/review'],
@@ -123,6 +126,7 @@ const evidence = {
   'change-refpicker':'#refPicker .refpick-row',
   'raw-diff':'.ds-filedetail',
   'overview':'#ds-view-tour [data-scene-layout="opening"]',
+  'evolution-open':'.ds-intro-evolution[open] .ds-evolution-copy',
   'narration-active':'.ds-readaloud.is-active.is-audible .ds-readaloud-wave',
   'code-step':'#ds-view-tour [data-scene-layout="logic-move"]:not([hidden])',
   'code-step-dock':'.ds-filmnode[style*="--ds-dock-scale"]',
@@ -579,6 +583,8 @@ async function main(){
           const label=button.querySelector('[data-readaloud-label]'),icon=button.querySelector('.ds-readaloud-ico');if(label)label.textContent='Pause';if(icon){icon.classList.remove('is-play');icon.classList.add('is-pause');}
         });
         await page.waitForTimeout(180);
+      }else if(def.surface==='evolution-open'){
+        await click(page,'.ds-intro-evolution > summary');
       }else if(def.surface==='code-step'){
         await gotoStoryStep(page,1);
       }else if(def.surface==='code-step-dock'){
@@ -633,7 +639,7 @@ async function main(){
         await progressState(page,def.surface.replace('pp-detail-','').replace('pp-',''));
       }
       await page.waitForFunction(()=>!/Loading (?:the split view|this review step)/i.test(document.body.innerText));
-      if(['overview','code-step','code-step-dock','code-focus','paired-code'].includes(def.surface))await assertReviewStageGeometry(page);
+      if(def.viewport==='desktop'&&['overview','code-step','code-step-dock','code-focus','paired-code'].includes(def.surface))await assertReviewStageGeometry(page);
       const degraded=await assertRendered(page,def);
       const file=`screenshots/${def.category}-${def.state}.png`,target=join(OUT,file);
       let size;

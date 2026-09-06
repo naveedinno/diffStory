@@ -28,6 +28,37 @@ test('storyPrompt names the base and the output file', () => {
   assert.ok(p.includes('Do not ask questions. Generate it directly.'));
 });
 
+test('storyPrompt pins narrative shape and supplies eligible frozen history', () => {
+  const baseSha = 'a'.repeat(40);
+  const headSha = 'd'.repeat(40);
+  const manifest = {
+    baseSha,
+    headSha,
+    eligible: true,
+    commits: [
+      { sha: 'b'.repeat(40), subject: 'introduce boundary', parentCount: 1, added: 8, removed: 2, files: ['src/a.ts'], omittedFiles: 0 },
+      { sha: 'c'.repeat(40), subject: 'prove boundary', parentCount: 1, added: 5, removed: 0, files: ['test/a.test.ts'], omittedFiles: 0 },
+    ],
+  };
+  const prompt = storyPrompt('main', 'feature', 'guided', [], undefined, manifest);
+  assert.ok(prompt.includes('"storyArc"'));
+  assert.ok(prompt.includes('"changeType", "shape", and "readingPath"'));
+  assert.ok(prompt.includes('"evolution" with "phases" only'));
+  assert.ok(prompt.includes('server owns and adds "baseSha" and "headSha"'));
+  assert.ok(prompt.includes('"firstCommit", "lastCommit", and optional "relatedSteps"'));
+  assert.ok(prompt.includes('introduce boundary'));
+  assert.ok(prompt.includes('src/a.ts'));
+  assert.ok(storyPrompt('main').includes('Do not add "evolution"'));
+
+  const frozenPrompt = storyPrompt(
+    baseSha, headSha, 'guided', [], undefined, manifest,
+    { base: 'main', head: 'feature' },
+  );
+  assert.ok(frozenPrompt.includes(`git diff ${baseSha}..${headSha} --`));
+  assert.ok(frozenPrompt.includes('set its "base" field to "main"'));
+  assert.ok(frozenPrompt.includes('its "head" field to "feature"'));
+});
+
 test('storyPrompt pins run facts and delegates every craft rule to the skill', () => {
   const p = storyPrompt('main');
   // Run-specific facts stay in the prompt…
@@ -56,7 +87,7 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   // validator-enforced, so by the rule above it belongs here rather than in the
   // skill. Raised again for the validator-enforced v3 move field contract; the
   // craft-section assertions above remain the real drift guard.
-  assert.ok(p.length < 4800, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  assert.ok(p.length < 5700, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -77,7 +108,7 @@ test('storyPrompt supports story detail levels', () => {
     // block in agent.ts) because deep-skill prose does not reliably survive being
     // read — and an out-of-tier tag is now a validation failure. This ceiling
     // buys correctness, not verbosity; keep new prose out of it.
-    assert.ok(prompt.length < 4800, `${mode} prompt grew to ${prompt.length} chars`);
+    assert.ok(prompt.length < 5700, `${mode} prompt grew to ${prompt.length} chars`);
   }
 });
 
@@ -127,6 +158,18 @@ test('bundled diffstory-storyteller skill requires the narrative story arc', () 
   assert.ok(skill.includes('To implement that flow, I first'));
   assert.ok(skill.includes('intent -> flow -> implementation'));
   assert.ok(skill.includes('not a list of touched files'));
+});
+
+test('bundled storyteller declares reading shape and frozen first-parent evolution', () => {
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  assert.ok(skill.includes('Every newly generated story carries `storyArc`'));
+  assert.ok(skill.includes('`changeType`, `shape`, and'));
+  assert.ok(skill.includes('plain-text `readingPath`'));
+  assert.ok(skill.includes('Inspect the frozen first-parent progression'));
+  assert.ok(skill.includes('1-6 contiguous phases'));
+  assert.ok(skill.includes('never author server-owned `baseSha` or `headSha`'));
+  assert.ok(skill.includes('final diff remains authoritative'));
+  assert.ok(skill.includes('failure trigger -> trust boundary -> fix -> proof'));
 });
 
 test('bundled diffstory-storyteller skill teaches just-in-time concept primers', () => {
@@ -372,14 +415,20 @@ test('normalizeCodexRunOptions keeps only supported story-generation options', (
   });
 });
 
-test('storyRepairPrompt preserves unaffected steps and targets one repair', () => {
-  const prompt = storyRepairPrompt({ action: 'split', stepId: 's2', file: 'src/a.ts', base: 'main' });
+test('storyRepairPrompt preserves unaffected steps and protected narrative history', () => {
+  const prompt = storyRepairPrompt({
+    action: 'split', stepId: 's2', file: 'src/a.ts', base: 'main',
+    hasStoryArc: true, hasEvolution: true,
+  });
   assert.match(prompt, /Split story step "s2" in src\/a\.ts/);
   assert.match(prompt, /Preserve every unaffected step/);
   assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
   assert.match(prompt, /Preserve every unaffected concept primer/);
   assert.match(prompt, /Preserve legacy version 1 or 2/);
   assert.match(prompt, /version 3 whenever the repair adds moves or pairedView/);
+  assert.match(prompt, /Preserve "storyArc" exactly/);
+  assert.match(prompt, /Only "relatedSteps" may change/);
+  assert.match(prompt, /firstCommit, and lastCommit exactly/);
   assert.match(prompt, /concept primers do not claim coverage/i);
   assert.match(prompt, /\.diffstory\/story\.json/);
   assert.match(prompt, /diffstory-storyteller/);

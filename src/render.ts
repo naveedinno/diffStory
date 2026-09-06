@@ -26,6 +26,11 @@ import {
   renderSplitRow,
   renderUnifiedRow,
   renderHunkGap,
+  SplitColumns,
+  untouredRuns,
+  wholeUntoured,
+  plainRows,
+  type SplitRowOpts,
 } from "./diff-render.js";
 import { renderShell } from "./shell.js";
 import { APP_BRAND } from "./config.js";
@@ -540,62 +545,72 @@ function storyUnifiedRow(
   return rowHtml;
 }
 
-function diffInner(s: CodeStepView, comments: Comment[]): string {
+function diffInner(s: CodeStepView, _comments: Comment[]): string {
   if (!s.blocks.length || !s.blocks.some((b) => b.length)) {
     return `<div class="ds-diffnote">${esc(s.note ?? "Nothing to show for this step.")}</div>`;
   }
   const head = diffHead(s);
-  const hunkGap = () =>
-    s.context || s.newFile
-      ? renderHunkGap()
-      : renderHunkGap(undefined, { split: true });
-  const canExpandViewport =
-    !s.context && !s.newFile && !s.pairedView && s.viewport[0] > 0;
-  const viewportBefore =
-    canExpandViewport && s.viewport[0] > 1
-      ? renderHunkGap(
-          { file: s.file, from: 1, to: s.viewport[0] - 1 },
-          { split: true, edge: "before" },
-        )
-      : "";
-  const viewportAfter = canExpandViewport
-    ? renderHunkGap(
-        { file: s.file, from: s.viewport[1] + 1, to: "eof" },
-        { split: true, edge: "after" },
-      )
-    : "";
+  const paired = s.pairedView
+    ? s.moves.find((move) => move.id === s.pairedView)
+    : undefined;
+  const single = !paired && (s.context || s.newFile);
   const callouts = calloutsByLastRow(s);
-  const body =
-    viewportBefore +
-    s.blocks
+  const note =
+    s.note && s.blocks.some((b) => b.length)
+      ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
+      : "";
+  if (single) {
+    // Context and new-file steps read as one column; nothing to keep in step.
+    const body = s.blocks
       .map((block, bi) => {
         const intra = intraLineMap(
           block,
           (r) => r.type,
           (r) => r.content,
         );
+        const runs = untouredRuns(block);
         return (
-          (bi > 0 ? hunkGap() : "") +
+          (bi > 0 ? renderHunkGap() : "") +
           block
             .map(
               (row) =>
-                sbsRow(row, s, comments, bi, intra) +
+                renderSplitRow(row, { ...sbsRowOpts(row, s, bi, intra), untouredTag: runs.get(row) ?? null }) +
                 rowCallouts(row, callouts),
             )
             .join("")
         );
       })
-      .join("") +
-    viewportAfter;
-  const note =
-    s.note && s.blocks.some((b) => b.length)
-      ? `<div class="ds-diffnote ds-diffnote-soft">${esc(s.note)}</div>`
-      : "";
-  const paired = s.pairedView
-    ? s.moves.find((move) => move.id === s.pairedView)
-    : undefined;
-  const bodyClass = paired?.kind === "flow" ? " ds-diffbody-paired-flow" : "";
-  return `${head}${note}${annotationSummary(s)}<div class="ds-diffbody${bodyClass}">${body}</div>${annotationData(s)}`;
+      .join("");
+    return `${head}${note}${annotationSummary(s)}<div class="ds-diffbody">${body}</div>${annotationData(s)}`;
+  }
+  const canExpandViewport = !s.context && !s.newFile && !s.pairedView && s.viewport[0] > 0;
+  const cols = new SplitColumns({
+    bodyClass: paired?.kind === "flow" ? "ds-diffbody-paired-flow" : undefined,
+  });
+  if (canExpandViewport && s.viewport[0] > 1) {
+    cols.gap({ file: s.file, from: 1, to: s.viewport[0] - 1 }, { edge: "before" });
+  }
+  s.blocks.forEach((block, bi) => {
+    const intra = intraLineMap(
+      block,
+      (r) => r.type,
+      (r) => r.content,
+    );
+    const runs = untouredRuns(block);
+    if (bi > 0) cols.gap();
+    for (const row of block) {
+      cols.row(row, { ...sbsRowOpts(row, s, bi, intra), untouredTag: runs.get(row) ?? null });
+      for (const move of callouts.get(row) ?? []) {
+        const html = calloutHtml(move);
+        if (calloutEndpoint(move).side === "left") cols.left(html);
+        else cols.right(html);
+      }
+    }
+  });
+  if (canExpandViewport) {
+    cols.gap({ file: s.file, from: s.viewport[1] + 1, to: "eof" }, { edge: "after" });
+  }
+  return `${head}${note}${annotationSummary(s)}${cols.html()}${annotationData(s)}`;
 }
 
 function diffHead(s: CodeStepView): string {
@@ -648,13 +663,12 @@ function diffHead(s: CodeStepView): string {
   </div>`;
 }
 
-function sbsRow(
+function sbsRowOpts(
   row: SbsRow,
   s: CodeStepView,
-  _comments: Comment[],
   blockIndex: number,
   intra?: Map<SbsRow, IntraSides>,
-): string {
+): SplitRowOpts {
   const paired = s.pairedView
     ? s.moves.find((move) => move.id === s.pairedView)
     : undefined;
@@ -674,7 +688,7 @@ function sbsRow(
           file: paired?.after.file ?? s.file,
           line: row.newNo,
         };
-  const rowHtml = renderSplitRow(row, {
+  return {
     leftTarget,
     rightTarget,
     stepId: s.id,
@@ -682,8 +696,7 @@ function sbsRow(
     single: !paired && (s.context || s.newFile),
     sides: intra?.get(row),
     moveTokens: rowMoveTokens(row, s),
-  });
-  return rowHtml;
+  };
 }
 
 function rowMoveTokens(row: SbsRow, s: CodeStepView): string[] {
@@ -765,25 +778,34 @@ export function renderFilePanelContent(
           to: "eof",
         })
       : "";
-  const unified = f.hunks.length
-    ? f.hunks
+  // A file the story never visits is flagged once, in the head; its rows stay
+  // plain. The split and full-file responses apply the same rule to the same
+  // rows, so every mode agrees.
+  const whole = wholeUntoured(f.hunks.flat());
+  const hunks = whole ? f.hunks.map(plainRows) : f.hunks;
+  const unified = hunks.length
+    ? hunks
         .map((hunk, hi) => {
           const intra = intraLineMap(
             hunk,
             (r) => r.type,
             (r) => r.content,
           );
+          const runs = untouredRuns(hunk);
           return (
             gapBefore(hi) +
             hunk
               .map((r) =>
-                unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra)),
+                unifiedRow(r, f.file, f.oldFile, unifiedIntra(r, intra), runs.get(r) ?? null),
               )
               .join("")
           );
         })
         .join("") + gapAfterLast
     : '<div class="ds-diffnote">No diff to show.</div>';
+  const wholeBadge = whole
+    ? `<span class="ds-untoured-badge" title="The story never visits this file"><span class="ds-tri">▲</span>Unexplained file</span>`
+    : "";
   // Changed files default to Split. A context-only file has no before/after
   // diff, so Unified is its real evidence and Split must not be offered.
   const toggle =
@@ -808,6 +830,7 @@ export function renderFilePanelContent(
         base,
       )}</span></span>
       ${stat}
+      ${wholeBadge}
       <span class="ds-flex"></span>
       ${changeJumpControls()}
       <button type="button" class="ds-viewed-toggle" data-viewed-toggle aria-pressed="false" aria-label="Mark ${esc(
@@ -835,6 +858,7 @@ function unifiedRow(
   file: string,
   oldFile = file,
   intra?: string,
+  tag?: number | null,
 ): string {
   const target =
     row.no === undefined
@@ -844,7 +868,7 @@ function unifiedRow(
           file: row.type === "del" ? oldFile : file,
           line: row.no,
         };
-  return renderUnifiedRow(row, target, intra);
+  return renderUnifiedRow(row, target, intra, tag);
 }
 
 /** Look up a unified row's precomputed intra-line side (del→left, add→right). */
@@ -1068,20 +1092,15 @@ function splitHead(opts: {
   oldFile?: string;
   newFile: boolean;
 }): string {
-  const leftLabel = opts.newFile ? "Did not exist" : "Before";
-  const rightLabel = opts.newFile ? "New file" : "After";
   const oldPath = opts.oldFile ?? opts.file;
   // The panel head above already names the file, so repeating the path on both
   // sides is noise. It earns its place only when the sides genuinely differ.
-  const renamed = !opts.newFile && oldPath !== opts.file;
+  // New files never reach here: they render as one column under newFileHead.
+  const renamed = oldPath !== opts.file;
   return `<div class="ds-diffhead">
-    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label${
-      opts.newFile ? " ds-dim" : ""
-    }">${leftLabel}</span>${renamed ? `<span class="ds-diffhead-path">${esc(oldPath)}</span>` : ""}</span>
+    <span class="ds-diffhead-side ds-diffhead-side-l"><span class="ds-diffhead-label">Before</span>${renamed ? `<span class="ds-diffhead-path">${esc(oldPath)}</span>` : ""}</span>
     <span class="ds-diffhead-divider"></span>
-    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label${
-      opts.newFile ? " ds-green" : ""
-    }">${rightLabel}</span>${renamed ? `<span class="ds-diffhead-path">${esc(opts.file)}</span>` : ""}</span>
+    <span class="ds-diffhead-side ds-diffhead-side-r"><span class="ds-diffhead-label">After</span>${renamed ? `<span class="ds-diffhead-path">${esc(opts.file)}</span>` : ""}</span>
   </div>`;
 }
 
@@ -1092,15 +1111,35 @@ export function renderFullFile(
   if (!rows.length) {
     return `<div class="ds-diffnote">Couldn't read ${esc(opts.file)} from the working tree.</div>`;
   }
-  const { rows: pairedRows, sides } = pairChangeRows(rows);
-  const body = pairedRows.map((r) => fullRow(r, opts, sides)).join("");
-  return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
+  const paired = pairChangeRows(rows);
+  const sides = paired.sides;
+  const pairedRows = wholeUntoured(paired.rows) ? plainRows(paired.rows) : paired.rows;
+  const runs = untouredRuns(pairedRows);
+  if (opts.newFile) {
+    // Nothing existed before, so there is no second column to keep in step.
+    const body = pairedRows
+      .map((r) => renderSplitRow(r, { ...fullRowOpts(r, opts, sides), single: true, untouredTag: runs.get(r) ?? null }))
+      .join("");
+    return `${newFileHead(opts.file)}<div class="ds-diffbody">${body}</div>`;
+  }
+  const cols = new SplitColumns();
+  for (const r of pairedRows) cols.row(r, { ...fullRowOpts(r, opts, sides), untouredTag: runs.get(r) ?? null });
+  return `${splitHead(opts)}${cols.html()}`;
+}
+
+/** One column for a file with no before side; mirrors the story step's head. */
+function newFileHead(file: string): string {
+  return `<div class="ds-diffhead ds-diffhead-ctx">
+      <span class="ds-diffhead-side"><span class="ds-diffhead-label ds-green">New file</span><span class="ds-diffhead-path">${esc(
+        file,
+      )}</span></span>
+    </div>`;
 }
 
 /** The lazily-loaded Split view for one All-files panel: hunks only,
  *  side-by-side, ⋯ gaps between hunks (expandable after Task 6). */
 export function renderSplitHunks(
-  blocks: SbsRow[][],
+  blocksIn: SbsRow[][],
   opts: {
     file: string;
     oldFile?: string;
@@ -1111,62 +1150,61 @@ export function renderSplitHunks(
     scopes?: Array<string | undefined>;
   },
 ): string {
+  const blocks = wholeUntoured(blocksIn.flat()) ? blocksIn.map(plainRows) : blocksIn;
   if (!blocks.length) return `<div class="ds-diffnote">No diff to show.</div>`;
+  if (opts.newFile) {
+    // A new file's whole content is its one hunk; render it as a single column
+    // like a new-file story step, not as an empty pane beside a full one.
+    const body = blocks
+      .map((block, bi) => {
+        const { rows: pairedRows, sides } = pairChangeRows(block);
+        const runs = untouredRuns(pairedRows);
+        const scope = opts.scopes?.[bi];
+        return (
+          (bi > 0 ? renderHunkGap() : "") +
+          (scope ? `<div class="ds-scoperow"><code>${esc(scope)}</code></div>` : "") +
+          pairedRows
+            .map((row) => renderSplitRow(row, { ...fullRowOpts(row, opts, sides), single: true, untouredTag: runs.get(row) ?? null }))
+            .join("")
+        );
+      })
+      .join("");
+    return `${newFileHead(opts.file)}<div class="ds-diffbody">${body}</div>`;
+  }
   const hunkRanges = opts.hunkRanges;
   const canExpand = !!opts.canExpand && !!hunkRanges;
-  const gapBefore = (bi: number): string => {
-    if (!canExpand || !hunkRanges)
-      return bi > 0 ? renderHunkGap(undefined, { split: true }) : "";
+  const cols = new SplitColumns();
+  const gapBefore = (bi: number): void => {
+    if (!canExpand || !hunkRanges) {
+      if (bi > 0) cols.gap();
+      return;
+    }
     if (bi === 0) {
       const start = hunkRanges[0]?.[0] ?? 1;
-      return start > 1
-        ? renderHunkGap(
-            { file: opts.file, from: 1, to: start - 1 },
-            { split: true },
-          )
-        : "";
+      if (start > 1) cols.gap({ file: opts.file, from: 1, to: start - 1 });
+      return;
     }
     const prevEnd = hunkRanges[bi - 1][1];
     const nextStart = hunkRanges[bi][0];
-    return nextStart - prevEnd > 1
-      ? renderHunkGap(
-          { file: opts.file, from: prevEnd + 1, to: nextStart - 1 },
-          { split: true },
-        )
-      : renderHunkGap(undefined, { split: true });
+    if (nextStart - prevEnd > 1) cols.gap({ file: opts.file, from: prevEnd + 1, to: nextStart - 1 });
+    else cols.gap();
   };
+  blocks.forEach((block, bi) => {
+    const { rows: pairedRows, sides } = pairChangeRows(block);
+    gapBefore(bi);
+    const scope = opts.scopes?.[bi];
+    // The scope label heads the AFTER column; the columns flow independently,
+    // so it is an ordinary row here rather than a sticky one.
+    if (scope) cols.right(`<div class="ds-scoperow"><code>${esc(scope)}</code></div>`);
+    const runs = untouredRuns(pairedRows);
+    for (const row of pairedRows) cols.row(row, { ...fullRowOpts(row, opts, sides), untouredTag: runs.get(row) ?? null });
+  });
   // A new file's whole content is the hunk — nothing is hidden past it (see
   // filePanel's matching guard), so it gets no trailing eof expand affordance.
-  const gapAfterLast =
-    canExpand && hunkRanges && blocks.length && !opts.newFile
-      ? renderHunkGap(
-          {
-            file: opts.file,
-            from: hunkRanges[hunkRanges.length - 1][1] + 1,
-            to: "eof",
-          },
-          { split: true },
-        )
-      : "";
-  const body =
-    blocks
-      .map((block, bi) => {
-        const { rows: pairedRows, sides } = pairChangeRows(block);
-        const scope = opts.scopes?.[bi];
-        const scopeRow = scope
-          ? `<div class="ds-scoperow"><code>${esc(scope)}</code></div>`
-          : "";
-        // Each hunk is its own sticky containing block, so a scope label
-        // releases when its hunk scrolls past instead of stacking.
-        return (
-          gapBefore(bi) +
-          `<div class="ds-hunk">${scopeRow}${pairedRows
-            .map((row) => fullRow(row, opts, sides))
-            .join("")}</div>`
-        );
-      })
-      .join("") + gapAfterLast;
-  return `${splitHead(opts)}<div class="ds-diffbody">${body}</div>`;
+  if (canExpand && hunkRanges && blocks.length && !opts.newFile) {
+    cols.gap({ file: opts.file, from: hunkRanges[hunkRanges.length - 1][1] + 1, to: "eof" });
+  }
+  return `${splitHead(opts)}${cols.html()}`;
 }
 
 /** Compact, single-column rendering for since-story evidence. The drawer's
@@ -1213,8 +1251,14 @@ export function renderContextRows(
     from;
   let body: string;
   if (layout === "split") {
+    // Two side fragments the engine drops into the matching columns. Their
+    // data-ri are local (0..n); the engine rebases and renumbers on insert.
     const { rows: pairedRows, sides } = pairChangeRows(rows);
-    body = pairedRows.map((row) => fullRow(row, opts, sides)).join("");
+    const runs = untouredRuns(pairedRows);
+    const cols = new SplitColumns();
+    for (const row of pairedRows) cols.row(row, { ...fullRowOpts(row, opts, sides), untouredTag: runs.get(row) ?? null });
+    const halves = cols.sides();
+    body = `<div data-ctx-side="left">${halves.left}</div><div data-ctx-side="right">${halves.right}</div>`;
   } else {
     const unifiedRows: UnifiedRow[] = rows.map((row) => ({
       type: row.type,
@@ -1241,11 +1285,11 @@ export function renderContextRows(
   return `<div data-ctx-rows data-from="${from}" data-to="${to}">${body}</div>`;
 }
 
-function fullRow(
+function fullRowOpts(
   row: SbsRow,
   opts: { file: string; oldFile?: string; newFile: boolean },
   intra?: Map<SbsRow, IntraSides>,
-): string {
+): SplitRowOpts {
   const leftTarget =
     !opts.newFile && row.oldNo !== undefined
       ? {
@@ -1258,11 +1302,11 @@ function fullRow(
     row.newNo === undefined
       ? undefined
       : { side: "right" as const, file: opts.file, line: row.newNo };
-  return renderSplitRow(row, {
+  return {
     leftTarget,
     rightTarget,
     sides: intra?.get(row),
-  });
+  };
 }
 
 // ---- shared bits ----
@@ -1435,6 +1479,7 @@ export function renderReviewShell(input: ReviewShellInput): string {
     fileIndex: input.fileIndex,
     trustPending: !!input.fileIndex,
     baseRef: tour.base ?? baseLabel,
+    storyIdentity: input.storyKey,
   });
 
   const activeComments = comments.filter(
@@ -1498,6 +1543,24 @@ export function renderReviewShell(input: ReviewShellInput): string {
                 ? { design: prose(model.story.intent.design) }
                 : {}),
               nonGoals: model.story.intent.nonGoals.map(prose),
+            },
+          }
+        : {}),
+      ...(model.story.arc ? { arc: model.story.arc } : {}),
+      ...(model.story.evolution
+        ? {
+            evolution: {
+              commitCount: model.story.evolution.commitCount,
+              phases: model.story.evolution.phases.map((phase) => ({
+                title: phase.title,
+                summary: prose(phase.summary),
+                firstCommit: phase.firstCommit,
+                lastCommit: phase.lastCommit,
+                commitCount: phase.commitCount,
+                ...(phase.relatedPanelIndex
+                  ? { relatedPanelIndex: phase.relatedPanelIndex }
+                  : {}),
+              })),
             },
           }
         : {}),

@@ -49,6 +49,9 @@ export interface CaptureStorySnapshotInput {
   repo: string;
   base: string;
   head?: string;
+  /** Immutable objects used for capture while base/head retain display semantics. */
+  frozenBase?: string;
+  frozenHead?: string;
   storyScope?: Pick<StoryScope, 'includedFiles'>;
 }
 
@@ -197,8 +200,10 @@ interface Observation {
  */
 export function captureStorySnapshot(input: CaptureStorySnapshotInput): StorySnapshotRef {
   const repo = repositoryRoot(input.repo);
-  const baseTree = resolveTree(repo, input.base);
-  const headTree = input.head === undefined ? undefined : resolveTree(repo, input.head);
+  const baseTree = resolveTree(repo, input.frozenBase ?? input.base);
+  const headTree = input.head === undefined
+    ? undefined
+    : resolveTree(repo, input.frozenHead ?? input.head);
   const scan = stableScan(repo, baseTree, headTree, true);
   const storyFiles = input.storyScope
     ? normalizeStoryFiles(input.storyScope.includedFiles)

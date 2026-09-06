@@ -312,6 +312,9 @@ const COMMENTS = `[
 function git(args) {
   execFileSync('git', args, { cwd: DEMO, stdio: ['ignore', 'pipe', 'pipe'] });
 }
+function gitOut(args) {
+  return execFileSync('git', args, { cwd: DEMO, encoding: 'utf8' }).trim();
+}
 function write(rel, content) {
   const p = join(DEMO, rel);
   mkdirSync(dirname(p), { recursive: true });
@@ -335,16 +338,57 @@ git(['commit', '-qm', 'base: orders service']);
 // the change (on a feature branch)
 git(['checkout', '-q', '-b', 'feat/spending-limit']);
 write('src/api.ts', NEW_API);
-write('src/orders.ts', NEW_ORDERS);
 write('src/limits.ts', NEW_LIMITS);
+git(['add', '-A']);
+git(['commit', '-qm', 'feat: extract the monthly spending decision']);
+
+write('src/orders.ts', NEW_ORDERS);
 write('src/pipeline.ts', NEW_PIPELINE);
 write('src/receipt.ts', NEW_RECEIPT);
+git(['add', '-A']);
+git(['commit', '-qm', 'refactor: connect the supporting flow']);
+
 write('test/limits.test.ts', NEW_TEST);
 git(['add', '-A']);
-git(['commit', '-qm', 'feat: per-customer monthly spending limit']);
+git(['commit', '-qm', 'test: prove over-cap rejection']);
 
 // the tour + a couple of pre-seeded comments
-write('.diffstory/story.json', TOUR);
+const story = JSON.parse(TOUR);
+const evolutionCommits = gitOut(['rev-list', '--first-parent', '--reverse', 'main..feat/spending-limit']).split('\n');
+story.head = 'feat/spending-limit';
+story.storyArc = {
+  changeType: 'mixed',
+  shape: 'entry-implementation',
+  readingPath: 'request boundary -> shared policy -> downstream state -> proof',
+};
+story.evolution = {
+  baseSha: gitOut(['rev-parse', 'main']),
+  headSha: gitOut(['rev-parse', 'feat/spending-limit']),
+  phases: [
+    {
+      title: 'Extract the decision',
+      summary: 'The request boundary delegates the spending calculation to one reusable policy helper.',
+      firstCommit: evolutionCommits[0],
+      lastCommit: evolutionCommits[0],
+      relatedSteps: ['s1', 's2'],
+    },
+    {
+      title: 'Connect the supporting flow',
+      summary: 'The accepted path records spend while the adjacent move examples complete the review surface.',
+      firstCommit: evolutionCommits[1],
+      lastCommit: evolutionCommits[1],
+      relatedSteps: ['s4'],
+    },
+    {
+      title: 'Pin the rejection case',
+      summary: 'The final commit proves an over-cap order is rejected and leaves exact equality visible as a review question.',
+      firstCommit: evolutionCommits[2],
+      lastCommit: evolutionCommits[2],
+      relatedSteps: ['s7'],
+    },
+  ],
+};
+write('.diffstory/story.json', `${JSON.stringify(story, null, 2)}\n`);
 write('.diffstory/comments.json', COMMENTS);
 
 console.log('\nDemo repo built at: ' + DEMO);

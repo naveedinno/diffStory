@@ -26,8 +26,10 @@ const APP_DATA_PATHSPEC = ':(exclude).diffstory/**';
  */
 export function captureStorySnapshot(input) {
     const repo = repositoryRoot(input.repo);
-    const baseTree = resolveTree(repo, input.base);
-    const headTree = input.head === undefined ? undefined : resolveTree(repo, input.head);
+    const baseTree = resolveTree(repo, input.frozenBase ?? input.base);
+    const headTree = input.head === undefined
+        ? undefined
+        : resolveTree(repo, input.frozenHead ?? input.head);
     const scan = stableScan(repo, baseTree, headTree, true);
     const storyFiles = input.storyScope
         ? normalizeStoryFiles(input.storyScope.includedFiles)

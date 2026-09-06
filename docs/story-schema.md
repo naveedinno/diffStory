@@ -22,7 +22,9 @@ appears on screen as `**bold**`, not as bold text. The fix is to regenerate the
 story; there is no automatic conversion.
 
 `Tour.version` is unrelated to text format: `1` means code-only steps, `2` permits
-concept primers, and `3` permits semantic logic moves.
+concept primers, and `3` permits semantic logic moves. Narrative shape and commit
+evolution are optional additions to version 3, so older version 3 stories remain
+valid and repairable without either field.
 
 Reviewer comments (`comments.json` — `body`, `reply`, `turns[].text`) are **not**
 covered by this document. They are human-authored through the review UI and stay
@@ -63,6 +65,7 @@ title.
 | `intent.nonGoals[]` | `<li>` |
 | `hotspots[].reason` | `<span class="ds-hotspot-reason">` |
 | `steps[].diagram.caption` | `<figcaption>` — and it is what the narrator speaks for the figure |
+| `evolution.phases[].summary` | A phase explanation inside the commit-evolution disclosure. |
 
 Allowed:
 
@@ -86,10 +89,31 @@ the two-line clamp and the button's accessible name.
 | `steps[].moves[].label` | A plain-text annotation tag of at most 24 characters. |
 | `steps[].moves[].hidden.tag` | A plain-text callout headline of at most 48 characters. |
 | `storyScope.reviewerNote` | Reviewer-authored, prompt-only, no render surface. |
+| `storyArc.readingPath` | The quiet overview path. Store ASCII `->`; the UI renders and announces the separators. |
+| `evolution.phases[].title` | The phase heading in commit evolution. |
+| `evolution.phases[].firstCommit` / `lastCommit` | Hex commit boundaries; generation accepts 7-40 characters and expands unique prefixes. |
 
 No markup at all. Tags are stripped to their text content. A `<table>` in a
 sidebar title is never the right answer, and attribute sinks can only ever show
 markup as literal characters.
+
+## Narrative shape and commit evolution
+
+Every newly generated story includes `storyArc`. Its `changeType` and `shape`
+use the enums in `src/types.ts`; `readingPath` is non-empty plain text of at most
+200 characters. Stage count and editorial quality are judged by the storyteller
+evaluation rather than by schema validation.
+
+Fixed `base..head` stories may also include `evolution` when their frozen
+first-parent range contains 2-30 commits. The server owns its full 40-character
+`baseSha` and `headSha`. The storyteller groups that immutable history into 1-6
+ordered phases with non-empty titles and inline-HTML summaries. Phase boundaries
+are 7-40 hexadecimal characters during authoring and are expanded to full SHAs
+when unique. Optional `relatedSteps` values must resolve to story step ids.
+
+Evolution is supporting context, not a replacement diff. The final diff remains
+authoritative, and a recoverable gap or overlap hides the disclosure without
+discarding the main story.
 
 ## Attribute allowlist
 

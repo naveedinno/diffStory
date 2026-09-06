@@ -160,6 +160,44 @@ test('a mutable base ref moving after capture makes the story unverified', () =>
   }
 });
 
+test('frozen capture keeps display refs while reading immutable endpoint trees', () => {
+  const f = fixture();
+  try {
+    const frozenBase = f.git(['rev-parse', 'HEAD']);
+    f.git(['branch', 'story-base', frozenBase]);
+    writeFileSync(join(f.repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 2; }\n');
+    f.git(['add', '.']);
+    f.git(['commit', '-qm', 'story head']);
+    const frozenHead = f.git(['rev-parse', 'HEAD']);
+    f.git(['branch', 'story-head', frozenHead]);
+
+    writeFileSync(join(f.repo, 'contracts', 'A.sol'), 'contract A { uint256 value = 3; }\n');
+    f.git(['add', '.']);
+    f.git(['commit', '-qm', 'refs moved later']);
+    f.git(['branch', '-f', 'story-base', 'HEAD']);
+    f.git(['branch', '-f', 'story-head', 'HEAD']);
+
+    const snapshot = captureStorySnapshot({
+      repo: f.repo,
+      base: 'story-base',
+      head: 'story-head',
+      frozenBase,
+      frozenHead,
+      storyScope: { includedFiles: ['contracts/A.sol'] },
+    });
+    const manifest = JSON.parse(readFileSync(
+      join(f.repo, '.diffstory', 'snapshots', `${snapshot.id}.json`),
+      'utf8',
+    ));
+    assert.equal(manifest.base.requested, 'story-base');
+    assert.equal(manifest.head.requested, 'story-head');
+    assert.equal(manifest.base.resolvedTree, f.git(['rev-parse', `${frozenBase}^{tree}`]));
+    assert.equal(manifest.head.resolvedTree, f.git(['rev-parse', `${frozenHead}^{tree}`]));
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('outside drift stays side-file-only while a later in-scope edit makes the story stale', () => {
   const f = fixture();
   try {

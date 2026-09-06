@@ -1,8 +1,13 @@
 // Unit tests for the full-file side-by-side reconstruction. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseUnifiedDiff } from '../dist/diff.js';
 import { buildFullFileRows, buildPairedBlocks, buildReviewModel, hunksToSbsBlocks, pairChangeRows } from '../dist/view-model.js';
+import { commitEvolutionManifest } from '../dist/git.js';
 
 const DIFF = [
   'diff --git a/a.ts b/a.ts',
@@ -135,6 +140,57 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.files[0].file, 'a.ts');
   assert.equal(model.files[0].stepId, 'implementation');
   assert.equal(model.trust.uncovered.length, 0);
+});
+
+test('story shape and verified evolution project into the review model', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'ds-view-evolution-'));
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    writeFileSync(join(repo, 'a.ts'), 'export const value = 0;\n');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    const base = git('rev-parse', 'HEAD');
+    for (const value of [1, 2]) {
+      writeFileSync(join(repo, 'a.ts'), `export const value = ${value};\n`);
+      git('add', '.');
+      git('commit', '-qm', `set value ${value}`);
+    }
+    const head = git('rev-parse', 'HEAD');
+    const manifest = commitEvolutionManifest(repo, base, head);
+    const tour = {
+      version: 3,
+      title: 'Stable shape',
+      summary: 'Read the decision and its proof.',
+      storyArc: { changeType: 'bug-fix', shape: 'cause-effect', readingPath: 'failure -> fix -> proof' },
+      evolution: {
+        baseSha: base,
+        headSha: head,
+        phases: [{
+          title: 'Close the gap',
+          summary: 'The implementation lands, then its final behavior is pinned.',
+          firstCommit: manifest.commits[0].sha,
+          lastCommit: manifest.commits[1].sha,
+          relatedSteps: ['decision'],
+        }],
+      },
+      steps: [{ id: 'decision', order: 1, title: 'Changed decision', file: 'a.ts', range: [1, 1], kind: 'changed', why: 'Review the chosen value.' }],
+    };
+    const model = buildReviewModel(repo, tour, [], undefined, { storyIdentity: 'shape-v1' });
+    assert.deepEqual(model.story.arc, {
+      changeType: 'bug-fix', changeTypeLabel: 'Bug fix',
+      shape: 'cause-effect', shapeLabel: 'Cause and effect',
+      readingPath: 'failure -> fix -> proof',
+    });
+    assert.equal(model.story.evolution.commitCount, 2);
+    assert.equal(model.story.evolution.phases[0].commitCount, 2);
+    assert.equal(model.story.evolution.phases[0].summary.text, 'The implementation lands, then its final behavior is pinned.');
+    assert.equal(model.story.evolution.phases[0].relatedPanelIndex, 1);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('code steps derive focus groups, chapters, and broad-step health', () => {
@@ -329,4 +385,11 @@ test('pairChangeRows leaves a pure deletion run single-sided', () => {
   assert.equal(out.length, 2);
   assert.equal(out[0].type, 'del');
   assert.equal(out[0].changePair, undefined);
+});
+
+test('a scoped story is measured only against its included files', async () => {
+  const { filesForStoryCoverage } = await import('../dist/view-model.js');
+  const files = [{ newPath: 'src/a.ts', hunks: [] }, { newPath: 'test/a.test.ts', hunks: [] }];
+  assert.deepEqual(filesForStoryCoverage({ storyScope: { includedFiles: ['src/a.ts'] } }, files).map((f) => f.newPath), ['src/a.ts']);
+  assert.equal(filesForStoryCoverage({}, files).length, 2);
 });

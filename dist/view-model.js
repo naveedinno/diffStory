@@ -21,6 +21,7 @@ import { isCodeStep } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
 import { diffLineTokens } from './intra-line.js';
 import { projectStoryStepScene } from './story-scenes.js';
+import { cachedEvolutionVerification } from './evolution.js';
 import { createHash } from 'node:crypto';
 const STEP_KIND_LABEL = {
     changed: 'Changed',
@@ -82,7 +83,7 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
         : codeSteps.filter((step) => step.kind !== 'context').map((step) => step.file));
     const storyFileViews = changedFileViews.filter((file) => storyPaths.has(file.file));
     return {
-        story: storyView(tour),
+        story: storyView(repo, tour, opts?.storyIdentity),
         steps: stepViews,
         files: fileViews,
         hotspots,
@@ -102,11 +103,33 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
  * or a list item on the Overview panel, so it is inline-tier; the concept body is
  * the only block-tier narrative in the model.
  */
-function storyView(tour) {
+const CHANGE_TYPE_LABELS = {
+    feature: 'Feature',
+    'bug-fix': 'Bug fix',
+    refactor: 'Refactor',
+    security: 'Security',
+    performance: 'Performance',
+    migration: 'Migration',
+    maintenance: 'Maintenance',
+    mixed: 'Mixed change',
+};
+const NARRATIVE_SHAPE_LABELS = {
+    'cause-effect': 'Cause and effect',
+    'entry-implementation': 'Entry to implementation',
+    'before-after': 'Before and after',
+    'core-supporting': 'Core and supporting changes',
+    'rule-instances': 'Rule and instances',
+};
+function storyView(repo, tour, storyIdentity) {
     const summary = narrative(tour.summary ?? '', 'inline');
     const intent = tour.intent;
     const goal = narrative(intent?.goal ?? '', 'inline');
     const design = narrative(intent?.design ?? '', 'inline');
+    const evolutionVerification = tour.evolution
+        ? cachedEvolutionVerification(repo, storyIdentity ?? createHash('sha256').update(JSON.stringify(tour)).digest('hex'), tour)
+        : undefined;
+    const ordered = orderedSteps(tour);
+    const stepIndex = new Map(ordered.map((step, index) => [step.id, index + 1]));
     return {
         title: narrative(tour.title ?? '', 'inline'),
         summary: summary.text.trim() ? summary : undefined,
@@ -122,9 +145,43 @@ function storyView(tour) {
                     .filter((nonGoal) => nonGoal.text.trim()),
             }
             : undefined,
+        ...(tour.storyArc
+            ? {
+                arc: {
+                    changeType: tour.storyArc.changeType,
+                    changeTypeLabel: CHANGE_TYPE_LABELS[tour.storyArc.changeType] ?? tour.storyArc.changeType,
+                    shape: tour.storyArc.shape,
+                    shapeLabel: NARRATIVE_SHAPE_LABELS[tour.storyArc.shape] ?? tour.storyArc.shape,
+                    readingPath: narrativeText(tour.storyArc.readingPath),
+                },
+            }
+            : {}),
+        ...(tour.evolution && evolutionVerification?.displayable
+            ? {
+                evolution: {
+                    commitCount: evolutionVerification.commitCount,
+                    phases: tour.evolution.phases.map((phase, index) => ({
+                        title: narrativeText(phase.title),
+                        summary: narrative(phase.summary, 'inline'),
+                        firstCommit: phase.firstCommit,
+                        lastCommit: phase.lastCommit,
+                        commitCount: evolutionVerification.phaseCommitCounts[index] ?? 0,
+                        ...(phase.relatedSteps?.find((id) => stepIndex.has(id))
+                            ? {
+                                relatedPanelIndex: stepIndex.get(phase.relatedSteps.find((id) => stepIndex.has(id))),
+                            }
+                            : {}),
+                    })),
+                },
+            }
+            : {}),
     };
 }
-function filesForStoryCoverage(tour, files) {
+/** The files a story is measured against. A scoped story only owes an
+ *  explanation for its included files, so anything outside the scope is never
+ *  "unexplained" — the lazy split and full-file responses must apply the same
+ *  filter as the review model or they flag every line of an excluded file. */
+export function filesForStoryCoverage(tour, files) {
     const included = tour.storyScope?.includedFiles;
     if (!included?.length)
         return files;

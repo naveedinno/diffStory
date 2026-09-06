@@ -285,12 +285,30 @@ export interface ReviewStoryView {
  title: ReviewProse;
  summary?: ReviewProse;
  /** Recovered intent. When present the goal leads and the summary is the map. */
- intent?: {
+  intent?: {
   goal: ReviewProse;
   design?: ReviewProse;
   /** Deliberate omissions, so a reviewer does not flag them as misses. */
-  nonGoals: ReviewProse[];
- };
+    nonGoals: ReviewProse[];
+  };
+  arc?: {
+    changeType: string;
+    changeTypeLabel: string;
+    shape: string;
+    shapeLabel: string;
+    readingPath: string;
+  };
+  evolution?: {
+    commitCount: number;
+    phases: Array<{
+      title: string;
+      summary: ReviewProse;
+      firstCommit: string;
+      lastCommit: string;
+      commitCount: number;
+      relatedPanelIndex?: number;
+    }>;
+  };
 }
 
 /**

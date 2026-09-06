@@ -14,6 +14,7 @@ import {
   orderedSteps,
   validateGeneratedConceptSteps,
   validateGeneratedTour,
+  validateNewGeneratedStory,
 } from "./tour.js";
 import {
   isGitRepo,
@@ -39,6 +40,8 @@ import {
   stagedWorktreeDivergentFiles,
   numstat,
   assertSafeRepoPath,
+  commitEvolutionManifest,
+  type CommitEvolutionManifest,
 } from "./git.js";
 import { enclosingScopeLabel } from "./enclosing-scope.js";
 import { parseUnifiedDiff } from "./diff.js";
@@ -72,6 +75,7 @@ import {
 import {
   buildFullFileRows,
   hunksToSbsBlocks,
+  filesForStoryCoverage,
   hunkNewRange,
   rowsInNewRange,
 } from "./view-model.js";
@@ -93,8 +97,16 @@ import {
   type DiffFile,
   type ReviewFileIndexEntry,
   type StoryScope,
+  type StoryArc,
+  type StoryEvolution,
   type Tour,
 } from "./types.js";
+import { writeJsonAtomic } from "./atomic-json.js";
+import {
+  evolutionPreservationErrors,
+  normalizeEvolutionObject,
+  verifyEvolution,
+} from "./evolution.js";
 import {
   availableAgents,
   streamAgent,
@@ -168,7 +180,6 @@ import {
   existsSync,
   readFileSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { createAloudReader, type AloudReader } from "./aloud-client.js";
 import { listCodexStoryModels } from "./codex-tasks.js";
@@ -2204,7 +2215,7 @@ function renderFullFileResponse(page: LeasedReviewPage, file: string): string {
   const newLines = readWholeFile(repo, file, head) ?? [];
   const ranges = storyless
     ? []
-    : computeCoverage(tour, files)
+    : computeCoverage(tour, filesForStoryCoverage(tour, files))
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
   const rows = buildFullFileRows(df, newLines, ranges);
@@ -2232,7 +2243,7 @@ function renderSplitResponse(page: LeasedReviewPage, file: string): string {
   const files = df ? [df] : [];
   const ranges = storyless
     ? []
-    : computeCoverage(tour, files)
+    : computeCoverage(tour, filesForStoryCoverage(tour, files))
         .uncovered.filter((u) => u.file === file)
         .map((u) => u.range);
   // Prefer a scope read from the post-change file; git's own funcname is the
@@ -2557,7 +2568,7 @@ export function finishStoryGeneration(
   session: Pick<Session, "selectedStory" | "chooseStory"> &
     Partial<Pick<Session, "repo">>,
   previousStoryContents?: string | null,
-  requireModernStory = true,
+  finishPolicy: StoryFinishPolicy | boolean = DEFAULT_STORY_FINISH_POLICY,
 ): {
   status: RunStatus;
   result: Record<string, unknown>;
@@ -2576,13 +2587,34 @@ export function finishStoryGeneration(
   if (storyWritten) {
     try {
       const tour = loadTour(storyPath);
-      const qualityErrors = requireModernStory
-        ? validateGeneratedTour(tour)
+      const policy = normalizeStoryFinishPolicy(finishPolicy);
+      const qualityErrors = policy.validateModern
+        ? policy.requireStoryArc
+          ? validateNewGeneratedStory(tour)
+          : validateGeneratedTour(tour)
         : validateGeneratedConceptSteps(tour);
-      const moveVerification = requireModernStory
+      if (
+        Object.prototype.hasOwnProperty.call(policy, "originalStoryArc") ||
+        Object.prototype.hasOwnProperty.call(policy, "originalEvolution")
+      ) {
+        qualityErrors.push(
+          ...evolutionPreservationErrors(
+            tour,
+            policy.originalStoryArc,
+            policy.originalEvolution,
+          ),
+        );
+      }
+      const moveVerification = policy.validateModern
         ? verifyLogicMoves(session.repo ?? repoForStoryPath(storyPath), tour)
         : { errors: [], warnings: [] };
       qualityErrors.push(...moveVerification.errors);
+      const evolutionVerification = verifyEvolution(
+        session.repo ?? repoForStoryPath(storyPath),
+        tour,
+        policy.evolutionManifest,
+      );
+      qualityErrors.push(...evolutionVerification.errors);
       if (qualityErrors.length) {
         throw new Error(
           `Generated story did not meet the storyteller contract:\n  - ${qualityErrors.join("\n  - ")}`,
@@ -2591,6 +2623,11 @@ export function finishStoryGeneration(
       for (const warning of moveVerification.warnings) {
         events.push(
           warningEvent("Logic move needs a closer look", warning, "validation"),
+        );
+      }
+      for (const warning of evolutionVerification.warnings) {
+        events.push(
+          warningEvent("Commit evolution was hidden", warning, "validation"),
         );
       }
       session.selectedStory = storyPath;
@@ -2626,6 +2663,28 @@ export function finishStoryGeneration(
     status = "failed";
   }
   return { status, result: { storyWritten, storyValid: false }, events };
+}
+
+export interface StoryFinishPolicy {
+  validateModern: boolean;
+  requireStoryArc: boolean;
+  originalStoryArc?: StoryArc;
+  originalEvolution?: StoryEvolution;
+  evolutionManifest?: CommitEvolutionManifest;
+}
+
+const DEFAULT_STORY_FINISH_POLICY: StoryFinishPolicy = {
+  validateModern: true,
+  requireStoryArc: false,
+};
+
+function normalizeStoryFinishPolicy(
+  policy: StoryFinishPolicy | boolean,
+): StoryFinishPolicy {
+  if (typeof policy === "boolean") {
+    return { validateModern: policy, requireStoryArc: false };
+  }
+  return policy;
 }
 
 function repoForStoryPath(storyPath: string): string {
@@ -2689,6 +2748,8 @@ export function verifyLogicMoves(
       warnings,
     };
   const steps = orderedSteps(tour);
+  const beforeRef = tour.evolution?.baseSha ?? tour.base ?? "HEAD";
+  const afterRef = tour.evolution?.headSha ?? tour.head;
   steps.forEach((step, stepIndex) => {
     if (!isCodeStep(step) || !("moves" in step)) return;
     (step.moves ?? []).forEach((move, moveIndex) => {
@@ -2696,8 +2757,7 @@ export function verifyLogicMoves(
       if (move.hidden?.as === "destination") {
         const endpointName = move.after.file === step.file ? "before" : "after";
         const endpoint = move[endpointName];
-        const ref =
-          endpointName === "before" ? (tour.base ?? "HEAD") : tour.head;
+        const ref = endpointName === "before" ? beforeRef : afterRef;
         if (readWholeFile(repo, endpoint.file, ref) === null) {
           errors.push(
             `${where}.hidden destination file "${endpoint.file}" could not be resolved in the repository`,
@@ -2706,7 +2766,7 @@ export function verifyLogicMoves(
       }
       const readAnchor = (endpoint: "before" | "after"): string | null => {
         const anchor = move[endpoint];
-        const ref = endpoint === "before" ? (tour.base ?? "HEAD") : tour.head;
+        const ref = endpoint === "before" ? beforeRef : afterRef;
         const slice = readFileRange(
           repo,
           anchor.file,
@@ -2970,9 +3030,33 @@ function stampStoryMetadata(
     parsed.diffFingerprint = fingerprint;
     if (scope) parsed.storyScope = scope;
     if (snapshot) parsed.storySnapshot = snapshot;
-    writeFileSync(storyPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeJsonAtomic(storyPath, parsed);
   } catch {
     // Validation will report malformed or missing stories in the normal finish path.
+  }
+}
+
+/** Normalize agent output and stamp app-owned metadata in one atomic write. */
+export function prepareStoryOutput(
+  storyPath: string,
+  fingerprint: string,
+  scope?: StoryScope,
+  evolutionManifest?: CommitEvolutionManifest,
+): void {
+  if (!existsSync(storyPath)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(storyPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return;
+    normalizeEvolutionObject(parsed, evolutionManifest);
+    parsed.diffFingerprint = fingerprint;
+    if (scope) parsed.storyScope = scope;
+    writeJsonAtomic(storyPath, parsed);
+  } catch {
+    // The final load reports malformed agent output with its ordinary validation error.
   }
 }
 
@@ -3004,6 +3088,7 @@ function captureAndStampStoryBaseline(
   storyPath: string,
   base: string,
   head?: string,
+  frozenManifest?: CommitEvolutionManifest,
 ): StorySnapshotRef {
   const storySource = readFileSync(storyPath, "utf8");
   const tour = loadTour(storyPath);
@@ -3012,8 +3097,28 @@ function captureAndStampStoryBaseline(
       repo,
       base,
       ...(head ? { head } : {}),
+      ...(frozenManifest
+        ? {
+            frozenBase: frozenManifest.baseSha,
+            frozenHead: frozenManifest.headSha,
+          }
+        : {}),
       storyScope: storySnapshotScope(tour),
     });
+    if (frozenManifest) {
+      const diff = getDiff(
+        repo,
+        frozenManifest.baseSha,
+        frozenManifest.headSha,
+      );
+      if (readFileSync(storyPath, "utf8") !== storySource) {
+        throw new Error(
+          "The story changed while DiffStory captured its baseline.",
+        );
+      }
+      stampStoryMetadata(storyPath, diffFingerprint(diff), undefined, snapshot);
+      return snapshot;
+    }
     const expected = storyDriftBinding(base, head, tour);
     const observed = inspectStoryDrift({ repo, snapshot, expected });
     if (observed.status !== "current") continue;
@@ -3043,10 +3148,17 @@ function finishWithStoryBaseline(
   storyPath: string,
   base: string,
   head?: string,
+  frozenManifest?: CommitEvolutionManifest,
 ): ReturnType<typeof finishStoryGeneration> {
   if (finished.status !== "complete") return finished;
   try {
-    const snapshot = captureAndStampStoryBaseline(repo, storyPath, base, head);
+    const snapshot = captureAndStampStoryBaseline(
+      repo,
+      storyPath,
+      base,
+      head,
+      frozenManifest,
+    );
     return {
       ...finished,
       result: { ...finished.result, storySnapshot: snapshot.id },
@@ -3137,9 +3249,11 @@ function runStoryRepair(
       ),
     );
   }
+  let originalTour: Tour;
   let storyWasModern = false;
   try {
-    storyWasModern = validateGeneratedTour(loadTour(storyPath)).length === 0;
+    originalTour = loadTour(storyPath);
+    storyWasModern = validateGeneratedTour(originalTour).length === 0;
   } catch (e) {
     return sendJson(
       res,
@@ -3153,6 +3267,17 @@ function runStoryRepair(
   }
   const storyBefore = readFileSync(storyPath, "utf8");
   const data = sessionReviewData(session);
+  const repairEvolutionManifest = originalTour.evolution
+    ? commitEvolutionManifest(
+        repo,
+        originalTour.evolution.baseSha,
+        originalTour.evolution.headSha,
+      ) ?? undefined
+    : undefined;
+  const repairBase =
+    originalTour.evolution?.baseSha ?? stableDiffRef(repo, data.base) ?? data.base;
+  const repairHead =
+    originalTour.evolution?.headSha ?? stableDiffRef(repo, data.head);
   const title =
     action === "explain"
       ? "Explaining an uncovered change"
@@ -3172,8 +3297,10 @@ function runStoryRepair(
         ? Math.trunc(Number(input.line))
         : undefined,
       stepId: input.stepId?.trim() || undefined,
-      base: stableDiffRef(repo, data.base) ?? data.base,
-      head: stableDiffRef(repo, data.head),
+      base: repairBase,
+      head: repairHead,
+      hasStoryArc: !!originalTour.storyArc,
+      hasEvolution: !!originalTour.evolution,
     }),
     context: {
       repoName: basename(repo),
@@ -3191,10 +3318,12 @@ function runStoryRepair(
       const storyChanged =
         existsSync(storyPath) &&
         readFileSync(storyPath, "utf8") !== storyBefore;
-      if (result.ok && storyChanged) {
-        stampStoryMetadata(
+      if (storyChanged) {
+        prepareStoryOutput(
           storyPath,
-          diffFingerprint(getDiff(repo, data.base, data.head)),
+          diffFingerprint(getDiff(repo, repairBase, repairHead)),
+          undefined,
+          repairEvolutionManifest,
         );
       }
       const finished = finishStoryGeneration(
@@ -3202,19 +3331,28 @@ function runStoryRepair(
         storyPath,
         session,
         storyBefore,
-        storyWasModern,
+        {
+          validateModern: storyWasModern,
+          requireStoryArc: false,
+          originalStoryArc: originalTour.storyArc,
+          originalEvolution: originalTour.evolution,
+          evolutionManifest: repairEvolutionManifest,
+        },
       );
       return finishWithStoryBaseline(
         finished,
         repo,
         storyPath,
-        data.base,
-        data.head,
+        originalTour.base ?? data.base,
+        originalTour.head ?? data.head,
+        repairEvolutionManifest,
       );
     },
     fileScope: {
       repoPath: repo,
-      changedFiles: data.files.map((file) => file.newPath),
+      changedFiles: numstat(repo, repairBase, repairHead).map((file) =>
+        postRenamePath(file.path),
+      ),
     },
   });
 }
@@ -3286,8 +3424,11 @@ function runGenerate(
   const base = resolveBase(repo, input.base);
   const promptBase = stableDiffRef(repo, base) ?? base;
   const promptHead = stableDiffRef(repo, input.head);
-  session.base = promptBase;
-  session.head = promptHead;
+  const evolutionManifest = promptHead
+    ? commitEvolutionManifest(repo, promptBase, promptHead) ?? undefined
+    : undefined;
+  session.base = base;
+  session.head = input.head;
   const storyPath = resolveStoryPath(repo);
   const storyBefore = existsSync(storyPath)
     ? readFileSync(storyPath, "utf8")
@@ -3322,6 +3463,8 @@ function runGenerate(
       mode,
       excludePaths,
       storyScope.scope,
+      evolutionManifest,
+      { base, head: input.head },
     ),
     context: {
       repoName: basename(repo),
@@ -3342,11 +3485,12 @@ function runGenerate(
         existsSync(storyPath) &&
         (storyBefore === null ||
           readFileSync(storyPath, "utf8") !== storyBefore);
-      if (r.ok && storyChanged) {
-        stampStoryMetadata(
+      if (storyChanged) {
+        prepareStoryOutput(
           storyPath,
           diffFingerprint(getDiff(repo, promptBase, promptHead)),
           storyScope.scope,
+          evolutionManifest,
         );
       }
       const finished = finishStoryGeneration(
@@ -3354,13 +3498,19 @@ function runGenerate(
         storyPath,
         session,
         storyBefore,
+        {
+          validateModern: true,
+          requireStoryArc: true,
+          evolutionManifest,
+        },
       );
       return finishWithStoryBaseline(
         finished,
         repo,
         storyPath,
-        promptBase,
-        promptHead,
+        base,
+        input.head,
+        evolutionManifest,
       );
     },
     fileScope: { repoPath: repo, changedFiles },

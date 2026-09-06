@@ -181,7 +181,8 @@ body.ds-noscroll{overflow:hidden}
 @keyframes dsSpin{to{transform:rotate(360deg)}}
 .ds-story-tune{position:relative;flex:none}.ds-story-tune>summary{list-style:none;min-height:34px;display:flex;align-items:center;justify-content:center;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-pill);background:var(--fill-1);color:var(--muted);cursor:pointer;font-size:11.5px;font-weight:700;white-space:nowrap}.ds-story-tune>summary::-webkit-details-marker{display:none}.ds-story-tune>summary:hover{background:var(--fill-2);color:var(--text)}.ds-story-tune[open]>summary{background:var(--accent-soft);color:var(--accent-text)}
 .ds-story-tune-icon{display:block;width:16px;height:16px}.ds-story-tune-icon svg{display:block;width:100%;height:100%}
-.ds-story-tune-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:6;width:236px;padding:7px;border:1px solid var(--line-soft);border-radius:var(--radius-lg);background:var(--material);box-shadow:var(--shadow)}
+/* Sits above the sticky diff toolbar (9) and file head (10) it opens over, below the review chrome (12). */
+.ds-story-tune-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:11;width:236px;padding:7px;border:1px solid var(--line-soft);border-radius:var(--radius-lg);background:var(--material);box-shadow:var(--shadow)}
 .ds-story-tune button{display:grid;gap:3px;width:100%;border:0;border-radius:var(--radius);background:transparent;color:var(--text);font:inherit;text-align:left;padding:9px 11px;cursor:pointer}.ds-story-tune button:hover{background:var(--fill-2)}.ds-story-tune button strong{font-size:11.5px;font-weight:700}.ds-story-tune button small{color:var(--muted);font-size:10.5px;font-weight:500;line-height:1.35}
 .ds-btn-solid{font-weight:600;color:var(--on-accent);padding:7px 13px;border:none;background:var(--accent)}
 .ds-btn-solid:hover{background:var(--accent-solid-hover)}
@@ -283,6 +284,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-intro-eyebrow .ds-storymark{color:var(--accent-text)}
 .ds-intro-title{font-size:32px;font-weight:600;letter-spacing:-0.02em;line-height:1.16;color:var(--text);margin:15px 0 0;text-wrap:balance}
 .ds-intro-lede{font-size:16px;line-height:1.62;color:var(--muted);margin:20px 0 0;text-wrap:pretty}
+.ds-intro-reading{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 8px;margin:18px 0 0;color:var(--dim);font-size:12px;line-height:1.5}.ds-intro-reading>span:first-child{color:var(--text);font-weight:600}
 .ds-intro-design{font-size:14px;line-height:1.6;color:var(--muted);margin:12px 0 0;text-wrap:pretty}
 .ds-intro-block-kicker{display:block;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:var(--tracking-kicker);text-transform:uppercase}
 .ds-intro-hotspots{margin-top:26px}
@@ -311,6 +313,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-intro-start-main{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600}
 .ds-intro-arrow{font-size:16px}
 .ds-intro-start-sub{font-size:12px;font-weight:500;opacity:0.78}
+.ds-intro-evolution{max-width:820px;margin-top:24px;border:1px solid var(--line-soft);border-radius:12px;background:var(--panel2);overflow:hidden}.ds-intro-evolution>summary{min-height:46px;display:flex;align-items:center;gap:9px;padding:9px 14px;list-style:none;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer}.ds-intro-evolution>summary::-webkit-details-marker{display:none}.ds-intro-evolution>summary:hover{background:var(--fill-1)}.ds-intro-evolution>summary:focus-visible{outline:none;box-shadow:var(--shadow-focus-inset)}.ds-intro-evolution>summary small{margin-left:auto;color:var(--dim);font-family:var(--mono);font-size:10.5px;font-weight:500}.ds-intro-evolution-caret{color:var(--dim);font-size:14px;transition:transform var(--motion-duration-fast) var(--motion-ease-in-out)}.ds-intro-evolution[open] .ds-intro-evolution-caret{transform:rotate(180deg)}.ds-intro-evolution>ol{list-style:none;margin:0;padding:5px 14px 13px;border-top:1px solid var(--line-soft)}.ds-intro-evolution>ol>li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:9px;padding:12px 0}.ds-intro-evolution>ol>li+li{border-top:1px solid var(--line-soft)}.ds-evolution-index{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:var(--fill-2);color:var(--dim);font-family:var(--mono);font-size:10px}.ds-evolution-copy{min-width:0}.ds-evolution-titleline{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}.ds-evolution-titleline strong{font-size:12.5px;color:var(--text)}.ds-evolution-range{color:var(--dim);font-family:var(--mono);font-size:10px}.ds-evolution-copy p{margin:5px 0 0;color:var(--muted);font-size:12.5px;line-height:1.5;text-wrap:pretty}.ds-evolution-copy button{min-height:28px;margin:7px 0 -3px;padding:0;border:0;background:transparent;color:var(--accent-blue);font:inherit;font-size:11px;font-weight:600;cursor:pointer}.ds-evolution-copy button:hover{color:var(--text)}.ds-evolution-copy button:focus-visible{outline:none;box-shadow:var(--shadow-focus);border-radius:4px}
 .ds-storygen-card{margin-top:28px;border:1px solid var(--line-soft);border-radius:14px;background:var(--md-surface-container);box-shadow:var(--shadow);overflow:hidden}
 .ds-storygen-head{padding:19px 20px 18px;border-bottom:1px solid var(--line-soft);background:var(--fill-1)}
 .ds-storygen-head strong{display:block;margin-top:5px;font-size:19px;font-weight:600;color:var(--text);letter-spacing:-0.01em}
@@ -749,8 +752,13 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-step.is-voice-active .ds-difthint{color:var(--accent-text);font-weight:700}
 .ds-step.is-voice-active .ds-difthint::before{content:'Reading here';display:inline-flex;margin-right:8px;padding:1px 6px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--accent-text);font-size:10px;letter-spacing:0.02em;text-transform:uppercase}
 /* The toolbar stays inside the visible code viewport while unwrapped rows make
-   the card wider. The 11px deduction matches the declared review scrollbar. */
-.ds-difftoolbar{position:sticky;top:calc(0px - var(--ds-scrollpad-t,0px));left:0;z-index:9;width:calc(100cqw - 11px);max-width:calc(100cqw - 11px);display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
+   the card wider. The engine measures the scroller's inner width (clientWidth
+   minus padding) into --ds-diffviewport-w, so the toolbar is exact whether or
+   not a vertical scrollbar is present. A fixed scrollbar deduction was wrong
+   whenever the diff was short enough to need no scrollbar: an 11px strip of the
+   code showed past the toolbar's right edge. 100cqw is only the pre-measure
+   fallback. */
+.ds-difftoolbar{position:sticky;top:calc(0px - var(--ds-scrollpad-t,0px));left:0;z-index:9;width:var(--ds-diffviewport-w,100cqw);max-width:var(--ds-diffviewport-w,100cqw);display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-difthint{font-size:11px;color:var(--dim)}
 .ds-modetoggle{display:inline-flex;align-items:center;gap:2px;padding:3px;border:0;border-radius:var(--radius-pill);background:var(--fill-1)}
 .ds-modetoggle button{min-width:44px;height:30px;padding:0 11px;border:0;border-radius:var(--radius-pill);background:transparent;color:var(--dim);font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background var(--motion-duration-fast) ease,color var(--motion-duration-fast) ease}
@@ -848,6 +856,9 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
    overflow boundary handles layout; the paint clip also holds when a browser
    composites each horizontally scrolled code span onto its own layer. */
 [data-split-inner]:not([hidden]) .ds-cell{overflow:hidden;clip-path:inset(0)}
+/* A single-column cell has no divider to protect, and clipping it would make
+   the cell the sticky tag's scroll container instead of the pane. */
+[data-split-inner]:not([hidden]) .ds-cell-single{overflow:visible;clip-path:none}
 .ds-split-mode [data-split-inner]:not([hidden]) .ds-diffbody{overflow-x:clip}
 .ds-cell-single{flex:1}
 .ds-cell-add{background:var(--add-bg);box-shadow:inset 3px 0 0 var(--add-rail)}
@@ -859,6 +870,38 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}
+/* ---- independent split columns ----
+   The two sides are separate flows: no filler rows, no aligned void. The
+   engine sizes the body to the shared timeline, translates each column so the
+   row under the viewport centre sits at its timeline position, and paints the
+   drift between them as bands in the divider. overflow:clip (not hidden) so the
+   body never becomes a scroll container of its own. */
+.ds-diffbody-cols{position:relative;display:flex;align-items:flex-start;overflow:clip}
+.ds-col{position:relative;min-width:0;flex-shrink:1;flex-basis:0;will-change:transform}
+.ds-col-l{flex-grow:var(--ds-split,50)}
+.ds-col-r{flex-grow:calc(100 - var(--ds-split,50))}
+.ds-diffbody-cols .ds-row>.ds-cell{flex:1 1 0}
+.ds-diffbody-cols>.ds-celldiv{width:var(--ds-divider-w,26px);align-self:stretch;background:var(--panel2);border-left:1px solid var(--diff-rule);border-right:1px solid var(--diff-rule);z-index:1}
+.ds-diffbody-cols>.ds-celldiv::after{left:-6px;right:-6px}
+/* At this width the resize affordance is the edges, not a filled bar: hover
+   and focus brighten the two rules and leave the bands readable. */
+.ds-diffbody-cols>.ds-celldiv:hover{background:var(--panel2);border-color:var(--line)}
+.ds-diffbody-cols>.ds-celldiv[role="separator"]:focus-visible{background:var(--panel2);border-color:var(--accent-blue);box-shadow:none}
+body.ds-resizing .ds-diffbody-cols>.ds-celldiv{border-color:var(--accent-blue)}
+.ds-bands{position:absolute;left:0;top:0;display:block;width:100%;height:0;overflow:visible;pointer-events:none}
+.ds-band{fill:var(--fill-2);stroke:var(--diff-rule);stroke-width:1;vector-effect:non-scaling-stroke}
+/* Added and deleted blocks take their rail colour; a modified block, where
+   both sides carry rows, takes the signal blue so it never muddies into the
+   divider the way a green and red mix does. */
+.ds-band-add{fill:color-mix(in srgb,var(--add-rail) 36%,transparent);stroke:color-mix(in srgb,var(--add-rail) 55%,transparent)}
+.ds-band-del{fill:color-mix(in srgb,var(--del-rail) 36%,transparent);stroke:color-mix(in srgb,var(--del-rail) 55%,transparent)}
+.ds-band-pair{fill:color-mix(in srgb,var(--accent-blue) 30%,transparent);stroke:color-mix(in srgb,var(--accent-blue) 55%,transparent)}
+.ds-band.is-current{stroke:var(--accent-blue)}
+/* Sticky offsets resolve before transforms, so a sticky row inside a translated
+   column would park at the wrong place; in the column layout the scope label
+   is an ordinary row. Callouts take their column's full width. */
+.ds-diffbody-cols .ds-scoperow{position:static}
+.ds-diffbody-cols .ds-annot-callout{width:100%;margin-left:0;margin-right:0}
 .ds-celldiv::after{content:'';position:absolute;top:0;bottom:0;left:-12px;right:-12px;z-index:2}
 .ds-celldiv:hover{background:var(--add-rail)}
 .ds-celldiv[role="separator"]:focus-visible{outline:none;box-shadow:var(--shadow-focus);background:var(--accent-blue);z-index:4}
@@ -893,7 +936,8 @@ body.ds-line-wrap .ds-diff{width:100%;min-width:0;max-width:100%}
 body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-code-add{color:var(--diff-add-text)}
 .ds-code-del{color:var(--diff-del-text)}
-.ds-untoured-tag{flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
+/* Sticky so the tag stays at the visible edge when long lines scroll the card. */
+.ds-untoured-tag{position:sticky;right:10px;flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
 .ds-urow{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,0.025);min-height:23px}
 .ds-urow.ds-row-add{background:var(--add-bg);box-shadow:inset 3px 0 0 var(--add-rail)}
 .ds-urow.ds-row-del{background:var(--del-bg);box-shadow:inset 3px 0 0 var(--del-rail)}
@@ -939,18 +983,13 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-fileitem-viewed{flex:none;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--add);color:var(--ds-reviewed-check-fg);font-size:9px;font-weight:700;opacity:0;transform:scale(.72);transition:opacity var(--motion-duration-fast) ease,transform var(--motion-duration-fast) var(--motion-ease-in-out)}
 .ds-fileitem.is-viewed .ds-fileitem-viewed,.ds-fileitem.is-reviewed .ds-fileitem-viewed{opacity:1;transform:scale(1)}
 .ds-fileitem.is-viewed .ds-fileitem-path,.ds-fileitem.is-viewed .ds-fileitem-stat,.ds-fileitem.is-reviewed .ds-fileitem-path,.ds-fileitem.is-reviewed .ds-fileitem-stat{opacity:.55}
-.ds-hunkgap.is-expandable:not(.ds-hunkgap-split){display:flex;align-items:center;justify-content:center;gap:10px}
-.ds-hunkgap-split{display:flex;align-items:center;justify-content:stretch;gap:0;padding-left:0;padding-right:0;overflow:hidden}
-.ds-gap-side{min-width:0;display:flex;align-items:center;gap:10px}
-.ds-gap-side-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0;justify-content:flex-end}
-.ds-gap-side-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0;justify-content:flex-start}
-/* These clear the absolutely-centred middle control, which straddles the
-   divider: the margin must exceed half that button's width or the pills
-   overlap. Renaming the middle label means re-checking these two numbers. */
-.ds-gap-side-l>.ds-gapbtn{margin-right:46px}
-.ds-gap-side-r>.ds-gapbtn{margin-left:46px}
-.ds-gap-mid{position:relative;flex:none;width:0;height:22px;display:flex;align-items:center;justify-content:center;color:var(--dim2)}
-.ds-gap-mid>.ds-gapbtn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.ds-hunkgap.is-expandable:not(.ds-hunkgap-side){display:flex;align-items:center;justify-content:center;gap:10px}
+/* A split gap is two halves, one per column, with one fixed height so the
+   columns stay paired through it. The right half is the canonical control. */
+.ds-hunkgap-side{box-sizing:border-box;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;overflow:hidden}
+.ds-hunkgap-l{justify-content:flex-end}
+.ds-hunkgap-r{justify-content:flex-start}
+.ds-hunkgap-l>.ds-gaplabel{opacity:.55}
 .ds-gapbtn{font:inherit;font-size:10.5px;font-weight:600;line-height:16px;white-space:nowrap;padding:3px 11px;border-radius:var(--radius-pill);border:1px solid transparent;background:var(--fill-1);color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--motion-duration-fast) ease,background var(--motion-duration-fast) ease}
 .ds-hunkgap.is-expandable .ds-gapbtn{opacity:1}
 .ds-hunkgap.is-expandable:hover .ds-gapbtn,.ds-gapbtn:focus-visible{opacity:1}
@@ -958,7 +997,7 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-gapbtn:disabled{opacity:.4;cursor:default}
 .ds-gaplabel{display:block;color:var(--dim2);font-family:var(--sans);font-size:10.5px;font-weight:600;text-align:center;white-space:nowrap}
 .ds-hunkgap.is-error{display:flex;align-items:center;justify-content:center;min-height:34px;padding:4px 10px}
-.ds-hunkgap.is-error>.ds-gapbtn,.ds-hunkgap.is-error>.ds-gap-side,.ds-hunkgap.is-error>.ds-gap-mid{display:none}
+.ds-hunkgap.is-error>.ds-gapbtn{display:none}
 .ds-gaperror{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--diff-del-text);font-family:var(--sans);font-size:11px}
 .ds-gapretry{opacity:1;min-height:26px;color:var(--text);border-color:var(--line)}
 @media (hover:none),(pointer:coarse){.ds-hunkgap.is-expandable .ds-gapbtn{opacity:1;min-height:28px;padding-left:11px;padding-right:11px}}
@@ -986,11 +1025,7 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head>.ds-linewrap-toggle{order:9}
   .ds-filepanel-head>.ds-modetoggle{order:10;margin-left:auto}
   .ds-filepanel-head .ds-modetoggle button{padding-left:8px;padding-right:8px}
-  .ds-hunkgap-split{justify-content:center;gap:6px}
-  .ds-hunkgap-split .ds-gap-side{flex:0 0 auto}
-  .ds-hunkgap-split .ds-gap-side>.ds-gapbtn{margin:0}
-  .ds-hunkgap-split .ds-gap-mid{width:auto;height:auto}
-  .ds-hunkgap-split .ds-gap-mid>.ds-gapbtn{position:static;transform:none}
+  .ds-hunkgap-side{padding:0 6px;gap:6px}
 }
 @media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
 @media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-row.is-voice-focus,.ds-urow.is-voice-focus,.ds-row.is-change-jump,.ds-urow.is-change-jump{animation:none!important;filter:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
@@ -1028,7 +1063,10 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
 .ds-railbeat-list{display:grid;gap:1px}.ds-railbeat{position:relative;display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:6px;width:100%;min-height:40px;margin:0;padding:5px 7px 5px 0;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;text-align:left;cursor:pointer}.ds-railbeat::before{content:'';position:absolute;left:-13px;top:50%;width:9px;border-top:1px solid var(--line-soft)}.ds-railbeat:hover{background:var(--fill-1);color:var(--muted)}.ds-railbeat-marker{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em}.ds-railbeat-text{min-width:0;overflow:hidden;text-overflow:ellipsis;color:inherit;font-size:10.5px;font-weight:500;line-height:1.32;white-space:nowrap}.ds-railbeat.is-visited:not(.is-selected){color:var(--muted)}.ds-railbeat.is-visited:not(.is-selected) .ds-railbeat-marker::after{content:'✓';font-family:var(--sans);font-size:9px}.ds-railbeat.is-visited:not(.is-selected) .ds-railbeat-marker{font-size:0}.ds-railbeat.is-selected{background:var(--accent-soft);color:var(--text)}.ds-railbeat.is-selected::before{border-color:var(--accent-blue)}.ds-railbeat.is-selected .ds-railbeat-marker{background:var(--accent-blue);color:var(--on-accent)}.ds-railbeat.is-active .ds-railbeat-text{color:var(--accent-text)}
 .ds-stepcard.is-intro{grid-template-columns:42px minmax(0,1fr);margin:9px 10px 2px;padding:9px 10px 10px 0;border:1px solid var(--line-soft);border-radius:10px;background:transparent}.ds-stepcard.is-intro:hover{background:var(--fill-1)}.ds-stepcard.is-intro .ds-num{width:28px;height:28px;margin:0 0 0 10px;border-radius:8px;background:var(--fill-2);color:var(--accent-blue)}.ds-stepcard.is-intro .ds-stepcard-title{font-size:12.5px}.ds-stepcard.is-intro .ds-intro-cardsub{margin-top:2px;font-size:10px;color:var(--dim)}.ds-stepcard.is-intro.is-active{background:var(--fill-2);border-color:var(--line)}.ds-stepcard.is-intro.is-active .ds-num{background:var(--accent-soft);color:var(--accent-blue);box-shadow:none}.ds-stepcard.is-intro.is-active .ds-stepcard-title{color:var(--text)}.ds-stepcard.is-intro.is-active .ds-intro-cardsub{color:var(--muted)}
 .ds-step[hidden]{display:none!important}
-.ds-step.is-code-step{position:relative;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+/* isolation keeps the diff's sticky chrome (toolbar 9, file head 10, pane
+   scroll strip 7) inside the step, so the dock and its tooltip, at 3 in the
+   view, paint over the code instead of under it. */
+.ds-step.is-code-step{position:relative;isolation:isolate;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .ds-step.is-code-step>.ds-step-top{flex:none;padding:13px 22px 0}
 .ds-step-title{font-size:18px}.ds-step-meta{margin-bottom:8px}
 .ds-step.is-code-step>.ds-step-top>.ds-step-titlerow{margin-bottom:7px}

@@ -108,6 +108,56 @@ function DriftStatus({ drift }: { drift: NonNullable<ReviewPayload["storyDrift"]
 const FALLBACK_LEDE =
   "Each step builds on the one before it — read them in order, or jump to any file from the list.";
 
+function ReadingPath({ arc }: { arc: NonNullable<ReviewPayload["story"]["arc"]> }) {
+  const stages = arc.readingPath.split(/\s*->\s*/).map((stage) => stage.trim()).filter(Boolean);
+  const visible = stages.length > 1 ? stages.join(" → ") : arc.readingPath.replaceAll("->", "→");
+  const spoken = stages.length > 1 ? stages.join(", then ") : arc.readingPath.replaceAll("->", ", then ");
+  return (
+    <p className="ds-intro-reading" aria-label={`${arc.changeTypeLabel}. Reading path: ${spoken}`}>
+      <span>{arc.changeTypeLabel}</span>
+      <span aria-hidden="true">·</span>
+      <span aria-hidden="true">{visible}</span>
+    </p>
+  );
+}
+
+function EvolutionDetails({ evolution }: { evolution: NonNullable<ReviewPayload["story"]["evolution"]> }) {
+  return (
+    <details className="ds-intro-evolution">
+      <summary>
+        <span>How this evolved</span>
+        <small><span aria-hidden="true">·</span> {evolution.commitCount} {plural(evolution.commitCount, "commit")}</small>
+        <span className="ds-intro-evolution-caret" aria-hidden="true">⌄</span>
+      </summary>
+      <ol>
+        {evolution.phases.map((phase, index) => {
+          const first = phase.firstCommit.slice(0, 7);
+          const last = phase.lastCommit.slice(0, 7);
+          return (
+            <li key={`${phase.firstCommit}-${phase.lastCommit}`}>
+              <span className="ds-evolution-index" aria-hidden="true">{index + 1}</span>
+              <div className="ds-evolution-copy">
+                <div className="ds-evolution-titleline">
+                  <strong>{phase.title}</strong>
+                  <span className="ds-evolution-range">
+                    {phase.commitCount} {plural(phase.commitCount, "commit")} · {first}{first === last ? "" : `…${last}`}
+                  </span>
+                </div>
+                <p dangerouslySetInnerHTML={html(phase.summary.html)} />
+                {phase.relatedPanelIndex ? (
+                  <button type="button" data-goto-step={phase.relatedPanelIndex}>
+                    Review step {phase.relatedPanelIndex} <span aria-hidden="true">→</span>
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
+
 function IntroPanel({ payload }: { payload: ReviewPayload }) {
   const { story, hotspots, storyDrift, storyFreshness, routeBase } = payload;
   const summaryHtml = story.summary ? withBreaks(story.summary.html) : "";
@@ -164,6 +214,8 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
           </div>
         )}
 
+        {story.arc ? <ReadingPath arc={story.arc} /> : null}
+
         <div className="ds-intro-actions">
           {payload.steps.length ? (
             <button className="ds-intro-start" data-goto-step="1">
@@ -173,6 +225,8 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
             </button>
           ) : null}
         </div>
+
+        {story.evolution ? <EvolutionDetails evolution={story.evolution} /> : null}
 
         <div className="ds-intro-utility" aria-label="Story scope and optional review material">
           <span className="ds-intro-scope">{scopeText}</span>

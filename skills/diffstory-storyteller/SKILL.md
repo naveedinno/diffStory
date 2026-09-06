@@ -36,6 +36,12 @@ tell the user to open or refresh the installed diffStory app.
   rejects the story otherwise.
 - Newly generated stories use `"version": 3`. Version 1 and 2 stories remain
   readable; do not rewrite an existing story merely to modernize its number.
+- Every newly generated story carries `storyArc` with `changeType`, `shape`, and
+  a plain-text `readingPath`. The path names the real review stages in story
+  order and uses ASCII ` -> ` separators.
+- Add `evolution` only when the generation prompt supplies an eligible frozen
+  first-parent manifest. Author `phases`, `firstCommit`, `lastCommit`, and
+  optional `relatedSteps`; never author server-owned `baseSha` or `headSha`.
 - Open the story with an `intent` block whose `goal` cites real `sources`; use
   `["code-derived"]` when no evidence exists.
 - Diff exactly the requested scope. If the prompt gives a base/head, use that exact scope.
@@ -276,6 +282,24 @@ For fixed range stories, use:
 git diff <base>..<head> --
 ```
 
+### 1.5. Inspect the frozen first-parent progression
+
+When the prompt includes a frozen first-parent manifest, read it after the final
+diff and before choosing the story order. It is immutable generation context:
+the subject, parent count, totals, and bounded file list explain how the final
+implementation developed. The final diff remains authoritative for every code
+and behavior claim.
+
+Group the manifest into 1-6 contiguous phases in its given order. A phase names
+one meaningful development in the implementation, not one file and not
+necessarily one commit. Use the first and last commit of each group as
+`firstCommit` and `lastCommit`; 7-character or longer unique prefixes are
+allowed. Cover the full sequence without gaps or overlaps. Link a phase to its
+first useful code stop with `relatedSteps` after the final step ids exist.
+
+If no eligible manifest is supplied, omit `evolution`. Do not reconstruct it by
+resolving the displayed `base` or `head`, since those refs may move.
+
 ### 2. Reconstruct the app path
 
 The diff tells you what moved; the surrounding source tells the reviewer where
@@ -329,6 +353,20 @@ The story should help them distrust the right places.
 Write the story as intent -> flow -> implementation, not a list of touched files.
 Before any JSON, write the arc as a short visible note in your working output:
 goal -> design decisions -> implementation chain.
+
+Choose and record the story's narrative shape before writing steps:
+
+- `changeType`: `feature`, `bug-fix`, `refactor`, `security`, `performance`,
+  `migration`, `maintenance`, or `mixed`.
+- `shape`: `cause-effect`, `entry-implementation`, `before-after`,
+  `core-supporting`, or `rule-instances`.
+- `readingPath`: a plain-text map of the actual review order, at most 200
+  characters, with useful stages separated by ASCII ` -> `.
+
+The chosen shape is a composition tool, not a label applied after the steps.
+Use it to decide the order, then check that titles and beats follow the declared
+`readingPath`. Keep it compact enough to work as the overview's quiet orientation
+line, for example `failure trigger -> trust boundary -> fix -> proof`.
 
 - Start from the goal the diff actually supports: "We wanted to enable
   <actor> to <capability>." Reuse the `intent` block you recovered in step 0.
@@ -1187,6 +1225,24 @@ Falsifiable checks — run each one, do not skim:
     "design": "settleFunding() clamps through one shared _capRate() helper that reads each market's cap.",
     "sources": ["commit 41af8b7", "PR #12 body"],
     "nonGoals": ["Deliberately does not change settlement ordering; only the rate input is clamped."]
+  },
+  "storyArc": {
+    "changeType": "bug-fix",
+    "shape": "cause-effect",
+    "readingPath": "failure trigger -> trust boundary -> fix -> proof"
+  },
+  "evolution": {
+    "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "phases": [
+      {
+        "title": "Introduce the boundary",
+        "summary": "The first commits place the guard at the shared decision point.",
+        "firstCommit": "41af8b7",
+        "lastCommit": "78c0d12",
+        "relatedSteps": ["s1", "s2"]
+      }
+    ]
   },
   "hotspots": [
     { "step": "s2", "reason": "I matched the inclusive boundary to the docs but never exercised the exact-cap case." }

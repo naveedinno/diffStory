@@ -69,6 +69,59 @@ test('generation finish accepts only a valid written story', () => {
   rmSync(repo, { recursive: true, force: true });
 });
 
+test('new generation requires storyArc while an older modern repair still runs logic verification', () => {
+  const repo = tmp();
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  writeFileSync(join(repo, 'old.ts'), 'function decide() {\n  return true;\n}\n');
+  execFileSync('git', ['add', 'old.ts'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'base'], { cwd: repo });
+  rmSync(join(repo, 'old.ts'));
+  writeFileSync(join(repo, 'new.ts'), 'function unrelated() {\n  return false;\n}\n');
+
+  const storyPath = writeStory(repo, 'changed', {
+    file: 'new.ts',
+    range: [1, 3],
+    viewport: [1, 3],
+    highlights: [[1, 3]],
+    beats: [{ text: 'The destination is reviewed here.', highlights: [[1, 3]] }],
+    moves: [{
+      id: 'claimed-move', kind: 'moved',
+      before: { file: 'old.ts', range: [1, 3] },
+      after: { file: 'new.ts', range: [1, 3] },
+      label: 'moved',
+    }],
+  });
+
+  const generated = finishStoryGeneration(
+    { ok: true, output: '' },
+    storyPath,
+    { repo, chooseStory: true },
+    undefined,
+    { validateModern: true, requireStoryArc: true },
+  );
+  assert.equal(generated.status, 'failed');
+  assert.match(generated.events[0].technicalDetail, /storyArc is required/);
+
+  const repaired = finishStoryGeneration(
+    { ok: true, output: '' },
+    storyPath,
+    { repo, chooseStory: true },
+    undefined,
+    {
+      validateModern: true,
+      requireStoryArc: false,
+      originalStoryArc: undefined,
+      originalEvolution: undefined,
+    },
+  );
+  assert.equal(repaired.status, 'failed');
+  assert.match(repaired.events[0].technicalDetail, /70% token overlap/);
+
+  rmSync(repo, { recursive: true, force: true });
+});
+
 test('generation finish accepts an interleaved v3 concept primer before code', () => {
   const repo = tmp();
   const storyPath = writeStory(repo, 'changed');

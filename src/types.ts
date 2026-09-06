@@ -92,6 +92,54 @@ export interface StoryScope {
   reviewerNote?: string;
 }
 
+/** What kind of change the story explains. */
+export type StoryChangeType =
+  | 'feature'
+  | 'bug-fix'
+  | 'refactor'
+  | 'security'
+  | 'performance'
+  | 'migration'
+  | 'maintenance'
+  | 'mixed';
+
+/** The reading structure used to order the final diff. */
+export type StoryNarrativeShape =
+  | 'cause-effect'
+  | 'entry-implementation'
+  | 'before-after'
+  | 'core-supporting'
+  | 'rule-instances';
+
+/** A compact declaration of how the reviewer should read the final change. */
+export interface StoryArc {
+  changeType: StoryChangeType;
+  shape: StoryNarrativeShape;
+  /** Plain-text stages separated with ASCII `->`; the UI renders proper arrows. */
+  readingPath: string;
+}
+
+/** One contiguous first-parent phase in a fixed commit range. */
+export interface StoryEvolutionPhase {
+  /** Plain-text phase heading. */
+  title: string;
+  /** Inline-tier explanation of what changed during this phase. */
+  summary: string;
+  /** Inclusive commit boundaries. Prefixes are expanded by the server after generation. */
+  firstCommit: string;
+  lastCommit: string;
+  /** Story steps whose final-code evidence reflects this phase. */
+  relatedSteps?: string[];
+}
+
+/** Stable history context for a fixed-range story. */
+export interface StoryEvolution {
+  /** Server-owned immutable endpoints. */
+  baseSha: string;
+  headSha: string;
+  phases: StoryEvolutionPhase[];
+}
+
 /** Fields shared by every stop in the guided reading path. */
 export interface TourStepBase {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
@@ -264,6 +312,10 @@ export interface Tour {
   hotspots?: StoryHotspot[];
   /** Optional file-level generation scope for focused stories. */
   storyScope?: StoryScope;
+  /** How this story orders and explains the final diff. */
+  storyArc?: StoryArc;
+  /** Optional verified first-parent history for fixed commit ranges. */
+  evolution?: StoryEvolution;
   /** Optional git ref to diff against; overrides auto-detection. */
   base?: string;
   /** Optional head ref for fixed base..head stories. Omitted means working tree vs base. */

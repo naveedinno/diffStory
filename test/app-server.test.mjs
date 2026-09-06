@@ -994,7 +994,16 @@ test('/api/diff/context serves clamped context rows', async () => {
     // as 'line <span class="tk-n">3</span>' rather than a literal substring.
     assert.match(html, />line<\/span> <span class="tk-n">3<\/span>/);
     const split = await fetch(context('file=notes.txt&from=2&to=3&layout=split'));
-    assert.match(await split.text(), /ds-celldiv/);
+    const splitHtml = await split.text();
+    assert.match(splitHtml, /^<div data-ctx-rows data-from="\d+" data-to="\d+"><div data-ctx-side="left"><div class="ds-row ds-row-ctx" data-ri="0"/);
+    assert.match(splitHtml, /<\/div><div data-ctx-side="right"><div class="ds-row ds-row-ctx" data-ri="0"/);
+    assert.doesNotMatch(splitHtml, /ds-celldiv|ds-col-/);
+    // Both side fragments must be children of the wrapper, or the engine has
+    // nothing to distribute into the columns.
+    const opens = (splitHtml.match(/<div\b/g) || []).length;
+    const closes = (splitHtml.match(/<\/div>/g) || []).length;
+    assert.equal(opens, closes);
+    assert.match(splitHtml, /<\/div><\/div><\/div>$/);
     const empty = await fetch(context('file=notes.txt&from=9999&to=eof&layout=unified'));
     assert.match(await empty.text(), /data-from="0" data-to="0"/);
     // Inverted numeric range (to < from) hits the guard, not the row filter.
@@ -1110,4 +1119,10 @@ test('/api/diff/context serves the story head, not the drifted working tree', as
     server.close();
     rmSync(repo, { recursive: true, force: true });
   }
+});
+
+test('lazy split and full-file responses honour the story scope like the review model', () => {
+  const src = readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
+  assert.equal((src.match(/computeCoverage\(tour, filesForStoryCoverage\(tour, files\)\)/g) || []).length, 2);
+  assert.doesNotMatch(src, /computeCoverage\(tour, files\)\n/);
 });

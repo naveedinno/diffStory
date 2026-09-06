@@ -673,6 +673,62 @@ function changedPaths(repo, boundary) {
         .filter((path) => !isAppDataPath(path))
         .sort();
 }
+export const EVOLUTION_MIN_COMMITS = 2;
+export const EVOLUTION_MAX_COMMITS = 30;
+const EVOLUTION_FILES_PER_COMMIT = 12;
+const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/i;
+/**
+ * Freeze the first-parent progression for one fixed commit range.
+ *
+ * Merge commits are measured against their first parent. This produces the net
+ * change integrated onto the reviewed line instead of interleaving side-branch
+ * commits into the story.
+ */
+export function commitEvolutionManifest(repo, base, head) {
+    const baseSha = resolveCommit(repo, base);
+    const headSha = resolveCommit(repo, head);
+    if (!baseSha || !headSha)
+        return null;
+    const out = tryGit(repo, [
+        "log",
+        "--first-parent",
+        "--reverse",
+        "--format=%H%x09%P%x09%s",
+        "--end-of-options",
+        `${baseSha}..${headSha}`,
+    ]);
+    if (out === null)
+        return null;
+    const commits = out
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+        const [sha = "", parentsRaw = "", ...subjectParts] = line.split("\t");
+        if (!FULL_COMMIT_SHA.test(sha))
+            return null;
+        const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
+        const parent = parents[0] ?? emptyTree(repo);
+        const changed = numstat(repo, parent, sha);
+        const paths = changed.map((file) => file.path).sort((a, b) => a.localeCompare(b));
+        return {
+            sha,
+            subject: subjectParts.join("\t"),
+            parentCount: parents.length,
+            added: changed.reduce((sum, file) => sum + (file.added ?? 0), 0),
+            removed: changed.reduce((sum, file) => sum + (file.removed ?? 0), 0),
+            files: paths.slice(0, EVOLUTION_FILES_PER_COMMIT),
+            omittedFiles: Math.max(0, paths.length - EVOLUTION_FILES_PER_COMMIT),
+        };
+    })
+        .filter((entry) => entry !== null);
+    return {
+        baseSha,
+        headSha,
+        commits,
+        eligible: commits.length >= EVOLUTION_MIN_COMMITS &&
+            commits.length <= EVOLUTION_MAX_COMMITS,
+    };
+}
 /** Branch names (local + remote), most-recently-committed first. For the picker. */
 export function listBranches(repo) {
     return listBranchRefs(repo).map((b) => b.name);

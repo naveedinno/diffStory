@@ -495,6 +495,34 @@ test("AT RISK 1: lazy step stubs still ship the speech cache", () => {
   assert.ok(plan, "the engine still has a step→speech-units projection");
 });
 
+test("the overview keeps reading shape quiet and commit evolution native", () => {
+  assert.match(storyView, /function ReadingPath/);
+  assert.match(storyView, /stages\.join\(" → "\)/);
+  assert.match(storyView, /stages\.join\(", then "\)/);
+  assert.match(storyView, /aria-label=\{`\$\{arc\.changeTypeLabel\}\. Reading path:/);
+  assert.match(storyView, /<details className="ds-intro-evolution">/);
+  assert.match(storyView, /How this evolved/);
+  assert.match(storyView, /data-goto-step=\{phase\.relatedPanelIndex\}/);
+
+  const drift = storyView.indexOf('{storyDrift && storyDrift.state !== "unverified"');
+  const path = storyView.indexOf('{story.arc ? <ReadingPath');
+  const action = storyView.indexOf('<div className="ds-intro-actions">');
+  const evolution = storyView.indexOf('{story.evolution ? <EvolutionDetails');
+  const utility = storyView.indexOf('<div className="ds-intro-utility"');
+  assert.ok(drift < path && path < action && action < evolution && evolution < utility);
+
+  const readingComponent = storyView.slice(
+    storyView.indexOf('function ReadingPath'),
+    storyView.indexOf('function EvolutionDetails'),
+  );
+  const evolutionComponent = storyView.slice(
+    storyView.indexOf('function EvolutionDetails'),
+    storyView.indexOf('function IntroPanel'),
+  );
+  assert.doesNotMatch(readingComponent, /data-speech-overview/);
+  assert.doesNotMatch(evolutionComponent, /data-speech-overview/);
+});
+
 test("AT RISK 2: the reading position is keyed by scope AND story", () => {
   const key = engine.match(/function reviewUiKey\(\)\{[\s\S]*?\n {2}\}/)[0];
   assert.match(key, /'ds-review-ui:'/);

@@ -82,6 +82,8 @@ test('the eval rubric grades fields that exist, and grades markup', () => {
   assert.ok(keys.includes('claim_falsifiability'), keys.join(', '));
   // Narrative is HTML now; without this the judge scores broken markup as fine.
   assert.ok(keys.includes('markup_judgment'), keys.join(', '));
+  assert.ok(keys.includes('declared_path_alignment'), keys.join(', '));
+  assert.ok(keys.includes('evolution_fidelity'), keys.join(', '));
   assert.match(rubric, /<caption>/, 'the caption/TTS contract is the part authors get wrong');
 });
 

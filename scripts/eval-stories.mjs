@@ -17,9 +17,11 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { storyPrompt, streamCommand, parseClaudeStreamLine, onPath } from '../dist/agent.js';
-import { validateTour, validateGeneratedTour } from '../dist/tour.js';
+import { validateTour, validateNewGeneratedStory } from '../dist/tour.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
 import { computeCoverage } from '../dist/coverage.js';
+import { commitEvolutionManifest } from '../dist/git.js';
+import { normalizeEvolutionObject } from '../dist/evolution.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const storyPath = join(root, '.diffstory', 'story.json');
@@ -308,9 +310,10 @@ function makeWorktrees(caseList) {
 async function generate(c, { worktree, quiet = false } = {}) {
   const caseDir = join(outDir, c.id);
   mkdirSync(caseDir, { recursive: true });
-  const prompt = storyPrompt(c.base, c.head, c.mode, c.excludePaths ?? []);
-  writeFileSync(join(caseDir, 'prompt.txt'), prompt);
   const tree = worktree;
+  const evolutionManifest = commitEvolutionManifest(tree.path, c.base, c.head);
+  const prompt = storyPrompt(c.base, c.head, c.mode, c.excludePaths ?? [], undefined, evolutionManifest);
+  writeFileSync(join(caseDir, 'prompt.txt'), prompt);
   console.log(
     `\n▶ generate ${c.id} (${c.mode}, model ${genModel})` +
     (quiet ? ' — running in parallel, output on completion' : ' — live agent progress below'),
@@ -329,6 +332,9 @@ async function generate(c, { worktree, quiet = false } = {}) {
     timeoutMs: c.timeoutMinutes ? c.timeoutMinutes * 60000 : timeoutMs,
   });
   if (!existsSync(tree.storyFile)) throw new Error(`agent finished but wrote no ${tree.storyFile}`);
+  const normalized = JSON.parse(readFileSync(tree.storyFile, 'utf8'));
+  normalizeEvolutionObject(normalized, evolutionManifest);
+  writeFileSync(tree.storyFile, `${JSON.stringify(normalized, null, 2)}\n`);
   copyFileSync(tree.storyFile, join(caseDir, 'story.json'));
   console.log(`  ✓ ${c.id} captured in ${took} (${events} agent events) -> eval/results/${label}/${c.id}/story.json`);
 }
@@ -344,7 +350,12 @@ function narrativeFields(tour) {
   add('summary', tour.summary);
   add('intent.goal', tour.intent?.goal);
   add('intent.design', tour.intent?.design);
+  add('storyArc.readingPath', tour.storyArc?.readingPath);
   (tour.intent?.nonGoals ?? []).forEach((g, i) => add(`intent.nonGoals[${i}]`, g));
+  (tour.evolution?.phases ?? []).forEach((p, i) => {
+    add(`evolution.phases[${i}].title`, p.title);
+    add(`evolution.phases[${i}].summary`, p.summary);
+  });
   (tour.hotspots ?? []).forEach((h, i) => add(`hotspots[${i}].reason`, h.reason));
   (tour.steps ?? []).forEach((s, i) => {
     add(`steps[${i}].title`, s.title);
@@ -408,7 +419,7 @@ function mechanicalScores(c, tour) {
     validationErrors,
     generatedProfileErrors: validationErrors.length
       ? ['(skipped: story failed basic validation)']
-      : validateGeneratedTour(tour),
+      : validateNewGeneratedStory(tour),
     uncoveredHunks: uncovered.length,
     // A story written in the old format validates clean and then renders its
     // asterisks literally, so this is tracked separately from validationErrors.
@@ -427,6 +438,8 @@ function mechanicalScores(c, tour) {
 }
 
 const RUBRIC = [
+  ['declared_path_alignment', '5 = storyArc names a concise reading path that the actual step order follows; 1 = the path is generic, misleading, or disconnected from the steps.'],
+  ['evolution_fidelity', 'For eligible fixed history, 5 = contiguous phases explain meaningful implementation development and remain faithful to the manifest and final diff; 1 = commit-message paraphrase, fabricated behavior, or misleading grouping. If evolution is ineligible, score the deliberate omission as 5.'],
   ['narrative_order', 'Would reordering the steps by filename read the same? 5 = the order teaches the runtime/causal path and file order would wreck it; 1 = it is a file list.'],
   ['thread_continuity', 'Read only titles, concept bodies, and beats, in order, with no code. 5 = one continuous story with no unexplained jump or term; 1 = disconnected captions.'],
   // Was `question_falsifiability`, which graded a `question` field that no longer

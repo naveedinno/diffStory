@@ -4,6 +4,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { DATA_DIR } from './config.js';
 import { codexTaskBinary } from './codex-tasks.js';
+import type { CommitEvolutionManifest } from './git.js';
 import type { StoryMode, StoryScope } from './types.js';
 import {
   type ProgressEvent, type PlanItem, type PlanStatus,
@@ -64,6 +65,36 @@ function storyScopeJson(scope: StoryScope): string {
   });
 }
 
+function storyStructureContract(manifest?: CommitEvolutionManifest): string {
+  const arc =
+    `Story structure contract:\n` +
+    `- Add top-level "storyArc" with exactly "changeType", "shape", and "readingPath".\n` +
+    `- "changeType" is feature|bug-fix|refactor|security|performance|migration|maintenance|mixed.\n` +
+    `- "shape" is cause-effect|entry-implementation|before-after|core-supporting|rule-instances.\n` +
+    `- "readingPath" is plain text, at most 200 characters, with useful stages separated by ASCII " -> ". It must describe the actual step order.\n`;
+  if (!manifest?.eligible) {
+    return `${arc}- Do not add "evolution". This review has no eligible fixed first-parent history.\n\n`;
+  }
+  const commits = manifest.commits.map((commit, index) => ({
+    order: index + 1,
+    sha: commit.sha,
+    subject: commit.subject,
+    parents: commit.parentCount,
+    added: commit.added,
+    removed: commit.removed,
+    files: commit.files,
+    ...(commit.omittedFiles ? { omittedFiles: commit.omittedFiles } : {}),
+  }));
+  return (
+    `${arc}` +
+    `- Add top-level "evolution" with "phases" only. The server owns and adds "baseSha" and "headSha" after you finish.\n` +
+    `- Each phase has exactly "title", "summary", "firstCommit", "lastCommit", and optional "relatedSteps".\n` +
+    `- Use 1-6 contiguous phases in first-parent order. Commit boundaries may use unique prefixes of at least 7 hex characters.\n` +
+    `- Phase prose explains how the implementation developed, but every behavior claim must agree with the final diff. Commit messages are context, not proof.\n` +
+    `- Frozen first-parent manifest, in review order:\n${JSON.stringify(commits, null, 2)}\n\n`
+  );
+}
+
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
 export function storyPrompt(
   baseRef: string,
@@ -71,12 +102,16 @@ export function storyPrompt(
   mode: unknown = 'guided',
   excludePaths: string[] = [],
   storyScope?: StoryScope,
+  evolutionManifest?: CommitEvolutionManifest,
+  storyRefs?: { base: string; head?: string },
 ): string {
   const storyMode = normalizeStoryMode(mode);
   const includePaths = storyScope?.includedFiles ?? [];
   const pathspecs = pathspecArgs(includePaths, excludePaths);
   const diff = headRef ? `git diff ${baseRef}..${headRef} --${pathspecs}` : `git diff ${baseRef} --${pathspecs}`;
-  const headField = headRef ? ` and its "head" field to "${headRef}"` : '';
+  const authoredBase = storyRefs?.base ?? baseRef;
+  const authoredHead = storyRefs?.head ?? headRef;
+  const headField = authoredHead ? ` and its "head" field to "${authoredHead}"` : '';
   const storyScopeContract = storyScope
     ? `Story scope contract:\n` +
       `- Only create changed or new-file story steps for these selected files: ${storyScope.includedFiles.join(', ')}.\n` +
@@ -98,8 +133,9 @@ export function storyPrompt(
     : '';
   return (
     `Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
-    `Write ${DATA_DIR}/story.json, set its "version" field to 3, set its "base" field to "${baseRef}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
+    `Write ${DATA_DIR}/story.json, set its "version" field to 3, set its "base" field to "${authoredBase}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
+    storyStructureContract(evolutionManifest) +
     storyScopeContract +
     scopeContract +
     `The skill owns the craft. Follow its workflow in order — recover the why, reconstruct the app path, storyboard the camera, then write the steps — and honor every contract it defines: ` +
@@ -110,7 +146,8 @@ export function storyPrompt(
     // and dropped "order" from every step. Machine-checked names get pinned here,
     // closest to the moment of writing, where they cannot be reworded.
     `Exact field names (never paraphrase):\n` +
-    `- Top level: "version", "title", "summary", "base", "mode", "intent", "steps"; "title" and "summary" are required.\n` +
+    `- Top level: "version", "title", "summary", "base", "mode", "intent", "storyArc", "steps"; "title", "summary", and "storyArc" are required.\n` +
+    `- Optional fixed-range history: "evolution" with "phases"; each phase uses "title", "summary", "firstCommit", "lastCommit", and optional "relatedSteps". Never author server-owned "baseSha" or "headSha".\n` +
     `- Every step: "id", "order" (number 1..N), "title", "kind".\n` +
     `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical".\n` +
     `- Optional moves (max 6): "id", "kind", "before"/"after" {"file","range"}, "label" (tag, max 24), "hidden" {"as":path|destination|consequence, "tag" max 48, "what" max 120}; kinds are moved/extracted/inlined/wrapped/unwrapped/condition-changed/reordered/flow.\n` +
@@ -173,6 +210,8 @@ export function storyRepairPrompt(input: {
   stepId?: string;
   base: string;
   head?: string;
+  hasStoryArc?: boolean;
+  hasEvolution?: boolean;
 }): string {
   const target = input.stepId
     ? `story step "${input.stepId}"${input.file ? ` in ${input.file}` : ''}`
@@ -194,6 +233,12 @@ export function storyRepairPrompt(input: {
     `Preservation contract:\n` +
     `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
     `- Preserve every unaffected concept primer exactly, including its body, preparesFor links, diagram, tags, chapter, and just-in-time position. Concept primers do not claim coverage.\n` +
+    (input.hasStoryArc
+      ? `- Preserve "storyArc" exactly. A targeted repair must not change its change type, shape, or reading path.\n`
+      : `- Do not add "storyArc" to this older story during a targeted repair.\n`) +
+    (input.hasEvolution
+      ? `- Preserve "evolution.baseSha", "evolution.headSha", and every phase title, summary, firstCommit, and lastCommit exactly. Only "relatedSteps" may change when replaced or split step ids require it.\n`
+      : `- Do not add "evolution" to this story during a targeted repair.\n`) +
     `- Preserve legacy version 1 or 2 when the repair does not add semantic moves. Upgrade to version 2 when a v1 repair introduces a concept primer, and to version 3 whenever the repair adds moves or pairedView. Preserve version 3 once present.\n` +
     `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
     `- Keep the story short, informal, causal, and review-oriented.\n` +

@@ -992,6 +992,9 @@ export function startReviewEngine(options){
     if(aloudIntent==='off')clearVoiceFocus();
     var update=function(){
       stepPanels.forEach(function(p,idx){p.hidden=idx!==i;});
+      // The split columns can only be measured once the panel has a box; a
+      // view transition runs this update after activateStep has returned.
+      syncSplitPaneLayouts(stepPanels[i]);
       stepCards.forEach(function(c,idx){
         var isA=idx===i,isV=visited[idx]&&!isA;
         c.classList.toggle('is-active',isA);
@@ -1159,8 +1162,8 @@ export function startReviewEngine(options){
         focusScrollFrame=0;
         if(!document.documentElement.contains(target))return;
         var scroller=closest(target,'.ds-diffscroll');if(!scroller||!document.documentElement.contains(scroller))return;
-        var sr=scroller.getBoundingClientRect(),tr=target.getBoundingClientRect();
-        var top=scroller.scrollTop+(tr.top-sr.top)-(scroller.clientHeight-tr.height)/2;
+        var sr=scroller.getBoundingClientRect(),tr=target.getBoundingClientRect(),ft=flowRowTop(target);
+        var top=ft?ft.top-(scroller.clientHeight-ft.h)/2:scroller.scrollTop+(tr.top-sr.top)-(scroller.clientHeight-tr.height)/2;
         try{scroller.scrollTo({top:Math.max(0,top),behavior:instant||prefersReducedMotion()?'auto':'smooth'});}
         catch(e){scroller.scrollTop=Math.max(0,top);}
       });
@@ -2118,10 +2121,36 @@ export function startReviewEngine(options){
     $('.ds-annot',body)?.remove();var spec;try{spec=JSON.parse(data.textContent||'{}');}catch(e){return;}
     prepareAnnotationTagLanes(body,spec);
     var measured=measureAnnotations(body,spec),shapes=computeAnnotations(spec,measured.regions,measured.geom),trace=!prefersReducedMotion()&&panel.getAttribute('data-annot-traced')!=='1';paintAnnotations(body,shapes,measured.geom,trace);panel.setAttribute('data-annot-traced','1');
+    cacheAnnotationFlow(body,spec,measured);
     if(typeof ResizeObserver==='function'){
       if(annotationObserver)annotationObserver.disconnect();
       annotationObserver=new ResizeObserver(function(){scheduleAnnotations(panel);});annotationObserver.observe(body);
     }
+  }
+  // In the two-column layout the rows move with their column on every scroll
+  // frame, so the boxes and arrow must move with them rather than wait for a
+  // re-measure. The measured regions are kept in column coordinates, with the
+  // shift in force at measure time taken out, and re-shifted per frame.
+  function cacheAnnotationFlow(body,spec,measured){
+    var flow=body._dsFlow;if(!flow||!flow.shift){body._dsAnnot=null;return;}
+    var regions0=Object.create(null);
+    Object.keys(measured.regions).forEach(function(key){
+      var d=/:before$/.test(key)?flow.shift.l:flow.shift.r;
+      regions0[key]=measured.regions[key].map(function(run){return {top:run.top-d,bottom:run.bottom-d,left:run.left,right:run.right};});
+    });
+    body._dsAnnot={spec:spec,regions0:regions0,geom:measured.geom,shift:{l:flow.shift.l,r:flow.shift.r}};
+  }
+  function shiftAnnotations(body,shift){
+    var cache=body._dsAnnot;if(!cache)return;
+    if(Math.abs(cache.shift.l-shift.l)<0.5&&Math.abs(cache.shift.r-shift.r)<0.5)return;
+    var regions=Object.create(null);
+    Object.keys(cache.regions0).forEach(function(key){
+      var d=/:before$/.test(key)?shift.l:shift.r;
+      regions[key]=cache.regions0[key].map(function(run){return {top:run.top+d,bottom:run.bottom+d,left:run.left,right:run.right};});
+    });
+    var old=$('.ds-annot',body);if(old)old.remove();
+    paintAnnotations(body,computeAnnotations(cache.spec,regions,cache.geom),cache.geom,false);
+    cache.shift={l:shift.l,r:shift.r};
   }
   function scheduleAnnotations(panel){
     if(annotationFrame)cancelAnimationFrame(annotationFrame);
@@ -2139,8 +2168,8 @@ export function startReviewEngine(options){
     if(!row)return false;
     var scroller=closest(row,'.ds-diffscroll')||closest(row,'.ds-filedetail');
     if(!scroller)return false;
-    var sr=scroller.getBoundingClientRect(),rr=row.getBoundingClientRect();
-    var top=scroller.scrollTop+(rr.top-sr.top)-(scroller.clientHeight-rr.height)/2;
+    var sr=scroller.getBoundingClientRect(),rr=row.getBoundingClientRect(),ft=flowRowTop(row);
+    var top=ft?ft.top-(scroller.clientHeight-ft.h)/2:scroller.scrollTop+(rr.top-sr.top)-(scroller.clientHeight-rr.height)/2;
     try{scroller.scrollTo({top:Math.max(0,top),behavior:(opts&&opts.instant)||prefersReducedMotion()?'auto':'smooth'});}
     catch(e){scroller.scrollTop=Math.max(0,top);}
     return true;
@@ -2216,12 +2245,201 @@ export function startReviewEngine(options){
       holder.style.removeProperty(side==='left'?'--ds-left-scroll':'--ds-right-scroll');
     });
   }
+  // ---- independent split columns ----
+  // Each side of a two-column body is its own flow, so a change that exists
+  // on one side only never pads the other with an empty stretch. The body is
+  // sized to a shared timeline, where a paired row advances by its taller
+  // half and one-sided content by its own height, and each column moves per
+  // frame so the row under the viewport centre sits at its timeline position.
+  // The drift that opens between the two flows away from that anchor is what
+  // the divider paints: one band per change, from its span on the left to its
+  // span on the right, a point where a side has no rows.
+  var flowFrame=0,flowAnnotTimer=0,flowObserver=null;
+  function flowBodies(root){return $all('.ds-diffbody-cols',root||document).filter(function(body){return !!body.offsetParent;});}
+  function flowScroller(body){return closest(body,'.ds-diffscroll')||closest(body,'.ds-filedetail');}
+  function flowRi(node){var v=node&&node.getAttribute?node.getAttribute('data-ri'):null;if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
+  function flowItems(col){
+    var out=[],kids=col.children;
+    for(var i=0;i<kids.length;i++){var k=kids[i];if(k.hidden||k.classList.contains('ds-annot'))continue;out.push({el:k,y:k.offsetTop,h:k.offsetHeight,ri:flowRi(k)});}
+    return out;
+  }
+  function flowChangeHalf(elm){var c=elm.classList;return c.contains('ds-row-add')||c.contains('ds-row-del')||c.contains('ds-row-pair')||c.contains('ds-row-pair-l');}
+  function flowBands(entries){
+    var bands=[],cur=null;
+    for(var k=0;k<entries.length;k++){
+      var e=entries[k];
+      if(!e.change){cur=null;continue;}
+      if(!cur){cur={idx:k,l0:null,l1:null,r0:null,r1:null,adds:0,dels:0};bands.push(cur);}
+      if(e.l){if(cur.l0==null)cur.l0=e.l.y;cur.l1=e.l.y+e.l.h;}
+      if(e.r){if(cur.r0==null)cur.r0=e.r.y;cur.r1=e.r.y+e.r.h;}
+      if(e.l&&e.r){cur.adds++;cur.dels++;}else if(e.l)cur.dels++;else cur.adds++;
+    }
+    return bands;
+  }
+  function measureSplitFlow(body){
+    var l=$(':scope>.ds-col-l',body),r=$(':scope>.ds-col-r',body),d=$(':scope>.ds-celldiv',body),scroller=flowScroller(body);
+    if(!l||!r||!scroller){body._dsFlow=null;body.style.removeProperty('height');return null;}
+    var L=flowItems(l),R=flowItems(r),entries=[],i=0,j=0,t=0;
+    while(i<L.length||j<R.length){
+      var a=L[i],b=R[j],e;
+      if(a&&a.ri==null){e={l:a,r:null};i++;}
+      else if(b&&b.ri==null){e={l:null,r:b};j++;}
+      else if(a&&(!b||a.ri<b.ri)){e={l:a,r:null};i++;}
+      else if(b&&(!a||b.ri<a.ri)){e={l:null,r:b};j++;}
+      else{e={l:a,r:b};i++;j++;}
+      e.t=t;e.h=Math.max(e.l?e.l.h:0,e.r?e.r.h:0);e.change=!!((e.l&&flowChangeHalf(e.l.el))||(e.r&&flowChangeHalf(e.r.el)));
+      t+=e.h;entries.push(e);
+    }
+    var prev=body._dsFlow,flow={l:l,r:r,d:d,scroller:scroller,entries:entries,height:t,colH:{l:l.offsetHeight,r:r.offsetHeight},bands:flowBands(entries),shift:prev&&prev.shift?prev.shift:{l:0,r:0}};
+    body._dsFlow=flow;
+    body.style.height=t?t+'px':'';
+    return flow;
+  }
+  // Timeline position -> position in one column. Inside a row present on that
+  // side the two scale together; across content the side lacks, the column
+  // holds at its next row, which is the freeze the reviewer sees while the
+  // other side scrolls through an insertion.
+  function flowMap(flow,side,T){
+    var es=flow.entries;if(!es.length)return 0;
+    if(T<0)T=0;
+    var lo=0,hi=es.length-1;
+    while(lo<hi){var mid=(lo+hi+1)>>1;if(es[mid].t<=T)lo=mid;else hi=mid-1;}
+    var e=es[lo],it=e[side];
+    if(it){var frac=e.h>0?Math.min(1,Math.max(0,(T-e.t)/e.h)):0;return it.y+frac*it.h;}
+    for(var k=lo+1;k<es.length;k++){var n=es[k][side];if(n)return n.y;}
+    return flow.colH[side];
+  }
+  function flowSvgClear(svg){while(svg.firstChild)svg.removeChild(svg.firstChild);}
+  function paintFlowBands(flow,shift,winTop,winH){
+    var svg=$('.ds-bands',flow.d);if(!svg)return;
+    var w=flow.d.clientWidth||18,h=Math.ceil(winH),c=w/2,es=flow.entries;
+    svg.setAttribute('width',String(w));svg.setAttribute('height',String(h));svg.setAttribute('viewBox','0 0 '+w+' '+h);
+    svg.style.transform='translateY('+winTop+'px)';
+    flowSvgClear(svg);
+    flow.bands.forEach(function(b){
+      var t=es[b.idx].t;
+      var l0=(b.l0==null?flowMap(flow,'l',t):b.l0)+shift.l-winTop,l1=(b.l1==null?null:b.l1+shift.l-winTop),r0=(b.r0==null?flowMap(flow,'r',t):b.r0)+shift.r-winTop,r1=(b.r1==null?null:b.r1+shift.r-winTop);
+      if(l1==null)l1=l0;if(r1==null)r1=r0;
+      if(Math.max(l1,r1)<-40||Math.min(l0,r0)>winH+40)return;
+      var cls=b.dels&&!b.adds?'ds-band-del':b.adds&&!b.dels?'ds-band-add':'ds-band-pair';
+      var d='M0 '+l0.toFixed(1)+' C'+c+' '+l0.toFixed(1)+' '+c+' '+r0.toFixed(1)+' '+w+' '+r0.toFixed(1)+' L'+w+' '+r1.toFixed(1)+' C'+c+' '+r1.toFixed(1)+' '+c+' '+l1.toFixed(1)+' 0 '+l1.toFixed(1)+' Z';
+      svg.appendChild(annotationSvgElement('path',{class:'ds-band '+cls,d:d}));
+    });
+  }
+  function applySplitFlow(body){
+    var flow=body._dsFlow;if(!flow||!body.offsetParent)return;
+    var scroller=flow.scroller,sr=scroller.getBoundingClientRect(),br=body.getBoundingClientRect();
+    var vh=scroller.clientHeight,top=sr.top-br.top;
+    var winTop=Math.max(0,top),winBottom=Math.min(flow.height,top+vh),winH=Math.max(0,winBottom-winTop);
+    if(winH<=0)return;
+    var Ta=winTop+winH/2,shift={l:0,r:0};
+    ['l','r'].forEach(function(side){
+      var colH=flow.colH[side],y=flowMap(flow,side,Ta);
+      var colScroll=Math.max(0,Math.min(Math.max(0,colH-winH),y-winH/2));
+      var s=winTop-colScroll;shift[side]=s;
+      flow[side].style.transform=s?'translateY('+s.toFixed(2)+'px)':'';
+    });
+    flow.shift=shift;
+    paintFlowBands(flow,shift,winTop,winH);
+    shiftAnnotations(body,shift);
+  }
+  function scheduleFlow(){
+    if(flowFrame)return;
+    flowFrame=requestAnimationFrame(function(){
+      flowFrame=0;
+      flowBodies().forEach(function(body){
+        if(!body._dsFlow){if(!measureSplitFlow(body))return;watchFlow(body);}
+        applySplitFlow(body);
+      });
+    });
+  }
+  var flowScrollWatched=false;
+  function watchFlowScroller(){
+    if(flowScrollWatched)return;flowScrollWatched=true;
+    // Scroll does not bubble, so one capturing listener covers every diff
+    // scroller, including ones whose bodies were still hidden when synced.
+    document.addEventListener('scroll',function(e){
+      var scroller=e.target&&e.target.nodeType===1?e.target:null;
+      if(!scroller||!(scroller.classList.contains('ds-diffscroll')||scroller.classList.contains('ds-filedetail')))return;
+      scheduleFlow();
+      // Move annotations measure rects, and the columns just moved under them.
+      if(flowAnnotTimer)clearTimeout(flowAnnotTimer);
+      flowAnnotTimer=setTimeout(function(){flowAnnotTimer=0;var panel=closest(scroller,'.ds-step');if(panel&&$('.ds-annot',panel))scheduleAnnotations(panel);},160);
+    },{capture:true,passive:true});
+  }
+  function watchFlow(body){
+    if(typeof ResizeObserver!=='function'||body._dsFlowObserved)return;
+    var flow=body._dsFlow;if(!flow)return;body._dsFlowObserved=true;
+    // Column content boxes change when rows wrap, a composer opens, or context
+    // expands; the body height set from them never feeds back into a column.
+    if(!flowObserver)flowObserver=new ResizeObserver(function(records){
+      var seen=[];
+      records.forEach(function(rec){var b=closest(rec.target,'.ds-diffbody-cols');if(b&&seen.indexOf(b)<0)seen.push(b);});
+      seen.forEach(function(b){if(b.offsetParent){measureSplitFlow(b);applySplitFlow(b);}});
+    });
+    flowObserver.observe(flow.l);flowObserver.observe(flow.r);
+  }
+  function syncSplitFlow(holder){
+    var root=holder?visibleDiffRoot(holder):null;if(!root)return;
+    $all('.ds-diffbody-cols',root).forEach(function(body){
+      if(!body.offsetParent)return;
+      var flow=measureSplitFlow(body);if(!flow)return;
+      watchFlowScroller();watchFlow(body);applySplitFlow(body);autoFillFlow(body,flow);
+    });
+  }
+  // Where a row sits on the timeline, for centring it: its rect is transient
+  // because the column it lives in moves with the scroll position.
+  function flowRowTop(row){
+    var body=closest(row,'.ds-diffbody-cols'),flow=body&&body._dsFlow;if(!flow)return null;
+    var es=flow.entries;
+    for(var k=0;k<es.length;k++){
+      var e=es[k];
+      if((e.l&&e.l.el===row)||(e.r&&e.r.el===row)){
+        var sr=flow.scroller.getBoundingClientRect(),br=body.getBoundingClientRect();
+        return {scroller:flow.scroller,top:flow.scroller.scrollTop+(br.top-sr.top)+e.t,h:e.h};
+      }
+    }
+    return null;
+  }
+  function flowTwin(row){
+    var body=closest(row,'.ds-diffbody-cols'),ri=row.getAttribute('data-ri');if(!body||ri==null)return null;
+    var col=closest(row,'.ds-col'),other=col&&col.classList.contains('ds-col-l')?$(':scope>.ds-col-r',body):$(':scope>.ds-col-l',body);
+    return other?$(':scope>[data-ri="'+ri+'"]',other):null;
+  }
+  function flowCanonicalGap(mirror){
+    var body=closest(mirror,'.ds-diffbody-cols'),ri=mirror.getAttribute('data-ri');if(!body||ri==null)return null;
+    return $(':scope>.ds-col-r>[data-gap][data-ri="'+ri+'"]',body);
+  }
+  function flowMirrorGap(gap){
+    var body=closest(gap,'.ds-diffbody-cols'),ri=gap.getAttribute('data-ri');if(!body||ri==null)return null;
+    return $(':scope>.ds-col-l>[data-gap-mirror][data-ri="'+ri+'"]',body);
+  }
+  function removeFlowGap(gap,mirror){gap.remove();if(mirror)mirror.remove();}
+  // Expanded context arrives as two side fragments with local indices. They
+  // take fractions between the gap and its neighbour, then every index in the
+  // body is renumbered so the order stays integral for the next expansion.
+  function insertFlowFragments(gap,mirror,leftFrag,rightFrag,mode){
+    var body=closest(gap,'.ds-diffbody-cols');if(!body)return;
+    var gapRi=flowRi(gap),all=$all('[data-ri]',body).map(flowRi).filter(function(v){return v!=null;}),lo,hi;
+    if(mode==='up'){lo=gapRi;hi=Infinity;all.forEach(function(v){if(v>gapRi&&v<hi)hi=v;});if(hi===Infinity)hi=gapRi+1;}
+    else{hi=gapRi;lo=-Infinity;all.forEach(function(v){if(v<gapRi&&v>lo)lo=v;});if(lo===-Infinity)lo=gapRi-1;}
+    var n=0;
+    [leftFrag,rightFrag].forEach(function(frag){if(!frag)return;for(var i=0;i<frag.children.length;i++){var v=flowRi(frag.children[i]);if(v!=null&&v+1>n)n=v+1;}});
+    var rebase=function(frag){if(!frag)return;[].slice.call(frag.children).forEach(function(k){var v=flowRi(k);if(v!=null)k.setAttribute('data-ri',String(lo+(hi-lo)*(v+1)/(n+1)));});};
+    rebase(leftFrag);rebase(rightFrag);
+    var place=function(frag,anchor){if(!frag||!anchor||!anchor.parentNode)return;var parent=anchor.parentNode,ref=mode==='up'?anchor.nextSibling:anchor;while(frag.firstChild)parent.insertBefore(frag.firstChild,ref);};
+    place(rightFrag,gap);place(leftFrag,mirror);
+    var nodes=$all('[data-ri]',body).map(function(node,i){return {el:node,ri:flowRi(node),i:i};}).sort(function(a,b){return (a.ri-b.ri)||(a.i-b.i);}),next=-1,last=null;
+    nodes.forEach(function(x){if(last===null||x.ri!==last){next++;last=x.ri;}x.el.setAttribute('data-ri',String(next));});
+  }
   function syncSplitPaneLayout(holder){
     if(!holder)return;
-    var split=$('[data-split-inner]:not([hidden])',holder),active=!!split;
+    // A single-column body (a new file) has nothing to keep in step and wants
+    // the card at content width so long lines scroll natively.
+    var split=$('[data-split-inner]:not([hidden])',holder),active=!!split&&!!$('.ds-diffbody-cols',split);
     holder.classList.toggle('ds-split-mode',active);
     var oldBars=$('[data-split-scrollbars]',holder);
-    if(!active){if(oldBars)oldBars.hidden=true;return;}
+    if(!active){if(oldBars)oldBars.hidden=true;syncSplitFlow(holder);return;}
     var divider=$('.ds-celldiv[role="separator"]',split);if(divider)setSplitDividerValue(divider,splitPercent(holder));
     var bars=ensureSplitPaneScrollbars(holder);if(!bars)return;
     if(document.body.classList.contains('ds-line-wrap')){resetSplitPaneScroll(holder,bars);bars.hidden=true;return;}
@@ -2234,6 +2452,7 @@ export function startReviewEngine(options){
       holder.style.setProperty(side==='left'?'--ds-left-scroll':'--ds-right-scroll',scroller.scrollLeft+'px');
     });
     bars.hidden=!overflow;
+    syncSplitFlow(holder);
   }
   function syncSplitPaneLayouts(root){
     $all('.ds-filepanel,.ds-diff',root||document).forEach(syncSplitPaneLayout);
@@ -2263,7 +2482,11 @@ export function startReviewEngine(options){
   }
   function changeRows(holder){
     var root=visibleDiffRoot(holder);if(!root)return [];
-    return $all('.ds-row-add,.ds-row-del,.ds-row-pair',root);
+    var rows=$all('.ds-row-add,.ds-row-del,.ds-row-pair',root);
+    if(!$('.ds-diffbody-cols',root))return rows;
+    // Two columns put every left row before every right row in the DOM; the
+    // reading order is the timeline index.
+    return rows.map(function(r,i){return {r:r,ri:flowRi(r),i:i};}).sort(function(a,b){return (a.ri==null||b.ri==null)?a.i-b.i:(a.ri-b.ri)||(a.i-b.i);}).map(function(x){return x.r;});
   }
   function updateChangeNav(holder){
     if(!holder)return;
@@ -2290,7 +2513,9 @@ export function startReviewEngine(options){
     updateChangeNav(holder);
     var row=rows[idx];if(!row)return false;
     $all('.ds-row-add,.ds-row-del,.ds-row-pair',holder).forEach(function(r){r.classList.remove('is-change-jump');r.removeAttribute('aria-current');});
+    $all('.ds-row-pair-l.is-change-jump',holder).forEach(function(r){r.classList.remove('is-change-jump');});
     row.classList.add('is-change-jump');
+    var twin=flowTwin(row);if(twin)twin.classList.add('is-change-jump');
     row.setAttribute('aria-current','true');
     scrollReviewRowVertically(row,opts);
     if(opts&&opts.focus&&row.focus){try{row.focus({preventScroll:true});}catch(e){row.focus();}}
@@ -2364,7 +2589,7 @@ export function startReviewEngine(options){
     // pi-lens-ignore: ast-grep:no-inner-html-js
     fullInner.innerHTML='<div class="ds-diffnote" role="status">Loading the full file…</div>';
     // pi-lens-ignore: ast-grep:no-inner-html-js
-    fetch(reviewPageUrl('/api/fullfile?file='+encodeURIComponent(file))).then(diffResponseText).then(function(html){fullInner.setAttribute('aria-busy','false');fullInner.innerHTML=html;mountCommentPins(fullInner);updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));jumpToFirstChange(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));}).catch(function(err){showDiffLoadError(fullInner,'full file','full',err);updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));});
+    fetch(reviewPageUrl('/api/fullfile?file='+encodeURIComponent(file))).then(diffResponseText).then(function(html){fullInner.setAttribute('aria-busy','false');fullInner.innerHTML=html;mountCommentPins(fullInner);var fh=closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff');updateChangeNav(fh);syncSplitPaneLayout(fh);jumpToFirstChange(fh);}).catch(function(err){showDiffLoadError(fullInner,'full file','full',err);updateChangeNav(closest(fullInner,'.ds-filepanel')||closest(fullInner,'.ds-diff'));});
   }
   function loadSplit(splitInner,file){
     splitInner.setAttribute('data-loaded','1');
@@ -2456,15 +2681,36 @@ export function startReviewEngine(options){
     if(restoreFocus){try{retry.focus({preventScroll:true});}catch(e){retry.focus();}}
   }
   function expandGap(btn){
-    var gap=closest(btn,'[data-gap]');if(!gap)return;
+    var gap=closest(btn,'[data-gap]');
+    if(!gap){var mirrorHalf=closest(btn,'[data-gap-mirror]');gap=mirrorHalf?flowCanonicalGap(mirrorHalf):null;}
+    if(!gap)return;
     if(btn.disabled)return;
+    expandGapBy(gap,btn.getAttribute('data-expand'),0);
+  }
+  // A short column pulls in real context to fill its pane. The lines exist on
+  // both sides, so this is an ordinary expansion; on the tall side they land
+  // past the change, on the short side they fill what was empty. Trailing
+  // context first, so the change stays where the reviewer already sees it.
+  function autoFillFlow(body,flow){
+    var winH=flow.scroller.clientHeight,short=Math.min(flow.colH.l,flow.colH.r);
+    if(!winH||short>=winH-40||(body._dsFillTries||0)>=3)return;
+    var gaps=$all(':scope>.ds-col-r>[data-gap]',body);if(!gaps.length)return;
+    var last=gaps[gaps.length-1],first=gaps[0],col=flow.r;
+    var tail=last===col.lastElementChild?last:null,head=first===col.firstElementChild||(first.previousElementSibling&&!first.previousElementSibling.hasAttribute('data-ri'))?first:null;
+    var gap=tail||head;if(!gap||gap.getAttribute('aria-busy')==='true')return;
+    var rows=Math.max(1,$all(':scope>.ds-col-l>.ds-row,:scope>.ds-col-r>.ds-row',body).length),rowH=Math.max(16,(flow.colH.l+flow.colH.r)/rows);
+    var need=Math.ceil((winH-short)/rowH)+3;
+    body._dsFillTries=(body._dsFillTries||0)+1;
+    expandGapBy(gap,tail?'down':'up',need);
+  }
+  function expandGapBy(gap,mode,lines){
+    var mirrorGap=flowMirrorGap(gap);
     var file=gap.getAttribute('data-gap-file');
     var from=parseInt(gap.getAttribute('data-gap-from')||'0',10);
     var toAttr=gap.getAttribute('data-gap-to');
     var eof=toAttr==='eof';
     var to=eof?0:parseInt(toAttr||'0',10);
-    var mode=btn.getAttribute('data-expand');
-    var chunk=Math.max(1,parseInt(gap.getAttribute('data-gap-chunk')||'20',10)||20);
+    var chunk=lines>0?lines:Math.max(1,parseInt(gap.getAttribute('data-gap-chunk')||'20',10)||20);
     clearGapError(gap);gap.setAttribute('aria-busy','true');
     var rf,rt;
     if(mode==='all'){rf=from;rt=eof?'eof':to;}
@@ -2472,7 +2718,7 @@ export function startReviewEngine(options){
     else{rf=Math.max(from,to-chunk+1);rt=to;}
     var holder=closest(gap,'.ds-filepanel')||closest(gap,'.ds-diff');
     var layout=closest(gap,'[data-split-inner]')?'split':'unified';
-    var btns=[].slice.call(gap.querySelectorAll('.ds-gapbtn'));
+    var btns=[].slice.call(gap.querySelectorAll('.ds-gapbtn')).concat(mirrorGap?[].slice.call(mirrorGap.querySelectorAll('.ds-gapbtn')):[]);
     btns.forEach(function(b){b.disabled=true;});
     fetch(reviewPageUrl('/api/diff/context?file='+encodeURIComponent(file)+'&from='+rf+'&to='+rt+'&layout='+layout))
       .then(diffResponseText)
@@ -2482,21 +2728,22 @@ export function startReviewEngine(options){
         var tmp=document.createElement('div');tmp.innerHTML=html;
         var wrap=tmp.firstElementChild;
         if(!wrap||!wrap.hasAttribute('data-ctx-rows'))throw new Error('Unexpected context response');
-        if(!wrap.children.length){gap.remove();if(holder)updateChangeNav(holder);return;}
+        if(!wrap.children.length){removeFlowGap(gap,mirrorGap);if(holder)updateChangeNav(holder);return;}
         var servedFrom=parseInt(wrap.getAttribute('data-from')||'0',10);
         var servedTo=parseInt(wrap.getAttribute('data-to')||'0',10);
         mountCommentPins(wrap);
-        var parent=gap.parentNode,refNode=(mode==='up')?gap.nextSibling:gap;
-        while(wrap.firstChild)parent.insertBefore(wrap.firstChild,refNode);
-        if(mode==='all'){gap.remove();}
+        var leftFrag=$('[data-ctx-side="left"]',wrap),rightFrag=$('[data-ctx-side="right"]',wrap);
+        if(rightFrag)insertFlowFragments(gap,mirrorGap,leftFrag,rightFrag,mode);
+        else{var parent=gap.parentNode,refNode=(mode==='up')?gap.nextSibling:gap;while(wrap.firstChild)parent.insertBefore(wrap.firstChild,refNode);}
+        if(mode==='all'){removeFlowGap(gap,mirrorGap);}
         else if(mode==='down'){
           var nf=servedTo+1;
           if(eof){gap.setAttribute('data-gap-from',String(nf));}
-          else if(nf>to){gap.remove();}
+          else if(nf>to){removeFlowGap(gap,mirrorGap);}
           else{gap.setAttribute('data-gap-from',String(nf));}
         }else{
           var nt=servedFrom-1;
-          if(nt<from){gap.remove();}
+          if(nt<from){removeFlowGap(gap,mirrorGap);}
           else{gap.setAttribute('data-gap-to',String(nt));}
         }
         btns.forEach(function(b){b.disabled=false;});
@@ -3584,6 +3831,7 @@ export function startReviewEngine(options){
     var pct=Math.max(0,Math.min(100,(clientX-r.left)/r.width*100));
     splitHolder.style.setProperty('--ds-split',String(pct));
     var divider=$('.ds-celldiv[role="separator"]',splitHolder);if(divider)setSplitDividerValue(divider,pct);
+    scheduleFlow();
     scheduleAnnotations(closest(splitHolder,'.ds-step'));
   }
   function moveSplit(e){
@@ -3611,7 +3859,17 @@ export function startReviewEngine(options){
     var h=kid?Math.round(kid.getBoundingClientRect().height):0;
     if(h)holder.style.setProperty(prop,h+'px');else if(holder)holder.style.removeProperty(prop);
   }
+  // The card toolbar must span exactly the scroller's visible inner width: a
+  // fixed scrollbar deduction is wrong the moment the diff is short enough to
+  // need no scrollbar, and container units disagree across browsers about
+  // whether they include one. So measure it.
+  function measureViewport(scroller){
+    var cs=getComputedStyle(scroller);
+    var w=scroller.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+    if(w>0)scroller.style.setProperty('--ds-diffviewport-w',w+'px');else scroller.style.removeProperty('--ds-diffviewport-w');
+  }
   function updateStickyMetrics(){
+    $all('.ds-diffscroll').forEach(measureViewport);
     $all('.ds-diff').forEach(function(card){measureChrome(card,'.ds-difftoolbar','--ds-stickytop');});
     $all('.ds-filepanel').forEach(function(panel){measureChrome(panel,'.ds-filepanel-head','--ds-stickytop');});
   }
@@ -3622,7 +3880,9 @@ export function startReviewEngine(options){
     // schedule the next one and the loop would never settle.
     if(!stickyObserver)stickyObserver=new ResizeObserver(updateStickyMetrics);
     stickyObserver.disconnect();
-    $all('.ds-difftoolbar,.ds-filepanel-head').forEach(function(el){stickyObserver.observe(el);});
+    // The scroller's content box shrinks when a vertical scrollbar appears, so
+    // observing it re-measures the toolbar width at exactly the right moment.
+    $all('.ds-difftoolbar,.ds-filepanel-head,.ds-diffscroll').forEach(function(el){stickyObserver.observe(el);});
   }
   function init(){
     tourView=$('#ds-view-tour');filesView=$('#ds-view-files');reviewView=$('#ds-view-review');driftDrawer=$('#ds-drift-drawer');commandRoot=$('[data-command-root]');toastEl=$('#ds-toast');selectionMenu=$('[data-selection-menu]');filmThread=$('[data-filmthread]');filmTooltip=$('[data-filmthread-tooltip]');
