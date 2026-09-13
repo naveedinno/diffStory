@@ -191,7 +191,9 @@ export function storyPrompt(
     `- "viewport": at most ${storyMode === 'detailed' ? '60' : '40'} lines in ${storyMode} mode; only a changed/new-file step with a larger "range" may use its length plus at most 12 context lines.\n` +
     `- At most ${storyMode === 'detailed' ? '5' : '3'} beats per step in ${storyMode} mode; split the step instead of adding more.\n` +
     `- Top-level "highlights" must equal the union of that step's beat highlights.\n` +
-    `- Beat text must not open by naming line numbers ("Line 742 ...") and must not narrate a value transition ("650 -> 600"). The diff already shows both; say why they matter instead.\n\n` +
+    `- Beat text must not open by naming line numbers ("Line 742 ...") and must not narrate a value transition ("650 -> 600"). The diff already shows both; say why they matter instead.\n` +
+    // Heard aloud, a step that opens on the change makes the listener replay.
+    `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n\n` +
     `Live progress notes (streamed to the reviewer while you work):\n` +
     `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Reconstructing the app path", then ">> Storyboarding the camera", then ">> Writing the steps".\n` +
     `- Print every phase note as its own line starting with ">> " — for example ">> Goal: enable keepers to cap the fee" or ">> Arc: the cap is stored, then enforced, then tested".\n` +

@@ -748,6 +748,34 @@ test('bundled diffstory-storyteller skill bans value-transition narration in bea
   }
 });
 
+test('bundled diffstory-storyteller skill lands the listener before every change', () => {
+  // Heard aloud, a step that opens on the change drops the listener into
+  // unfamiliar code; they stop and replay. The first beat must say whose code
+  // this is and why control gets here before it says what moved.
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const flat = skill.replace(/\s+/g, ' ');
+  for (const phrase of [
+    'Landing rule',
+    'lands the listener before it says anything about the change',
+    'who reaches it and when',
+    'Land the listener first',
+    'Landing test',
+    'read ONLY the first beat of every code step, aloud',
+    'Name the symbol again',
+  ]) {
+    assert.ok(flat.includes(phrase), `SKILL.md is missing: ${phrase}`);
+  }
+  // The worked examples are what runs copy, so they must model the landing.
+  assert.ok(flat.includes('this is `placeOrder()` in the API layer'));
+  assert.ok(flat.includes('This is `.ds-main`, the page surface'));
+});
+
+test('storyPrompt pins the landing rule next to the beat rules', () => {
+  // One line, by design: the prompt owns pinned rules, the skill owns the craft.
+  const guided = storyPrompt('main');
+  assert.ok(guided.includes("A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change."));
+});
+
 test('storyPrompt pins the numeric limits the validator enforces, per mode', () => {
   // Camera caps drifted the same way field names did: stated in the skill, ignored
   // in practice. They are machine-checked, so they belong next to the field names.
