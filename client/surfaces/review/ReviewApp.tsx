@@ -404,15 +404,13 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
             <CloseStory routeBase={routeBase} srOnlyLabel />
           </div>
           <div className="ds-titlewrap">
-            {/* The story's own title is the document title and the tooltip; the
-                visible line stays stable so the chrome does not reflow. */}
             <div
               className="ds-title"
               title={
                 storyless ? "Reviewing the diff" : payload.story.title.text
               }
             >
-              Diff review
+              {storyless ? "Diff review" : payload.story.title.text}
             </div>
             <div className="ds-reviewchrome-subtitle">
               Working tree <span>vs</span> <b>{payload.baseLabel}</b>

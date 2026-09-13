@@ -252,7 +252,7 @@ test("a code step draws exactly one frame around the diff", () => {
   // Full-bleed: no side gutter between the island edge and the code.
   assert.match(
     source,
-    /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:8px 0 0/,
+    /\.ds-step\.is-code-step>\.ds-diffscroll\{[^}]*padding:0;--ds-scrollpad-t:0px/,
   );
   assert.doesNotMatch(
     source,
@@ -484,5 +484,14 @@ test("cover support stays visually quiet beside the compact walkthrough action",
   assert.equal(
     startRules.some((rule) => /(?:^|;)width:100%(?:;|$)/.test(rule)),
     false,
+  );
+});
+
+test("split columns clamp their rows to the column width", () => {
+  // Each column is a grid; an auto column track grows to the widest unwrapped
+  // line, so Before rows spill under the gutter and into After.
+  assert.match(
+    reviewCss,
+    /\.ds-col\{[^}]*grid-template-columns:minmax\(0,1fr\)/,
   );
 });

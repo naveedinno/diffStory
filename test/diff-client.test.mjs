@@ -225,7 +225,6 @@ test('split panes resize independently of line length and scroll their code loca
   assert.match(DIFF_JS, /function syncSplitPaneLayout\(holder\)/);
   assert.match(DIFF_JS, /function ensureSplitPaneScrollbars\(holder\)/);
   assert.match(DIFF_JS, /Math\.max\(0,Math\.min\(100,pct\)\)/);
-  assert.match(DIFF_JS, /Math\.max\(0,Math\.min\(100,\(clientX-r\.left\)\/r\.width\*100\)\)/);
   assert.match(DIFF_JS, /if\(key==='Home'\)pct=0;else if\(key==='End'\)pct=100/);
   assert.match(DIFF_JS, /--ds-left-scroll/);
   assert.match(DIFF_JS, /--ds-right-scroll/);
@@ -250,62 +249,21 @@ test('split panes resize independently of line length and scroll their code loca
   assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*left:-12px;right:-12px/);
 });
 
-test('split columns flow independently and are kept in step by the engine', () => {
-  // No filler: one column per side, the divider between them hosts the bands.
-  assert.match(DIFF_CSS, /\.ds-diffbody-cols\{position:relative;display:flex;align-items:flex-start;overflow:clip\}/);
-  assert.match(DIFF_CSS, /\.ds-col\{position:relative;min-width:0;flex-shrink:1;flex-basis:0;will-change:transform\}/);
-  assert.match(DIFF_CSS, /\.ds-col-l\{flex-grow:var\(--ds-split,50\)\}/);
-  assert.match(DIFF_CSS, /\.ds-col-r\{flex-grow:calc\(100 - var\(--ds-split,50\)\)\}/);
-  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv\{width:var\(--ds-divider-w,26px\);align-self:stretch/);
-  // A short column fills its pane with real context, trailing lines first, at most three rounds.
-  assert.match(DIFF_JS, /function autoFillFlow\(body,flow\)/);
-  assert.match(DIFF_JS, /short>=winH-40\|\|\(body\._dsFillTries\|\|0\)>=3/);
-  assert.match(DIFF_JS, /expandGapBy\(gap,tail\?'down':'up',need\)/);
-  assert.match(DIFF_JS, /applySplitFlow\(body\);autoFillFlow\(body,flow\);/);
-  // The unexplained tag stays in view while long lines scroll the card sideways.
-  assert.match(DIFF_CSS, /\.ds-untoured-tag\{position:sticky;right:10px;/);
-  assert.match(DIFF_CSS, /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell-single\{overflow:visible;clip-path:none\}/);
-  // A single-column body (new file) is not split mode: the card keeps content width.
-  assert.match(DIFF_JS, /active=!!split&&!!\$\('\.ds-diffbody-cols',split\)/);
-  // Move annotations re-shift on the same frame as the columns; no lag, no jump.
-  assert.match(DIFF_JS, /flow\.shift=shift;\s*paintFlowBands\(flow,shift,winTop,winH\);\s*shiftAnnotations\(body,shift\);/);
-  assert.match(DIFF_JS, /function cacheAnnotationFlow\(body,spec,measured\)/);
-  assert.match(DIFF_JS, /cacheAnnotationFlow\(body,spec,measured\);/);
-  assert.match(DIFF_CSS, /\.ds-bands\{position:absolute;left:0;top:0[^}]*pointer-events:none\}/);
-  // The step is its own stacking context, so the sticky diff chrome cannot
-  // paint over the dock's step tooltip.
-  assert.match(DIFF_CSS, /\.ds-step\.is-code-step\{position:relative;isolation:isolate;/);
-  // The wide divider never fills on hover or focus; only its edge rules change.
-  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv:hover\{background:var\(--panel2\);border-color:var\(--line\)\}/);
-  assert.match(DIFF_CSS, /\.ds-diffbody-cols>\.ds-celldiv\[role="separator"\]:focus-visible\{background:var\(--panel2\);border-color:var\(--accent-blue\);box-shadow:none\}/);
-  assert.match(DIFF_CSS, /\.ds-band-add\{fill:color-mix\(in srgb,var\(--add-rail\) 36%,transparent\)/);
-  assert.match(DIFF_CSS, /\.ds-band-del\{fill:color-mix\(in srgb,var\(--del-rail\) 36%,transparent\)/);
-  assert.match(DIFF_CSS, /\.ds-band-pair\{fill:color-mix\(in srgb,var\(--accent-blue\) 30%,transparent\)/);
-  // Sticky offsets resolve before transforms, so nothing sticky lives in a column.
-  assert.match(DIFF_CSS, /\.ds-diffbody-cols \.ds-scoperow\{position:static\}/);
-  // The timeline: paired rows advance by the taller half, one-sided content by its own.
+test('split panes share native grid tracks without scroll-driven geometry', () => {
+  assert.match(DIFF_CSS, /\.ds-diffbody-cols\{[^}]*display:grid;[^}]*isolation:isolate/);
+  assert.match(DIFF_CSS, /\.ds-col\{[^}]*grid-template-rows:subgrid;grid-row:1\/-1/);
+  assert.match(DIFF_CSS, /\.ds-col-l\{grid-column:1\}/);
+  assert.match(DIFF_CSS, /\.ds-col-r\{grid-column:3\}/);
+  assert.doesNotMatch(DIFF_CSS, /\.ds-col\{[^}]*will-change:transform/);
+  assert.doesNotMatch(DIFF_JS, /function autoFillFlow|function watchFlowScroller|function shiftAnnotations/);
   assert.match(DIFF_JS, /function measureSplitFlow\(body\)/);
-  assert.match(DIFF_JS, /e\.h=Math\.max\(e\.l\?e\.l\.h:0,e\.r\?e\.r\.h:0\)/);
-  assert.match(DIFF_JS, /body\.style\.height=t\?t\+'px':''/);
-  // Anchored at the viewport centre; a column freezes across content it lacks.
-  assert.match(DIFF_JS, /var Ta=winTop\+winH\/2/);
-  assert.match(DIFF_JS, /for\(var k=lo\+1;k<es\.length;k\+\+\)\{var n=es\[k\]\[side\];if\(n\)return n\.y;\}/);
-  assert.match(DIFF_JS, /flow\[side\]\.style\.transform=s\?'translateY\('\+s\.toFixed\(2\)\+'px\)':''/);
-  // Scroll is coalesced to one frame through a single capturing listener, and
-  // a visible body that was synced while hidden heals on its first scroll.
-  assert.match(DIFF_JS, /document\.addEventListener\('scroll',function\(e\)\{[\s\S]*?scheduleFlow\(\);[\s\S]*?\},\{capture:true,passive:true\}\);/);
-  assert.match(DIFF_JS, /if\(!body\._dsFlow\)\{if\(!measureSplitFlow\(body\)\)return;watchFlow\(body\);\}/);
-  // A step's columns are measured inside the visibility update, not before it.
-  assert.match(DIFF_JS, /stepPanels\.forEach\(function\(p,idx\)\{p\.hidden=idx!==i;\}\);\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*syncSplitPaneLayouts\(stepPanels\[i\]\);/);
-  // Change navigation reads the timeline index, not column-major DOM order.
-  assert.match(DIFF_JS, /\(a\.ri-b\.ri\)\|\|\(a\.i-b\.i\)/);
-  assert.match(DIFF_JS, /var twin=flowTwin\(row\);if\(twin\)twin\.classList\.add\('is-change-jump'\)/);
-  // Row centring uses the timeline position rather than a transient rect.
-  assert.match(DIFF_JS, /ft=flowRowTop\(row\)/);
-  assert.match(DIFF_JS, /ft=flowRowTop\(target\)/);
-  // Expanded context lands per side next to the matching gap half.
+  assert.match(DIFF_JS, /it\.el\.style\.gridRow=String\(index\+1\)/);
+  assert.match(DIFF_JS, /function flowTwin\(row\)/);
   assert.match(DIFF_JS, /insertFlowFragments\(gap,mirrorGap,leftFrag,rightFrag,mode\)/);
   assert.match(DIFF_JS, /flowCanonicalGap\(mirrorHalf\)/);
+  assert.match(DIFF_JS, /ft=flowRowTop\(row\)/);
+  assert.match(DIFF_JS, /ft=flowRowTop\(target\)/);
+  assert.match(DIFF_CSS, /\.ds-step\.is-code-step\{position:relative;isolation:isolate;/);
 });
 
 test('compact file toolbars wrap identity and review controls onto separate rows', () => {

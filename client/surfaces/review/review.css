@@ -787,6 +787,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-diffhead-label.ds-blue{color:var(--accent-blue)}
 .ds-diffhead-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
 .ds-diffhead-divider{width:1px;background:var(--diff-rule)}
+.ds-split-mode .ds-diffhead-divider,.ds-split-mode .ds-split-scroll-divider{width:var(--ds-divider-w,32px);flex:none;background:var(--panel2);border-inline:1px solid var(--diff-rule)}
 .ds-diffhead-note{font-size:11px;color:var(--dim2)}
 .ds-diffbody{position:relative;font-family:var(--mono);font-size:12.5px;line-height:1.48;background:var(--panel3)}
 .ds-diffbody-unified{font-size:12px;line-height:1.5;background:var(--panel3)}
@@ -870,36 +871,36 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-cell-l{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-cell-r{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}
 .ds-celldiv{width:1px;flex:none;background:var(--diff-rule);position:relative;cursor:col-resize}
-/* ---- independent split columns ----
-   The two sides are separate flows: no filler rows, no aligned void. The
-   engine sizes the body to the shared timeline, translates each column so the
-   row under the viewport centre sits at its timeline position, and paints the
-   drift between them as bands in the divider. overflow:clip (not hidden) so the
-   body never becomes a scroll container of its own. */
-.ds-diffbody-cols{position:relative;display:flex;align-items:flex-start;overflow:clip}
-.ds-col{position:relative;min-width:0;flex-shrink:1;flex-basis:0;will-change:transform}
-.ds-col-l{flex-grow:var(--ds-split,50)}
-.ds-col-r{flex-grow:calc(100 - var(--ds-split,50))}
+/* Shared tracks keep Before and After aligned under native scrolling.
+   Each column spans the same rows; one-sided edits occupy an empty track on
+   the other side without manufacturing selectable code or line numbers. */
+.ds-split-mode{--ds-divider-w:clamp(26px,2.4vw,36px)}
+.ds-diffbody-cols{position:relative;display:grid;grid-template-columns:minmax(0,calc((100% - var(--ds-divider-w,32px))*var(--ds-split,50)/100)) var(--ds-divider-w,32px) minmax(0,1fr);align-items:stretch;overflow:clip;isolation:isolate}
+/* minmax(0,1fr), not the implicit auto track: auto grows to the widest
+   unwrapped line and Before rows spill under the gutter into After. */
+.ds-col{position:relative;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:subgrid;grid-row:1/-1}
+.ds-col-l{grid-column:1}
+.ds-col-r{grid-column:3}
+.ds-diffbody-cols>.ds-celldiv{grid-column:2;grid-row:1/-1}
 .ds-diffbody-cols .ds-row>.ds-cell{flex:1 1 0}
-.ds-diffbody-cols>.ds-celldiv{width:var(--ds-divider-w,26px);align-self:stretch;background:var(--panel2);border-left:1px solid var(--diff-rule);border-right:1px solid var(--diff-rule);z-index:1}
+.ds-diffbody-cols>.ds-celldiv{width:var(--ds-divider-w,32px);align-self:stretch;background:var(--panel2);border-left:1px solid var(--diff-rule);border-right:1px solid var(--diff-rule);z-index:1}
 .ds-diffbody-cols>.ds-celldiv::after{left:-6px;right:-6px}
 /* At this width the resize affordance is the edges, not a filled bar: hover
    and focus brighten the two rules and leave the bands readable. */
 .ds-diffbody-cols>.ds-celldiv:hover{background:var(--panel2);border-color:var(--line)}
 .ds-diffbody-cols>.ds-celldiv[role="separator"]:focus-visible{background:var(--panel2);border-color:var(--accent-blue);box-shadow:none}
 body.ds-resizing .ds-diffbody-cols>.ds-celldiv{border-color:var(--accent-blue)}
-.ds-bands{position:absolute;left:0;top:0;display:block;width:100%;height:0;overflow:visible;pointer-events:none}
-.ds-band{fill:var(--fill-2);stroke:var(--diff-rule);stroke-width:1;vector-effect:non-scaling-stroke}
-/* Added and deleted blocks take their rail colour; a modified block, where
-   both sides carry rows, takes the signal blue so it never muddies into the
-   divider the way a green and red mix does. */
-.ds-band-add{fill:color-mix(in srgb,var(--add-rail) 36%,transparent);stroke:color-mix(in srgb,var(--add-rail) 55%,transparent)}
-.ds-band-del{fill:color-mix(in srgb,var(--del-rail) 36%,transparent);stroke:color-mix(in srgb,var(--del-rail) 55%,transparent)}
-.ds-band-pair{fill:color-mix(in srgb,var(--accent-blue) 30%,transparent);stroke:color-mix(in srgb,var(--accent-blue) 55%,transparent)}
-.ds-band.is-current{stroke:var(--accent-blue)}
-/* Sticky offsets resolve before transforms, so a sticky row inside a translated
-   column would park at the wrong place; in the column layout the scope label
-   is an ordinary row. Callouts take their column's full width. */
+.ds-bands{position:absolute;left:0;top:0;display:block;width:100%;overflow:visible;pointer-events:none}
+/* One flat colour per bridge, no outline. A replacement takes the signal
+   blue: a red-to-green blend turns to mud in the middle of the gutter. */
+.ds-band{fill:currentColor;fill-opacity:.16;stroke:none}
+.ds-band-add{color:var(--add-rail)}
+.ds-band-del{color:var(--del-rail)}
+.ds-band-pair{color:var(--accent-blue)}
+/* Hatched filler for a track the other side occupies alone. Neutral: the
+   change is coloured by its rows and the bridge, the void is only a void. */
+.ds-fill{position:relative;min-height:0;background:repeating-linear-gradient(-45deg,transparent 0 5px,var(--fill-1) 5px 6px)}
+/* Scope labels and callouts participate in the shared row tracks. */
 .ds-diffbody-cols .ds-scoperow{position:static}
 .ds-diffbody-cols .ds-annot-callout{width:100%;margin-left:0;margin-right:0}
 .ds-celldiv::after{content:'';position:absolute;top:0;bottom:0;left:-12px;right:-12px;z-index:2}
@@ -1074,10 +1075,9 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
 .ds-hotspot-flag{flex:none;display:flex;align-items:baseline;gap:9px;margin:2px 22px 3px;padding:6px 11px;border:1px solid color-mix(in srgb,var(--amber) 32%,transparent);border-radius:8px;background:color-mix(in srgb,var(--amber) 6%,var(--panel))}
 .ds-hotspot-flag-kicker{flex:none;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:var(--tracking-kicker);text-transform:uppercase;color:var(--amber-text)}
 .ds-hotspot-flag-reason{min-width:0;font-size:12.5px;line-height:1.45;color:var(--muted);text-wrap:pretty}
-/* No side or bottom padding: the code is full-bleed to the island's edges, so the
-   island rule is the only frame around it and the toolbar / file head read as its
-   headers. Only the top gap survives, to part the title block from the toolbar. */
-.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:8px 0 0;--ds-scrollpad-t:8px;overflow:auto}
+/* Keep the sticky headers flush with the scrollport. Top padding and negative
+   sticky offsets expose a strip of scrolling code above the toolbar in WebKit. */
+.ds-step.is-code-step>.ds-diffscroll{flex:1;min-width:0;min-height:180px;padding:0;--ds-scrollpad-t:0px;overflow:auto}
 /* The beat dock is rendered by its step but it lives in the bottom island — the
    client adopts it into .ds-dock-stage as the step comes up. So it draws no glass
    of its own: the island is the only floating surface, and this is one row in it. */
@@ -1265,10 +1265,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:none;box-shad
 }
 @media (max-width:1080px){
   .ds-step.is-code-step{display:flex;overflow:hidden}.ds-step.is-code-step>.ds-step-top{padding:16px 24px 0}
-  .ds-step.is-code-step>.ds-diffscroll{padding:8px 0 0;min-height:180px}
+  .ds-step.is-code-step>.ds-diffscroll{padding:0;min-height:180px}
 }
 @media (max-width:760px){.ds-symbols{display:none}}
-@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:6px 0 0;--ds-scrollpad-t:6px}.ds-dock-transport{gap:8px;min-height:62px;padding:8px}.ds-beatdock{gap:9px}.ds-beatdock-count{min-width:45px}.ds-beatdock-note{font-size:14px}.ds-beatdock-note .ds-beat-text{display:block;overflow:visible;-webkit-line-clamp:unset}.ds-filmthread{gap:6px;padding:3px 6px 6px}.ds-filmthread.is-storyless{padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
+@media (max-width:620px){.ds-top{height:52px}.ds-layout>.ds-rail,body:not(.ds-rail-collapsed) .ds-rail-scrim{top:52px}.ds-introwrap{padding:32px 20px 48px}.ds-intro-title{font-size:27px;line-height:1.1}.ds-intro-lede{font-size:15.5px;line-height:1.52}.ds-intro-actions{margin-top:20px}.ds-intro-actions .ds-intro-start{width:auto;max-width:100%;padding:12px 16px}.ds-intro-utility{gap:7px 15px;margin-top:13px}.ds-intro-notes[open]{flex-basis:100%}.ds-intro-notes-body{padding:13px}.ds-intro-allfiles{min-height:44px}.ds-concept-step>.ds-step-top{padding:14px 16px 0}.ds-concept-scroll{padding:12px 12px 28px}.ds-concept-document{padding:25px 20px 28px;border-radius:12px}.ds-concept-title{font-size:25px}.ds-concept-body{font-size:14px}.ds-concept-diagram-output{min-height:160px;padding:12px}.ds-exclusion-card{grid-template-columns:1fr}.ds-exclusion-card>.ds-btn{justify-self:start}.ds-story-tune-long{display:none}.ds-story-tune-pop{max-width:min(236px,calc(100vw - 48px))}.ds-step.is-code-step>.ds-step-top{padding:13px 16px 0}.ds-step.is-code-step>.ds-diffscroll{padding:0;--ds-scrollpad-t:0px}.ds-dock-transport{gap:8px;min-height:62px;padding:8px}.ds-beatdock{gap:9px}.ds-beatdock-count{min-width:45px}.ds-beatdock-note{font-size:14px}.ds-beatdock-note .ds-beat-text{display:block;overflow:visible;-webkit-line-clamp:unset}.ds-filmthread{gap:6px;padding:3px 6px 6px}.ds-filmthread.is-storyless{padding:4px 6px 5px}.ds-filmthread-scroll{padding:2px 0}.ds-filmthread-allfiles{height:44px;padding:0 9px}.ds-concept-body .ds-md-tablewrap{margin:14px 0 16px}.ds-concept-body table{font-size:12.5px}.ds-concept-body th,.ds-concept-body td{padding:7px 10px}.ds-concept-body dd{margin-left:13px}.ds-concept-body pre{margin:13px 0;padding:11px 12px;font-size:11.5px}.ds-md kbd{padding:1px 4px}}
 @media (max-width:620px){
   .ds-step[data-scene-layout="opening"] .ds-introwrap{justify-content:flex-start;min-height:0;padding:38px 22px 54px}
   .ds-step[data-scene-layout="opening"] .ds-intro-title{max-width:20ch;margin-top:16px;font-size:34px;line-height:1.04}
