@@ -129,7 +129,7 @@ export interface ListboxProps {
   onChoose: (value: string) => void;
 }
 
-const EMPTY_QUERIES: Record<FieldKind, string> = { commit: "", base: "", head: "" };
+const EMPTY_QUERIES: Record<FieldKind, string> = { commit: "", base: "", head: "", branch: "", from: "" };
 
 export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker {
   const [data, setData] = useState<RefData | null>(cachedRefs);
@@ -148,6 +148,12 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
     },
     head: (node) => {
       inputs.current.head = node;
+    },
+    branch: (node) => {
+      inputs.current.branch = node;
+    },
+    from: (node) => {
+      inputs.current.from = node;
     },
   });
   const listbox = useRef<HTMLDivElement>(null);

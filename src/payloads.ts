@@ -94,7 +94,11 @@ export interface ChangePayload {
  head?: string;
  /** Human scope description from `resolveScope()`, e.g. "Uncommitted changes". */
  scopeLabel: string;
- active: "uncommitted" | "commit" | "compare";
+ active: "uncommitted" | "commit" | "branch" | "compare";
+ /** Branch scope only: the branch under review, as the URL named it. */
+ branch?: string;
+ /** Branch scope only: the parent ref when pinned; absent means auto-detected. */
+ branchFrom?: string;
  files: ChangeFileView[];
  /** Set only when a review route could not load its story. */
  notice?: string;

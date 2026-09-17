@@ -1,8 +1,9 @@
 // Resolve the review scope for the "Your change" screen. The default is "what I just
 // did": uncommitted changes if the working tree is dirty, otherwise the latest commit.
-// Explicit modes can pin a single commit or any base/head pair. Produces the exact
+// Explicit modes can pin a single commit, a whole branch since it forked, or any
+// base/head pair. Produces the exact
 // base/head to diff plus a human label and active mode for the UI.
-import { describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, } from './git.js';
+import { describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, branchForkPoint, currentBranch, resolveCommit, } from './git.js';
 export function resolveScope(repo, params) {
     const ref = params.get('base');
     if (ref) {
@@ -15,7 +16,9 @@ export function resolveScope(repo, params) {
             active: 'compare',
         };
     }
-    const sel = params.get('scope'); // 'uncommitted' | 'last' | null (auto)
+    const sel = params.get('scope'); // 'uncommitted' | 'commit' | 'last' | 'branch' | null (auto)
+    if (sel === 'branch')
+        return branchScope(repo, params.get('branch')?.trim() || '', params.get('from')?.trim() || '');
     if (sel === 'commit' || sel === 'last')
         return commitScope(repo, params.get('commit') || 'HEAD');
     if (sel === 'uncommitted' || (sel == null && isDirty(repo))) {
@@ -31,5 +34,34 @@ function commitScope(repo, requested) {
         head: commit,
         label: commit === 'HEAD' ? 'Latest commit' : `Commit ${describeCommit(repo, commit)}`,
         active: 'commit',
+    };
+}
+/**
+ * A whole branch since it forked: merge-base(parent, branch) → branch tip.
+ * Committed work only — the working tree is what "Uncommitted" and a compare to
+ * `Working tree` are for. When no fork point exists (the default branch itself,
+ * or an unrelated parent) the scope is honestly empty rather than silently
+ * widened to the whole history.
+ */
+function branchScope(repo, requested, from) {
+    const branch = requested && isCommitRef(repo, requested) ? requested : currentBranch(repo) ?? 'HEAD';
+    const parent = from && resolveCommit(repo, from) ? from : undefined;
+    const fork = branchForkPoint(repo, branch, parent);
+    const pinned = parent ? { from: parent } : {};
+    if (!fork) {
+        const why = parent ? `shares no history with ${parent}` : 'has no fork point from another branch';
+        return { base: branch, head: branch, label: `${branch} ${why}`, active: 'branch', branch, ...pinned };
+    }
+    if (fork.ahead === 0) {
+        return { base: fork.base, head: branch, label: `${branch} is already in ${fork.parent}`, active: 'branch', branch, ...pinned };
+    }
+    const commits = `${fork.ahead} commit${fork.ahead === 1 ? '' : 's'}`;
+    return {
+        base: fork.base,
+        head: branch,
+        label: `${branch} since ${fork.parent} (${fork.base.slice(0, 7)}) · ${commits}`,
+        active: 'branch',
+        branch,
+        ...pinned,
     };
 }

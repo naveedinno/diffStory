@@ -4,7 +4,7 @@
 // draws rows identically. Pure functions; all content is escaped here.
 import { highlight, highlightNavigable } from './highlight.js';
 import type { IntraSides } from './intra-line.js';
-import type { SbsRow, UnifiedRow } from './view-model.js';
+import type { MovedMark, SbsRow, UnifiedRow } from './view-model.js';
 
 export type RowSide = 'left' | 'right';
 export interface RowTarget { side: RowSide; file: string; line: number }
@@ -35,18 +35,30 @@ function reviewRowAttrs(
   content: string | undefined,
   step?: string,
   changePair?: boolean,
+  moved?: boolean,
 ): string {
   if (!target) return '';
   const action = changePair
     ? 'Changed'
-    : type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
+    : moved && type !== 'ctx'
+      ? 'Moved'
+      : type === 'add' ? 'Added' : type === 'del' ? 'Deleted' : 'Context';
   const version = target.side === 'left' ? 'before' : 'after';
   // Keep the renderer tolerant of the legacy full-file row shape used by old
   // callers while still giving modern rows a useful accessible description.
   const summary = String(content ?? '').trim().replace(/\s+/g, ' ') || 'blank line';
-  return `${rowAttrs(target, step)} data-review-row role="group" tabindex="-1" aria-keyshortcuts="C" aria-label="${esc(
+  return `${rowAttrs(target, step)} data-review-row role="group" tabindex="-1" aria-keyshortcuts="C B" aria-label="${esc(
     `${action} ${version} line ${target.line} in ${target.file}: ${summary}`,
   )}"`;
+}
+
+/** The jump to a moved line's other end. The tag says where it went; the
+ *  engine scrolls to `[data-side][data-line]` in the same file on click. */
+function movedTagHtml(moved: MovedMark | undefined): string {
+  if (!moved) return '';
+  const text = moved.side === 'right' ? `Moved to ${moved.line}` : `Moved from ${moved.line}`;
+  const where = `${moved.side === 'right' ? 'after' : 'before'} line ${moved.line}`;
+  return `<button type="button" class="ds-moved-tag" data-moved-jump data-moved-side="${moved.side}" data-moved-line="${moved.line}" title="Jump to ${where}" aria-label="${text}: jump to ${where}">${text}</button>`;
 }
 
 function highlightedCode(code: string, target?: RowTarget): string {
@@ -78,21 +90,22 @@ function cell(side: RowSide, row: SbsRow, target?: RowTarget, intra?: string, ta
   if (side === 'left') {
     no = row.oldNo !== undefined ? String(row.oldNo) : '';
     if (del) {
-      sign = '−';
-      signClass = ' ds-sign-del';
+      sign = row.moved ? '↕' : '−';
+      signClass = row.moved ? ' ds-sign-moved' : ' ds-sign-del';
     }
   } else {
     no = row.newNo !== undefined ? String(row.newNo) : '';
     if (add) {
-      sign = '+';
-      signClass = ' ds-sign-add';
+      sign = row.moved ? '↕' : '+';
+      signClass = row.moved ? ' ds-sign-moved' : ' ds-sign-add';
     }
   }
   let tint = '';
   if (row.paired) tint = side === 'left' ? ' ds-cell-del ds-cell-paired' : ' ds-cell-add ds-cell-paired';
+  else if (row.moved && ((side === 'right' && add) || (side === 'left' && del))) tint = ' ds-cell-moved';
   else if (side === 'right' && add) tint = row.untoured ? ' ds-cell-untoured' : ' ds-cell-add';
   else if (side === 'left' && del) tint = ' ds-cell-del';
-  const flag = side === 'right' && untouredRow(row) ? untouredTagHtml(tag) : '';
+  const flag = (side === 'right' && untouredRow(row) && !row.moved ? untouredTagHtml(tag) : '') + movedTagHtml(row.moved);
   return `<span class="ds-cell${tint}${sideCls}"><span class="ds-no">${no}</span><span class="ds-sign${signClass}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
     (intra ?? highlightedCode(sideContent ?? '', target)) || ' '
   }</span>${flag}</span>`;
@@ -225,10 +238,10 @@ export function renderSplitHalves(row: SbsRow, opts: SplitRowOpts = {}): SplitHa
     if (sideAbsent(side, row)) return '';
     const target = side === 'left' ? opts.leftTarget : opts.rightTarget;
     const content = row.paired ? (side === 'left' ? row.leftContent : row.rightContent) : row.content;
-    const attrs = reviewRowAttrs(target, row.type, content, target ? opts.stepId : undefined, row.changePair);
+    const attrs = reviewRowAttrs(target, row.type, content, target ? opts.stepId : undefined, row.changePair, !!row.moved);
     const pairCls = row.changePair ? (side === 'left' ? ' ds-row-pair-l' : ' ds-row-pair') : '';
     const intra = side === 'left' ? opts.sides?.left : opts.sides?.right;
-    return `<div class="ds-row ds-row-${row.type}${pairCls}"${ri}${attrs}${extra}>${cell(side, row, target, intra, opts.untouredTag)}</div>`;
+    return `<div class="ds-row ds-row-${row.type}${pairCls}${row.moved ? ' ds-row-moved' : ''}"${ri}${attrs}${extra}>${cell(side, row, target, intra, opts.untouredTag)}</div>`;
   };
   return { left: half('left'), right: half('right') };
 }
@@ -297,12 +310,12 @@ export class SplitColumns {
 }
 
 export function renderUnifiedRow(row: UnifiedRow, target?: RowTarget, intra?: string, tag?: number | null): string {
-  const sign = row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
-  const flag = row.untoured ? untouredTagHtml(tag) : '';
-  const attrs = reviewRowAttrs(target, row.type, row.content);
-  return `<div class="ds-urow ds-row-${row.type}${row.untoured ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${
+  const sign = row.moved ? '↕' : row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ';
+  const flag = (row.untoured && !row.moved ? untouredTagHtml(tag) : '') + movedTagHtml(row.moved);
+  const attrs = reviewRowAttrs(target, row.type, row.content, undefined, false, !!row.moved);
+  return `<div class="ds-urow ds-row-${row.type}${row.moved ? ' ds-row-moved' : ''}${row.untoured && !row.moved ? ' is-untoured' : ''}"${attrs}><span class="ds-no">${
     row.no ?? ''
-  }</span><span class="ds-sign ds-sign-${row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
+  }</span><span class="ds-sign ds-sign-${row.moved ? 'moved' : row.type}">${sign}</span><span class="ds-code"${targetAttrs(target)}>${
     (intra ?? highlightedCode(row.content, target)) || ' '
   }</span>${flag}</div>`;
 }

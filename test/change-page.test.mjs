@@ -471,11 +471,12 @@ test('selection comes from the URL and disclosure does not', () => {
   assert.match(scopeCard, /segmentClass\(active === "uncommitted", false\)/);
   assert.match(scopeCard, /segmentClass\(active === "commit", openPanel === "commit"\)/);
   assert.match(scopeCard, /segmentClass\(active === "compare", openPanel === "compare"\)/);
+  assert.match(scopeCard, /segmentClass\(active === "branch", openPanel === "branch"\)/);
   assert.match(scopeCard, /function segmentClass\(selected: boolean, open: boolean\)/);
   assert.match(scopeCard, /selected\s*\?\s*"border-accent-line bg-accent-soft/, 'selected wins over open');
   assert.equal(
     (scopeCard.match(/text-\[11\.5px\] leading-\[1\.3\] max-\[600px\]:hidden/g) ?? []).length,
-    3,
+    4,
     'scope descriptions inherit the segment state color instead of pinning muted ink over the selected tint',
   );
   assert.match(scopeCard, /aria-current=\{active === "uncommitted" \? "true" : undefined\}/);
@@ -494,14 +495,14 @@ test('selection comes from the URL and disclosure does not', () => {
   );
 });
 
-test('the three scope segments stay three across, in one track', () => {
-  // The card is inside a `max-w-[960px]` main, where three segments fit down to
-  // roughly 600px — below which they already shorten to a single centred label.
-  // A two-column breakpoint therefore only ever orphaned the third segment on a
-  // row of its own beside several hundred px of dead space, and the old
-  // `max-[1080px]:grid-cols-2` did that on most laptop windows.
-  assert.match(scopeCard, /const SEGMENT_TRACK = cn\(\s*\n?\s*"grid grid-cols-3 /);
-  assert.ok(!/grid-cols-2/.test(scopeCard), 'no width drops the segments to two columns');
+test('the four scope segments stay four across, in one track', () => {
+  // The card is inside a `max-w-[960px]` main, where four segments fit down to
+  // roughly 600px — below which they shorten to a single centred label on a
+  // 2×2 grid. The old `max-[1080px]:grid-cols-2` (from the three-segment days)
+  // orphaned a segment beside several hundred px of dead space on most laptop
+  // windows; only the phone width may fold the track.
+  assert.match(scopeCard, /const SEGMENT_TRACK = cn\(\s*\n?\s*"grid grid-cols-4 /);
+  assert.ok(!/max-\[(?!600px\])[0-9]+px\]:grid-cols-2/.test(scopeCard), 'only the phone width folds the segments');
   assert.match(scopeCard, /className=\{SEGMENT_TRACK\}/);
   // The track owns the fill and the hairline; the segments are transparent
   // compartments in it, which is what makes three controls read as one choice.
@@ -519,8 +520,8 @@ test('an endpoint of the diff is one tile whether it is being edited or resolved
   assert.match(scopeCard, /const SLOT_DONE = cn\(SLOT, /);
   assert.equal(
     (scopeCard.match(/grid-cols-\[minmax\(0,1fr\)_32px_minmax\(0,1fr\)\]/g) ?? []).length,
-    2,
-    'the compare editor and the split summary use one grid',
+    3,
+    'the compare editor, the branch editor and the split summary use one grid',
   );
   // Neither tile draws a border around a border any more.
   assert.ok(
@@ -535,7 +536,7 @@ test('the scope summary and the compare editor never show the same two refs at o
   assert.match(scopeCard, /aria-label=\{`Source: \$\{baseValue\}`\}/);
   assert.match(scopeCard, /aria-label=\{`Target: \$\{headValue\}`\}/);
   assert.match(scopeCard, /aria-label="Selected review scope"/);
-  assert.match(scopeCard, /active === "compare" \? "Selected comparison" : active === "commit" \? "Selected commit" : "Selected scope"/);
+  assert.match(scopeCard, /active === "compare"\s*\?\s*"Selected comparison"\s*:\s*active === "commit"\s*\?\s*"Selected commit"\s*:\s*active === "branch"\s*\?\s*"Selected branch"\s*:\s*"Selected scope"/);
   // The compare editor prefills only in compare mode: other scopes resolve base
   // to bookkeeping values that would read as a chosen rev.
   assert.match(scopeCard, /useState\(inCompare \? base : ""\)/);
@@ -616,12 +617,12 @@ test('the surface does not animate its own arrival', () => {
   assert.match(scopeCard, /const SEGMENT_PRESS = 0\.985;/);
   assert.equal(
     (scopeCard.match(/pressScale=\{SEGMENT_PRESS\}/g) ?? []).length,
-    3,
-    'all three segments press, not just the two that are buttons',
+    4,
+    'all four segments press, not just the three that are buttons',
   );
   // And none of them lifts on hover: three tiles side by side scaling up 2% is
   // the "lurch" the repo picker's full-width card rejected, at three times over.
-  assert.equal((scopeCard.match(/whileHover=\{undefined\}/g) ?? []).length, 4);
+  assert.equal((scopeCard.match(/whileHover=\{undefined\}/g) ?? []).length, 5);
 });
 
 test('the beUI segments do not inherit beUI geometry', () => {
@@ -659,7 +660,7 @@ test('the vendored ref field keeps a focus ring, drawn on the slot that labels i
   assert.match(scopeCard, /input: cn\(\s*\n?\s*"[^"]*font-mono/);
   assert.match(scopeCard, /placeholder:font-sans/);
   // All three fields are the same field.
-  assert.equal((scopeCard.match(/classNames=\{FIELD_CLASSNAMES\}/g) ?? []).length, 3);
+  assert.equal((scopeCard.match(/classNames=\{FIELD_CLASSNAMES\}/g) ?? []).length, 5);
   // The picker's `value` still arrives as a string, because that is what the
   // component hands back — the old handler read `event.target.value` and this
   // one must not silently start committing `[object Object]`.
@@ -868,6 +869,10 @@ test('the built bundle actually ships the change behaviour', (t) => {
     'Working tree vs HEAD',
     'Single commit',
     'Parent → selected commit',
+    'Whole branch',
+    'Fork point → branch tip',
+    'Use the current branch',
+    'Auto-detect',
     'Compare any refs',
     'Source → target, any branch or commit',
     'HEAD or a commit SHA',

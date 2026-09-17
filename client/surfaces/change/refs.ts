@@ -8,16 +8,23 @@
 //   - each field gets a DIFFERENT list. The commit field leads with `HEAD`, the
 //     compare target leads with the `Working tree` pseudo-ref, and the compare
 //     source has no pseudo-row at all — you cannot diff *from* an uncommitted
-//     tree.
+//     tree. The branch field lists branches only, and its parent field leads
+//     with `Auto-detect`.
 //   - before the fetch resolves, the list is a single unselectable "Loading
 //     refs…" row rather than an empty listbox, so the field never looks broken.
 //   - the filter matches value + label + meta + kind, so typing "remote" or a
 //     commit subject finds rows whose value contains neither.
 
-export type FieldKind = "commit" | "base" | "head";
+export type FieldKind = "commit" | "base" | "head" | "branch" | "from";
 
 /** The `Working tree` pseudo-ref. Never sent to git; it means "omit &head". */
 export const WORKTREE = "__WORKTREE__";
+
+/** The `Auto-detect` pseudo-ref for a branch's parent. Never sent to git; it means "omit &from". */
+export const AUTO_PARENT = "__AUTO__";
+
+/** The literal shown in the parent field when the parent is auto-detected. */
+export const AUTO_PARENT_LABEL = "Auto-detect";
 
 /** The literal shown in the target field when it means the working tree. */
 export const WORKTREE_LABEL = "Working tree";
@@ -94,6 +101,10 @@ function commitOptions(data: RefData): RefOption[] {
 export function optionsFor(kind: FieldKind, data: RefData | null): RefOption[] {
   if (!data) return [option("", "Loading refs…", "reading local git refs", "")];
   if (kind === "commit") return [option("HEAD", "HEAD", "current HEAD", "head")].concat(commitOptions(data));
+  if (kind === "branch") return branchOptions(data);
+  if (kind === "from") {
+    return [option(AUTO_PARENT, AUTO_PARENT_LABEL, "nearest of main, master, develop", "auto")].concat(branchOptions(data));
+  }
   if (kind === "head") {
     return [option(WORKTREE, WORKTREE_LABEL, "HEAD plus uncommitted edits", "worktree")].concat(
       branchOptions(data),

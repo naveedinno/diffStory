@@ -982,7 +982,7 @@ test("diff rows keep their full data-* contract", () => {
     full,
     /data-comment-side="right" data-comment-file="a\.ts" data-comment-line="2"/,
   );
-  assert.match(full, /role="group" tabindex="-1" aria-keyshortcuts="C"/);
+  assert.match(full, /role="group" tabindex="-1" aria-keyshortcuts="C B"/);
   assert.match(full, /aria-label="Added after line 2 in a\.ts: line two"/);
 });
 

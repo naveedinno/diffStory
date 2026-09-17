@@ -5,7 +5,7 @@
 import { createServer, } from "node:http";
 import { spawn } from "node:child_process";
 import { loadTour, orderedSteps, validateGeneratedConceptSteps, validateGeneratedTour, validateNewGeneratedStory, } from "./tour.js";
-import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, reviewChangeIndexSnapshot, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, assertSafeRepoPath, commitEvolutionManifest, } from "./git.js";
+import { isGitRepo, resolveBase, getDiff, getFileDiff, reviewFileIndex, reviewChangeIndexSnapshot, describeBase, readFileRange, readWholeFile, listBranchRefs, listRecentCommits, currentBranch, isDirty, hasParentCommit, emptyTree, resolveCommit, noiseFiles, excludedReviewFiles, reviewChangeFingerprint, reviewSourceMetadataFingerprint, stagedWorktreeDivergentFiles, numstat, assertSafeRepoPath, commitEvolutionManifest, blameReviewLine, } from "./git.js";
 import { enclosingScopeLabel } from "./enclosing-scope.js";
 import { parseUnifiedDiff } from "./diff.js";
 import { computeCoverage } from "./coverage.js";
@@ -605,6 +605,24 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                 commits: listRecentCommits(session.repo, 0, ref || "--all"),
             });
         }
+        if (method === "GET" && url.pathname === "/api/blame") {
+            // Blame reads history, not the rendered diff, so it only needs the page's
+            // own base..head — not the per-file freshness the diff endpoints enforce.
+            const lease = getReviewPageLease(session, url.searchParams.get("page") ?? undefined);
+            if (!lease || !session.repo || session.repo !== lease.repo) {
+                return sendReviewPageConflict(res, "This review page is no longer active.");
+            }
+            const result = blameReviewLine(lease.repo, {
+                base: lease.base,
+                head: lease.head,
+                side: url.searchParams.get("side") === "left" ? "left" : "right",
+                file: url.searchParams.get("file") ?? "",
+                line: Number(url.searchParams.get("line")),
+            });
+            if (!result)
+                return sendJson(res, 404, { error: "Git has no blame for this line." });
+            return sendJson(res, 200, result);
+        }
         if (method === "GET" && url.pathname === "/api/fullfile") {
             const file = url.searchParams.get("file") ?? "";
             const page = validateReviewPageLease(session, url.searchParams.get("page"), file);
@@ -1052,6 +1070,8 @@ function renderChange(session, scope, notice) {
             ...(scope.head ? { head: scope.head } : {}),
             scopeLabel: scope.label,
             active: scope.active,
+            ...(scope.branch ? { branch: scope.branch } : {}),
+            ...(scope.from ? { branchFrom: scope.from } : {}),
             files: summary.files,
             ...(notice ? { notice } : {}),
         },

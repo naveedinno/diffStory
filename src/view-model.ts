@@ -58,6 +58,8 @@ export interface SbsRow {
   comment?: boolean;
   /** Flagged by the trust check (changed but no step explains it). */
   untoured?: boolean;
+  /** This deleted/added line reappears unchanged elsewhere in the file. */
+  moved?: MovedMark;
 }
 
 /** One row of a compact unified diff (All-files cards). */
@@ -66,6 +68,77 @@ export interface UnifiedRow {
   no?: number;
   content: string;
   untoured?: boolean;
+  moved?: MovedMark;
+}
+
+/** Where the other end of a moved line lives: the pane side and its line. */
+export interface MovedMark {
+  side: 'left' | 'right';
+  line: number;
+}
+
+interface MovableRow {
+  type: RowType;
+  content: string;
+  moved?: MovedMark;
+}
+
+/** Word characters a line needs before its reappearance counts as a move. A
+ *  `}` or `return;` recurs everywhere and moves nowhere. */
+const MOVE_MIN_WORD_CHARS = 10;
+
+/**
+ * Mark deleted lines that were re-added elsewhere in the same file, and the
+ * added lines they became, so a relocated statement reads as one move instead
+ * of an unrelated deletion and addition.
+ *
+ * Text is compared with whitespace collapsed (a move into a deeper block
+ * re-indents it), and a match must be unambiguous: the line occurs exactly
+ * once among the file's deletions and once among its additions. A deletion
+ * and addition that the split view would pair in place — same change run,
+ * same position — are an edit (typically a re-indent), not a move.
+ *
+ * `blocks` are the file's hunks in order; `line` gives a row's own number
+ * (old for a deletion, new for an addition). Rows are marked in place.
+ */
+export function markMovedLines<T extends MovableRow>(blocks: T[][], line: (row: T) => number | undefined): void {
+  type Slot = { row: T; run: number; k: number; line: number };
+  const dels = new Map<string, Slot[]>();
+  const adds = new Map<string, Slot[]>();
+  let run = 0;
+  for (const block of blocks) {
+    let kDel = 0;
+    let kAdd = 0;
+    let inRun = false;
+    for (const row of block) {
+      if (row.type === 'ctx') {
+        if (inRun) run++;
+        inRun = false;
+        kDel = kAdd = 0;
+        continue;
+      }
+      inRun = true;
+      const k = row.type === 'del' ? kDel++ : kAdd++;
+      const n = line(row);
+      if (n === undefined) continue;
+      const key = row.content.trim().replace(/\s+/g, ' ');
+      if ((key.match(/\w/g)?.length ?? 0) < MOVE_MIN_WORD_CHARS) continue;
+      const map = row.type === 'del' ? dels : adds;
+      const slot = { row, run, k, line: n };
+      const list = map.get(key);
+      if (list) list.push(slot);
+      else map.set(key, [slot]);
+    }
+    if (inRun) run++;
+  }
+  for (const [key, from] of dels) {
+    const to = adds.get(key);
+    if (from.length !== 1 || to?.length !== 1) continue;
+    const [d, a] = [from[0], to[0]];
+    if (d.run === a.run && d.k === a.k) continue;
+    d.row.moved = { side: 'right', line: a.line };
+    a.row.moved = { side: 'left', line: d.line };
+  }
 }
 
 export type FileKind = 'changed' | 'new' | 'context';
@@ -862,7 +935,7 @@ function buildFiles(
     const uncovered = uncoveredByFile.get(summary.path) ?? [];
     const hunks =
       file && (detailedFilePaths === undefined || detailedFilePaths.has(summary.path))
-        ? file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered)))
+        ? movedUnified(file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered))))
         : [];
     const step = stepByFile.get(summary.path);
     views.push({
@@ -1032,7 +1105,17 @@ export function buildFullFileRows(
     newCursor++;
     oldCursor++;
   }
+  markMovedLines([rows], sbsLine);
   return rows;
+}
+
+function sbsLine(row: SbsRow): number | undefined {
+  return row.type === 'del' ? row.oldNo : row.newNo;
+}
+
+function movedUnified(hunks: UnifiedRow[][]): UnifiedRow[][] {
+  markMovedLines(hunks, (row) => row.no);
+  return hunks;
 }
 
 /** Split-layout blocks for one file's hunks (the All-files Split view):
@@ -1047,13 +1130,15 @@ export function hunksToSbsBlocks(
   if (!file) return [];
   const untoured = (n?: number) =>
     n !== undefined && uncoveredRanges.some((r) => n >= r[0] && n <= r[1]);
-  return file.hunks.map((h) =>
+  const blocks = file.hunks.map((h) =>
     h.lines.map((l) => {
       const row = toSbs(l);
       if (l.type === 'add' && untoured(l.newNo)) row.untoured = true;
       return row;
     }),
   );
+  markMovedLines(blocks, sbsLine);
+  return blocks;
 }
 
 /** GitHub-style change pairing: within each run of deleted lines immediately
@@ -1061,7 +1146,7 @@ export function hunksToSbsBlocks(
  *  side-by-side row and word-diff the pair, so a rewritten statement reads as
  *  one before/after row instead of two islands separated by empty space.
  *  Excess lines on either side keep their single-sided rows; rows already
- *  paired by a story move view pass through untouched. */
+ *  paired by a story move view, and lines marked moved, pass through untouched. */
 export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<SbsRow, IntraSides> } {
   const out: SbsRow[] = [];
   const sides = new Map<SbsRow, IntraSides>();
@@ -1072,12 +1157,14 @@ export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<Sbs
       i++;
       continue;
     }
-    const delStart = i;
-    while (i < rows.length && rows[i].type === 'del' && !rows[i].paired) i++;
-    const addStart = i;
-    while (i < rows.length && rows[i].type === 'add' && !rows[i].paired) i++;
-    const dels = rows.slice(delStart, addStart);
-    const adds = rows.slice(addStart, i);
+    // A moved line never pairs, but it does not split the run around it either:
+    // it keeps its side and its place, and its neighbours still pair up.
+    const dels: SbsRow[] = [];
+    const adds: SbsRow[] = [];
+    const movedDels: SbsRow[] = [];
+    const movedAdds: SbsRow[] = [];
+    while (i < rows.length && rows[i].type === 'del' && !rows[i].paired) (rows[i].moved ? movedDels : dels).push(rows[i++]);
+    while (i < rows.length && rows[i].type === 'add' && !rows[i].paired) (rows[i].moved ? movedAdds : adds).push(rows[i++]);
     const n = Math.min(dels.length, adds.length);
     for (let k = 0; k < n; k++) {
       const merged: SbsRow = {
@@ -1097,7 +1184,9 @@ export function pairChangeRows(rows: SbsRow[]): { rows: SbsRow[]; sides: Map<Sbs
       out.push(merged);
     }
     for (let k = n; k < dels.length; k++) out.push(dels[k]);
+    out.push(...movedDels);
     for (let k = n; k < adds.length; k++) out.push(adds[k]);
+    out.push(...movedAdds);
   }
   return { rows: out, sides };
 }

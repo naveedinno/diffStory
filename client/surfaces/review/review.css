@@ -70,6 +70,9 @@
   --hairline:var(--line);
   --gutter-hi:var(--surface-2); --diff-rule:var(--line-soft);
   --add-rail:var(--add); --del-rail:var(--del);
+  /* A moved line is neither gained nor lost: the neutral signal accent, kept
+     off the add/del hues so a relocation never reads as churn. */
+  --move-rail:var(--accent-blue); --move-bg:color-mix(in srgb,var(--accent-blue) 9%,transparent);
   --material:var(--surface-2); --scroll-hi:var(--text-3);
   --ds-rail-width:var(--rail-width);
   --ds-split:50;
@@ -882,7 +885,7 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-col-l{grid-column:1}
 .ds-col-r{grid-column:3}
 .ds-diffbody-cols>.ds-celldiv{grid-column:2;grid-row:1/-1}
-.ds-diffbody-cols .ds-row>.ds-cell{flex:1 1 0}
+.ds-diffbody-cols .ds-row>.ds-cell{flex:1 1 0;overflow:hidden;clip-path:inset(0)}
 .ds-diffbody-cols>.ds-celldiv{width:var(--ds-divider-w,32px);align-self:stretch;background:var(--panel2);border-left:1px solid var(--diff-rule);border-right:1px solid var(--diff-rule);z-index:1}
 .ds-diffbody-cols>.ds-celldiv::after{left:-6px;right:-6px}
 /* At this width the resize affordance is the edges, not a filled bar: hover
@@ -897,6 +900,7 @@ body.ds-resizing .ds-diffbody-cols>.ds-celldiv{border-color:var(--accent-blue)}
 .ds-band-add{color:var(--add-rail)}
 .ds-band-del{color:var(--del-rail)}
 .ds-band-pair{color:var(--accent-blue)}
+.ds-band-moved{color:var(--move-rail)}
 /* Hatched filler for a track the other side occupies alone. Neutral: the
    change is coloured by its rows and the bridge, the void is only a void. */
 .ds-fill{position:relative;min-height:0;background:repeating-linear-gradient(-45deg,transparent 0 5px,var(--fill-1) 5px 6px)}
@@ -938,6 +942,31 @@ body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
 .ds-code-add{color:var(--diff-add-text)}
 .ds-code-del{color:var(--diff-del-text)}
 /* Sticky so the tag stays at the visible edge when long lines scroll the card. */
+.ds-cell-moved,.ds-urow.ds-row-moved{background:var(--move-bg);box-shadow:inset 3px 0 0 var(--move-rail)}
+.ds-sign-moved{color:var(--move-rail)}
+.ds-moved-tag{position:sticky;right:10px;flex:none;align-self:center;font:inherit;font-size:10px;font-weight:600;line-height:1.5;color:var(--accent-blue);background:color-mix(in srgb,var(--accent-blue) 14%,transparent);border:0;padding:0 7px;border-radius:4px;margin:0 9px;cursor:pointer;white-space:nowrap}
+.ds-moved-tag:hover{background:color-mix(in srgb,var(--accent-blue) 24%,transparent)}
+.ds-moved-tag:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+[data-review-row] .ds-no:not(:empty){cursor:pointer}
+[data-review-row] .ds-no:not(:empty):hover{color:var(--accent-blue);text-decoration:underline;text-underline-offset:2px}
+.ds-blame-pop{position:fixed;z-index:60;width:min(360px,calc(100vw - 16px));background:var(--surface-3);color:var(--text);border:1px solid var(--line);border-radius:var(--radius-lg,10px);box-shadow:var(--shadow);font-size:12.5px;line-height:1.4}
+.ds-blame-pop:focus{outline:none}
+.ds-blame-head{display:flex;align-items:center;gap:8px;padding:8px 8px 6px 12px;border-bottom:1px solid var(--line-soft)}
+.ds-blame-title{flex:1;font-family:var(--mono,ui-monospace,monospace);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}
+.ds-blame-close{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--text-2);font-size:16px;line-height:1;cursor:pointer}
+.ds-blame-close:hover{background:var(--fill-2,var(--surface-2));color:var(--text)}
+.ds-blame-close:focus-visible,.ds-blame-action:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.ds-blame-body{padding:10px 12px 12px;display:grid;gap:12px}
+.ds-blame-commit{display:grid;gap:3px}
+.ds-blame-commit+.ds-blame-commit{padding-top:10px;border-top:1px solid var(--line-soft)}
+.ds-blame-kicker{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-text,var(--accent-blue))}
+.ds-blame-subject{font-weight:600;overflow-wrap:anywhere}
+.ds-blame-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;color:var(--text-2)}
+.ds-blame-sha{font-size:11.5px;color:var(--text)}
+.ds-blame-actions{display:flex;gap:6px;margin-top:6px}
+.ds-blame-action{font:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--text);text-decoration:none;cursor:pointer}
+.ds-blame-action:hover{background:var(--surface-2);border-color:var(--accent-blue)}
+.ds-blame-note{margin:0;color:var(--text-2)}
 .ds-untoured-tag{position:sticky;right:10px;flex:none;align-self:center;font-size:9px;font-weight:700;letter-spacing:0.03em;color:var(--on-amber);background:var(--amber);padding:1px 6px;border-radius:4px;margin:0 9px}
 .ds-urow{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,0.025);min-height:23px}
 .ds-urow.ds-row-add{background:var(--add-bg);box-shadow:inset 3px 0 0 var(--add-rail)}

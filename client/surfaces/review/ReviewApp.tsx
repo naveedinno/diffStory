@@ -321,6 +321,9 @@ function CommandPalette() {
             <kbd>C</kbd> comment selection
           </span>
           <span>
+            <kbd>B</kbd> blame line
+          </span>
+          <span>
             <kbd>?</kbd> commands
           </span>
         </div>
@@ -349,6 +352,8 @@ function useBodyFacts(payload: ReviewPayload): void {
       "data-story-key": payload.storyKey,
       "data-current-diff-hash": payload.currentDiffHash,
       "data-review-page-token": payload.pageToken,
+      // Blame links a commit back to the scope page for this repo.
+      "data-route-base": payload.routeBase,
     };
     for (const [name, value] of Object.entries(attrs)) {
       if (value === null) body.removeAttribute(name);
@@ -413,7 +418,15 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
               {storyless ? "Diff review" : payload.story.title.text}
             </div>
             <div className="ds-reviewchrome-subtitle">
-              Working tree <span>vs</span> <b>{payload.baseLabel}</b>
+              {payload.headRef ? (
+                <>
+                  <b>{payload.baseLabel}</b> <span>→</span> <b>{refLabel(payload.headRef)}</b>
+                </>
+              ) : (
+                <>
+                  Working tree <span>vs</span> <b>{payload.baseLabel}</b>
+                </>
+              )}
             </div>
           </div>
           <div className="ds-reviewchrome-utilities">
@@ -595,4 +608,9 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
       </noscript>
     </>
   );
+}
+
+/** A full object id reads as noise in a subtitle; branch and tag names stay whole. */
+function refLabel(ref: string): string {
+  return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 8) : ref;
 }

@@ -2229,7 +2229,7 @@ export function startReviewEngine(options){
   function flowRi(node){var v=node&&node.getAttribute?node.getAttribute('data-ri'):null;if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
   function flowItems(col){
     var out=[],kids=col.children;
-    for(var i=0;i<kids.length;i++){var k=kids[i];if(k.hidden||k.classList.contains('ds-annot')||k.classList.contains('ds-fill'))continue;out.push({el:k,y:k.offsetTop,h:k.offsetHeight,ri:flowRi(k),change:flowChangeHalf(k)});}
+    for(var i=0;i<kids.length;i++){var k=kids[i];if(k.hidden||k.classList.contains('ds-annot')||k.classList.contains('ds-fill'))continue;out.push({el:k,y:k.offsetTop,h:k.offsetHeight,ri:flowRi(k),change:flowChangeHalf(k),moved:k.classList.contains('ds-row-moved')});}
     return out;
   }
   function flowChangeHalf(elm){var c=elm.classList;return c.contains('ds-row-add')||c.contains('ds-row-del')||c.contains('ds-row-pair')||c.contains('ds-row-pair-l');}
@@ -2273,7 +2273,8 @@ export function startReviewEngine(options){
     for(var k=0;k<entries.length;k++){
       var e=entries[k];
       if(!e.change){cur=null;continue;}
-      if(!cur){cur={idx:k,l0:null,l1:null,r0:null,r1:null,adds:0,dels:0};bands.push(cur);}
+      if(!cur){cur={idx:k,l0:null,l1:null,r0:null,r1:null,adds:0,dels:0,moved:0,rows:0};bands.push(cur);}
+      cur.rows++;if((!e.l||e.l.moved)&&(!e.r||e.r.moved))cur.moved++;
       if(e.l){if(cur.l0==null)cur.l0=e.l.y;cur.l1=e.l.y+e.l.h;}
       if(e.r){if(cur.r0==null)cur.r0=e.r.y;cur.r1=e.r.y+e.r.h;}
       if(e.l&&e.r){cur.adds++;cur.dels++;}else if(e.l)cur.dels++;else cur.adds++;
@@ -2317,14 +2318,19 @@ export function startReviewEngine(options){
   function paintFlowBands(flow,shift,winTop,winH){
     var svg=$('.ds-bands',flow.d);if(!svg)return;
     var w=flow.d.clientWidth||32,h=Math.ceil(winH);
+    // Pin the drawing to its box. `clientWidth` is rounded, the divider's real
+    // width can be fractional, and with the default aspect-ratio fit a 1px
+    // mismatch scales every band and centres it — the bands drift down and
+    // shrink the further they are from the top of the file.
     svg.setAttribute('width',String(w));svg.setAttribute('height',String(h));svg.setAttribute('viewBox','0 0 '+w+' '+h);
+    svg.setAttribute('preserveAspectRatio','none');svg.style.height=h+'px';
     svg.style.transform='translateY('+winTop+'px)';
     flowSvgClear(svg);
     flow.bands.forEach(function(b){
       var y=function(v,s){return v==null?null:v+s-winTop;};
       var g={l0:y(b.l0,shift.l),l1:y(b.l1,shift.l),r0:y(b.r0,shift.r),r1:y(b.r1,shift.r)};
       if(Math.max(g.l1==null?-Infinity:g.l1,g.r1==null?-Infinity:g.r1)<-40||Math.min(g.l0==null?Infinity:g.l0,g.r0==null?Infinity:g.r0)>winH+40)return;
-      var kind=b.dels&&!b.adds?'del':b.adds&&!b.dels?'add':'pair';
+      var kind=b.moved===b.rows?'moved':b.dels&&!b.adds?'del':b.adds&&!b.dels?'add':'pair';
       svg.appendChild(annotationSvgElement('path',{class:'ds-band ds-band-'+kind,d:flowBridgePath(g,w)}));
     });
   }
@@ -3552,9 +3558,124 @@ export function startReviewEngine(options){
     $all('.ds-story-tune[open]').forEach(function(menu){menu.open=false;});
   }
 
+  // Blame: which commit put a line here, or took it away. Opened from a row's
+  // line number or the B key, anchored under that number, one at a time.
+  var blamePop=null,blameFor=null,blameReq=0;
+  function blameRowTarget(row){
+    if(!row)return null;
+    var side=row.getAttribute('data-side'),line=parseInt(row.getAttribute('data-line')||'0',10),file=row.getAttribute('data-file')||'';
+    return (side==='left'||side==='right')&&line>0&&file?{row:row,side:side,line:line,file:file}:null;
+  }
+  function blameOpen(){return !!(blamePop&&!blamePop.hidden);}
+  function closeBlame(restore){
+    if(!blameOpen())return;
+    blamePop.hidden=true;blameReq++;
+    var back=blameFor;blameFor=null;
+    if(restore&&back&&document.documentElement.contains(back.row)){try{back.row.focus({preventScroll:true});}catch(err){back.row.focus();}}
+  }
+  function blameCommit(kicker,c){
+    var wrap=el('div','ds-blame-commit');
+    wrap.appendChild(el('div','ds-blame-kicker',kicker));
+    wrap.appendChild(el('div','ds-blame-subject',c.subject||'(no subject)'));
+    var meta=el('div','ds-blame-meta');
+    var sha=el('code','ds-blame-sha',String(c.sha||'').slice(0,8));sha.title=c.sha||'';
+    meta.appendChild(sha);meta.appendChild(el('span','',(c.author||'')+(c.relative?' · '+c.relative:'')));
+    if(c.date)meta.title=c.date;
+    wrap.appendChild(meta);
+    var actions=el('div','ds-blame-actions');
+    var routeBase=document.body.getAttribute('data-route-base')||'';
+    if(routeBase){
+      var open=el('a','ds-blame-action','Review this commit');
+      open.href=routeBase+'/change?scope=commit&commit='+encodeURIComponent(c.sha);open.target='_blank';open.rel='noopener';
+      actions.appendChild(open);
+    }
+    var copy=el('button','ds-blame-action','Copy SHA');copy.type='button';
+    copy.onclick=function(){writeClipboard(c.sha,function(){copy.textContent='Copied';});};
+    actions.appendChild(copy);
+    wrap.appendChild(actions);
+    return wrap;
+  }
+  function renderBlame(body,data){
+    body.textContent='';
+    if(data.kind==='uncommitted'){
+      body.appendChild(el('div','ds-blame-kicker','Not committed yet'));
+      body.appendChild(el('p','ds-blame-note','This line exists only in the working tree.'));
+      return;
+    }
+    if(data.kind==='line'){
+      body.appendChild(blameCommit(data.inRange?'Changed in this review by':'Unchanged here since',data.commit));
+      return;
+    }
+    if(data.removedBy==='uncommitted'){
+      body.appendChild(el('div','ds-blame-kicker','Removed by uncommitted changes'));
+      body.appendChild(el('p','ds-blame-note','No commit has taken this line away yet.'));
+    }else body.appendChild(blameCommit(data.moved?'Moved by':'Removed by',data.removedBy));
+    if(data.origin)body.appendChild(blameCommit('Originally written in',data.origin));
+  }
+  function placeBlame(anchor){
+    var r=anchor.getBoundingClientRect(),w=blamePop.offsetWidth||320,h=blamePop.offsetHeight||140;
+    var vw=window.innerWidth||document.documentElement.clientWidth,vh=window.innerHeight||document.documentElement.clientHeight;
+    var top=r.bottom+6;if(top+h>vh-8)top=Math.max(8,r.top-6-h);
+    blamePop.style.left=Math.max(8,Math.min(r.left,vw-w-8))+'px';blamePop.style.top=top+'px';
+  }
+  function openBlame(target,anchor){
+    if(!blamePop){
+      blamePop=el('div','ds-blame-pop');blamePop.hidden=true;blamePop.setAttribute('role','dialog');blamePop.tabIndex=-1;
+      document.body.appendChild(blamePop);
+    }
+    var req=++blameReq;blameFor=target;
+    blamePop.textContent='';
+    blamePop.setAttribute('aria-label','Blame for '+(target.side==='left'?'before':'after')+' line '+target.line);
+    var head=el('div','ds-blame-head');
+    head.appendChild(el('span','ds-blame-title',(target.side==='left'?'Before':'After')+' · line '+target.line));
+    var close=el('button','ds-blame-close','×');close.type='button';close.setAttribute('aria-label','Close blame');
+    close.onclick=function(){closeBlame(true);};
+    head.appendChild(close);blamePop.appendChild(head);
+    var body=el('div','ds-blame-body');body.appendChild(el('p','ds-blame-note','Reading history…'));
+    blamePop.appendChild(body);
+    blamePop.hidden=false;placeBlame(anchor);
+    try{blamePop.focus({preventScroll:true});}catch(err){blamePop.focus();}
+    var q='/api/blame?side='+target.side+'&line='+target.line+'&file='+encodeURIComponent(target.file);
+    fetch(reviewPageUrl(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){
+      if(req!==blameReq)return;
+      if(!res.ok){body.textContent='';body.appendChild(el('p','ds-blame-note',(res.j&&res.j.error)||'Git has no blame for this line.'));}
+      else renderBlame(body,res.j);
+      placeBlame(anchor);
+    }).catch(function(){
+      if(req!==blameReq)return;
+      body.textContent='';body.appendChild(el('p','ds-blame-note','Couldn\u2019t read the history for this line.'));
+    });
+  }
+
+  // A moved line's tag jumps to its other end in the same file and view.
+  function jumpToMovedLine(tag){
+    var side=tag.getAttribute('data-moved-side'),line=tag.getAttribute('data-moved-line');
+    var scope=closest(tag,'[data-diff-inner],[data-split-inner],[data-full-inner]')||closest(tag,'.ds-filepanel-body')||document;
+    var row=$all('[data-side="'+side+'"][data-line="'+line+'"]',scope).filter(function(r){return !!r.offsetParent;})[0];
+    if(!row)return;
+    // The same stable marker change navigation leaves: one outline, no flash.
+    var holder=closest(tag,'.ds-filepanel')||scope;
+    $all('.ds-row-add,.ds-row-del,.ds-row-pair',holder).forEach(function(r){r.classList.remove('is-change-jump');r.removeAttribute('aria-current');});
+    $all('.ds-row-pair-l.is-change-jump',holder).forEach(function(r){r.classList.remove('is-change-jump');});
+    row.classList.add('is-change-jump');row.setAttribute('aria-current','true');
+    scrollReviewRowVertically(row);
+    try{row.focus({preventScroll:true});}catch(err){row.focus();}
+  }
+
   function onClick(e){
     var t=e.target,b;
     if(!closest(t,'.ds-story-tune'))closeStoryTuneMenus();
+    if(blameOpen()&&!closest(t,'.ds-blame-pop')&&!closest(t,'.ds-no'))closeBlame(false);
+    b=closest(t,'[data-moved-jump]');if(b){e.preventDefault();jumpToMovedLine(b);return;}
+    b=closest(t,'.ds-no');
+    if(b&&(b.textContent||'').trim()){
+      var blameRow=closest(b,'[data-review-row]'),blameTarget=blameRowTarget(blameRow);
+      if(blameTarget){
+        e.preventDefault();
+        if(blameOpen()&&blameFor&&blameFor.row===blameRow){closeBlame(false);return;}
+        openBlame(blameTarget,b);return;
+      }
+    }
     b=closest(t,'[data-vscode-symbol]');if(b&&(e.metaKey||e.ctrlKey)){e.preventDefault();openSymbolInEditor(b);return;}
     b=closest(t,'[data-review-reload]');if(b){location.reload();return;}
     b=closest(t,'[data-move-target-file]');if(b){var targetStep=parseInt(b.getAttribute('data-move-target-step')||'0',10);if(targetStep>0){setActive(targetStep);return;}var targetFile=b.getAttribute('data-move-target-file')||'',targetLine=parseInt(b.getAttribute('data-move-target-line')||'0',10);if(targetFile){openMoveTargetFile(targetFile,targetLine);return;}}
@@ -3642,6 +3763,7 @@ export function startReviewEngine(options){
     b=closest(t,'.ds-stepcard');if(b){setActive(Number(b.getAttribute('data-step-index')));collapseCompactSidebar();return;}
   }
   function onKey(e){
+    if(e.key==='Escape'&&blameOpen()){e.preventDefault();e.stopPropagation();closeBlame(true);return;}
     if(e.key==='Escape'){
       var mermaidFullscreen=document.fullscreenElement&&closest(document.fullscreenElement,'[data-concept-diagram]')||$('.is-mermaid-fullscreen');
       if(mermaidFullscreen){e.preventDefault();setMermaidFullscreen(mermaidFullscreen,false);return;}
@@ -3665,6 +3787,10 @@ export function startReviewEngine(options){
     if(modalRoot)return;
     if(!isTextEntryTarget(e.target)&&e.key==='/'){
       e.preventDefault();setView('files');var search=$('[data-file-search]');if(search)search.focus();return;
+    }
+    if(!isTextEntryTarget(e.target)&&(e.key==='b'||e.key==='B')&&!e.metaKey&&!e.ctrlKey&&!e.altKey){
+      var blameKeyRow=closest(document.activeElement,'[data-review-row]'),blameKeyTarget=blameRowTarget(blameKeyRow);
+      if(blameKeyTarget){e.preventDefault();openBlame(blameKeyTarget,$('.ds-no',blameKeyRow)||blameKeyRow);return;}
     }
     if(!isTextEntryTarget(e.target)&&(e.key==='c'||e.key==='C')){
       var cctx=currentSelectionContext()||focusedRowContext();if(cctx){e.preventDefault();selectionContext=cctx;openComposer(cctx.anchorRow,'change',cctx);return;}
@@ -3863,6 +3989,8 @@ export function startReviewEngine(options){
     document.addEventListener('mouseup',releaseSelectionSide);
     document.addEventListener('selectionchange',clearCollapsedSelection);
     document.addEventListener('scroll',saveReviewPositionSoon,true);
+    // The popover is anchored to a row that scrolling carries away.
+    document.addEventListener('scroll',function(e){if(blameOpen()&&!closest(e.target,'.ds-blame-pop'))closeBlame(false);},true);
     document.addEventListener('mousedown',startSidebarResize);
     document.addEventListener('mousemove',moveSidebarResize);
     document.addEventListener('mouseup',endSidebarResize);

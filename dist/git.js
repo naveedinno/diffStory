@@ -853,7 +853,10 @@ export function describeBase(repo, base) {
         "--end-of-options",
         base,
     ])?.trim();
-    if (name && name !== "undefined")
+    // name-rev describes ANY commit relative to some ref (`tags/v1~29^2`), which
+    // reads like a ref the reviewer picked when it is really a walk from one. Only
+    // an exact hit on a ref is worth naming; otherwise the short id is clearer.
+    if (name && name !== "undefined" && !/[~^]/.test(name))
         return `${name} (${short ?? base})`;
     return short ?? base;
 }
@@ -898,6 +901,115 @@ export function commitParentBase(repo, commit) {
     ]) !== null)
         return `${commit}^`;
     return emptyTree(repo);
+}
+/**
+ * Where `branch` forked off its parent line: `merge-base(parent, branch)`.
+ *
+ * With an explicit `parent` that pair is the whole answer. Otherwise the parent
+ * is discovered from the branch's own history rather than guessed from names:
+ * walk the branch's first-parent line, dropping every commit some OTHER branch
+ * can reach, and the first commit past the branch's own work is the fork. Real
+ * repos cut feature branches from release lines (`version_0.8.6`) that split
+ * from `main`/`develop` long ago, so measuring from a default branch alone
+ * reports thousands of unrelated commits.
+ *
+ * "Other" excludes the branch's own remote twins (`origin/x` is not where `x`
+ * came from) and topic branches merged in through a second parent. A ref whose
+ * tip sits on the branch's first-parent line stays: that is a parent that has
+ * not moved since the cut — or a child fast-forwarded back in, which the graph
+ * cannot tell apart. A trunk only looks at trunks ranked
+ * above it, so `main` never measures from `develop`. The one case no ref graph
+ * can settle is a CHILD branch cut from this one — it shares a fork just like a
+ * parent — which is what the explicit parent is for.
+ */
+export function branchForkPoint(repo, branch, parent) {
+    const tip = resolveCommit(repo, branch);
+    if (!tip)
+        return null;
+    if (parent) {
+        if (!resolveCommit(repo, parent))
+            return null;
+        return measureFork(repo, tip, parent);
+    }
+    const remotes = (tryGit(repo, ["remote"]) ?? "").split("\n").filter(Boolean);
+    const local = (ref) => {
+        const remote = remotes.find((r) => ref.startsWith(`${r}/`));
+        return remote ? ref.slice(remote.length + 1) : ref;
+    };
+    const trunks = [...new Set(defaultBranchCandidates(repo))];
+    const trunkRank = (ref) => {
+        const i = trunks.findIndex((t) => local(t) === local(ref));
+        return i < 0 ? trunks.length : i;
+    };
+    const ownRank = trunkRank(branch);
+    // A ref already merged into the branch is still a parent candidate when its
+    // tip sits on the branch's first-parent line — a parent that has not moved
+    // since the cut. One reached only through a merge's second parent is a topic
+    // branch that was merged in, which is history, not where the branch came from.
+    const merged = new Set((tryGit(repo, ["for-each-ref", "--format=%(refname)", "--merged", tip, "refs/heads", "refs/remotes"]) ?? "")
+        .split("\n")
+        .filter(Boolean));
+    const firstParentLine = new Set((tryGit(repo, ["rev-list", "--first-parent", tip]) ?? "").split("\n").filter(Boolean));
+    // Full refname → short name, for every ref that could be the parent.
+    const others = new Map();
+    for (const line of (tryGit(repo, [
+        "for-each-ref",
+        "--format=%(refname)%09%(refname:short)%09%(objectname)",
+        "refs/heads",
+        "refs/remotes",
+    ]) ?? "").split("\n")) {
+        const [full, short, object] = line.split("\t");
+        if (!full || !short || full.endsWith("/HEAD"))
+            continue;
+        if (merged.has(full) && (object === tip || !firstParentLine.has(object)))
+            continue;
+        if (local(short) === local(branch))
+            continue;
+        if (ownRank < trunks.length && trunkRank(short) >= ownRank)
+            continue;
+        others.set(full, short);
+    }
+    if (!others.size)
+        return null;
+    // The branch's own first-parent commits, newest first. Empty means another
+    // ref already contains the tip.
+    const own = (tryGit(repo, [
+        "rev-list",
+        "--first-parent",
+        tip,
+        "--not",
+        ...others.keys(),
+    ]) ?? "")
+        .split("\n")
+        .filter(Boolean);
+    const fork = own.length
+        ? tryGit(repo, ["rev-parse", "--verify", "--quiet", `${own[own.length - 1]}^1`])?.trim()
+        : tip;
+    if (!fork)
+        return null; // the branch's own line reaches its root commit
+    const holders = (tryGit(repo, ["for-each-ref", "--format=%(refname)", "--contains", fork, "refs/heads", "refs/remotes"]) ?? "")
+        .split("\n")
+        .map((r) => others.get(r.trim()))
+        .filter((r) => !!r);
+    if (!holders.length)
+        return null;
+    // Name the parent the way a person would: a trunk first, then a local branch
+    // over its remote copy, then `origin` over other remotes, then the shortest.
+    const remoteShorts = new Set([...others].filter(([full]) => full.startsWith("refs/remotes/")).map(([, short]) => short));
+    const isRemote = (r) => remoteShorts.has(r);
+    holders.sort((a, b) => trunkRank(a) - trunkRank(b) ||
+        Number(isRemote(a)) - Number(isRemote(b)) ||
+        Number(!a.startsWith("origin/")) - Number(!b.startsWith("origin/")) ||
+        a.length - b.length ||
+        a.localeCompare(b));
+    return measureFork(repo, tip, holders[0]);
+}
+function measureFork(repo, tip, parent) {
+    const base = tryGit(repo, ["merge-base", "--end-of-options", parent, tip])?.trim();
+    if (!base)
+        return null;
+    const ahead = Number(tryGit(repo, ["rev-list", "--count", "--end-of-options", `${base}..${tip}`])?.trim() ?? NaN);
+    return Number.isFinite(ahead) ? { base, parent, ahead } : null;
 }
 /** Short commit label for controls and headings. */
 export function describeCommit(repo, commit) {
@@ -1197,4 +1309,119 @@ function readFileText(repo, file, ref) {
     if (!existsSync(abs))
         return null;
     return readFileSync(abs, "utf8");
+}
+const ZERO_SHA = /^0{40}$/;
+function blameAt(repo, file, line, args) {
+    const out = tryGit(repo, [
+        "blame",
+        "--porcelain",
+        "-L",
+        `${line},${line}`,
+        ...args,
+        "--",
+        file,
+    ]);
+    if (!out)
+        return null;
+    const lines = out.split("\n");
+    const sha = lines[0]?.split(" ")[0] ?? "";
+    if (!/^[0-9a-f]{40}$/.test(sha))
+        return null;
+    if (ZERO_SHA.test(sha))
+        return "uncommitted";
+    return commitInfo(repo, sha);
+}
+function commitInfo(repo, sha) {
+    const out = tryGit(repo, ["show", "-s", "--format=%H%x00%s%x00%an%x00%aI", "--end-of-options", sha])?.trim();
+    if (!out)
+        return null;
+    const [full, subject, author, date] = out.split("\0");
+    return { sha: full, subject, author, date, relative: relativeCommitTime(date) };
+}
+/**
+ * Which commit is responsible for one line of the diff on screen.
+ *
+ * After side (`right`): plain blame at `head` — or the working tree when the
+ * review ends there, where an unsaved edit blames to the zero id.
+ *
+ * Before side (`left`): the line exists at `base` and not at the tip, so the
+ * interesting commit is the one that took it away. `blame --reverse` finds the
+ * last commit in base..tip that still had it; the first commit after that on
+ * the ancestry path which touched the file is the removal. If even the tip
+ * still has the line, the removal is uncommitted.
+ */
+export function blameReviewLine(repo, opts) {
+    const { base, head, side, file, line } = opts;
+    try {
+        assertSafeRef(base);
+        if (head)
+            assertSafeRef(head);
+        assertSafeRepoPath(file);
+    }
+    catch {
+        return null;
+    }
+    if (!Number.isInteger(line) || line < 1)
+        return null;
+    if (side === "right") {
+        const hit = blameAt(repo, file, line, head ? [head] : []);
+        if (!hit)
+            return null;
+        if (hit === "uncommitted")
+            return { kind: "uncommitted" };
+        // `--is-ancestor` exits 1 (tryGit → null) when the commit is newer than base.
+        const inRange = tryGit(repo, ["merge-base", "--is-ancestor", hit.sha, base]) === null;
+        return { kind: "line", commit: hit, inRange };
+    }
+    const tip = resolveCommit(repo, head ?? "HEAD");
+    const baseSha = resolveCommit(repo, base);
+    const origin = baseSha ? blameAt(repo, file, line, [baseSha]) : null;
+    const originCommit = origin && origin !== "uncommitted" ? origin : null;
+    if (!tip || !baseSha)
+        return null;
+    if (tip === baseSha)
+        return { kind: "removed", removedBy: "uncommitted", origin: originCommit };
+    const lastSeen = tryGit(repo, [
+        "blame",
+        "--porcelain",
+        "--reverse",
+        "-L",
+        `${line},${line}`,
+        `${baseSha}..${tip}`,
+        "--",
+        file,
+    ])
+        ?.split("\n")[0]
+        ?.split(" ")[0];
+    if (!lastSeen || !/^[0-9a-f]{40}$/.test(lastSeen))
+        return null;
+    if (lastSeen === tip) {
+        // Git follows the line to the tip, so it survives somewhere — usually
+        // moved. The commit that moved it is the first in range whose diff touched
+        // that exact text; with none, only the working tree has moved or dropped it.
+        const text = (tryGit(repo, ["show", safeObjectPath(baseSha, file)]) ?? "").split("\n")[line - 1]?.trim();
+        const mover = text
+            ? (tryGit(repo, ["log", "--format=%H", "--reverse", `-G${escapeRegex(text)}`, `${baseSha}..${tip}`, "--", file]) ?? "")
+                .split("\n")
+                .filter(Boolean)[0]
+            : undefined;
+        const movedBy = mover ? commitInfo(repo, mover) : null;
+        return movedBy
+            ? { kind: "removed", removedBy: movedBy, moved: true, origin: originCommit }
+            : { kind: "removed", removedBy: "uncommitted", origin: originCommit };
+    }
+    const after = (args) => (tryGit(repo, ["rev-list", "--ancestry-path", "--reverse", `${lastSeen}..${tip}`, ...args]) ?? "")
+        .split("\n")
+        .filter(Boolean)[0];
+    // Prefer the first later commit that touched the file; a rename can hide it
+    // from the path filter, so fall back to the first later commit at all.
+    const next = after(["--", file]) ?? after([]);
+    const removedBy = next ? commitInfo(repo, next) : null;
+    if (!removedBy)
+        return null;
+    return { kind: "removed", removedBy, origin: originCommit };
+}
+/** Escape text for git's POSIX extended regex (`-G`). */
+function escapeRegex(text) {
+    return text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }

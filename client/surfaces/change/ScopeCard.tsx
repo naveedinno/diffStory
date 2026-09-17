@@ -1,8 +1,9 @@
-// "What am I reviewing?" — the three scope modes, their editors, and the
+// "What am I reviewing?" — the four scope modes, their editors, and the
 // resolved-scope summary.
 //
 // The whole surface is URL-backed. Every scope change is a full navigation to a
-// real URL (`?scope=uncommitted`, `?scope=commit&commit=…`, `?base=…&head=…`),
+// real URL (`?scope=uncommitted`, `?scope=commit&commit=…`,
+// `?scope=branch&branch=…&from=…`, `?base=…&head=…`),
 // which is why Back and Forward work here and why there is no `pushState`
 // anywhere in this codebase. Two rules follow from that and both are easy to
 // lose:
@@ -84,23 +85,23 @@ import { cn } from "../../shared/cn";
 import { useQuietSubtree } from "../../shared/quiet";
 import type { ChangePayload } from "../../../src/payloads";
 import { RefListbox, useRefPicker, type FieldProps } from "./RefPicker";
-import { WORKTREE, WORKTREE_LABEL, type FieldKind } from "./refs";
+import { AUTO_PARENT, AUTO_PARENT_LABEL, WORKTREE, WORKTREE_LABEL, type FieldKind } from "./refs";
 
-type Panel = "commit" | "compare";
+type Panel = "commit" | "branch" | "compare";
 
 /** Signal colours for the portalled bubble, which ships with none of its own. */
 const TOOLTIP_SURFACE =
   "max-w-[min(90vw,52ch)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
 
-// The three segments sit INSIDE a recessed track rather than floating on the
-// card as three separate tiles. Three tiles with their own fill and their own
-// hairline read as three cards you could each act on; one track with three
-// compartments reads as "pick exactly one of these", which is what it is. So
+// The four segments sit INSIDE a recessed track rather than floating on the
+// card as separate tiles. Tiles with their own fill and their own hairline read
+// as cards you could each act on; one track with four compartments reads as
+// "pick exactly one of these", which is what it is. So
 // the segment itself is transparent — the track supplies the fill — and colour
 // is spent only on the two states that mean something (see `segmentClass`).
 const SEGMENT_TRACK = cn(
-  "grid grid-cols-3 gap-1 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 p-1",
-  "max-[600px]:gap-0.5 contrast-more:border-text",
+  "grid grid-cols-4 gap-1 rounded-[var(--radius-lg)] border border-line-soft bg-fill-1 p-1",
+  "max-[600px]:grid-cols-2 max-[600px]:gap-0.5 contrast-more:border-text",
 );
 
 const SEGMENT_BASE = cn(
@@ -279,22 +280,29 @@ export interface ScopeCardProps {
 export function ScopeCard({ payload }: ScopeCardProps) {
   const { routeBase, base, head, scopeLabel, active } = payload;
   const inCompare = active === "compare";
+  const inBranch = active === "branch";
 
   // The compare editor repopulates straight from the resolved scope, because in
   // compare mode base/head ARE the two chosen revs. Other scopes resolve base to
   // bookkeeping values (`HEAD`, a parent SHA) that would read as a chosen rev.
   const [openPanel, setOpenPanel] = useState<Panel | null>(
-    active === "commit" ? "commit" : active === "compare" ? "compare" : null,
+    active === "commit" || active === "branch" || active === "compare" ? active : null,
   );
   const [commitValue, setCommitValue] = useState(head ?? "HEAD");
   const [baseValue, setBaseValue] = useState(inCompare ? base : "");
   const targetIsWorktree = !inCompare || !head;
   const [headValue, setHeadValue] = useState(targetIsWorktree ? WORKTREE_LABEL : (head as string));
   const [headWorktree, setHeadWorktree] = useState(targetIsWorktree);
+  // Branch mode prefills from the URL's own words, never from the resolved
+  // fork SHA: an empty branch means "the checked-out branch", and a missing
+  // parent means auto-detect.
+  const [branchValue, setBranchValue] = useState(inBranch ? (payload.branch ?? "") : "");
+  const [fromValue, setFromValue] = useState(inBranch && payload.branchFrom ? payload.branchFrom : AUTO_PARENT_LABEL);
+  const [fromAuto, setFromAuto] = useState(!(inBranch && payload.branchFrom));
   const reduceMotion = useReducedMotion();
 
   const navTimer = useRef(0);
-  const focusValue = useRef<Record<FieldKind, string>>({ commit: "", base: "", head: "" });
+  const focusValue = useRef<Record<FieldKind, string>>({ commit: "", base: "", head: "", branch: "", from: "" });
 
   const scheduleNavTo = (url: string, delay: number) => {
     if (!url) return;
@@ -309,6 +317,12 @@ export function ScopeCard({ payload }: ScopeCardProps) {
   const commitUrl = (value: string) =>
     `${routeBase}/change?scope=commit&commit=${encodeURIComponent(value.trim() || "HEAD")}`;
 
+  const branchUrl = (nextBranch: string, nextFrom: string, auto: boolean) => {
+    const name = nextBranch.trim();
+    const parent = auto || nextFrom.trim() === AUTO_PARENT_LABEL ? "" : nextFrom.trim();
+    return `${routeBase}/change?scope=branch${name ? `&branch=${encodeURIComponent(name)}` : ""}${parent ? `&from=${encodeURIComponent(parent)}` : ""}`;
+  };
+
   const compareUrl = (nextBase: string, nextHead: string, worktree: boolean) => {
     const source = nextBase.trim();
     if (!source) return "";
@@ -321,11 +335,25 @@ export function ScopeCard({ payload }: ScopeCardProps) {
       commit: { value: commitValue, worktree: false },
       base: { value: baseValue, worktree: false },
       head: { value: headValue, worktree: headWorktree },
+      branch: { value: branchValue, worktree: false },
+      from: { value: fromAuto ? AUTO_PARENT : fromValue, worktree: false },
     },
     onChoose: (kind, value) => {
       if (kind === "commit") {
         setCommitValue(value);
         scheduleNavTo(commitUrl(value), 0);
+        return;
+      }
+      if (kind === "branch") {
+        setBranchValue(value);
+        scheduleNavTo(branchUrl(value, fromValue, fromAuto), 0);
+        return;
+      }
+      if (kind === "from") {
+        const auto = value === AUTO_PARENT;
+        setFromValue(auto ? AUTO_PARENT_LABEL : value);
+        setFromAuto(auto);
+        scheduleNavTo(branchUrl(branchValue, auto ? "" : value, auto), 0);
         return;
       }
       if (kind === "base") {
@@ -393,6 +421,17 @@ export function ScopeCard({ payload }: ScopeCardProps) {
     scheduleNavTo(commitUrl(value), delay);
   });
 
+  const branchField = wire("branch", "branchRef", branchValue, (value, delay) => {
+    setBranchValue(value);
+    scheduleNavTo(branchUrl(value, fromValue, fromAuto), delay);
+  });
+
+  const fromField = wire("from", "branchFrom", fromValue, (value, delay) => {
+    setFromValue(value);
+    setFromAuto(false);
+    scheduleNavTo(branchUrl(branchValue, value, false), delay);
+  });
+
   const baseField = wire("base", "cmpBase", baseValue, (value, delay) => {
     setBaseValue(value);
     scheduleNavTo(compareUrl(value, headValue, headWorktree), delay);
@@ -405,7 +444,13 @@ export function ScopeCard({ payload }: ScopeCardProps) {
   });
 
   const summaryKicker =
-    active === "compare" ? "Selected comparison" : active === "commit" ? "Selected commit" : "Selected scope";
+    active === "compare"
+      ? "Selected comparison"
+      : active === "commit"
+        ? "Selected commit"
+        : active === "branch"
+          ? "Selected branch"
+          : "Selected scope";
 
   // The split summary and the compare editor show the same two refs, so only one
   // of them is on screen at a time. The single-line summary has no such twin and
@@ -472,6 +517,19 @@ export function ScopeCard({ payload }: ScopeCardProps) {
         </Button>
         <Button
           type="button"
+          data-open-panel="branch"
+          aria-controls="branchPanel"
+          aria-expanded={openPanel === "branch"}
+          pressScale={SEGMENT_PRESS}
+          whileHover={undefined}
+          onClick={() => showPanel("branch")}
+          className={segmentClass(active === "branch", openPanel === "branch")}
+        >
+          <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Whole branch</span>
+          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Fork point → branch tip</span>
+        </Button>
+        <Button
+          type="button"
           data-open-panel="compare"
           aria-controls="comparePanel"
           aria-expanded={openPanel === "compare"}
@@ -508,6 +566,51 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           </label>
           <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
             Shows that commit against its first parent; root commits are shown against the empty tree.
+          </p>
+        </div>
+      </motion.div>
+
+      <motion.div
+        id="branchPanel"
+        data-panel="branch"
+        aria-hidden={openPanel !== "branch"}
+        inert={openPanel !== "branch"}
+        {...panelMotion(openPanel === "branch")}
+        style={{ transformOrigin: "75% 0" }}
+        className={cn("overflow-hidden", openPanel !== "branch" && "pointer-events-none")}
+      >
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-1.5 pb-px">
+          <div className="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-stretch gap-2 max-[700px]:grid-cols-[minmax(0,1fr)] max-[700px]:gap-2.5">
+            <label className={SLOT_EDIT}>
+              <span className={KICKER_EDIT}>
+                Forked from <i className={GLOSS}>parent</i>
+              </span>
+              <Input
+                {...fromField}
+                {...(fromAuto ? { "data-auto": "1" } : {})}
+                leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
+                placeholder="main, develop, or any ref"
+                classNames={FIELD_CLASSNAMES}
+              />
+            </label>
+            <Arrow className="max-[700px]:hidden" />
+            <label className={SLOT_EDIT}>
+              <span className={KICKER_EDIT}>
+                Branch <i className={GLOSS}>tip</i>
+              </span>
+              <Input
+                {...branchField}
+                leftIcon={<GitBranch strokeWidth={1.8} aria-hidden="true" />}
+                placeholder="current branch"
+                classNames={FIELD_CLASSNAMES}
+              />
+            </label>
+          </div>
+          <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
+            Shows every commit on the branch since it split from its parent.{" "}
+            <a href={`${routeBase}/change?scope=branch`} className="font-semibold text-accent-text underline-offset-2 hover:underline">
+              Use the current branch
+            </a>
           </p>
         </div>
       </motion.div>

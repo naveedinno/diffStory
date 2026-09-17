@@ -393,3 +393,45 @@ test('a scoped story is measured only against its included files', async () => {
   assert.deepEqual(filesForStoryCoverage({ storyScope: { includedFiles: ['src/a.ts'] } }, files).map((f) => f.newPath), ['src/a.ts']);
   assert.equal(filesForStoryCoverage({}, files).length, 2);
 });
+
+// ---- moved lines ----
+import { markMovedLines } from '../dist/view-model.js';
+
+const del = (oldNo, content) => ({ type: 'del', oldNo, content });
+const add = (newNo, content) => ({ type: 'add', newNo, content });
+const ctx = (n, content = 'ctx') => ({ type: 'ctx', oldNo: n, newNo: n, content, comment: true });
+const lineOf = (r) => (r.type === 'del' ? r.oldNo : r.newNo);
+
+test('a line deleted in one place and added in another is marked moved both ways', () => {
+  const rows = [ctx(120), del(121, '    quote.closedAmount += filledAmount;'), ctx(122), add(122, '        quote.closedAmount += filledAmount;'), ctx(123)];
+  markMovedLines([rows], lineOf);
+  assert.deepEqual(rows[1].moved, { side: 'right', line: 122 });
+  assert.deepEqual(rows[3].moved, { side: 'left', line: 121 });
+  const { rows: paired } = pairChangeRows(rows);
+  assert.ok(paired.every((r) => !r.changePair), 'moved lines never pair as an edit');
+});
+
+test('moves need a meaningful, unambiguous line and are not in-place re-indents', () => {
+  const trivial = [del(1, '}'), ctx(2), add(3, '}')];
+  markMovedLines([trivial], lineOf);
+  assert.equal(trivial[0].moved, undefined, 'a brace is not a move');
+
+  const ambiguous = [del(1, 'emitSettlement(quoteId);'), del(2, 'emitSettlement(quoteId);'), ctx(3), add(4, 'emitSettlement(quoteId);')];
+  markMovedLines([ambiguous], lineOf);
+  assert.ok(ambiguous.every((r) => !r.moved), 'a repeated line has no single other end');
+
+  const reindent = [del(5, '  settleFunding(quote);'), add(5, '    settleFunding(quote);')];
+  markMovedLines([reindent], lineOf);
+  assert.ok(reindent.every((r) => !r.moved), 'an edit in place stays an edit');
+
+  const swap = [del(7, 'firstStatement(alpha);'), del(8, 'secondStatement(beta);'), add(7, 'secondStatement(beta);'), add(8, 'firstStatement(alpha);')];
+  markMovedLines([swap], lineOf);
+  assert.ok(swap.every((r) => r.moved), 'two swapped lines are two moves');
+});
+
+test('moves are found across hunks', () => {
+  const blocks = [[ctx(10), del(11, 'uint256 cachedBalance = balanceOf(owner);'), ctx(12)], [ctx(80), add(79, 'uint256 cachedBalance = balanceOf(owner);'), ctx(81)]];
+  markMovedLines(blocks, lineOf);
+  assert.deepEqual(blocks[0][1].moved, { side: 'right', line: 79 });
+  assert.deepEqual(blocks[1][1].moved, { side: 'left', line: 11 });
+});
