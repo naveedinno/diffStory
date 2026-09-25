@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setGitignore, skillsInstalled, skillStatus, updateSkills } from '../dist/repo-setup.js';
+import { setGitignore, skillDirDigest, skillsInstalled, skillStatus, updateSkills } from '../dist/repo-setup.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ds-rs-'));
 
@@ -163,5 +163,34 @@ test('updateSkills installs bundled skills into agent, Claude, and Codex skill d
   assert.equal(status.agents.claude.current, true);
   assert.equal(status.agents.codex.current, true);
 
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('skillStatus compares the whole skill folder, not just SKILL.md', () => {
+  const home = tmp();
+  const bundleDir = join(home, 'bundle', 'diffstory-storyteller');
+  const installedDir = join(home, '.claude', 'skills', 'diffstory-storyteller');
+  for (const dir of [bundleDir, installedDir]) {
+    mkdirSync(join(dir, 'references'), { recursive: true });
+    writeFileSync(join(dir, 'SKILL.md'), 'same core');
+  }
+  writeFileSync(join(bundleDir, 'references', 'schema.md'), 'new schema');
+  writeFileSync(join(installedDir, 'references', 'schema.md'), 'old schema');
+  assert.equal(skillStatus(home, join(bundleDir, 'SKILL.md')).agents.claude.current, false);
+  writeFileSync(join(installedDir, 'references', 'schema.md'), 'new schema');
+  assert.equal(skillStatus(home, join(bundleDir, 'SKILL.md')).agents.claude.current, true);
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('skillDirDigest ignores .DS_Store and line-ending noise', () => {
+  const home = tmp();
+  const a = join(home, 'a');
+  const b = join(home, 'b');
+  mkdirSync(a);
+  mkdirSync(b);
+  writeFileSync(join(a, 'SKILL.md'), 'line one\nline two\n');
+  writeFileSync(join(b, 'SKILL.md'), 'line one\r\nline two');
+  writeFileSync(join(b, '.DS_Store'), 'junk');
+  assert.equal(skillDirDigest(a), skillDirDigest(b));
   rmSync(home, { recursive: true, force: true });
 });

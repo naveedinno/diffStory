@@ -1,6 +1,7 @@
 // Per-repo setup: choose how .diffstory/ is tracked in git, and check the
 // producer skill is installed for some agent. Pure FS; no CLI dependencies.
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './config.js';
@@ -36,7 +37,9 @@ export function skillsInstalled(home) {
  * codex → ~/.codex/skills), so callers can warn for the agent actually in use.
  */
 export function skillStatus(home, expected = bundledStorytellerSkill()) {
-    const expectedText = readNormalized(expected);
+    // Compare the whole skill folder (SKILL.md, references/, scripts/), not just
+    // SKILL.md: a stale reference file or checker bundle teaches the old skill too.
+    const expectedDigest = existsSync(expected) ? skillDirDigest(dirname(expected)) : null;
     const skillRoots = [
         join(home, '.agents', 'skills'),
         join(home, '.claude', 'skills'),
@@ -45,7 +48,7 @@ export function skillStatus(home, expected = bundledStorytellerSkill()) {
     const candidates = skillRoots.map((root) => {
         const path = join(root, STORYTELLER_SKILL, 'SKILL.md');
         const installed = existsSync(path);
-        const current = installed && expectedText != null && readNormalized(path) === expectedText;
+        const current = installed && expectedDigest != null && skillDirDigest(dirname(path)) === expectedDigest;
         return { path, installed, current };
     });
     const legacyInstalled = skillRoots.some((root) => existsSync(join(root, LEGACY_STORYTELLER_SKILL, 'SKILL.md')));
@@ -118,4 +121,28 @@ function readNormalized(path) {
     catch {
         return null;
     }
+}
+/**
+ * Content digest of a skill folder: every file's relative path and normalized
+ * text, in sorted order. Two folders with the same digest teach the same skill.
+ */
+export function skillDirDigest(dir) {
+    const files = [];
+    const walk = (rel) => {
+        for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
+            if (entry.name === '.DS_Store')
+                continue;
+            const child = rel ? `${rel}/${entry.name}` : entry.name;
+            if (entry.isDirectory())
+                walk(child);
+            else if (entry.isFile())
+                files.push(child);
+        }
+    };
+    walk('');
+    const hash = createHash('sha256');
+    for (const file of files.sort()) {
+        hash.update(`${file}\0${readNormalized(join(dir, file)) ?? ''}\0`);
+    }
+    return hash.digest('hex');
 }
