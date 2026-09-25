@@ -2,6 +2,41 @@
 
 Part of the diffstory-storyteller skill. Read immediately before writing or editing story JSON.
 
+## File contract
+
+The checker enforces every line of this; knowing it saves a rewrite.
+
+- Every story under `.diffstory/stories/` carries a top-level `storyScope` with
+  `includedFiles`, and every code step's `file` appears in it. The app rejects
+  the story otherwise.
+- Newly generated stories use `"version": 3`. Older versions stay readable; do
+  not rewrite an existing story just to modernize its number.
+- Every newly generated story carries `storyArc` with `changeType`, `shape`, and
+  a plain-text `readingPath` naming the real review stages in story order with
+  ASCII ` -> ` separators.
+- Add `evolution` only when the prompt supplies an eligible frozen first-parent
+  manifest. Author `phases`, `firstCommit`, `lastCommit`, optional
+  `relatedSteps`; never author server-owned `baseSha` or `headSha`.
+- Set `base` to the ref you diffed against; set `head` only for fixed
+  `base..head` stories.
+- Never use "deleted" as a step kind. For deleted files, use kind "changed" and
+  anchor the range at the post-change deletion location.
+- For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`.
+  Do not invent line 1 for a file that no longer exists.
+- `range`: post-change, 1-based inclusive lines; the tight local camera anchor.
+  When top-level `ranges` is absent, `range` is also the step's complete
+  coverage claim.
+- Optional top-level `ranges`: the complete list of post-change spans a
+  `changed`/`new-file` step claims. Only for one repeated mechanical pattern in
+  one file. `range` must be contained in one entry; other entries may sit
+  outside `viewport`; `range` is never their bounding box.
+- `viewport`: post-change lines the diff viewer shows. `highlights`: post-change
+  ranges inside `viewport`; the lines the story is currently talking about.
+  Full contracts: `references/camera-and-coverage.md`.
+- `context` steps show unchanged code that helps judge a changed path; they
+  never claim coverage and never carry `ranges`. `concept` steps are short,
+  fileless primers placed immediately before dependent code; same rule.
+
 #### Narrative fields are HTML
 
 Story prose is restricted HTML, not Markdown: `**bold**` renders literally.
@@ -89,7 +124,7 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
       "order": 2,
       "title": "How the per-market cap travels",
       "kind": "concept",
-      "body": "One settlement carries a proposed funding rate into a market-specific boundary. The keeper triggers `settleFunding()`, the entry point chooses the market, and `_capRate()` applies that market's configured ceiling before balances move. The cap is therefore not a global throttle or a post-settlement correction: it is an input constraint owned by each market. Keep that ownership in mind while reading the helper next. The key review question is whether every caller supplies the matching market configuration and whether the inclusive edge behaves consistently.",
+      "body": "One settlement carries a proposed funding rate into a market-specific boundary. The keeper triggers <code>settleFunding()</code>, the entry point chooses the market, and <code>_capRate()</code> applies that market's configured ceiling before balances move. The cap is therefore not a global throttle or a post-settlement correction: it is an input constraint owned by each market. Keep that ownership in mind while reading the helper next. The key review question is whether every caller supplies the matching market configuration and whether the inclusive edge behaves consistently.",
       "preparesFor": ["s2"],
       "diagram": {
         "type": "mermaid",
@@ -136,3 +171,15 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
 
 Use `"mode": "brief"` for the shortest useful story and `"mode": "detailed"`
 for the line-by-line correctness story. Omit `head` for working tree vs base.
+
+## Schema spot-check
+
+Schema spot-check, especially on long stories. Long stories are where authors
+drift into an abbreviated shape, and the app rejects the whole story over it.
+Confirm, in order: top level has `title` and `summary`; every step has `id`,
+`order` (a number — never omit it), `title`, `kind`; every code step has
+`file`, `range`, `viewport`, `highlights`, `why`, `beats`; a step with
+`ranges` is a tagged changed/new-file sweep listing every full span and
+containing `range`; every beat has `text` (never `body`) and non-empty
+`highlights`. Those five — top-level `title`, top-level `summary`, step
+`order`, beat `text`, beat `highlights` — are the ones real stories lose first.

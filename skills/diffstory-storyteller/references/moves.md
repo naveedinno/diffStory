@@ -4,15 +4,20 @@ Part of the diffstory-storyteller skill. Read when logic moved, was extracted or
 
 ### 5.4. Record semantic logic moves
 
-Annotations draw on the code. Before adding one ask: **could the reviewer
-learn this by reading the two columns?** If yes, write no move. Most steps
-have none. Do not annotate a guard whose condition and body are both visible,
-a call that replaced inline code with both sides on screen, a rename, a
-reformat, or a relocation whose destination is the right-hand pane. Do
-annotate: a branch with **no code to read** (an unwritten `else`, a silent
-skip); a destination in a file that is **not one of the two panes**; an
-ordering or dependency consequence **no line states**; a region whose extent
-the diff colouring does not show.
+Record a move whenever logic changed home: `moved` to another file,
+`extracted` into a helper, `inlined` from one, or relocated more than about 40
+lines within a file. Reviewers keep asking "how was it before, and where did
+it go?", and a cross-file move lets the app pair the old and new code side by
+side.
+
+Every other annotation, and every `hidden` callout, must pass the restraint
+filter. Before adding one ask: **could the reviewer learn this by reading the
+two columns?** If yes, write no annotation. Do not annotate a guard whose
+condition and body are both visible, a call that replaced inline code with
+both sides on screen, a rename, or a reformat. Do annotate: a branch with **no
+code to read** (an unwritten `else`, a silent skip); a destination in a file
+that is **not one of the two panes**; an ordering or dependency consequence
+**no line states**; a region whose extent the diff colouring does not show.
 
 Never use `flow` when a named verb fits.
 

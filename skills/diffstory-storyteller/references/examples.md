@@ -40,3 +40,96 @@ beat picking up what the previous stop established:
 The difference is not length or polish: each stop exists because of the
 previous one, each first beat says whose code this is, and
 each beat names the failure its evidence rules out.
+
+## Beats before and after
+
+```text
+BAD  (one beat, three decisions, pure inventory)
+  "Line 742 makes .ds-main transparent; line 747 anchors ghost cards to
+   calc(50% - 440px - 66px) instead of a fixed 6px; line 751 gives the active
+   step a background, border, and radius."
+```
+
+```text
+GOOD  (three beats, each one decision ending in its consequence)
+  beat 1: "This is `.ds-main`, the page surface every review step is laid
+           on. It goes transparent first — without this the step below would
+           be a card sitting on another card, and the island edge would never
+           read as an edge."
+  beat 2: "Now the step gets its own surface and radius, so it floats as the
+           bounded 880px island the mockup asks for."
+  beat 3: "The ghosts have to follow that new edge, so they anchor off the
+           island's half-width rather than the viewport — this is the number
+           to check, since it assumes a 66px gutter clears them."
+```
+
+Same lines, same coverage. The first beat says whose code this is before
+anything moves, each beat hands off to the next, and the last aims attention at
+the thing most likely to be wrong.
+
+```text
+BAD  (a landing bolted onto an old beat, 50 words, line numbers as filler)
+  "We are starting in relayBatch. The relayer calls this function. This is the
+   entrance to the execution flow. Look at lines 17 through 22. The batch now
+   carries wallet ids. Keep that routing decision in mind as we read the new
+   walletIds argument."
+```
+
+```text
+GOOD  (one clause of landing, then the change and what it unlocks)
+  "This is `relayBatch()`, what the relayer calls once per signed batch; it now
+   takes `walletIds`, so one signature can move funds for several wallets."
+```
+
+```text
+BAD  (the same sentence pasted into many steps)
+  s12: "Now that the previous boundary is visible, inspect this decision."
+  s13: "Now that the previous boundary is visible, inspect this decision."
+```
+
+A repeated edit is one sweep step that narrates one instance and claims the
+rest with top-level `ranges`. Distinct decisions each get a sentence about
+their own evidence.
+
+## Passages worth imitating
+
+Adapted from real stories; the shape is the lesson.
+
+- **Intent that opens on the problem:** "A trader holding large unrealized
+  profit could withdraw real collateral down to the floor recorded when each
+  position opened, leaving an open position backed only by paper gains; on a
+  reversal, the counterparty absorbs the gap."
+- **Seam and landing in one sentence:** "That closes the wrapper: from here
+  `msg.sender` is the operator and we are inside the execution layer. This is
+  where the change starts: one decision, taken once per batch, opens either the
+  transaction-scoped context or the deployed setter sequence."
+- **The road not taken:** "The floor rides in the same signed struct as the
+  profit figure by design: splitting them across two signatures would let a
+  caller pair a fresh profit with a stale floor and walk straight back into the
+  bug."
+- **A consequence, not a caption:** "With zero stopped before
+  `_claimUnlocked()`, a rounded-down flow cannot be advanced merely by asking to
+  claim nothing." And the next concern's seam: "That settles the zero-claim
+  path; the second concern starts here, where the setter now names both states
+  that consume a user's cap slot."
+- **A hotspot that names the doubt:** "The archive decoder is hand-packed:
+  every field needs an offset and a shift that agree with the encoder, and a
+  mismatch does not revert — it rebuilds a plausible but wrong record. I traced
+  all seventeen offsets by hand, but no test proves it, and the narrow tail is
+  where an off-by-one would hide."
+- **A sweep beat that still connects:** "Settlement is one of the operations
+  that legitimately bumps the counter, so seeing it read the value under the
+  new name here is the consistency check worth making."
+
+## A test stop
+
+For tests:
+
+```text
+Beat 1: Final proof: `test_rejects_over_cap_order` drives `placeOrder()` the way the client does and pins the failure mode from the entry point.
+Beat 2: It fails if an over-cap order can reach placement again, so it guards the behavior above.
+```
+
+Attention cues (`Start here`, `Pause here`, `Skim this`, `Check this
+invariant`, `Final proof`) help scanning when they feel natural. The story's
+last beat says what is now guaranteed, not a recap.

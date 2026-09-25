@@ -154,7 +154,7 @@ test('bundled diffstory-storyteller skill makes the camera contract falsifiable'
 test('bundled diffstory-storyteller skill requires the narrative story arc', () => {
   const skill = skillCorpus();
   assert.ok(skill.includes('Narrative arc'));
-  assert.ok(skill.includes('We wanted to enable'));
+  assert.ok(skill.includes('Open the goal on the problem, not on the diff'));
   assert.ok(skill.includes('designed the flow'));
   assert.ok(skill.includes('To implement that flow, I first'));
   assert.ok(skill.includes('intent -> flow -> implementation'));
@@ -205,7 +205,7 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
 
 test('bundled skill schema example is a valid interleaved v3 story', () => {
   const skill = skillCorpus();
-  const example = JSON.parse(skill.split('## Schema')[1].split('```jsonc')[1].split('```')[0]);
+  const example = JSON.parse(skill.split(/^## Schema$/m)[1].split('```jsonc')[1].split('```')[0]);
   assert.deepEqual(validateTour(example), []);
   assert.deepEqual(validateGeneratedTour(example), []);
   assert.deepEqual(example.steps.map((step) => [step.order, step.kind]), [
@@ -900,5 +900,41 @@ test('every storyteller reference file is linked from SKILL.md, and every link r
 
 test('the always-loaded SKILL.md stays small enough to survive long sessions', () => {
   const lines = skillCore().split('\n').length;
-  assert.ok(lines <= 600, `SKILL.md grew to ${lines} lines; move detail into references/`);
+  assert.ok(lines <= 520, `SKILL.md grew to ${lines} lines; move detail into references/`);
+});
+
+test('storyteller v2 teaches the 2026-09 corpus-audit rules', () => {
+  const flat = skillCorpus().replace(/\s+/g, ' ');
+  for (const phrase of [
+    'Read standing preferences',
+    '.diffstory/preferences.json',
+    'check-story.mjs --ledger',
+    'Put the riskiest stop in the first third',
+    'A landing is a clause, not a paragraph',
+    'Say what changed in behavior, not in values',
+    'why this and not the obvious alternative',
+    'One concrete trace per logic change',
+    'Vary the frame; keep it warm',
+    'List up to three terms, roles, or states a newcomer would ask about',
+    'Environment gaps',
+    'RESULT: READY',
+    'Keep the story fresh',
+    'Record a move whenever logic changed home',
+    'Open the goal on the problem, not on the diff',
+  ]) {
+    assert.ok(flat.includes(phrase), `skill is missing: ${phrase}`);
+  }
+});
+
+test('the skill schema example carries no Markdown residue', async () => {
+  const { lintStory } = await import('../dist/story-lint.js');
+  const example = JSON.parse(skillCorpus().split(/^## Schema$/m)[1].split('```jsonc')[1].split('```')[0]);
+  assert.deepEqual(lintStory(example).filter((f) => f.rule === 'markdown-residue'), []);
+});
+
+test('change-type playbooks cover every storyArc changeType', () => {
+  const ref = readFileSync(new URL('../skills/diffstory-storyteller/references/change-types.md', import.meta.url), 'utf8');
+  for (const t of ['feature', 'bug-fix', 'refactor', 'security', 'performance', 'migration', 'maintenance', 'mixed']) {
+    assert.match(ref, new RegExp(`^### ${t}$`, 'm'), `no playbook for ${t}`);
+  }
 });
