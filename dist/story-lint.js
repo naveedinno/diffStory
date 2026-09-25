@@ -16,6 +16,22 @@ const OPERAND = String.raw `(?:<code[^>]*>[^<]{1,40}<\/code>|\d[\d_.,]*%?)`;
 const PROSE_TRANSITION = new RegExp(String.raw `\bfrom\s+${OPERAND}\s+to\s+${OPERAND}`, "i");
 const COUNTER_SUFFIX = /(?:\s+|\s*[·•:#(\-–—]\s*)(?:\d+\s*(?:\/|of)\s*\d+\)?|(?:part|decision|step|instance)\s+\d+|#?\d+\)?)\s*$/i;
 const OFFSCREEN = /\b(claimed spans?|other spans?|second span|remaining spans|claimed ranges?)\b/i;
+const SEAM_CUE = /(^with\b[^.;]{1,80}[,;]|^(skim|final proof|finally|last)\b|\b(that|this) (closes|settles|finishes|covers|completes|wraps)\b|\b(is|are) (now )?(complete|done|settled|covered|in place|finished)\b|\bthis (chapter|part|section|half)\b|\bnow that\b|\bso far\b|\b(second|third|final|last|next|other|another) (concern|change|fix|part|half|thread|piece|path)\b|\bseparate(ly)?\b|\bindependent(ly)?\b|\bswitch(es|ing)?\b|\bturn(s|ing)? to\b|\bback (in|to)\b|\breturning to\b|\bmoving on\b|\bmeanwhile\b)/i;
+const TEST_FILE = /(^|\/)(tests?|__tests__|specs?)\/|\.(test|spec)\.[cm]?[jt]sx?$|\.t\.sol$|_test\.(go|py|rs)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|swift|cs)$/i;
+const IMPORT_LINE = /^\s*(import\b|from\s+\S+\s+import\b|export\s+(\*|\{[^}]*\})\s+from\b|#include\b|(const|let|var)\s+[\w{}\s,]+=\s*require\(|require\(|use\s+[\w:]+(::\{[^}]*\})?\s*;)/;
+/** A hotspot with none of these is a statement or a chore, not a doubt. */
+const DOUBT_MARKER = /\b(i|i'm|i've|i'd|my|we|not|never|no|nothing|only|without|rather than|unverified|untested|unexercised|unproven|assum\w*|guess\w*|unclear|unsure|may|might|could|relies|rely|doesn't|isn't|wasn't|didn't|cannot|can't)\b/i;
+const ENVIRONMENT_GAP = /\b(voiceover|screen ?readers?|physical (device|iphone|android)|real device|on[- ]device|simulator|emulator|mainnet|testnet|staging|production (deploy|rollout)|in ci|ci run|not (been )?(re)?run)\b/i;
+/** Markdown that renders literally in HTML narrative fields (shared with scripts/eval-stories.mjs). */
+export const MARKDOWN_RESIDUE = [
+    [/\*\*[^*\n]+\*\*|__[^_\n]+__/, "bold"],
+    [/(^|[^`])`[^`\n]+`/, "code span"],
+    [/^#{1,4}\s+\S/m, "heading"],
+    [/^\s*[-*]\s+\S/m, "bullet"],
+    [/^\s*\d+[.)]\s+\S/m, "ordered item"],
+    [/`{3}/, "fence"],
+    [/^>\s+\S/m, "blockquote"],
+];
 /** Visible text of a narrative field: tags dropped, common entities decoded. */
 export function plainText(html) {
     return html
@@ -62,7 +78,6 @@ export function lintStory(tour, ctx = {}) {
     const steps = orderedSteps(tour);
     const code = steps.filter(isCodeStep);
     const beats = code.flatMap((step) => (step.beats ?? []).map((beat, index) => ({ step, beat, index })));
-    void ctx; // TEMP: used by Task 3 rules
     lintCopies(code, add);
     lintOpeners(beats, add);
     lintLandings(code, add);
@@ -71,6 +86,13 @@ export function lintStory(tour, ctx = {}) {
     lintBeatLength(beats, add);
     lintBeatPhrases(beats, add);
     lintNumberedSeries(steps, add);
+    lintChapters(steps, add);
+    lintTestsAtTail(code, add);
+    lintHighlights(code, ctx, add);
+    lintHotspots(tour, add);
+    lintDiagrams(steps, add);
+    lintMarkdown(tour, add);
+    lintDepth(tour, steps, code, add);
     return findings;
 }
 function lintCopies(code, add) {
@@ -197,5 +219,175 @@ function lintNumberedSeries(steps, add) {
         if (ids.length < 3)
             continue;
         add("numbered-series", "warning", stepList(ids), `${ids.length} steps are numbered copies of "${base}".`, "A repeated edit is one sweep step: narrate one instance and claim the rest with top-level `ranges`. A real sequence gets purpose titles, not counters.");
+    }
+}
+function lintChapters(steps, add) {
+    if (steps.length > 10) {
+        const missing = steps.filter((s) => !s.chapter?.trim()).length;
+        if (missing) {
+            add("chapter-missing", "warning", "story", `${missing} of ${steps.length} steps have no chapter.`, "Stories over 10 steps give every step a chapter named for the concept its beats keep using.");
+        }
+    }
+    const seen = new Set();
+    let previous;
+    let run = 0;
+    steps.forEach((step) => {
+        const chapter = step.chapter?.trim();
+        if (!chapter) {
+            previous = undefined;
+            run = 0;
+            return;
+        }
+        if (chapter === previous) {
+            run += 1;
+            if (run === 10) {
+                add("chapter-too-long", "warning", `steps[${step.id}]`, `Chapter "${chapter}" runs past 9 steps.`, "Split it where the beats switch to a new concept.");
+            }
+            return;
+        }
+        if (seen.has(chapter)) {
+            add("chapter-pingpong", "warning", `steps[${step.id}]`, `Chapter "${chapter}" resumes after a different chapter.`, "Keep each chapter contiguous. A test belongs in the chapter of the behavior it pins, not in an alternating proof chapter.");
+        }
+        if (previous !== undefined && !isSweep(step)) {
+            const opener = step.kind === "concept"
+                ? plainText(step.body).slice(0, 220)
+                : plainText(step.beats?.[0]?.text ?? "");
+            const firstSentence = opener.split(/(?<=[.!?])\s/)[0] ?? opener;
+            if (!SEAM_CUE.test(firstSentence)) {
+                add("chapter-seam", "warning", `steps[${step.id}]`, `Chapter "${chapter}" starts without saying what the previous chapter settled.`, 'Open the chapter\'s first beat with the seam, in the same sentence as the landing: "That settles the cap; the second concern is <code>refund()</code>, which the keeper calls …".');
+            }
+        }
+        seen.add(chapter);
+        previous = chapter;
+        run = 1;
+    });
+}
+function lintTestsAtTail(code, add) {
+    const claims = code.filter((s) => s.kind !== "context");
+    if (claims.length < 10)
+        return;
+    const tests = claims.filter((s) => TEST_FILE.test(s.file));
+    const others = claims.filter((s) => !TEST_FILE.test(s.file));
+    if (tests.length < 3 || !others.length)
+        return;
+    const firstTest = Math.min(...tests.map((s) => s.order));
+    const lastOther = Math.max(...others.map((s) => s.order));
+    if (firstTest > lastOther) {
+        add("tests-at-tail", "warning", "story", `All ${tests.length} test steps come after every code step.`, "Place each test right after the behavior it pins, in the same chapter.");
+    }
+}
+function lintHighlights(code, ctx, add) {
+    if (!ctx.readLines)
+        return;
+    for (const step of code) {
+        const lines = ctx.readLines(step.file);
+        if (!lines)
+            continue;
+        (step.beats ?? []).forEach((beat, index) => {
+            if (/\b(imports?|require|using)\b/i.test(plainText(beat.text)))
+                return;
+            const shown = (beat.highlights ?? [])
+                .flatMap(([a, b]) => (a === 0 && b === 0 ? [] : lines.slice(a - 1, b)))
+                .filter((line) => line.trim());
+            if (shown.length && shown.every((line) => IMPORT_LINE.test(line))) {
+                add("import-only-highlight", "warning", `steps[${step.id}].beats[${index}]`, "The beat glows only import lines.", "Point the glow at the code the sentence is about; an import rarely proves a claim.");
+            }
+        });
+    }
+}
+function lintHotspots(tour, add) {
+    (tour.hotspots ?? []).forEach((spot, index) => {
+        const text = plainText(spot.reason ?? "");
+        if (ENVIRONMENT_GAP.test(text)) {
+            add("hotspot-is-verification", "warning", `hotspots[${index}]`, "This hotspot is about what was not run, not about the code.", 'Record it in top-level `verification` with result "not-run"; keep hotspots for doubts about the code itself.');
+        }
+        else if (!DOUBT_MARKER.test(text)) {
+            add("hotspot-not-a-doubt", "warning", `hotspots[${index}]`, "The hotspot states a fact or a chore, not a doubt.", 'Name what you did not verify and why it could be wrong: "I matched the boundary to the docs but never exercised rate == cap."');
+        }
+    });
+}
+/** Label syntax Mermaid cannot parse. Quoted labels ("…") are always safe. */
+export function mermaidLabelProblems(source) {
+    const problems = [];
+    const lines = source.split(/\r?\n/);
+    const kind = lines.find((l) => l.trim() && !l.trim().startsWith("%%"))?.trim() ?? "";
+    for (const raw of lines) {
+        const line = raw.replace(/"[^"]*"/g, '""');
+        if (kind.startsWith("flowchart")) {
+            for (const m of line.matchAll(/[A-Za-z0-9_]\[(?![[(/\\])([^\]]*)\]/g)) {
+                if (/[()[\]{}<>;#|]/.test(m[1]))
+                    problems.push(`unquoted label "${m[1].trim()}"`);
+            }
+            for (const m of line.matchAll(/[A-Za-z0-9_]\((?![([])([^()]*\([^()]*\)[^()]*)\)/g)) {
+                problems.push(`nested parentheses in label "${m[1].trim()}"`);
+            }
+            for (const m of line.matchAll(/[A-Za-z0-9_]\{(?!\{)([^}]*)\}/g)) {
+                if (/[()[\]{<>;#|]/.test(m[1]))
+                    problems.push(`unquoted decision label "${m[1].trim()}"`);
+            }
+            for (const m of line.matchAll(/\|([^|]*)\|/g)) {
+                if (/[()[\]{}<>;#]/.test(m[1]))
+                    problems.push(`unquoted edge label "${m[1].trim()}"`);
+            }
+            if (/(-->|---|==>|-\.->)\s*end\b/i.test(line))
+                problems.push('node id "end" is reserved');
+        }
+        else if (kind.startsWith("sequenceDiagram")) {
+            const message = line.match(/^\s*[^:]+?(?:-{1,2}>>?|-{1,2}x|-{1,2}\))[^:]*:(.*)$/);
+            if (message && /[;#]/.test(message[1]))
+                problems.push(`";" or "#" in message "${message[1].trim()}"`);
+        }
+    }
+    return problems;
+}
+function lintDiagrams(steps, add) {
+    for (const step of steps) {
+        if (step.kind !== "concept" || !step.diagram)
+            continue;
+        for (const problem of mermaidLabelProblems(step.diagram.source)) {
+            add("mermaid-label", "error", `steps[${step.id}].diagram`, `Mermaid cannot parse this: ${problem}.`, 'Wrap labels containing ( ) [ ] { } < > ; # | in double quotes: A["O(1) lookup"]. In sequence messages, avoid ";" and "#".');
+        }
+    }
+}
+/** Every authored narrative field, with a path the author can find. */
+export function narrativeFields(tour) {
+    const out = [];
+    const push = (path, value) => {
+        if (typeof value === "string" && value.trim())
+            out.push([path, value]);
+    };
+    push("summary", tour.summary);
+    push("intent.goal", tour.intent?.goal);
+    push("intent.design", tour.intent?.design);
+    (tour.intent?.nonGoals ?? []).forEach((v, i) => push(`intent.nonGoals[${i}]`, v));
+    (tour.hotspots ?? []).forEach((h, i) => push(`hotspots[${i}].reason`, h.reason));
+    (tour.verification ?? []).forEach((v, i) => push(`verification[${i}].detail`, v.detail));
+    for (const step of tour.steps ?? []) {
+        if (step.kind === "concept") {
+            push(`steps[${step.id}].body`, step.body);
+            push(`steps[${step.id}].diagram.caption`, step.diagram?.caption);
+            continue;
+        }
+        push(`steps[${step.id}].why`, step.why);
+        (step.beats ?? []).forEach((b, i) => push(`steps[${step.id}].beats[${i}].text`, b.text));
+    }
+    return out;
+}
+function lintMarkdown(tour, add) {
+    for (const [path, text] of narrativeFields(tour)) {
+        const hit = MARKDOWN_RESIDUE.find(([pattern]) => pattern.test(text));
+        if (!hit)
+            continue;
+        add("markdown-residue", "error", path, `Markdown ${hit[1]} renders literally here.`, "Narrative fields are HTML: use <code>, <strong>, <em>; block fields use <ul>/<li>, <p>.");
+    }
+}
+function lintDepth(tour, steps, code, add) {
+    const concepts = steps.length - code.length;
+    const claims = code.filter((s) => s.kind !== "context").length;
+    if (tour.mode === "detailed" && claims >= 15 && concepts === 0) {
+        add("detailed-without-primer", "warning", "story", `A detailed story with ${claims} code stops has no concept primer.`, 'List the three terms a newcomer would ask about ("what is a single close?") and teach each where it is first needed: a primer, a context step, or one clause in the landing.');
+    }
+    if (claims >= 12 && !tour.hotspots?.length) {
+        add("no-hotspots", "warning", "story", `${claims} code stops and no hotspots.`, "Name up to three places you are least sure of, in first person.");
     }
 }

@@ -119,3 +119,88 @@ test('offscreen-claim: beats must not narrate claimed spans off screen', () => {
   const s = step({ beats: [{ text: 'This is <code>abi()</code>; the second claimed span adds liquidation.', highlights: [[10, 12]] }] });
   assert.ok(has(lintStory(story([s])), 'offscreen-claim'));
 });
+
+function chaptered(names) {
+  return story(names.map((chapter) => step({ chapter })));
+}
+
+test('chapter-missing: stories over 10 steps need chapters on every step', () => {
+  assert.ok(has(lintStory(story(Array.from({ length: 11 }, () => step()))), 'chapter-missing'));
+});
+
+test('chapter-pingpong: a chapter must not resume after another', () => {
+  assert.ok(has(lintStory(chaptered(['Cap', 'Proof', 'Cap'])), 'chapter-pingpong'));
+  assert.ok(!has(lintStory(chaptered(['Cap', 'Cap', 'Proof'])), 'chapter-pingpong'));
+});
+
+test('chapter-too-long: more than 9 consecutive steps in one chapter', () => {
+  assert.ok(has(lintStory(chaptered(Array(10).fill('Cap'))), 'chapter-too-long'));
+});
+
+test('chapter-seam: the first beat of a new chapter names the seam', () => {
+  const s = story([
+    step({ chapter: 'Cap' }),
+    step({ chapter: 'Refunds', beats: [{ text: 'This is <code>refund()</code>, called by the keeper.', highlights: [[10, 12]] }] }),
+  ]);
+  assert.ok(has(lintStory(s), 'chapter-seam'));
+  const ok = story([
+    step({ chapter: 'Cap' }),
+    step({ chapter: 'Refunds', beats: [{ text: 'That settles the cap; the second concern is <code>refund()</code>, which the keeper calls.', highlights: [[10, 12]] }] }),
+  ]);
+  assert.ok(!has(lintStory(ok), 'chapter-seam'));
+  const natural = story([
+    step({ chapter: 'Startup' }),
+    step({ chapter: 'Tools', beats: [{ text: 'With desktop startup bounded, this chapter follows <code>runTool()</code>, which the queue calls.', highlights: [[10, 12]] }] }),
+  ]);
+  assert.ok(!has(lintStory(natural), 'chapter-seam'));
+});
+
+test('tests-at-tail: all test steps after every code step', () => {
+  const code = Array.from({ length: 8 }, () => step());
+  const tests = Array.from({ length: 3 }, () => step({ file: 'test/app.test.ts' }));
+  assert.ok(has(lintStory(story([...code, ...tests])), 'tests-at-tail'));
+  const interleaved = [code[0], tests[0], ...code.slice(1, 4), tests[1], ...code.slice(4), tests[2]];
+  assert.ok(!has(lintStory(story(interleaved.map((s) => ({ ...s })))), 'tests-at-tail'));
+});
+
+test('import-only-highlight: needs file lines; skips when the beat is about imports', () => {
+  const lines = ['import { a } from "./a";', 'import b from "./b";', '', 'export function f() {', '  return a(b);', '}'];
+  const ctx = { readLines: () => lines };
+  const bad = step({ range: [1, 2], viewport: [1, 6], highlights: [[1, 2]], beats: [{ text: 'This is <code>f()</code>; it now rejects stale quotes.', highlights: [[1, 2]] }] });
+  assert.ok(has(lintStory(story([bad]), ctx), 'import-only-highlight'));
+  const about = step({ range: [1, 2], viewport: [1, 6], highlights: [[1, 2]], beats: [{ text: 'This is <code>f()</code>; its imports now come from the shared module.', highlights: [[1, 2]] }] });
+  assert.ok(!has(lintStory(story([about]), ctx), 'import-only-highlight'));
+  assert.ok(!has(lintStory(story([bad])), 'import-only-highlight'));
+});
+
+test('hotspot rules: environment gaps and non-doubts', () => {
+  const s = (reason) => story([step({ id: 'h1' })], { hotspots: [{ step: 'h1', reason }] });
+  assert.ok(has(lintStory(s('Physical VoiceOver was not replayed on a real device.')), 'hotspot-is-verification'));
+  assert.ok(has(lintStory(s('The production facet replacement must include these selectors.')), 'hotspot-not-a-doubt'));
+  assert.deepEqual(rules(lintStory(s('I matched the inclusive boundary to the docs but never exercised rate == cap.'))), []);
+  assert.deepEqual(rules(lintStory(s('The readiness proof mocks urlopen; it does not exercise a live listener.'))), []);
+});
+
+test('mermaid-label: unquoted parentheses break the diagram; valid shapes pass', () => {
+  const concept = (source) => ({ id: 'c1', order: 1, kind: 'concept', title: 'Model', body: '<p>x</p>', preparesFor: ['s9'], diagram: { type: 'mermaid', source, caption: 'c' } });
+  const withDiagram = (source) => story([concept(source), step({ id: 's9' })]);
+  assert.equal(lintStory(withDiagram('flowchart LR\n  A[Lookup O(1)] --> B')).find((f) => f.rule === 'mermaid-label')?.severity, 'error');
+  assert.ok(has(lintStory(withDiagram('flowchart LR\n  A -->|O(1) hit| B')), 'mermaid-label'));
+  assert.ok(has(lintStory(withDiagram('sequenceDiagram\n  A->>B: pay; then settle')), 'mermaid-label'));
+  for (const ok of ['flowchart LR\n  A["O(1) lookup"] --> B[(db)]', 'flowchart TD\n  A[[sub]] --> B(("x"))', 'flowchart LR\n  A(Start) --> B{Valid?}']) {
+    assert.ok(!has(lintStory(withDiagram(ok)), 'mermaid-label'), ok);
+  }
+});
+
+test('markdown-residue is an error in narrative fields', () => {
+  const s = story([step({ why: 'Uses **bold** here.' })]);
+  assert.equal(lintStory(s).find((f) => f.rule === 'markdown-residue')?.severity, 'error');
+  assert.ok(has(lintStory(story([step({ beats: [{ text: 'This is `f()` in backticks.', highlights: [[10, 12]] }] })])), 'markdown-residue'));
+});
+
+test('depth rules: detailed without primer; long without hotspots', () => {
+  const long = Array.from({ length: 15 }, (_, i) => step({ chapter: `C${Math.floor(i / 5)}` }));
+  const f = lintStory(story(long, { mode: 'detailed' }));
+  assert.ok(has(f, 'detailed-without-primer'));
+  assert.ok(has(f, 'no-hotspots'));
+});
