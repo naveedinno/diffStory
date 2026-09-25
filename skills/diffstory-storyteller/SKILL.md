@@ -1,6 +1,6 @@
 ---
 name: diffstory-storyteller
-description: Use right after you (the agent) have made code changes the user needs to review, especially a large multi-file change. Produces a diffStory story file — .diffstory/story.json for one change, or several scoped stories under .diffstory/stories/ when the diff splits into independent concerns — a context-first, guided reading path through your own diff that opens with recovered intent and drives exact viewport and highlight beats. Run before handing work back for review.
+description: Use only when the user explicitly asks for a diffStory, a story, or a guided walkthrough of code changes ("make a diff story", "write the story for this"), or when a prompt says "Use the diffstory-storyteller skill". Never on your own initiative, not after finishing code changes and not before a commit or push. Produces .diffstory/story.json (or scoped stories under .diffstory/stories/): a context-first, read-aloud reading path through the diff that opens with recovered intent and drives exact viewport and highlight beats.
 ---
 
 # Writing a diffStory
@@ -20,6 +20,9 @@ floor; restored context is the product.
 The story is heard as much as read. Every sentence must work for a listener who
 cannot glance back: name what is on screen, say who reaches it, then say what
 changed and what that now guarantees.
+
+Write a story only when the user (or a prompt) explicitly asks for one. Never
+write or offer one on your own initiative after making changes.
 
 diffStory is UI-only. Never install, invoke, validate with, or recommend a
 `diffstory` CLI command. Write and validate the story artifact directly, then

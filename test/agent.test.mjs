@@ -877,3 +877,14 @@ test('both authoring prompts pin the HTML format contract', () => {
   const repair = storyRepairPrompt({ action: 'rewrite', base: 'main', stepId: 's1' });
   assert.match(repair, /restricted HTML, never Markdown/);
 });
+
+test('the storyteller skill runs only when explicitly asked', () => {
+  // Stories written unasked were a repeated complaint ("I don't need diff story").
+  // The description is what agents match on, so it must say explicit-only.
+  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const description = skill.match(/^description: (.*)$/m)?.[1] ?? '';
+  assert.match(description, /only when the user explicitly asks/);
+  assert.match(description, /Never on your own initiative/);
+  assert.doesNotMatch(description, /right after you|before handing work back/i);
+  assert.ok(skill.includes('Write a story only when the user (or a prompt) explicitly asks for one.'));
+});
