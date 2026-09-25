@@ -97,9 +97,22 @@ test('why-copies-beats: why that restates the beats warns', () => {
 test('beat-too-long and beats-long-on-average', () => {
   const long = 'This is <code>f()</code>, ' + 'and it keeps going with more words '.repeat(8);
   assert.ok(has(lintStory(story([step({ beats: [{ text: long, highlights: [[10, 12]] }] })])), 'beat-too-long'));
-  const mid = 'This is <code>f()</code>, ' + 'with a moderately long clause '.repeat(6);
-  const avg = story(Array.from({ length: 6 }, () => step({ beats: [{ text: mid + Math.random(), highlights: [[10, 12]] }] })));
+  const mid = 'The guard then ' + 'keeps a moderately long clause going '.repeat(6);
+  const landing = (n) => `This is <code>f${nameOf(n)}()</code> in <code>app.ts</code>, which the router calls on every request.`;
+  const avg = story(Array.from({ length: 6 }, (_, n) => step({ beats: [
+    { text: landing(n), highlights: [[10, 12]] },
+    { text: mid + nameOf(n), highlights: [[10, 12]] },
+  ] })));
   assert.ok(has(lintStory(avg), 'beats-long-on-average'));
+});
+
+test('beats-long-on-average ignores landing beats, which run longer by design', () => {
+  const longLanding = (n) => `This is <code>f${nameOf(n)}()</code> in <code>app.ts</code>, the handler <code>router${nameOf(n)}()</code> calls on every checkout POST before anything is persisted or charged to the card.`;
+  const s = story(Array.from({ length: 6 }, (_, n) => step({ beats: [
+    { text: longLanding(n), highlights: [[10, 12]] },
+    { text: `It now rejects stale input ${nameOf(n)}.`, highlights: [[10, 12]] },
+  ] })));
+  assert.ok(!has(lintStory(s), 'beats-long-on-average'));
 });
 
 test('prose-value-transition: "from 650 to 600" warns; "from the caller to the helper" does not', () => {

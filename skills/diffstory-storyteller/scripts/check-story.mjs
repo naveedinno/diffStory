@@ -2665,9 +2665,13 @@ function lintWhyCopiesBeats(code, add) {
 }
 function lintBeatLength(beats, add) {
   let total = 0;
+  let counted = 0;
   for (const { step, beat, index } of beats) {
     const count = wordsOf(plainText(beat.text)).length;
-    total += count;
+    if (index > 0) {
+      total += count;
+      counted += 1;
+    }
     if (count > 45) {
       add(
         "beat-too-long",
@@ -2678,13 +2682,13 @@ function lintBeatLength(beats, add) {
       );
     }
   }
-  if (beats.length >= 6 && total / beats.length > 32) {
+  if (counted >= 6 && total / counted > 32) {
     add(
       "beats-long-on-average",
       "warning",
       "story",
-      `Beats average ${Math.round(total / beats.length)} words.`,
-      "Aim for 12\u201330 spoken words per beat; the listener cannot glance back."
+      `Beats after the landing average ${Math.round(total / counted)} words.`,
+      "Aim for 12\u201330 spoken words per beat after the landing; the listener cannot glance back."
     );
   }
 }
