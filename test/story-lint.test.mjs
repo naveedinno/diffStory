@@ -107,12 +107,17 @@ test('beat-too-long and beats-long-on-average', () => {
 });
 
 test('beats-long-on-average ignores landing beats, which run longer by design', () => {
-  const longLanding = (n) => `This is <code>f${nameOf(n)}()</code> in <code>app.ts</code>, the handler <code>router${nameOf(n)}()</code> calls on every checkout POST before anything is persisted or charged to the card.`;
+  // Realistic sizes: 39-word landings and 27-word follow-ups average 33 across
+  // all beats, which tripped the old warning; the follow-ups alone average 27.
+  const landing = (n) => `This is <code>f${nameOf(n)}()</code> in <code>app.ts</code>, the handler <code>router${nameOf(n)}()</code> calls on every checkout POST, right after the session middleware resolves the cart and before anything is persisted, charged to the card, or emailed to the buyer as a signed receipt.`;
+  const followUp = (n) => `It now rejects a stale cart before the payment call, so a buyer who edited the cart in another tab is never charged the old total ${nameOf(n)}.`;
   const s = story(Array.from({ length: 6 }, (_, n) => step({ beats: [
-    { text: longLanding(n), highlights: [[10, 12]] },
-    { text: `It now rejects stale input ${nameOf(n)}.`, highlights: [[10, 12]] },
+    { text: landing(n), highlights: [[10, 12]] },
+    { text: followUp(n), highlights: [[10, 12]] },
   ] })));
-  assert.ok(!has(lintStory(s), 'beats-long-on-average'));
+  const findings = lintStory(s);
+  assert.ok(!has(findings, 'beats-long-on-average'));
+  assert.ok(!has(findings, 'beat-too-long'), 'a 39-word landing stays under the 45-word cap');
 });
 
 test('prose-value-transition: "from 650 to 600" warns; "from the caller to the helper" does not', () => {
