@@ -1,0 +1,170 @@
+// The bundled checker, run exactly as an agent runs it: node <skill>/scripts/check-story.mjs.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { build } from 'esbuild';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const CHECKER = fileURLToPath(new URL('../skills/diffstory-storyteller/scripts/check-story.mjs', import.meta.url));
+
+/** A repo on `main` with one committed file and an uncommitted edit on line 10. */
+function repoWithChange() {
+  const dir = mkdtempSync(join(tmpdir(), 'ds-check-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'test');
+  const lines = Array.from({ length: 30 }, (_, i) => `export const v${i + 1} = ${i + 1};`);
+  writeFileSync(join(dir, 'app.ts'), lines.join('\n') + '\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+  lines[9] = 'export function capRate(rate: number, cap: number) { return Math.min(rate, cap); }';
+  writeFileSync(join(dir, 'app.ts'), lines.join('\n') + '\n');
+  mkdirSync(join(dir, '.diffstory'));
+  return { dir, lines };
+}
+
+function goodStory(over = {}) {
+  return {
+    version: 3,
+    mode: 'brief',
+    title: 'Cap the funding rate',
+    summary: 'One helper caps the rate before settlement.',
+    base: 'main',
+    intent: {
+      goal: 'Rates above the market cap reached settlement.',
+      design: 'Settlement already calls one per-market helper; capRate() now clamps there, so every market settles at or below its cap.',
+      sources: ['conversation'],
+    },
+    storyArc: { changeType: 'bug-fix', shape: 'cause-effect', readingPath: 'helper -> cap' },
+    steps: [{
+      id: 's1', order: 1, kind: 'changed', title: 'capRate() clamps the rate at the cap',
+      file: 'app.ts', range: [10, 10], viewport: [5, 15], highlights: [[10, 10]],
+      why: 'Rules out a rate above the cap reaching settlement.',
+      beats: [{ text: 'This is <code>capRate()</code>, the helper settlement calls per market; it clamps the rate at the cap.', highlights: [[10, 10]] }],
+    }],
+    ...over,
+  };
+}
+
+function run(dir, ...args) {
+  const r = spawnSync(process.execPath, [CHECKER, ...args], { cwd: dir, encoding: 'utf8' });
+  return { code: r.status, out: r.stdout + r.stderr };
+}
+
+function withRepo(fn) {
+  const repo = repoWithChange();
+  try { fn(repo); } finally { rmSync(repo.dir, { recursive: true, force: true }); }
+}
+
+test('--help prints usage and exits 0', () => {
+  withRepo(({ dir }) => {
+    const r = run(dir, '--help');
+    assert.equal(r.code, 0);
+    assert.match(r.out, /Usage: node check-story\.mjs/);
+  });
+});
+
+test('a valid, fully covered story is READY', () => {
+  withRepo(({ dir }) => {
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(goodStory()));
+    const r = run(dir);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /RESULT: READY/);
+    assert.match(r.out, /coverage 1\/1 changed ranges claimed/);
+  });
+});
+
+test('an unclaimed change is an error', () => {
+  withRepo(({ dir, lines }) => {
+    lines[24] = 'export const v25 = 2500;';
+    writeFileSync(join(dir, 'app.ts'), lines.join('\n') + '\n');
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(goodStory()));
+    const r = run(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /unexplained change: app\.ts 25-25/);
+  });
+});
+
+test('basic contract failures stop the check early', () => {
+  withRepo(({ dir }) => {
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(goodStory({ storyArc: 'mixed' })));
+    const r = run(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /storyArc must be an object/);
+  });
+});
+
+test('lint errors fail the check and name the rule', () => {
+  withRepo(({ dir }) => {
+    const story = goodStory();
+    story.steps[0].why = 'Uses **bold** Markdown.';
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(story));
+    const r = run(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /\[markdown-residue\]/);
+  });
+});
+
+test('warnings pass by default and fail with --strict', () => {
+  withRepo(({ dir }) => {
+    const story = goodStory();
+    story.steps[0].beats[0].text = 'The helper clamps the rate at the cap before settlement.';
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(story));
+    assert.equal(run(dir).code, 0);
+    const strict = run(dir, '--strict');
+    assert.equal(strict.code, 1);
+    assert.match(strict.out, /landing-missing-symbol/);
+  });
+});
+
+test('--json reports machine-readable results', () => {
+  withRepo(({ dir }) => {
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(goodStory()));
+    const r = run(dir, '--json');
+    const parsed = JSON.parse(r.out);
+    assert.equal(parsed.ready, true);
+    assert.equal(parsed.reports[0].story, '.diffstory/story.json');
+    assert.deepEqual(parsed.reports[0].errors, []);
+  });
+});
+
+test('--ledger lists every changed range with its file', () => {
+  withRepo(({ dir }) => {
+    const r = run(dir, '--ledger');
+    assert.equal(r.code, 0);
+    assert.match(r.out, /app\.ts/);
+    assert.match(r.out, /10-10/);
+    const json = JSON.parse(run(dir, '--ledger', '--json').out);
+    assert.deepEqual(json.files[0].ranges[0].range, [10, 10]);
+  });
+});
+
+test('--ledger honors includeGlobs from .diffstory/preferences.json', () => {
+  withRepo(({ dir }) => {
+    writeFileSync(join(dir, '.diffstory/preferences.json'), JSON.stringify({ includeGlobs: ['**/*.sol'] }));
+    const json = JSON.parse(run(dir, '--ledger', '--json').out);
+    assert.deepEqual(json.files, []);
+  });
+});
+
+test('no story is a setup error (exit 2)', () => {
+  withRepo(({ dir }) => {
+    const r = run(dir);
+    assert.equal(r.code, 2);
+    assert.match(r.out, /no story found/);
+  });
+});
+
+test('scoped stories under .diffstory/stories/ need storyScope', () => {
+  withRepo(({ dir }) => {
+    mkdirSync(join(dir, '.diffstory/stories'));
+    writeFileSync(join(dir, '.diffstory/stories/cap.json'), JSON.stringify(goodStory()));
+    const r = run(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /need storyScope\.includedFiles/);
+  });
+});

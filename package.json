@@ -21,9 +21,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && npm run build:browser-assets && npm run build:client",
+    "build": "tsc && npm run build:browser-assets && npm run build:client && npm run build:skill-checker",
     "build:browser-assets": "node scripts/build-browser-assets.mjs",
     "build:client": "node scripts/build-client.mjs",
+    "build:skill-checker": "node scripts/build-skill-checker.mjs",
     "typecheck:client": "tsc -p client/tsconfig.json",
     "check": "npm run build && node --test test/*.test.mjs",
     "dev": "npm run build && node dist/app-server.js",
