@@ -206,4 +206,4 @@ edit to reverse.
 
 ### Follow-ups
 
-(Plan 025 appends here.)
+- v2 grading (2026-09-25): no clear win — landing flat at 3.2 base→v2 while its lint warnings fell 14→0. Next iteration changes ONE thing: landing examples in references/examples.md (caller-first landings agents can imitate).
