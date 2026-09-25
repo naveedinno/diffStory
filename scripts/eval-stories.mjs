@@ -500,6 +500,14 @@ const RUBRIC = [
   ['beat_pointing', '5 = each beat says why its lines matter and what they unlock next; 1 = beats restate what the diff already shows ("adds a helper").'],
   ['intent_grounding', '5 = goal/design/nonGoals are specific, cited to real sources, and match the diff; 1 = invented or generic intent.'],
   ['hotspot_honesty', '5 = hotspots name specific unverified doubts a reviewer should chase; 3 = plausible but vague; 1 = missing on a risky change, or decorative ("this is complex").'],
+  // Added 2026-09 from the corpus audit and the research in
+  // docs/research/story-corpus-audit-2026-09.md. Adding dimensions changes the
+  // mean's denominator: re-baseline before comparing (eval/GOAL.md).
+  ['landing', 'Read only the FIRST beat of every code step, aloud, with no code. 5 = each names the symbol on screen (function, rule, test) in <code>, who reaches it and when, then the change, and every new chapter opens by saying what the previous one settled; 3 = most land, some open on the change or on "Now/Here/It"; 1 = the listener is dropped into code with no orientation, or landings are boilerplate glued to every beat ("Look at lines 17 through 22").'],
+  ['listenability', 'Heard, not read. 5 = one idea per beat, short sentences with the new information at the end, identifiers introduced once and reused, openings that vary; 3 = occasional overload or a repeated sentence frame; 1 = long nested sentences, stacked identifiers, or one template repeated across steps.'],
+  ['rationale_depth', 'Reviewers most often ask "why this and not the obvious alternative?" and "is this needed?". 5 = at each non-obvious choice the story answers both where the choice is visible; 3 = the why appears only at story level; 1 = what-only narration.'],
+  ['concreteness', '5 = every logic change carries one concrete trace (an input and what now happens to it, or old vs new behavior in words); 3 = some; 1 = abstractions only ("improves robustness").'],
+  ['newcomer_coverage', 'A reviewer who knows the goal but not this codebase. 5 = every domain term, role, or state the code relies on is taught before it is needed (a primer, a context step, or one clause in a landing); 3 = one or two terms left unexplained; 1 = jargon throughout ("single close", "uncapped amount") with no help.'],
   ['markup_judgment', 'Narrative is restricted HTML. 5 = markup earns its place — a table only where a grid genuinely beats a sentence, and its <caption> reads as the one line a listener needs, because that caption is what the read-aloud voice speaks instead of the table; 3 = correct but plain, or a table that would have been better as prose; 1 = literal Markdown left in the prose, a decorative table, or a caption that just names the table ("the fields") instead of saying what it shows.'],
 ];
 

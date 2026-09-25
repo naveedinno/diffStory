@@ -122,3 +122,11 @@ test('summarizeLint counts errors, warnings, and rules', async () => {
     { errors: 1, warnings: 2, byRule: { a: 2, b: 1 } },
   );
 });
+
+test('judge rubric v2 scores landing, listenability, rationale, concreteness, newcomer coverage', () => {
+  const harness = readFileSync(new URL('../scripts/eval-stories.mjs', import.meta.url), 'utf8');
+  for (const key of ['landing', 'listenability', 'rationale_depth', 'concreteness', 'newcomer_coverage']) {
+    assert.match(harness, new RegExp(`\\['${key}',`), `rubric is missing ${key}`);
+  }
+  assert.match(harness, /'compare'/, 'the blind pairwise compare command exists');
+});

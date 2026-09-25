@@ -20,6 +20,9 @@ the loop can never end, so it is defined as measurable exit criteria, not taste.
    shows `**bold**` to the reviewer. See `docs/story-schema.md`.
 5. **Genuinely useful.** Judge mean ≥ 4.0 for every case, and no single dimension
    below 3 in any case.
+6. **Lint-clean.** Zero lint *errors* (`copied-beat`, `line-pointer`,
+   `markdown-residue`, `mermaid-label`) in every case, from
+   `src/story-lint.ts`. Warnings are reported, not gated.
 
 ## Current status (2026-07-22)
 
@@ -43,6 +46,12 @@ denominator and a partly phantom dimension.
 Re-baseline before reading any comparison: run one label on the current skill and
 treat that as the new zero. Comparing a pre-2026-07-29 mean against a new one
 measures the rubric change, not the generator.
+
+### Baselines before rubric v2 (2026-09) are not comparable either
+
+Rubric v2 adds `landing`, `listenability`, `rationale_depth`, `concreteness`,
+and `newcomer_coverage` (14 dimensions instead of 9), and in-repo worktrees now
+detach at the case head. Re-baseline (plan 021) before comparing anything.
 
 ## Non-goals for this loop
 
