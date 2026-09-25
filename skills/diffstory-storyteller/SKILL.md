@@ -231,16 +231,20 @@ beats follow it.
   After a primer, apply its mental model directly to the code so the steps
   read as one continuous story.
 - Landing rule: the first beat of EVERY code step lands the listener before it
-  says anything about the change. In one clause, name the symbol the camera is
-  on in `<code>` (function, method, handler, rule, test), who reaches it and
-  when (the caller, route, event, or process), and what this spot is
-  responsible for; that beat's highlight is the signature or call site. Only
-  then the change. "This is `_capRate()`, the helper `settleFunding()` calls once
-  per market right after it picks the market config; here we add the inclusive
-  ceiling check." If the camera stayed inside the same function, one clause is
-  enough ("Still in `_capRate()`, one branch down: …"), but it is never skipped.
-  A landing is a clause, not a paragraph: never bolt a landing sentence onto an
-  existing beat, and never pad it with "Look at lines …".
+  says anything about the change, the way a colleague would orient you: "this
+  is function x, in file z, that y calls when w." Name the symbol the camera is
+  on in `<code>`; the file or module it lives in whenever the camera changed
+  files; who reaches it, by name (the calling function, route handler, test, or
+  component; for an external entry point, the role that calls it and the check
+  that gates it), never a vague population ("every review page", "the app");
+  and when. That beat's highlight is the signature or call site. Only then the
+  change. "This is `_capRate()` in `RateMath.sol`, the helper `settleFunding()`
+  calls once per market right after it picks the market config; here we add
+  the inclusive ceiling check." If the camera stayed inside the same function,
+  one clause is enough ("Still in `_capRate()`, one branch down: …"), but it is
+  never skipped. A landing is a clause, not a paragraph, but a complete one:
+  never bolt a landing sentence onto an existing beat, and never pad it with
+  "Look at lines …".
 - Chapter-seam rule: the FIRST step of every new `chapter` must open by naming the seam
   — what the previous chapter settled and why this one starts — in the same
   sentence as its landing, in a spoken beat, not only in `why`. "That closes
@@ -335,15 +339,15 @@ spent on *what the lines say* are dead air. Spend them on what they cannot
 see: whose code this is, why this line, why now, what it makes possible next.
 
 0. **Land the listener first.** Name where they are — the function or rule,
-   who calls it and when — before the change.
+   the file it lives in, who calls it by name, and when — before the change.
 1. **No line-number narration.** Never open with "Line 742 …", "Lines 30-34
    add …", or "Look at lines …". A line number is an address, not a landing; the
    glow already points there. When the glow alone is ambiguous, one short
    pointer after the landing is fine ("down at line 120, the second call"), at
    most once per step.
 2. **One beat, one decision.** A semicolon or "and also" joining separate
-   decisions means two beats, or two steps. Aim for 12-30 spoken words; over 45
-   is two beats.
+   decisions means two beats, or two steps. Aim for 12-30 spoken words (a
+   landing beat usually needs 20-40); over 45 is two beats.
 3. **End on the consequence.** What the code now guarantees, prevents, unlocks,
    or hands to the next stop. Put the new information at the end of the
    sentence, where the voice lands.

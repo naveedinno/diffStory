@@ -76,10 +76,27 @@ BAD  (a landing bolted onto an old beat, 50 words, line numbers as filler)
 ```
 
 ```text
-GOOD  (one clause of landing, then the change and what it unlocks)
-  "This is `relayBatch()`, what the relayer calls once per signed batch; it now
-   takes `walletIds`, so one signature can move funds for several wallets."
+GOOD  (one complete landing clause, then the change and what it unlocks)
+  "This is `relayBatch()` in `BatchRelay.sol`, what the relayer calls under
+   `RELAYER_ROLE` once per signed batch; it now takes `walletIds`, so one
+   signature can move funds for several wallets."
 ```
+
+```text
+BAD  (a label, not a landing: no caller, a vague population)
+  "This is review-state.ts, the module every review page reaches for before
+   rendering."
+```
+
+```text
+GOOD  (symbol, file, caller by name, when)
+  "This is `reviewStateSummary()` in `review-state.ts`, the helper
+   `renderReview()` and `diffScreen()` call on every page load to bind the
+   page, story, and notes to one exact diff."
+```
+
+The listener should be able to say, after the first beat and without looking:
+which function I am in, which file, who calls it, and when.
 
 ```text
 BAD  (the same sentence pasted into many steps)
