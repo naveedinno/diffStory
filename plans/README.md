@@ -128,9 +128,9 @@ skill, and measures again.
 | 019 | Eval cases from the repos stories are written for (Solidity) | eval | no | DONE |
 | 020 | Lint in the eval, rubric v2, blind A/B, corpus report | eval | no | DONE |
 | 021 | Baseline: measure the current skill | operations | **yes (~12)** | DONE |
-| 022 | Split the skill into a core and references (verbatim) | skill | no | TODO |
-| 023 | Storyteller craft rules v2 | skill | no | TODO |
-| 024 | App prompts run the checker; repairs land the listener | prompt | no | TODO |
+| 022 | Split the skill into a core and references (verbatim) | skill | no | DONE |
+| 023 | Storyteller craft rules v2 | skill | no | DONE |
+| 024 | App prompts run the checker; repairs land the listener | prompt | no | DONE |
 | 025 | Measure v2 against the baseline, then decide | operations | **yes (~24)** | TODO |
 | 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
 
