@@ -114,3 +114,14 @@ export function stalePointers(tour, files) {
             || !changed.some((range) => rangesOverlap(range, claim))));
     });
 }
+/** The files a story is measured against. A scoped story only owes an
+ *  explanation for its included files, so anything outside the scope is never
+ *  "unexplained" — the lazy split and full-file responses must apply the same
+ *  filter as the review model or they flag every line of an excluded file. */
+export function filesForStoryCoverage(tour, files) {
+    const included = tour.storyScope?.includedFiles;
+    if (!included?.length)
+        return files;
+    const selected = new Set(included);
+    return files.filter((f) => selected.has(f.newPath));
+}
