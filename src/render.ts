@@ -148,6 +148,7 @@ function codeStepPanel(
           ${storyRepairMenu(s, true)}
         </div>
       </div>
+      ${landingLine(s)}
     </div>
     ${
       s.hotspot
@@ -179,6 +180,31 @@ function codeStepPanel(
     </div>
     ${stepStoryHtml(s, diffRegionId, i + 1)}
   </section>`;
+}
+
+/** "Where am I": the symbol on screen, its file, who reaches it, and when. Not narrated. */
+function landingLine(s: CodeStepView): string {
+  const landing = s.landing;
+  if (!landing) return "";
+  const parts = [
+    `<code class="ds-landing-symbol">${esc(landing.symbol)}</code>`,
+    `<span class="ds-landing-file">${esc(landing.file)}</span>`,
+  ];
+  if (landing.calledBy.length) {
+    parts.push(
+      `<span class="ds-landing-callers">called by ${landing.calledBy.map((caller) => `<code>${esc(caller)}</code>`).join(", ")}</span>`,
+    );
+  } else if (landing.role) {
+    parts.push(
+      `<span class="ds-landing-callers">called by the ${esc(landing.role.who)}${
+        landing.role.gate ? ` through <code>${esc(landing.role.gate)}</code>` : ""
+      }</span>`,
+    );
+  }
+  if (landing.when) parts.push(`<span class="ds-landing-when">${esc(landing.when)}</span>`);
+  return `<p class="ds-landing" aria-label="Where this step is">${parts.join(
+    '<span class="ds-landing-sep" aria-hidden="true">·</span>',
+  )}</p>`;
 }
 
 function moveRangeLabel(file: string, [start, end]: [number, number]): string {

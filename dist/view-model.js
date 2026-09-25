@@ -283,6 +283,24 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
         why: narrative(step.why ?? '', 'inline'),
+        ...(step.landing
+            ? {
+                landing: {
+                    symbol: narrativeText(step.landing.symbol),
+                    file: step.file.split('/').pop() ?? step.file,
+                    calledBy: (step.landing.calledBy ?? []).map((caller) => narrativeText(caller)),
+                    ...(step.landing.role
+                        ? {
+                            role: {
+                                who: narrativeText(step.landing.role.who),
+                                ...(step.landing.role.gate ? { gate: narrativeText(step.landing.role.gate) } : {}),
+                            },
+                        }
+                        : {}),
+                    ...(step.landing.when ? { when: narrativeText(step.landing.when) } : {}),
+                },
+            }
+            : {}),
         hotspot,
         health: stepHealth(step, viewport, focusGroups),
         beats,

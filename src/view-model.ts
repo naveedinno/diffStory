@@ -212,6 +212,15 @@ export interface CodeStepView extends StepViewBase {
   newFile: boolean;
   context: boolean;
   why: Narrative;
+  /** Verified "where am I" facts, shown under the step title. */
+  landing?: {
+    symbol: string;
+    /** Basename of the step's file. */
+    file: string;
+    calledBy: string[];
+    role?: { who: string; gate?: string };
+    when?: string;
+  };
   /** Author-declared distrust reason when this step is a story hotspot. */
   hotspot?: Narrative;
   health: StepHealthView;
@@ -614,6 +623,24 @@ function buildCodeStep(
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
     why: narrative(step.why ?? '', 'inline'),
+    ...(step.landing
+      ? {
+          landing: {
+            symbol: narrativeText(step.landing.symbol),
+            file: step.file.split('/').pop() ?? step.file,
+            calledBy: (step.landing.calledBy ?? []).map((caller) => narrativeText(caller)),
+            ...(step.landing.role
+              ? {
+                  role: {
+                    who: narrativeText(step.landing.role.who),
+                    ...(step.landing.role.gate ? { gate: narrativeText(step.landing.role.gate) } : {}),
+                  },
+                }
+              : {}),
+            ...(step.landing.when ? { when: narrativeText(step.landing.when) } : {}),
+          },
+        }
+      : {}),
     hotspot,
     health: stepHealth(step, viewport, focusGroups),
     beats,

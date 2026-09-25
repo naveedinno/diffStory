@@ -1294,3 +1294,41 @@ test('story verification reaches the review model with sanitized detail', () => 
   const bare = buildReviewModel(process.cwd(), { ...tour, verification: undefined }, [], undefined, {});
   assert.equal(bare.story.verification, undefined);
 });
+
+test('a code step with a landing renders the "where am I" line, escaped', () => {
+  const tour = {
+    version: 3,
+    title: 't',
+    summary: 's',
+    steps: [
+      {
+        id: 's1', order: 1, title: 'c', file: 'src/a.ts', range: [1, 2], kind: 'changed',
+        why: 'I changed this so the next helper receives the value it needs.',
+        landing: { symbol: 'capRate()', calledBy: ['settleFunding()', 'runKeeper()'], when: 'once per market, while rate < cap & fresh' },
+      },
+      {
+        id: 's2', order: 2, title: 'd', file: 'src/b.sol', range: [1, 1], kind: 'changed',
+        why: 'I changed this so relayers pass the new argument.',
+        landing: { symbol: 'relayBatch()', role: { who: 'relayer', gate: 'onlyRole(RELAYER_ROLE)' } },
+      },
+    ],
+  };
+  const hunk = { oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: [
+    { type: 'del', content: 'old', oldNo: 1 }, { type: 'add', content: 'new1', newNo: 1 }, { type: 'add', content: 'new2', newNo: 2 },
+  ] };
+  const files = [
+    { oldPath: 'src/a.ts', newPath: 'src/a.ts', status: 'modified', hunks: [hunk] },
+    { oldPath: 'src/b.sol', newPath: 'src/b.sol', status: 'modified', hunks: [hunk] },
+  ];
+  const model = buildReviewModel(process.cwd(), tour, files, undefined, {});
+  const first = renderStoryStepPanel(process.cwd(), model, [], 0);
+  assert.match(first, /<p class="ds-landing" aria-label="Where this step is">/);
+  assert.match(first, /<code class="ds-landing-symbol">capRate\(\)<\/code>/);
+  assert.match(first, /<span class="ds-landing-file">a\.ts<\/span>/);
+  assert.match(first, /called by <code>settleFunding\(\)<\/code>, <code>runKeeper\(\)<\/code>/);
+  assert.match(first, /<span class="ds-landing-when">once per market, while rate &lt; cap &amp; fresh<\/span>/, 'plain text is escaped');
+  const second = renderStoryStepPanel(process.cwd(), model, [], 1);
+  assert.match(second, /called by the relayer through <code>onlyRole\(RELAYER_ROLE\)<\/code>/);
+  const bare = buildReviewModel(process.cwd(), { ...tour, steps: [{ ...tour.steps[0], landing: undefined }] }, files, undefined, {});
+  assert.doesNotMatch(renderStoryStepPanel(process.cwd(), bare, [], 0), /ds-landing/);
+});
