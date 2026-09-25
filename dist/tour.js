@@ -306,6 +306,46 @@ function validateHotspots(t, errors) {
         validateNarrative(spot.reason, `hotspots[${i}].reason`, "inline", errors);
     });
 }
+const VERIFICATION_RESULTS = ["passed", "failed", "not-run"];
+/** Optional record of what the author ran; separate from hotspots, which are doubts. */
+function validateVerification(t, errors) {
+    if (t.verification === undefined)
+        return;
+    if (!Array.isArray(t.verification)) {
+        errors.push("verification must be an array");
+        return;
+    }
+    if (t.verification.length > 8)
+        errors.push("verification must have at most 8 entries");
+    t.verification.forEach((raw, i) => {
+        const where = `verification[${i}]`;
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+            errors.push(`${where} must be an object`);
+            return;
+        }
+        const entry = raw;
+        if (typeof entry.check !== "string" || !entry.check.trim()) {
+            errors.push(`${where}.check is required`);
+        }
+        else {
+            if (entry.check.length > 120)
+                errors.push(`${where}.check must be at most 120 characters`);
+            validateNarrative(entry.check, `${where}.check`, "text", errors);
+        }
+        if (!VERIFICATION_RESULTS.includes(entry.result))
+            errors.push(`${where}.result must be one of passed, failed, not-run`);
+        if (entry.detail !== undefined) {
+            if (typeof entry.detail !== "string" || !entry.detail.trim()) {
+                errors.push(`${where}.detail must be a non-empty string when present`);
+            }
+            else {
+                if (narrativeText(entry.detail).length > 240)
+                    errors.push(`${where}.detail must be at most 240 characters of text`);
+                validateNarrative(entry.detail, `${where}.detail`, "inline", errors);
+            }
+        }
+    });
+}
 function validateStringArray(value, name, errors, opts = {}) {
     if (value === undefined) {
         if (opts.required)
@@ -802,6 +842,7 @@ export function validateTour(obj) {
     validateNarrative(t.summary, "summary", "inline", errors);
     validateIntent(t, errors);
     validateHotspots(t, errors);
+    validateVerification(t, errors);
     validateStoryScope(t, errors);
     validateStoryArc(t, errors);
     validateEvolution(t, errors);

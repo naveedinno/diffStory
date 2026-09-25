@@ -1171,3 +1171,25 @@ test('the beat prose gates read the text projection, not the raw markup', () => 
   });
   assert.ok(withMarkup.some((e) => e.toLowerCase().includes('line')), withMarkup.join(' | '));
 });
+
+test('verification is optional and validates check, result, and detail', () => {
+  const tour = (verification) => ({
+    version: 3,
+    title: 'T',
+    summary: '',
+    verification,
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' }],
+  });
+  assert.deepEqual(validateTour(tour(undefined)), []);
+  assert.deepEqual(validateTour(tour([])), []);
+  assert.deepEqual(validateTour(tour([
+    { check: 'forge test --match-contract Funding', result: 'passed' },
+    { check: 'VoiceOver on a physical iPhone', result: 'not-run', detail: 'Only the <code>aria-live</code> region was checked in Chrome.' },
+  ])), []);
+  assert.ok(validateTour(tour('nope')).includes('verification must be an array'));
+  assert.ok(validateTour(tour([{ result: 'passed' }])).includes('verification[0].check is required'));
+  assert.ok(validateTour(tour([{ check: 'x', result: 'green' }])).includes('verification[0].result must be one of passed, failed, not-run'));
+  assert.ok(validateTour(tour([{ check: 'x'.repeat(121), result: 'passed' }])).includes('verification[0].check must be at most 120 characters'));
+  assert.ok(validateTour(tour(Array.from({ length: 9 }, () => ({ check: 'x', result: 'passed' })))).includes('verification must have at most 8 entries'));
+  assert.ok(validateTour(tour([{ check: '<b>x</b>', result: 'passed' }])).some((e) => e.startsWith('verification[0].check')));
+});

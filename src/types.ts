@@ -78,6 +78,15 @@ export interface StoryHotspot {
   reason: string;
 }
 
+/** Something the author ran (or could not run) to check the change. */
+export interface StoryVerification {
+  /** What was run, as the reviewer would type or recognise it. Plain text, ≤ 120 chars. */
+  check: string;
+  result: 'passed' | 'failed' | 'not-run';
+  /** Optional one-line qualifier. Inline-tier HTML, ≤ 240 chars of text. */
+  detail?: string;
+}
+
 /** The changed files the reviewer intentionally asked the generated story to cover. */
 export interface StoryScope {
   /** Repo-relative changed files that should receive story steps. */
@@ -310,6 +319,8 @@ export interface Tour {
   intent?: StoryIntent;
   /** Author-declared distrust spots (at most 3), each anchored to a code step. */
   hotspots?: StoryHotspot[];
+  /** What the author ran to check the change, and what could not be run. */
+  verification?: StoryVerification[];
   /** Optional file-level generation scope for focused stories. */
   storyScope?: StoryScope;
   /** How this story orders and explains the final diff. */
