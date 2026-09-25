@@ -17,7 +17,12 @@ and `eval/GOAL.md` ("Rules the loop follows").
 - `eval/BASELINE-2026-09.md` exists (plan 021 ran).
 - Plans 022, 023, 024 are merged, and plan 023's digest check printed
   `362c7f6b52b15920`.
-- **The user said go.** About 24 billed `claude` runs: 6 generations, 6
+- **Same runner as the baseline.** `eval/BASELINE-2026-09.md` was measured
+  with `--runner muse` (generator and judge `muse-spark-1.3-contributor`).
+  Every eval command in this plan passes `--runner muse`. If Muse is
+  unavailable, stop and report; never switch runners, because the comparison
+  would be meaningless.
+- **The user said go.** About 24 billed Muse runs: 6 generations, 6
   judgings, and 12 compare calls. Two to four hours. If you were not
   explicitly told to run it, stop and ask.
 
@@ -30,20 +35,23 @@ npm run build
 sh scripts/install-skills.sh --claude --codex
 ```
 
-Then run plan 018 Task 4 Step 2. Expected: three `current` lines.
+Then run plan 018 Task 4 Step 2. Expected: three `current` lines. (Muse
+loads the `~/.agents` copy; the harness refuses to run if it is stale.)
 
 - [ ] **Step 2: Generate and judge**
 
 ```bash
-node scripts/eval-stories.mjs all --label after-v2-2026-09 --parallel 2 --timeout 90
+node scripts/eval-stories.mjs all --runner muse --label after-v2-2026-09 --parallel 2 --timeout 90
 ```
 
-Re-run single cases that died of "retries exhausted" (infrastructure, not the skill).
+Re-run single cases that died of "retries exhausted" or a transport or stream
+error (infrastructure, not the skill), once each, with the same flags plus
+`--case <id>`.
 
 - [ ] **Step 3: Blind A/B against the baseline**
 
 ```bash
-node scripts/eval-stories.mjs compare --a baseline-2026-09 --b after-v2-2026-09
+node scripts/eval-stories.mjs compare --runner muse --a baseline-2026-09 --b after-v2-2026-09
 ```
 
 - [ ] **Step 4: Real-world corpus**
@@ -59,7 +67,7 @@ be empty right after merging; that is fine, and you should say so.
 - [ ] **Step 5: Write `eval/AFTER-V2-2026-09.md`** with exactly these sections:
 
 ```md
-# Storyteller v2 vs baseline — measured <date>
+# Storyteller v2 vs baseline — measured <date> (runner muse, muse-spark-1.3-contributor)
 
 ## Side by side (per case)
 
