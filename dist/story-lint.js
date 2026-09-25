@@ -9,6 +9,7 @@ import { orderedSteps } from "./tour.js";
 import { isCodeStep, } from "./types.js";
 const SWEEP_TAGS = new Set(["skim", "sweep", "mechanical"]);
 const PROSE_FILE = /\.(md|mdx|markdown|txt|rst|adoc)$/i;
+const CONFIG_FILE = /\.(json|ya?ml|toml|ini|env|lock)$/i;
 const BARE_OPENER = /^(now(?! that)|here|this adds|it|then|also|next|and)\b/i;
 const LINE_REF = /\blines?\s+\d+/gi;
 const LOOK_AT_LINES = /\blook at lines?\s+\d+/i;
@@ -86,6 +87,7 @@ export function lintStory(tour, ctx = {}) {
     lintBeatLength(beats, add);
     lintBeatPhrases(beats, add);
     lintNumberedSeries(steps, add);
+    lintLandingField(code, add);
     lintChapters(steps, add);
     lintTestsAtTail(code, add);
     lintHighlights(code, ctx, add);
@@ -226,6 +228,18 @@ function lintNumberedSeries(steps, add) {
             continue;
         add("numbered-series", "warning", stepList(ids), `${ids.length} steps are numbered copies of "${base}".`, "A repeated edit is one sweep step: narrate one instance and claim the rest with top-level `ranges`. A real sequence gets purpose titles, not counters.");
     }
+}
+function lintLandingField(code, add) {
+    const missing = code
+        .filter((step) => !step.landing &&
+        !isSweep(step) &&
+        !PROSE_FILE.test(step.file) &&
+        !CONFIG_FILE.test(step.file) &&
+        step.range[0] !== 0)
+        .map((step) => step.id);
+    if (!missing.length)
+        return;
+    add("landing-field-missing", "warning", stepList(missing), `${missing.length} code step${missing.length === 1 ? " has" : "s have"} no landing field.`, "Add `landing` to each: the symbol on screen, who calls it by name (`calledBy`) or the role and gate of an external entry point, and when. The checker verifies callers against the repository.");
 }
 function lintChapters(steps, add) {
     if (steps.length > 10) {

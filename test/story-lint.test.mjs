@@ -23,6 +23,7 @@ function step(over = {}) {
     highlights: [[10, 12]],
     why: `Rules out the ${name} regression where stale input reached settlement.`,
     beats: [{ text: `This is <code>${name}()</code>, called by the router on every request; it now rejects stale input.`, highlights: [[10, 12]] }],
+    landing: { symbol: `${name}()`, calledBy: ['router()'] },
     ...over,
   };
 }
@@ -232,4 +233,14 @@ test('calibration: the best-measured eval stories produce no lint errors', () =>
     const errors = lintStory(tour).filter((f) => f.severity === 'error');
     assert.deepEqual(errors, [], `${file}: ${JSON.stringify(errors, null, 2)}`);
   }
+});
+
+test('landing-field-missing: code steps without a landing warn once, grouped', () => {
+  const bare = (over = {}) => step({ landing: undefined, ...over });
+  const f = lintStory(story([bare(), bare(), step()]));
+  const hit = f.find((x) => x.rule === 'landing-field-missing');
+  assert.equal(hit?.severity, 'warning');
+  assert.match(hit.message, /^2 code steps have no landing field/);
+  const exempt = story([step({ landing: undefined, tags: ['sweep'] }), step({ landing: undefined, file: 'docs/guide.md' }), step({ landing: undefined, file: 'config/app.json' })]);
+  assert.ok(!has(lintStory(exempt), 'landing-field-missing'));
 });
