@@ -21,6 +21,7 @@ import { storyPrompt, streamCommand, parseClaudeStreamLine, onPath } from '../di
 import { validateTour, validateNewGeneratedStory } from '../dist/tour.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
 import { computeCoverage } from '../dist/coverage.js';
+import { lintStory, MARKDOWN_RESIDUE } from '../dist/story-lint.js';
 import { commitEvolutionManifest } from '../dist/git.js';
 import { normalizeEvolutionObject } from '../dist/evolution.js';
 import { skillDirDigest } from '../dist/repo-setup.js';
@@ -405,16 +406,6 @@ function narrativeFields(tour) {
  * in front of the reviewer. Without this the eval scores a format regression as
  * a perfect run.
  */
-const MARKDOWN_RESIDUE = [
-  [/\*\*[^*\n]+\*\*|__[^_\n]+__/, 'bold'],
-  [/(^|[^`])`[^`\n]+`/, 'code span'],
-  [/^#{1,4}\s+\S/m, 'heading'],
-  [/^\s*[-*]\s+\S/m, 'bullet'],
-  [/^\s*\d+[.)]\s+\S/m, 'ordered item'],
-  [/```/, 'fence'],
-  [/^>\s+\S/m, 'blockquote'],
-];
-
 function markdownResidue(tour) {
   const hits = [];
   for (const [path, text] of narrativeFields(tour)) {
@@ -437,6 +428,32 @@ function markupUse(tour) {
   };
 }
 
+/** Post-change lines of a case file, read from the case repo at `head` (cached). */
+function caseLines(c) {
+  const cache = new Map();
+  return (file) => {
+    if (!cache.has(file)) {
+      try {
+        cache.set(file, gitIn(caseRepo(c), 'show', `${c.head}:${file}`).split('\n'));
+      } catch {
+        cache.set(file, null);
+      }
+    }
+    return cache.get(file);
+  };
+}
+
+/** Lint findings folded into counts: the eval tracks rules, not every place. */
+export function summarizeLint(findings) {
+  const byRule = {};
+  for (const f of findings) byRule[f.rule] = (byRule[f.rule] ?? 0) + 1;
+  return {
+    errors: findings.filter((f) => f.severity === 'error').length,
+    warnings: findings.filter((f) => f.severity === 'warning').length,
+    byRule,
+  };
+}
+
 // Mechanical scores are free and objective: the app's own gates.
 function mechanicalScores(c, tour) {
   const files = parseUnifiedDiff(caseDiff(c));
@@ -455,6 +472,9 @@ function mechanicalScores(c, tour) {
     // A story written in the old format validates clean and then renders its
     // asterisks literally, so this is tracked separately from validationErrors.
     markdownResidue: markdownResidue(tour),
+    // Deterministic craft lints (src/story-lint.ts); skipped when the story
+    // failed basic validation, like the generated profile above.
+    lint: validationErrors.length ? null : summarizeLint(lintStory(tour, { readLines: caseLines(c) })),
     markupUse: markupUse(tour),
     steps: tour.steps.length,
     conceptSteps: tour.steps.length - codeSteps.length,
@@ -531,6 +551,13 @@ async function judge(c) {
     `${gateErrors} validation ${gateErrors === 1 ? 'error' : 'errors'}` +
     (tables || signalSpans ? ` · ${tables} ${tables === 1 ? 'table' : 'tables'}, ${signalSpans} signal spans` : ''),
   );
+  if (mechanical.lint) {
+    const top = Object.entries(mechanical.lint.byRule).sort((x, y) => y[1] - x[1]).slice(0, 4);
+    console.log(
+      `  lint: ${mechanical.lint.errors} errors, ${mechanical.lint.warnings} warnings` +
+      (top.length ? ` (${top.map(([rule, n]) => `${rule} x${n}`).join(', ')})` : ''),
+    );
+  }
   // Loud, because it is invisible everywhere else: this story validates clean and
   // then shows its asterisks to the reviewer.
   if (mechanical.markdownResidue.length) {
@@ -556,7 +583,7 @@ function report(results) {
   if (!done.length) return;
   const header = [
     'case', 'mode', 'mean', ...RUBRIC.map(([k]) => k),
-    'val errors', 'md residue', 'uncovered', 'steps', 'hotspots', 'tables',
+    'val errors', 'md residue', 'lint E', 'lint W', 'uncovered', 'steps', 'hotspots', 'tables',
   ];
   const rows = done.map((r) => [
     r.case, r.mode, r.mean,
@@ -564,6 +591,8 @@ function report(results) {
     r.mechanical.validationErrors.length + r.mechanical.generatedProfileErrors.length,
     // Non-zero means the generator is still writing Markdown into HTML fields.
     r.mechanical.markdownResidue?.length ?? 0,
+    r.mechanical.lint?.errors ?? '-',
+    r.mechanical.lint?.warnings ?? '-',
     r.mechanical.uncoveredHunks, r.mechanical.steps, r.mechanical.hotspots,
     r.mechanical.markupUse?.tables ?? 0,
   ]);
@@ -576,7 +605,7 @@ function report(results) {
     `| ${header.map(() => '---').join(' | ')} |`,
     ...rows.map((r) => `| ${r.join(' | ')} |`),
     '',
-    ...done.map((r) => `## ${r.case}\n\n- verdict: ${r.llm.verdict}\n- worst step: ${r.llm.worstStep}\n${RUBRIC.map(([k]) => `- ${k} (${r.llm.scores[k]}): ${r.llm.rationale[k]}`).join('\n')}\n`),
+    ...done.map((r) => `## ${r.case}\n\n- verdict: ${r.llm.verdict}\n- worst step: ${r.llm.worstStep}\n- lint: ${r.mechanical.lint ? `${r.mechanical.lint.errors} errors, ${r.mechanical.lint.warnings} warnings ${JSON.stringify(r.mechanical.lint.byRule)}` : 'skipped (story failed basic validation)'}\n${RUBRIC.map(([k]) => `- ${k} (${r.llm.scores[k]}): ${r.llm.rationale[k]}`).join('\n')}\n`),
   ].join('\n');
   writeFileSync(join(outDir, 'report.md'), md);
   console.log(`\nOverall mean: ${(done.reduce((a, r) => a + r.mean, 0) / done.length).toFixed(2)} across ${done.length} cases`);

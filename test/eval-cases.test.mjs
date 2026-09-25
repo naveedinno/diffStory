@@ -114,3 +114,11 @@ test('external-repo cases are optional, because the repo is machine-specific', (
     assert.equal(c.optional, true, `${c.id} names repo ${c.repo}, so it must set optional: true`);
   }
 });
+
+test('summarizeLint counts errors, warnings, and rules', async () => {
+  const { summarizeLint } = await import('../scripts/eval-stories.mjs');
+  assert.deepEqual(
+    summarizeLint([{ rule: 'a', severity: 'error' }, { rule: 'a', severity: 'warning' }, { rule: 'b', severity: 'warning' }]),
+    { errors: 1, warnings: 2, byRule: { a: 2, b: 1 } },
+  );
+});
