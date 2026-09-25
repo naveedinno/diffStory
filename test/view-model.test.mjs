@@ -435,3 +435,50 @@ test('moves are found across hunks', () => {
   assert.deepEqual(blocks[0][1].moved, { side: 'right', line: 79 });
   assert.deepEqual(blocks[1][1].moved, { side: 'left', line: 11 });
 });
+
+test('a moved line keeps its place in the column it belongs to', () => {
+  // A two-argument signature grows to four: two of its lines survive at new
+  // indices (moves), and the after column must still read top to bottom.
+  const rows = [
+    ctx(280, '    /**'),
+    del(281, '    function deploySwapAccount('),
+    del(282, '        address baseTokenAddress,'),
+    del(283, '        address quoteTokenAddress,'),
+    del(284, '    ) external onlyRole(TOKEN_MANAGER_ROLE) returns (address swapAccount) {'),
+    add(282, '     * @return swapAccount The deployed SwapAccount address'),
+    add(283, '     */'),
+    add(284, '    function deploySwapAccountWithPermissions('),
+    add(285, '        address baseTokenAddress,'),
+    add(286, '        address quoteTokenAddress,'),
+    add(287, '        address[] calldata initialOperators,'),
+    add(288, '        address[] calldata initialWithdrawers'),
+    add(289, '    ) external onlyRole(TOKEN_MANAGER_ROLE) returns (address swapAccount) {'),
+    ctx(290, '        swapAccount = _deploySwapAccount(baseTokenAddress, quoteTokenAddress);'),
+  ];
+  markMovedLines([rows], lineOf);
+  assert.ok(rows[9].moved && rows[12].moved, 'the reused signature lines are moves');
+
+  const { rows: out } = pairChangeRows(rows);
+  const after = out.filter((r) => r.newNo !== undefined).map((r) => r.newNo);
+  assert.deepEqual(after, [280, 282, 283, 284, 285, 286, 287, 288, 289, 290], 'after column stays in line order');
+  const before = out.filter((r) => r.oldNo !== undefined && r.type !== 'add').map((r) => r.oldNo);
+  assert.deepEqual(before, [280, 281, 282, 283, 284, 290], 'before column stays in line order');
+});
+
+test('a moved line does not stop its neighbours pairing as an edit', () => {
+  const rows = [
+    del(10, 'const budget = plan.cap - plan.spent;'),
+    del(11, 'emitBudgetReady(budget);'),
+    add(10, 'const budget = plan.cap - plan.spent - plan.reserved;'),
+    ctx(12, 'settle();'),
+    add(13, 'emitBudgetReady(budget);'),
+  ];
+  markMovedLines([rows], lineOf);
+  assert.ok(rows[1].moved, 'the re-emitted line is a move');
+  const { rows: out } = pairChangeRows(rows);
+  assert.equal(out[0].changePair, true, 'the edited line still pairs across the move');
+  assert.equal(out[0].oldNo, 10);
+  assert.equal(out[0].newNo, 10);
+  assert.equal(out[1].type, 'del', 'the moved deletion keeps its own side');
+  assert.ok(out[1].moved);
+});

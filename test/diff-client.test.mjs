@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { sharedTokens } from '../dist/theme.js';
 
 // `DIFF_CSS`/`DIFF_JS` and `PAGE_CSS`/`PAGE_JS` were template strings inlined
@@ -127,6 +128,29 @@ test('expand-context client is wired', () => {
   assert.match(DIFF_JS, /function expandGap\(/);
   assert.match(DIFF_JS, /\/api\/diff\/context\?file=/);
   assert.match(PAGE_JS, /data-expand/);
+});
+
+test('expanding a gap retires the enclosing-scope label above the hunk', () => {
+  // The label stands in for the code hidden above a hunk. Once that code is on
+  // screen the label is stale, and leaving it strands a declaration mid-body.
+  assert.match(DIFF_JS, /pruneScopeRows\(holder\)/);
+  const source = DIFF_JS.match(/ {2}function pruneScopeRows\([^]*?\n {2}}/)?.[0];
+  assert.ok(source, 'pruneScopeRows is defined');
+  const node = (cls, prev = null) => ({
+    removed: false,
+    previousElementSibling: prev,
+    classList: { contains: (c) => c === cls },
+    remove() { this.removed = true; },
+  });
+  const stale = node('ds-scoperow', node('ds-row'));
+  const fronting = node('ds-scoperow', node('ds-hunkgap'));
+  const head = node('ds-scoperow');
+  const context = vm.createContext({ $all: () => [stale, fronting, head] });
+  vm.runInContext(source, context);
+  context.pruneScopeRows({});
+  assert.equal(stale.removed, true, 'a label with revealed code above it goes');
+  assert.equal(fronting.removed, false, 'a label still fronting a gap stays');
+  assert.equal(head.removed, false, 'a label at the head of a column stays');
 });
 
 test('hunk expansion remains discoverable without hover on touch devices', () => {

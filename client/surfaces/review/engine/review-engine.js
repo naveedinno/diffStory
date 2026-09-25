@@ -2394,6 +2394,16 @@ export function startReviewEngine(options){
     return $(':scope>.ds-col-l>[data-gap-mirror][data-ri="'+ri+'"]',body);
   }
   function removeFlowGap(gap,mirror){gap.remove();if(mirror)mirror.remove();}
+  // The enclosing-declaration label stands in for the code hidden above a hunk.
+  // Once a gap is expanded that code is on screen, so a label with a real row
+  // above it is stale: it would read as a declaration reopening mid-body.
+  function pruneScopeRows(holder){
+    if(!holder)return;
+    $all('.ds-scoperow',holder).forEach(function(scope){
+      var prev=scope.previousElementSibling;
+      if(prev&&!prev.classList.contains('ds-hunkgap'))scope.remove();
+    });
+  }
   // Expanded context arrives as two side fragments with local indices. They
   // take fractions between the gap and its neighbour, then every index in the
   // body is renumbered so the order stays integral for the next expansion.
@@ -2691,7 +2701,7 @@ export function startReviewEngine(options){
         var tmp=document.createElement('div');tmp.innerHTML=html;
         var wrap=tmp.firstElementChild;
         if(!wrap||!wrap.hasAttribute('data-ctx-rows'))throw new Error('Unexpected context response');
-        if(!wrap.children.length){removeFlowGap(gap,mirrorGap);if(holder)updateChangeNav(holder);return;}
+        if(!wrap.children.length){removeFlowGap(gap,mirrorGap);if(holder){pruneScopeRows(holder);updateChangeNav(holder);}return;}
         var servedFrom=parseInt(wrap.getAttribute('data-from')||'0',10);
         var servedTo=parseInt(wrap.getAttribute('data-to')||'0',10);
         mountCommentPins(wrap);
@@ -2710,7 +2720,7 @@ export function startReviewEngine(options){
           else{gap.setAttribute('data-gap-to',String(nt));}
         }
         btns.forEach(function(b){b.disabled=false;});
-        if(holder){updateChangeNav(holder);syncSplitPaneLayout(holder);scheduleAnnotations(closest(holder,'.ds-step'));}
+        if(holder){pruneScopeRows(holder);updateChangeNav(holder);syncSplitPaneLayout(holder);scheduleAnnotations(closest(holder,'.ds-step'));}
       })
       .catch(function(err){
         btns.forEach(function(b){b.disabled=false;});

@@ -754,7 +754,9 @@ export function hunksToSbsBlocks(file, uncoveredRanges) {
  *  side-by-side row and word-diff the pair, so a rewritten statement reads as
  *  one before/after row instead of two islands separated by empty space.
  *  Excess lines on either side keep their single-sided rows; rows already
- *  paired by a story move view, and lines marked moved, pass through untouched. */
+ *  paired by a story move view pass through untouched. A moved line never
+ *  pairs, but it does not split the run around it either: it keeps its side
+ *  and its place, and its neighbours still pair up. */
 export function pairChangeRows(rows) {
     const out = [];
     const sides = new Map();
@@ -765,43 +767,72 @@ export function pairChangeRows(rows) {
             i++;
             continue;
         }
-        // A moved line never pairs, but it does not split the run around it either:
-        // it keeps its side and its place, and its neighbours still pair up.
         const dels = [];
         const adds = [];
-        const movedDels = [];
-        const movedAdds = [];
         while (i < rows.length && rows[i].type === 'del' && !rows[i].paired)
-            (rows[i].moved ? movedDels : dels).push(rows[i++]);
+            dels.push(rows[i++]);
         while (i < rows.length && rows[i].type === 'add' && !rows[i].paired)
-            (rows[i].moved ? movedAdds : adds).push(rows[i++]);
-        const n = Math.min(dels.length, adds.length);
-        for (let k = 0; k < n; k++) {
-            const merged = {
-                type: 'ctx',
-                changePair: true,
-                paired: true,
-                oldNo: dels[k].oldNo,
-                newNo: adds[k].newNo,
-                content: adds[k].content,
-                leftContent: dels[k].content,
-                rightContent: adds[k].content,
-                comment: true,
-                untoured: adds[k].untoured,
-            };
-            const intra = diffLineTokens(dels[k].content, adds[k].content);
-            if (intra)
-                sides.set(merged, intra);
-            out.push(merged);
-        }
-        for (let k = n; k < dels.length; k++)
-            out.push(dels[k]);
-        out.push(...movedDels);
-        for (let k = n; k < adds.length; k++)
-            out.push(adds[k]);
-        out.push(...movedAdds);
+            adds.push(rows[i++]);
+        emitPairedRun(dels, adds, out, sides);
     }
     return { rows: out, sides };
+}
+/** One del-run and add-run emitted in place. The k-th pairable deletion merges
+ *  with the k-th pairable addition; everything else — moved lines and the
+ *  excess on the longer side — keeps its own side. Both columns are walked in
+ *  file order, so a move never jumps to the end of the run: a line the reader
+ *  expects between 285 and 287 renders between 285 and 287. */
+function emitPairedRun(dels, adds, out, sides) {
+    const pairDels = dels.filter((row) => !row.moved);
+    const pairAdds = adds.filter((row) => !row.moved);
+    const mates = new Map();
+    for (let k = 0; k < Math.min(pairDels.length, pairAdds.length); k++)
+        mates.set(pairDels[k], pairAdds[k]);
+    let di = 0;
+    let ai = 0;
+    while (di < dels.length || ai < adds.length) {
+        const del = dels[di];
+        const add = adds[ai];
+        const mate = del && mates.get(del);
+        if (mate) {
+            // An addition standing between this deletion's mate and the ones already
+            // paired is a move: it goes out first so the after column keeps its order.
+            if (add && add !== mate) {
+                out.push(add);
+                ai++;
+                continue;
+            }
+            out.push(mergePair(del, mate, sides));
+            di++;
+            ai++;
+            continue;
+        }
+        if (del) {
+            out.push(del);
+            di++;
+            continue;
+        }
+        out.push(adds[ai++]);
+    }
+}
+/** A deletion and an addition read as one before/after row, word-diffed. */
+function mergePair(del, add, sides) {
+    const merged = {
+        type: 'ctx',
+        changePair: true,
+        paired: true,
+        oldNo: del.oldNo,
+        newNo: add.newNo,
+        content: add.content,
+        leftContent: del.content,
+        rightContent: add.content,
+        comment: true,
+        untoured: add.untoured,
+    };
+    const intra = diffLineTokens(del.content, add.content);
+    if (intra)
+        sides.set(merged, intra);
+    return merged;
 }
 // ---- helpers ----
 function toSbs(l) {
