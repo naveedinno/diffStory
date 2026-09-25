@@ -889,3 +889,16 @@ test('the storyteller skill runs only when explicitly asked', () => {
   assert.doesNotMatch(description, /right after you|before handing work back/i);
   assert.ok(skill.includes('Write a story only when the user (or a prompt) explicitly asks for one.'));
 });
+
+test('every storyteller reference file is linked from SKILL.md, and every link resolves', () => {
+  const core = skillCore();
+  const files = skillReferenceFiles();
+  assert.ok(files.length > 0, 'references/ should exist');
+  for (const f of files) assert.ok(core.includes(`references/${f}`), `SKILL.md never points at references/${f}`);
+  for (const [, f] of core.matchAll(/references\/([a-z0-9-]+\.md)/g)) assert.ok(files.includes(f), `SKILL.md points at missing references/${f}`);
+});
+
+test('the always-loaded SKILL.md stays small enough to survive long sessions', () => {
+  const lines = skillCore().split('\n').length;
+  assert.ok(lines <= 600, `SKILL.md grew to ${lines} lines; move detail into references/`);
+});
