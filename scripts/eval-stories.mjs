@@ -7,6 +7,7 @@
 //   node scripts/eval-stories.mjs all --label baseline
 //   node scripts/eval-stories.mjs generate --label exp1 --case bugfix-review-ui
 //   node scripts/eval-stories.mjs judge --label exp1
+//   node scripts/eval-stories.mjs compare --a baseline --b after   # blind A/B, both orders
 //
 // Requires: `npm run build` first (uses dist/), the `claude` CLI on PATH, and
 // the diffstory-storyteller skill installed (scripts/install-skills.sh).
@@ -586,6 +587,82 @@ async function judge(c) {
   return result;
 }
 
+/** Blind A/B prompt. Order is swapped on the second call to cancel position bias. */
+function comparePrompt(c, first, second, diff) {
+  const truncated = diff.length > 60000 ? `${diff.slice(0, 60000)}\n[diff truncated at 60000 chars]` : diff;
+  return [
+    'Two AI-written "diffStory" review stories explain the SAME code change. Pick the one that would help a reviewer who knows the goal but not this code understand the change and find its risks faster.',
+    'Weigh: landing (each step says where we are and who calls it before what changed), rationale (why this and not the obvious alternative), concreteness, risk calibration (honest, specific doubts), listenability (it is read aloud), and truth to the diff.',
+    'Do NOT prefer a story for being longer or more detailed; prefer the one a reviewer would rather follow. A story that invents behavior the diff does not show loses.',
+    '',
+    'Reply with STRICT JSON only, no markdown fences: {"winner":"A"|"B"|"tie","why":"one sentence","landing":"A|B|tie","rationale":"A|B|tie","listenability":"A|B|tie"}',
+    '',
+    `Change note: ${c.note}`,
+    '',
+    '--- STORY A ---',
+    first,
+    '',
+    '--- STORY B ---',
+    second,
+    '',
+    '--- THE ACTUAL DIFF ---',
+    truncated,
+  ].join('\n');
+}
+
+async function compareCase(c, labelA, labelB) {
+  const read = (l) => {
+    const file = join(root, 'eval', 'results', l, c.id, 'story.json');
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  };
+  const a = read(labelA);
+  const b = read(labelB);
+  if (!a || !b) {
+    console.log(`\n▶ compare ${c.id} — missing a story (${!a ? labelA : labelB}), skipping`);
+    return null;
+  }
+  const dir = join(root, 'eval', 'results', `compare-${labelA}-vs-${labelB}`, c.id);
+  mkdirSync(dir, { recursive: true });
+  const diff = caseDiff(c);
+  console.log(`\n▶ compare ${c.id}: ${labelA} vs ${labelB} (both orders, model ${judgeModel})`);
+  const ask = async (first, second, log) =>
+    parseJudgeOutput((await runClaude({
+      cliArgs: ['-p', comparePrompt(c, first, second, diff), '--model', judgeModel],
+      logPath: join(dir, log),
+      activity: 'comparing',
+    })).out);
+  const forward = await ask(a, b, 'a-first.log');
+  const backward = await ask(b, a, 'b-first.log');
+  const vote = (r, aFirst) => (r.winner === 'tie' ? 'tie' : (r.winner === 'A') === aFirst ? labelA : labelB);
+  const votes = [vote(forward, true), vote(backward, false)];
+  const result = { case: c.id, votes, agreed: votes[0] === votes[1] ? votes[0] : 'split', why: [forward.why, backward.why] };
+  writeFileSync(join(dir, 'compare.json'), JSON.stringify(result, null, 2));
+  console.log(`  ✓ ${result.agreed === 'split' ? `split (${votes.join(' / ')})` : `prefers ${result.agreed}`}`);
+  return result;
+}
+
+function compareReport(results, labelA, labelB) {
+  const done = results.filter(Boolean);
+  const count = (who) => done.filter((r) => r.agreed === who).length;
+  const md = [
+    `# Blind comparison — ${labelA} vs ${labelB}`,
+    '',
+    `Judge: ${judgeModel}. Each case is judged twice with the story order swapped; only agreeing votes count.`,
+    '',
+    `**${labelB}** preferred in ${count(labelB)}, **${labelA}** in ${count(labelA)}, tie in ${count('tie')}, split in ${count('split')} of ${done.length} cases.`,
+    '',
+    '| case | A-first vote | B-first vote | agreed |',
+    '| --- | --- | --- | --- |',
+    ...done.map((r) => `| ${r.case} | ${r.votes[0]} | ${r.votes[1]} | ${r.agreed} |`),
+    '',
+    ...done.map((r) => `## ${r.case}\n\n- A first: ${r.why[0]}\n- B first: ${r.why[1]}\n`),
+  ].join('\n');
+  const out = join(root, 'eval', 'results', `compare-${labelA}-vs-${labelB}`, 'report.md');
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, md);
+  console.log(`\n${labelB} preferred in ${count(labelB)} of ${done.length} cases. Report: ${out}`);
+}
+
 function report(results) {
   const done = results.filter(Boolean);
   if (!done.length) return;
@@ -623,13 +700,26 @@ function report(results) {
 // Only run when invoked as a script — importing this file (e.g. from a test of
 // progressLine) must not spawn billed agent runs.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (!['generate', 'judge', 'all'].includes(command)) {
-    console.error(`Unknown command "${command}". Use: generate | judge | all`);
+  if (!['generate', 'judge', 'all', 'compare'].includes(command)) {
+    console.error(`Unknown command "${command}". Use: generate | judge | all | compare`);
     process.exit(1);
   }
   if (!onPath('claude')) {
     console.error('The claude CLI is required on PATH for generation and judging.');
     process.exit(1);
+  }
+  if (command === 'compare') {
+    const labelA = flag('a');
+    const labelB = flag('b');
+    if (!labelA || !labelB) {
+      console.error('compare needs --a <label> --b <label>: two existing result labels under eval/results/.');
+      process.exit(1);
+    }
+    const results = [];
+    for (const c of selected) results.push(await compareCase(c, labelA, labelB));
+    compareReport(results, labelA, labelB);
+    console.log(`\nDone in ${elapsed()}.`);
+    process.exit(0);
   }
   if (command !== 'judge') checkInstalledSkill();
   recoverStrandedStory();

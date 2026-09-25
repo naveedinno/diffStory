@@ -22,7 +22,13 @@ node scripts/eval-stories.mjs all --label exp-new-skill     # after a skill edit
 node scripts/eval-stories.mjs generate --case bugfix-review-ui --label quick
 node scripts/eval-stories.mjs judge --label quick           # re-judge without regenerating
 node scripts/eval-stories.mjs all --label exp1 --parallel 2 # recommended stable throughput
+node scripts/eval-stories.mjs compare --a baseline --b after   # blind A/B per case
 ```
+
+`compare` asks the judge which of two stories for the same case helps a
+reviewer more. It asks twice, with the order swapped, and counts a vote only
+when both orders agree, because LLM judges favor position and length (Zheng
+et al. 2023). It spends two judge runs per case.
 
 Flags: `--label <name>` (result folder, default `baseline`), `--model <m>`
 (generator, default `sonnet`), `--judge-model <m>` (default `sonnet`),
