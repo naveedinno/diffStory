@@ -102,3 +102,108 @@ story-presentation feature, not an unresolved corrective audit finding.
 ## Execution
 
 Completed on 2026-07-14. Plan 001's token migration stops at the review surfaces because `picker.ts` and `story-picker.ts` do not consume `sharedTokens()`, and `navStyles()` is shared with the tokenless story picker. Their literal timings remain unchanged per the plan's no-local-duplicate boundary.
+
+## Story quality campaign — 2026-09-25
+
+Plans 014–026 improve the stories the `diffstory-storyteller` skill writes.
+They argue from one evidence file: `docs/research/story-corpus-audit-2026-09.md`,
+an audit of 66 real stories across 20 repositories, 3,141 user messages,
+the app's validators run over the whole corpus, and new research.
+
+**The short version of what was found:** stories written from chat are never
+validated (the newest one fails with 50 errors); the 56 KB skill does not
+survive long sessions; no craft rule (landing, seams, copied beats, formulaic
+voice) is checked anywhere; a stale 1,400-line Codex copy of the skill was
+still installed; and standing preferences ("only Solidity", "detailed") had
+nowhere to live. The campaign fixes the tooling first, measures, rewrites the
+skill, and measures again.
+
+| Plan | Title | Kind | Billed runs | Status |
+| --- | --- | --- | --- | --- |
+| 014 | Extract story verification into standalone modules | refactor | no | TODO |
+| 015 | Add a `verification` field (what the author ran) | schema → UI | no | TODO |
+| 016 | Deterministic story lints | new module | no | TODO |
+| 017 | Bundle a story checker (and ledger) into the skill folder | tooling | no | TODO |
+| 018 | No stale storyteller skill survives an install | tooling | no | TODO |
+| 019 | Eval cases from the repos stories are written for (Solidity) | eval | no | TODO |
+| 020 | Lint in the eval, rubric v2, blind A/B, corpus report | eval | no | TODO |
+| 021 | Baseline: measure the current skill | operations | **yes (~12)** | TODO |
+| 022 | Split the skill into a core and references (verbatim) | skill | no | TODO |
+| 023 | Storyteller craft rules v2 | skill | no | TODO |
+| 024 | App prompts run the checker; repairs land the listener | prompt | no | TODO |
+| 025 | Measure v2 against the baseline, then decide | operations | **yes (~24)** | TODO |
+| 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
+
+### Execution order and dependencies
+
+```text
+014 ─┬─> 017 ──┬──> 020 ──> 021 (baseline) ──> 022 ──> 023 ──> 024 ──> 025 (after)
+015 ─┤         │
+016 ─┘         │
+018 ───────────┤
+019 ───────────┘
+```
+
+- 014, 015, 016, 018, and 019 are independent of each other; run them in any
+  order, or in parallel **only in separate worktrees** (see rules below).
+- 016 needs 015 (it reads `tour.verification`). 017 needs 014 and 016.
+  020 needs 016 and 019.
+- **021 must run before 022.** The baseline measures the current skill, so
+  nothing under `skills/diffstory-storyteller/` (except the plan-017 bundle)
+  may change before it.
+- 022 → 023 → 024 strictly in order. 023 checks a digest of 022's output and
+  refuses to run on anything else.
+- 025 last. 026 items each need their own planning pass.
+
+Every plan's code was compiled and its tests run in a scratch copy of this
+repository on 2026-09-25 (except 021 and 025, which spend agent runs, and
+015's React rendering, which has a manual check). Executors should expect the
+steps to work as written. If one doesn't, the repo moved since then: fix the
+smallest thing and report it.
+
+### Rules for every executor
+
+1. **Start clean.** Work on the `story-quality-campaign` branch. The work that
+   was uncommitted when these plans were written was committed there as
+   `f80d93a`, so the tree should be clean. For every plan: run
+   `git status --short` first, and if a file your plan modifies already shows
+   as modified and you did not modify it, **stop and report**.
+2. **Git safety.** Never run `git checkout`, `git switch`, `git stash`,
+   `git reset`, `git restore`, `git clean`, `git rebase`, or `git push`. Stage
+   files by explicit path only; never `git add .`, `git add -A`, or
+   `git add dist/`. Parallel agents must each work in their own
+   `git worktree` (they can wipe each other's uncommitted work otherwise).
+3. **`dist/` is committed.** Every `src/` change ships with its rebuilt
+   `dist/*.js` in the same commit (`npm run build`). The same goes for
+   `skills/diffstory-storyteller/scripts/check-story.mjs` once plan 017 lands.
+4. **Tests are the gate.** A task is done when its tests pass and `npm test`
+   passes. Never weaken an assertion to make a test pass unless the plan tells
+   you to change that assertion.
+5. **No billed runs without a go-ahead.** Plans 021 and 025 spawn `claude` runs.
+   Do not run `generate`, `judge`, `all`, or `compare` in any other plan.
+6. **Never commit `.diffstory/`** (stories, preferences, comments). It is local
+   review state in every repository.
+7. **Never write into other repositories.** Plans 017 and 019 only read
+   `~/Codes/**` (checker dry-runs, eval clones via `git clone --shared`).
+8. **Commit messages:** conventional prefix (`feat:`, `fix:`, `refactor:`,
+   `test:`, `docs:`), imperative, and no generated-by or co-author trailers.
+9. **Report:** list your commits, paste the outputs each plan asks for, and
+   say plainly what you could not verify.
+
+### Decisions this campaign makes (the user can override before 023)
+
+These defaults are explained in section 6 of the audit file. Each is a single
+edit to reverse.
+
+- **D1** A checker script ships inside the skill folder; it is not a `diffstory` CLI.
+- **D2** One spoken line pointer ("down at line 120") is allowed per step, after the landing; "Look at lines …" is an error.
+- **D3** Moves are expected for every relocation; the restraint filter stays for callouts.
+- **D4** Standing preferences live in `.diffstory/preferences.json` (local).
+- **D5** Environment gaps go in a new `verification` field, not in hotspots.
+- **D6** The skill triggers on request, or for large changes in repos with `.diffstory/`.
+- **D7** Intent opens on the problem, not the diff.
+- **D8** Core `SKILL.md` ≤ 520 lines, with references loaded on demand; schema re-read before writing.
+
+### Follow-ups
+
+(Plan 025 appends here.)
