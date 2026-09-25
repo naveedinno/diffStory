@@ -168,6 +168,22 @@ export interface TourStepBase {
 }
 
 /** Fields shared by every code-backed stop. */
+/**
+ * Where a code step's camera lands, as facts the story checker verifies:
+ * the symbol on screen, who reaches it by name (or, for an external entry
+ * point, the role and the check that gates it), and when. Plain text.
+ */
+export interface StepLanding {
+  /** The symbol on screen as a reviewer would search for it: "_capRate()", ".ds-main". */
+  symbol: string;
+  /** 1-3 functions, handlers, tests, or components that reach it, by name. */
+  calledBy?: string[];
+  /** For an external entry point with no calling function: who calls it, and the gate. */
+  role?: { who: string; gate?: string };
+  /** When it runs: "once per market, after the config is picked". */
+  when?: string;
+}
+
 export interface CodeTourStepBase extends TourStepBase {
   /** Repo-relative path of the file this step shows. */
   file: string;
@@ -190,6 +206,8 @@ export interface CodeTourStepBase extends TourStepBase {
   calls?: string[];
   /** Step id to return to afterwards (the B -> A jump back). */
   returnsTo?: string;
+  /** Verified "where am I" facts; rendered under the step title. */
+  landing?: StepLanding;
 }
 
 /** Which version of a file a semantic move endpoint addresses. */

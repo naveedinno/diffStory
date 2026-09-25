@@ -1193,3 +1193,34 @@ test('verification is optional and validates check, result, and detail', () => {
   assert.ok(validateTour(tour(Array.from({ length: 9 }, () => ({ check: 'x', result: 'passed' })))).includes('verification must have at most 8 entries'));
   assert.ok(validateTour(tour([{ check: '<b>x</b>', result: 'passed' }])).some((e) => e.startsWith('verification[0].check')));
 });
+
+test('landing is optional and validates symbol, callers, role, and when', () => {
+  const tour = (landing) => ({
+    version: 3,
+    title: 'T',
+    summary: '',
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w', landing }],
+  });
+  assert.deepEqual(validateTour(tour(undefined)), []);
+  assert.deepEqual(validateTour(tour({ symbol: '_capRate()', calledBy: ['settleFunding()'], when: 'once per market' })), []);
+  assert.deepEqual(validateTour(tour({ symbol: 'relayBatch()', role: { who: 'relayer', gate: 'onlyRole(RELAYER_ROLE)' } })), []);
+  assert.ok(validateTour(tour('nope')).includes('steps[0].landing must be an object'));
+  assert.ok(validateTour(tour({ calledBy: ['a()'] })).includes('steps[0].landing.symbol is required'));
+  assert.ok(validateTour(tour({ symbol: 'f()' })).some((e) => e.startsWith('steps[0].landing needs calledBy')));
+  assert.ok(validateTour(tour({ symbol: 'f()', calledBy: [] })).includes('steps[0].landing.calledBy must list 1 to 3 callers'));
+  assert.ok(validateTour(tour({ symbol: 'f()', calledBy: ['a', 'b', 'c', 'd'] })).includes('steps[0].landing.calledBy must list 1 to 3 callers'));
+  assert.ok(validateTour(tour({ symbol: 'f()', role: {} })).includes('steps[0].landing.role.who is required'));
+  assert.ok(validateTour(tour({ symbol: '<b>f</b>', calledBy: ['a()'] })).some((e) => e.startsWith('steps[0].landing.symbol')));
+});
+
+test('concept steps cannot carry a landing', () => {
+  const body = Array.from({ length: 70 }, (_, i) => `word${i}`).join(' ');
+  const tour = {
+    version: 3, title: 'T', summary: '',
+    steps: [
+      { id: 'c1', order: 1, title: 'Model', kind: 'concept', body: `<p>${body}</p>`, preparesFor: ['s1'], landing: { symbol: 'x', calledBy: ['y'] } },
+      { id: 's1', order: 2, title: 'a', file: 'x.ts', range: [1, 2], kind: 'changed', why: 'w' },
+    ],
+  };
+  assert.ok(validateTour(tour).some((e) => e.includes('landing')));
+});

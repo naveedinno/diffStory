@@ -49,6 +49,7 @@ const CONCEPT_CODE_FIELDS = [
     "why",
     "calls",
     "returnsTo",
+    "landing",
 ];
 const CONCEPT_MIN_WORDS = 60;
 const CONCEPT_MAX_WORDS = 220;
@@ -544,6 +545,53 @@ function validateConceptStep(step, where, errors) {
             errors.push(`${where}.${field} is not allowed for a concept step`);
     }
 }
+/** A landing states where the camera is, as plain-text facts the checker verifies. */
+function validateLanding(value, where, errors) {
+    if (value === undefined)
+        return;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        errors.push(`${where} must be an object`);
+        return;
+    }
+    const landing = value;
+    const text = (field, name, max, required) => {
+        if (field === undefined) {
+            if (required)
+                errors.push(`${name} is required`);
+            return;
+        }
+        if (typeof field !== "string" || !field.trim()) {
+            errors.push(`${name} must be a non-empty string`);
+            return;
+        }
+        if (field.length > max)
+            errors.push(`${name} must be at most ${max} characters`);
+        validateNarrative(field, name, "text", errors);
+    };
+    text(landing.symbol, `${where}.symbol`, 80, true);
+    text(landing.when, `${where}.when`, 80, false);
+    if (landing.calledBy !== undefined) {
+        if (!Array.isArray(landing.calledBy) || landing.calledBy.length === 0 || landing.calledBy.length > 3) {
+            errors.push(`${where}.calledBy must list 1 to 3 callers`);
+        }
+        else {
+            landing.calledBy.forEach((caller, i) => text(caller, `${where}.calledBy[${i}]`, 80, true));
+        }
+    }
+    if (landing.role !== undefined) {
+        if (typeof landing.role !== "object" || landing.role === null || Array.isArray(landing.role)) {
+            errors.push(`${where}.role must be an object`);
+        }
+        else {
+            const role = landing.role;
+            text(role.who, `${where}.role.who`, 40, true);
+            text(role.gate, `${where}.role.gate`, 80, false);
+        }
+    }
+    if (landing.calledBy === undefined && landing.role === undefined) {
+        errors.push(`${where} needs calledBy (who calls it, by name) or role (who reaches an external entry point)`);
+    }
+}
 function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     const stepKind = step.kind;
     if (typeof step.file !== "string" || !step.file)
@@ -557,6 +605,7 @@ function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     if (step.returnsTo !== undefined && typeof step.returnsTo !== "string") {
         errors.push(`${where}.returnsTo must be a string`);
     }
+    validateLanding(step.landing, `${where}.landing`, errors);
     if (storyFiles &&
         stepKind !== "context" &&
         typeof step.file === "string" &&
