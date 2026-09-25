@@ -2,6 +2,8 @@
 // generate the story. The spawn itself is integration-only; the pure helpers
 // (onPath, storyPrompt, agentCommand) are unit-tested.
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './config.js';
 import { codexTaskBinary } from './codex-tasks.js';
 import { fileEvent, commandEvent, activityEvent, toolEvent, textEvent, planEvent, } from './progress.js';
@@ -63,6 +65,19 @@ function storyStructureContract(manifest) {
         `- Use 1-6 contiguous phases in first-parent order. Commit boundaries may use unique prefixes of at least 7 hex characters.\n` +
         `- Phase prose explains how the implementation developed, but every behavior claim must agree with the final diff. Commit messages are context, not proof.\n` +
         `- Frozen first-parent manifest, in review order:\n${JSON.stringify(commits, null, 2)}\n\n`);
+}
+/** The story checker bundled with this build's copy of the storyteller skill. */
+export const STORY_CHECKER = fileURLToPath(new URL('../skills/diffstory-storyteller/scripts/check-story.mjs', import.meta.url));
+/**
+ * Tells the agent to verify its own story before finishing. The app's finish
+ * gate rejects contract failures but never checks coverage or prose; the
+ * checker does both, and the agent can still fix what it finds.
+ */
+function checkerInstruction() {
+    return existsSync(STORY_CHECKER)
+        ? `Before you finish, run the checker that ships with the skill, from the repository root: node "${STORY_CHECKER}". ` +
+            `Fix every ERROR, fix or justify every WARNING, and rerun until it prints "RESULT: READY".\n\n`
+        : '';
 }
 /** The instruction handed to the agent — triggers the producer skill, pins the exact diff. */
 export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = [], storyScope, evolutionManifest, storyRefs) {
@@ -154,6 +169,7 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Beat text must not open by naming line numbers ("Line 742 ...") and must not narrate a value transition ("650 -> 600"). The diff already shows both; say why they matter instead.\n` +
         // Heard aloud, a step that opens on the change makes the listener replay.
         `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n\n` +
+        checkerInstruction() +
         `Live progress notes (streamed to the reviewer while you work):\n` +
         `- Announce each phase as you enter it by printing its marker alone on its own line, exactly: ">> Recovering the why", then ">> Reconstructing the app path", then ">> Storyboarding the camera", then ">> Writing the steps".\n` +
         `- Print every phase note as its own line starting with ">> " — for example ">> Goal: enable keepers to cap the fee" or ">> Arc: the cap is stored, then enforced, then tested".\n` +
@@ -188,13 +204,15 @@ export function storyRepairPrompt(input) {
             : `- Do not add "evolution" to this story during a targeted repair.\n`) +
         `- Preserve legacy version 1 or 2 when the repair does not add semantic moves. Upgrade to version 2 when a v1 repair introduces a concept primer, and to version 3 whenever the repair adds moves or pairedView. Preserve version 3 once present.\n` +
         `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
-        `- Keep the story short, informal, causal, and review-oriented.\n` +
+        `- Keep the story causal and review-oriented, in the voice of the steps around the repair.\n` +
+        `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n` +
         // Same reason the generation prompt pins it: the repair path is a second
         // authoring entry point, and a repair written in Markdown renders literally.
         `- Prose is restricted HTML, never Markdown. Concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. No links, images, SVG, id, or style.\n` +
         `- Renumber order fields and repair calls/returnsTo/preparesFor only where the targeted edit requires it.\n` +
         `- Validate every chapter, range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
-        `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n`);
+        `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n\n` +
+        checkerInstruction());
 }
 /** Broadly-available default so a plan-gated default model (e.g. Fable) can't break `story`. */
 export const DEFAULT_CLAUDE_MODEL = 'sonnet';

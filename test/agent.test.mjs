@@ -88,7 +88,9 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   // validator-enforced, so by the rule above it belongs here rather than in the
   // skill. Raised again for the validator-enforced v3 move field contract; the
   // craft-section assertions above remain the real drift guard.
-  assert.ok(p.length < 5700, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  // Raised to 6000 for the checker instruction: it is how the agent verifies the
+  // validator-enforced contracts (and coverage) before the finish gate runs.
+  assert.ok(p.length < 6000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -109,7 +111,8 @@ test('storyPrompt supports story detail levels', () => {
     // block in agent.ts) because deep-skill prose does not reliably survive being
     // read — and an out-of-tier tag is now a validation failure. This ceiling
     // buys correctness, not verbosity; keep new prose out of it.
-    assert.ok(prompt.length < 5700, `${mode} prompt grew to ${prompt.length} chars`);
+    // Raised to 6000 with the checker instruction (see the test above).
+    assert.ok(prompt.length < 6000, `${mode} prompt grew to ${prompt.length} chars`);
   }
 });
 
@@ -937,4 +940,14 @@ test('change-type playbooks cover every storyArc changeType', () => {
   for (const t of ['feature', 'bug-fix', 'refactor', 'security', 'performance', 'migration', 'maintenance', 'mixed']) {
     assert.match(ref, new RegExp(`^### ${t}$`, 'm'), `no playbook for ${t}`);
   }
+});
+
+test('both authoring prompts tell the agent to run the bundled checker until READY', () => {
+  const p = storyPrompt('main');
+  assert.ok(p.includes('scripts/check-story.mjs'));
+  assert.ok(p.includes('RESULT: READY'));
+  const repair = storyRepairPrompt({ action: 'rewrite', base: 'main', stepId: 's1' });
+  assert.ok(repair.includes('scripts/check-story.mjs'));
+  assert.ok(repair.includes("A step's FIRST beat lands the listener"));
+  assert.ok(!repair.includes('short, informal'));
 });
