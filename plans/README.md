@@ -135,11 +135,12 @@ skill, and measures again.
 | 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
 | 027 | Storyteller v2.1: full landings (file and caller, by name) | skill + lint | no | DONE |
 | 028 | Measure v2.1 against v2 and the baseline, then decide | operations | **yes (~36, Muse)** | DONE |
+| 029 | Verified landings: a `landing` field the checker proves and the app shows | schema + checker + UI + skill | no | TODO |
 
 ### Execution order and dependencies
 
 ```text
-014 ─┬─> 017 ──┬──> 020 ──> 021 (baseline) ──> 022 ──> 023 ──> 024 ──> 025 (after) ──> 027 ──> 028
+014 ─┬─> 017 ──┬──> 020 ──> 021 (baseline) ──> 022 ──> 023 ──> 024 ──> 025 (after) ──> 027 ──> 028 ──> 029
 015 ─┤         │
 016 ─┘         │
 018 ───────────┤
@@ -155,7 +156,7 @@ skill, and measures again.
   may change before it.
 - 022 → 023 → 024 strictly in order. 023 checks a digest of 022's output and
   refuses to run on anything else.
-- 025 measured v2. 027 (one lever) and 028 (measure it) follow; 026 items each need their own planning pass.
+- 025 measured v2. 027 (one lever) and 028 (measure it) follow, then 029 (the structural landing fix that 028's result called for); 026 items each need their own planning pass.
 
 Every plan's code was compiled and its tests run in a scratch copy of this
 repository on 2026-09-25 (except 021 and 025, which spend agent runs, and
@@ -211,3 +212,4 @@ edit to reverse.
 - v2 grading (2026-09-25): no clear win — landing flat at 3.2 base→v2 while its lint warnings fell 14→0. Next iteration changes ONE thing: landing examples in references/examples.md (caller-first landings agents can imitate).
 - v2.1 grading (2026-09-25): inconclusive — landing 3.17→3.00, v2.1-vs-v2 A/B 3–3, no mechanical regression. Kept; the file-and-caller landing lever needs a larger case set to judge.
   - Refined into plan 027 (2026-09-25): the v2 logs show every run already read `examples.md`, so examples alone are not the lever. The landings were compressed (refactor beats 32 → 16 words) into file-or-module labels with vague callers. 027 makes the landing complete (file plus caller by name), lifts the length pressure off landing beats, and deliberately adds no new lint, because two candidate rules failed to separate the landings the judges preferred.
+- After 028 (2026-09-25): judged landing scored 3 in 16 of 18 stories across baseline, v2, and v2.1, so per `eval/GOAL.md`'s stop rule the remaining landing gap is structural. Plan 029 adds a `landing` field that the checker verifies against the repository and the app shows under each step title. No billed eval is planned for it: the judge's landing dimension cannot see the difference, so success is measured by real stories passing the checker (`scripts/story-corpus-report.mjs --since <date>`).
