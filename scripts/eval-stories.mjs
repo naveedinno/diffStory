@@ -22,6 +22,7 @@ import { parseUnifiedDiff } from '../dist/diff.js';
 import { computeCoverage } from '../dist/coverage.js';
 import { commitEvolutionManifest } from '../dist/git.js';
 import { normalizeEvolutionObject } from '../dist/evolution.js';
+import { skillDirDigest } from '../dist/repo-setup.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const storyPath = join(root, '.diffstory', 'story.json');
@@ -65,15 +66,15 @@ export function skillInstallState(repoSkill, installedSkill) {
 }
 
 function checkInstalledSkill() {
-  const repoSkill = readFileSync(join(root, 'skills', 'diffstory-storyteller', 'SKILL.md'), 'utf8');
-  const target = join(process.env.HOME ?? '', '.claude', 'skills', 'diffstory-storyteller', 'SKILL.md');
-  const installed = existsSync(target) ? readFileSync(target, 'utf8') : null;
-  const state = skillInstallState(repoSkill, installed);
+  const repoDir = join(root, 'skills', 'diffstory-storyteller');
+  const target = join(process.env.HOME ?? '', '.claude', 'skills', 'diffstory-storyteller');
+  const installed = existsSync(join(target, 'SKILL.md')) ? skillDirDigest(target) : null;
+  const state = skillInstallState(skillDirDigest(repoDir), installed);
   if (state.ok) return;
   console.error(
     `\n✖ The installed diffstory-storyteller skill is ${state.reason}:\n` +
     `    ${target}\n` +
-    `  The agent reads that copy, so this run would score the wrong skill.\n` +
+    `  The agent reads that copy (SKILL.md, references/, scripts/), so this run would score the wrong skill.\n` +
     `  Fix it first:  sh scripts/install-skills.sh --claude\n`,
   );
   process.exit(1);
