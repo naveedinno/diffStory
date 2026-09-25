@@ -136,6 +136,15 @@ a mode, and the standard `excludePaths`. Prefer diverse change shapes: bugfix,
 small feature, deletion-heavy refactor, multi-file feature. A case may set
 `timeoutMinutes` to override the global cap when it is known to be slow.
 
+A case may live in another local repository: set `"repo"` (absolute or
+`~/…`) and `"optional": true`. The harness clones it with
+`git clone --shared --no-checkout` into `.eval-worktrees/<id>` and detaches at
+`head`; it never writes to that repository. Cases whose repo is missing on
+this machine are skipped with a notice. Since 2026-09, in-repo worktrees are
+also detached at the case `head` (previously `HEAD`), so what the agent reads
+on disk is the post-change code; results from before that change are not
+comparable.
+
 ## What the first runs found (2026-07-20)
 
 Kept because each finding cost a real agent run to discover, and each one is a
