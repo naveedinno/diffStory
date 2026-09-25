@@ -123,6 +123,21 @@ test('summarizeLint counts errors, warnings, and rules', async () => {
   );
 });
 
+test('museFinalText reads the terminal event, falling back to deltas', async () => {
+  const { museFinalText } = await import('../scripts/eval-stories.mjs');
+  const delta = (text) => JSON.stringify({ payload_type: 'run.output.delta', payload: { kind: 'run_output_delta', text } });
+  const terminal = (terminal, text, reason = null) => JSON.stringify({ payload_type: `run.terminal.${terminal}`, payload: { kind: 'run_terminal', terminal, text, reason } });
+  assert.deepEqual(
+    museFinalText(['noise', delta('{"a":'), delta('1}'), terminal('completed', '{"a":1}')].join('\n')),
+    { ok: true, text: '{"a":1}', reason: null, deltas: 2 },
+  );
+  assert.deepEqual(
+    museFinalText(terminal('failed', '', 'rate_limited')),
+    { ok: false, text: '', reason: 'rate_limited', deltas: 0 },
+  );
+  assert.equal(museFinalText(delta('partial')).ok, false);
+});
+
 test('judge rubric v2 scores landing, listenability, rationale, concreteness, newcomer coverage', () => {
   const harness = readFileSync(new URL('../scripts/eval-stories.mjs', import.meta.url), 'utf8');
   for (const key of ['landing', 'listenability', 'rationale_depth', 'concreteness', 'newcomer_coverage']) {

@@ -32,7 +32,8 @@ et al. 2023). It spends two judge runs per case.
 
 Flags: `--label <name>` (result folder, default `baseline`), `--model <m>`
 (generator, default `sonnet`), `--judge-model <m>` (default `sonnet`),
-`--case <id>` (repeatable), `--parallel <n>` (default 1).
+`--case <id>` (repeatable), `--parallel <n>` (default 1),
+`--runner <claude|muse>` (which agent CLI spends the runs, default `claude`).
 
 **`--parallel <n>`** runs *n* generations at once. Per-case progress is then
 prefixed `[case-id]` and the live tool stream is suppressed, since interleaving
