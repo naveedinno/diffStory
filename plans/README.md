@@ -127,7 +127,7 @@ skill, and measures again.
 | 018 | No stale storyteller skill survives an install | tooling | no | DONE |
 | 019 | Eval cases from the repos stories are written for (Solidity) | eval | no | DONE |
 | 020 | Lint in the eval, rubric v2, blind A/B, corpus report | eval | no | DONE |
-| 021 | Baseline: measure the current skill | operations | **yes (~12)** | TODO |
+| 021 | Baseline: measure the current skill | operations | **yes (~12)** | DONE |
 | 022 | Split the skill into a core and references (verbatim) | skill | no | TODO |
 | 023 | Storyteller craft rules v2 | skill | no | TODO |
 | 024 | App prompts run the checker; repairs land the listener | prompt | no | TODO |
