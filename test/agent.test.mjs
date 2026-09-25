@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { skillCore, skillCorpus, skillReferenceFiles } from './helpers/skill-text.mjs';
 import {
   onPath, storyPrompt, normalizeStoryMode, agentCommand,
   streamCommand, normalizeCodexRunOptions, parseClaudeStreamLine, parseCodexStreamLine, toolSummary, classifyTool, planItems,
@@ -113,7 +114,7 @@ test('storyPrompt supports story detail levels', () => {
 });
 
 test('bundled diffstory-storyteller skill teaches reviewer-first story generation', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(skill.includes('Make a reviewer map before JSON'));
   assert.ok(skill.includes('falsifiable mental model'));
@@ -126,7 +127,7 @@ test('bundled diffstory-storyteller skill teaches reviewer-first story generatio
 });
 
 test('bundled diffstory-storyteller skill restores app context before judging the diff', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('reviewer remembers the requested outcome but not the app internals'));
   assert.ok(skill.includes('Reconstruct the app path'));
   assert.ok(skill.includes('inbound'));
@@ -138,7 +139,7 @@ test('bundled diffstory-storyteller skill restores app context before judging th
 });
 
 test('bundled diffstory-storyteller skill makes the camera contract falsifiable', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('guided camera'));
   assert.ok(skill.includes('orientation -> change ->'));
   assert.ok(skill.includes('detailed steps stay within 60'));
@@ -151,7 +152,7 @@ test('bundled diffstory-storyteller skill makes the camera contract falsifiable'
 });
 
 test('bundled diffstory-storyteller skill requires the narrative story arc', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Narrative arc'));
   assert.ok(skill.includes('We wanted to enable'));
   assert.ok(skill.includes('designed the flow'));
@@ -161,7 +162,7 @@ test('bundled diffstory-storyteller skill requires the narrative story arc', () 
 });
 
 test('bundled storyteller declares reading shape and frozen first-parent evolution', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Every newly generated story carries `storyArc`'));
   assert.ok(skill.includes('`changeType`, `shape`, and'));
   assert.ok(skill.includes('plain-text `readingPath`'));
@@ -173,7 +174,7 @@ test('bundled storyteller declares reading shape and frozen first-parent evoluti
 });
 
 test('bundled diffstory-storyteller skill teaches just-in-time concept primers', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Concept-gap test'));
   assert.ok(skill.includes('terminology, roles, relationships, or state model'));
   assert.ok(skill.includes('immediately before the first code step that depends on it'));
@@ -184,7 +185,7 @@ test('bundled diffstory-storyteller skill teaches just-in-time concept primers',
 });
 
 test('bundled diffstory-storyteller skill pins concept schema, limits, and diagram safety', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(skill.includes('Newly generated stories use `"version": 3`'));
   assert.ok(skill.includes('60-180 words'));
@@ -203,7 +204,7 @@ test('bundled diffstory-storyteller skill pins concept schema, limits, and diagr
 });
 
 test('bundled skill schema example is a valid interleaved v3 story', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const example = JSON.parse(skill.split('## Schema')[1].split('```jsonc')[1].split('```')[0]);
   assert.deepEqual(validateTour(example), []);
   assert.deepEqual(validateGeneratedTour(example), []);
@@ -217,20 +218,20 @@ test('bundled skill schema example is a valid interleaved v3 story', () => {
 });
 
 test('bundled diffstory-storyteller skill makes deleted-file steps use the changed kind', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Never use "deleted" as a step kind'));
   assert.ok(skill.includes('For deleted files, use kind "changed"'));
   assert.ok(skill.includes('anchor the range at the post-change deletion location'));
 });
 
 test('bundled diffstory-storyteller skill teaches the pure deleted-file sentinel anchor', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`'));
   assert.ok(skill.includes('Do not invent line 1 for a file that no longer exists'));
 });
 
 test('bundled diffstory-storyteller skill teaches explicit read-aloud focus targets', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Focus pointer contract'));
   assert.ok(skill.includes('"focus"'));
   assert.ok(skill.includes('"ranges"'));
@@ -241,7 +242,7 @@ test('bundled diffstory-storyteller skill teaches explicit read-aloud focus targ
 });
 
 test('bundled diffstory-storyteller skill teaches viewport and highlighted line selection', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Viewport contract'));
   assert.ok(skill.includes('`viewport`'));
   assert.ok(skill.includes('`highlights`'));
@@ -253,7 +254,7 @@ test('bundled diffstory-storyteller skill teaches viewport and highlighted line 
 });
 
 test('bundled diffstory-storyteller skill requires beat-by-beat narration for read-aloud sync', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Beat contract'));
   assert.ok(skill.includes('`beats`'));
   assert.ok(skill.includes('separate speech'));
@@ -262,7 +263,7 @@ test('bundled diffstory-storyteller skill requires beat-by-beat narration for re
 });
 
 test('bundled diffstory-storyteller skill teaches story detail levels', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Detail levels'));
   assert.ok(skill.includes('Brief mode'));
   assert.ok(skill.includes('Balanced mode'));
@@ -274,7 +275,7 @@ test('bundled diffstory-storyteller skill teaches story detail levels', () => {
 });
 
 test('bundled diffstory-storyteller skill recovers intent before writing', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Recover the why'));
   assert.ok(skill.includes('"sources"'));
   assert.ok(skill.includes('code-derived'));
@@ -285,7 +286,7 @@ test('bundled diffstory-storyteller skill recovers intent before writing', () =>
 });
 
 test('bundled diffstory-storyteller skill enforces the narrative audit', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Narrative audit'));
   assert.ok(skill.includes('Order test'));
   assert.ok(skill.includes('Thread rule'));
@@ -294,7 +295,7 @@ test('bundled diffstory-storyteller skill enforces the narrative audit', () => {
 });
 
 test('bundled diffstory-storyteller skill teaches focused story scopes', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('storyScope'));
   assert.ok(skill.includes('includedFiles'));
   assert.ok(skill.includes('excludedFiles'));
@@ -585,7 +586,7 @@ test('storyPrompt requires live >> phase markers and notes', () => {
 });
 
 test('bundled diffstory-storyteller skill demands honest hotspots and non-goals', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Declare your doubts (hotspots)'));
   assert.ok(skill.includes('where should I distrust this?'));
   assert.ok(skill.includes('"hotspots"'));
@@ -598,7 +599,7 @@ test('bundled diffstory-storyteller skill demands honest hotspots and non-goals'
 });
 
 test('bundled diffstory-storyteller skill makes every stop name the failure it rules out', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('A stop earns its place by naming the failure its evidence rules out'));
   assert.ok(skill.includes('name the specific bug'));
   assert.ok(skill.includes('Failure test'));
@@ -606,7 +607,7 @@ test('bundled diffstory-storyteller skill makes every stop name the failure it r
 });
 
 test('bundled diffstory-storyteller skill shows the same diff as changelog vs story', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('the same diff, told twice'));
   assert.ok(skill.includes('The changelog (do not write this)'));
   assert.ok(skill.includes('The story (write this)'));
@@ -614,7 +615,7 @@ test('bundled diffstory-storyteller skill shows the same diff as changelog vs st
 });
 
 test('bundled diffstory-storyteller skill teaches beat prose that unlocks, not inventories', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('the layer that most often goes flat'));
   assert.ok(skill.includes('No line-number narration'));
   assert.ok(skill.includes('One beat, one decision'));
@@ -625,14 +626,14 @@ test('bundled diffstory-storyteller skill teaches beat prose that unlocks, not i
 });
 
 test('bundled diffstory-storyteller skill rejects circular intent sources', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Prefer evidence that *motivated* the change'));
   assert.ok(skill.includes('circular'));
   assert.ok(skill.includes('keep the\n  goal narrow and factual'));
 });
 
 test('bundled diffstory-storyteller skill signals independent concerns instead of faking a thread', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('Branch rule'));
   assert.ok(skill.includes('Do not fake a thread between them'));
   assert.ok(skill.includes('announcing the switch'));
@@ -641,7 +642,7 @@ test('bundled diffstory-storyteller skill signals independent concerns instead o
 });
 
 test('bundled diffstory-storyteller skill permits only narrow mechanical sweep consolidation', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(flat.includes('Count the hunks before you plan the steps'));
   assert.ok(flat.includes('Mechanical sweeps'));
@@ -654,14 +655,14 @@ test('bundled diffstory-storyteller skill permits only narrow mechanical sweep c
 });
 
 test('bundled diffstory-storyteller skill keeps detailed mode from narrating line numbers', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.ok(skill.includes('describes *granularity*, never *phrasing*'));
   assert.ok(skill.includes('does not license narrating line numbers'));
   assert.ok(skill.includes('let the highlight supply the address'));
 });
 
 test('bundled diffstory-storyteller skill forbids abbreviating sweep-step schema', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(flat.includes('shorter, never structurally lighter'));
   assert.ok(flat.includes('beats use `text`, never `body`'));
@@ -691,7 +692,7 @@ test('storyPrompt pins machine-checked field names the skill prose cannot convey
 });
 
 test('bundled storyteller skill applies the diff-annotation restraint filter', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(flat.includes('could the reviewer learn this by reading the two columns?'));
   for (const kind of ['`moved`', '`extracted`', '`inlined`', '`wrapped`', '`unwrapped`', '`condition-changed`', '`reordered`', '`flow`']) {
@@ -707,7 +708,7 @@ test('bundled storyteller skill applies the diff-annotation restraint filter', (
 });
 
 test('bundled diffstory-storyteller skill keeps sweep steps from becoming diff narration', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   assert.ok(flat.includes('Sweep steps must not become diff narration'));
   assert.ok(flat.includes('Keep `range` tight around one representative instance'));
@@ -717,7 +718,7 @@ test('bundled diffstory-storyteller skill keeps sweep steps from becoming diff n
 });
 
 test('bundled diffstory-storyteller skill separates range (claims) from highlights (points)', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   // Markdown rewraps as the prose is edited, so match against whitespace-normalized
   // text instead of guessing where a line happens to break.
   const flat = skill.replace(/\s+/g, ' ');
@@ -736,7 +737,7 @@ test('bundled diffstory-storyteller skill separates range (claims) from highligh
 });
 
 test('bundled diffstory-storyteller skill bans value-transition narration in beats', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   for (const phrase of [
     'Never narrate a value transition',
@@ -752,7 +753,7 @@ test('bundled diffstory-storyteller skill lands the listener before every change
   // Heard aloud, a step that opens on the change drops the listener into
   // unfamiliar code; they stop and replay. The first beat must say whose code
   // this is and why control gets here before it says what moved.
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   for (const phrase of [
     'Landing rule',
@@ -835,7 +836,7 @@ test('storyPrompt requires every named source to be cited in intent.sources', ()
 });
 
 test('bundled diffstory-storyteller skill bridges chapter seams without blanket long-tail merging', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
   for (const phrase of [
     'Chapter-seam rule',
@@ -855,7 +856,7 @@ test('bundled diffstory-storyteller skill bridges chapter seams without blanket 
 });
 
 test('the storyteller skill teaches the HTML tiers and the caption rule', () => {
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   assert.match(skill, /Narrative fields are HTML/);
   assert.match(skill, /<caption>/, 'the caption requirement must be shown, not merely described');
   assert.match(skill, /inline only/i, 'beats and why are inline-only');
@@ -881,7 +882,7 @@ test('both authoring prompts pin the HTML format contract', () => {
 test('the storyteller skill runs only when explicitly asked', () => {
   // Stories written unasked were a repeated complaint ("I don't need diff story").
   // The description is what agents match on, so it must say explicit-only.
-  const skill = readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8');
+  const skill = skillCorpus();
   const description = skill.match(/^description: (.*)$/m)?.[1] ?? '';
   assert.match(description, /only when the user explicitly asks/);
   assert.match(description, /Never on your own initiative/);
