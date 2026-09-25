@@ -131,13 +131,15 @@ skill, and measures again.
 | 022 | Split the skill into a core and references (verbatim) | skill | no | DONE |
 | 023 | Storyteller craft rules v2 | skill | no | DONE |
 | 024 | App prompts run the checker; repairs land the listener | prompt | no | DONE |
-| 025 | Measure v2 against the baseline, then decide | operations | **yes (~24)** | TODO |
+| 025 | Measure v2 against the baseline, then decide | operations | **yes (~24)** | DONE |
 | 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
+| 027 | Storyteller v2.1: full landings (file and caller, by name) | skill + lint | no | TODO |
+| 028 | Measure v2.1 against v2 and the baseline, then decide | operations | **yes (~36, Muse)** | TODO |
 
 ### Execution order and dependencies
 
 ```text
-014 ─┬─> 017 ──┬──> 020 ──> 021 (baseline) ──> 022 ──> 023 ──> 024 ──> 025 (after)
+014 ─┬─> 017 ──┬──> 020 ──> 021 (baseline) ──> 022 ──> 023 ──> 024 ──> 025 (after) ──> 027 ──> 028
 015 ─┤         │
 016 ─┘         │
 018 ───────────┤
@@ -153,7 +155,7 @@ skill, and measures again.
   may change before it.
 - 022 → 023 → 024 strictly in order. 023 checks a digest of 022's output and
   refuses to run on anything else.
-- 025 last. 026 items each need their own planning pass.
+- 025 measured v2. 027 (one lever) and 028 (measure it) follow; 026 items each need their own planning pass.
 
 Every plan's code was compiled and its tests run in a scratch copy of this
 repository on 2026-09-25 (except 021 and 025, which spend agent runs, and
@@ -207,3 +209,4 @@ edit to reverse.
 ### Follow-ups
 
 - v2 grading (2026-09-25): no clear win — landing flat at 3.2 base→v2 while its lint warnings fell 14→0. Next iteration changes ONE thing: landing examples in references/examples.md (caller-first landings agents can imitate).
+  - Refined into plan 027 (2026-09-25): the v2 logs show every run already read `examples.md`, so examples alone are not the lever. The landings were compressed (refactor beats 32 → 16 words) into file-or-module labels with vague callers. 027 makes the landing complete (file plus caller by name), lifts the length pressure off landing beats, and deliberately adds no new lint, because two candidate rules failed to separate the landings the judges preferred.

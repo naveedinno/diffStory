@@ -16,7 +16,7 @@ and `eval/GOAL.md` ("Rules the loop follows").
 
 - `eval/BASELINE-2026-09.md` exists (plan 021 ran).
 - Plans 022, 023, 024 are merged, and plan 023's digest check printed
-  `362c7f6b52b15920`.
+  `aa7a6902421eee48`.
 - **Same runner as the baseline.** `eval/BASELINE-2026-09.md` was measured
   with `--runner muse` (generator and judge `muse-spark-1.3-contributor`).
   Every eval command in this plan passes `--runner muse`. If Muse is
