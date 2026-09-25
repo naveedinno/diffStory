@@ -180,3 +180,20 @@ test('the committed checker bundle matches its sources', async () => {
   });
   assert.equal(readFileSync(out, 'utf8'), readFileSync(CHECKER, 'utf8'), 'run npm run build and commit skills/diffstory-storyteller/scripts/check-story.mjs');
 });
+
+test('landing callers are verified by the checker', () => {
+  withRepo(({ dir }) => {
+    writeFileSync(join(dir, 'settle.ts'), "import { capRate } from './app';\nexport function settleFunding() { return capRate(1, 2); }\n");
+    const good = goodStory();
+    good.steps[0].landing = { symbol: 'capRate()', calledBy: ['settleFunding()'] };
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(good));
+    const ok = run(dir);
+    assert.doesNotMatch(ok.out, /landing/);
+    const vague = goodStory();
+    vague.steps[0].landing = { symbol: 'capRate()', calledBy: ['every settlement path'] };
+    writeFileSync(join(dir, '.diffstory/story.json'), JSON.stringify(vague));
+    const r = run(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /is a description, not a symbol/);
+  });
+});

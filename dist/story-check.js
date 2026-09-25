@@ -10,6 +10,7 @@ import { changedRanges, parseUnifiedDiff } from "./diff.js";
 import { enclosingScopeLabel } from "./enclosing-scope.js";
 import { getDiff, readWholeFile, resolveBase } from "./git.js";
 import { computeCoverage, filesForStoryCoverage, stalePointers } from "./coverage.js";
+import { verifyLandings } from "./landing-verify.js";
 import { verifyLogicMoves } from "./logic-moves.js";
 import { lintStory } from "./story-lint.js";
 import { validateGeneratedTour, validateNewGeneratedStory, validateTour } from "./tour.js";
@@ -88,6 +89,7 @@ export function runStoryCheck(repo, storyPath) {
     const moves = verifyLogicMoves(repo, tour);
     report.errors.push(...moves.errors);
     report.moveWarnings.push(...moves.warnings);
+    report.errors.push(...verifyLandings(repo, tour).errors);
     report.findings = lintStory(tour, {
         readLines: (file) => readWholeFile(repo, file, tour.head),
     });
