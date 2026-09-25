@@ -1,0 +1,568 @@
+{
+  "version": 3,
+  "mode": "guided",
+  "title": "Make review navigation and status easier to read",
+  "summary": "Follow the first-focus skip path from shared navigation into every main landmark, then review the queued-comment copy repair, dark-tab contrast, and 320px chrome containment. Finish with the deterministic keyboard replay, regression contracts, and regenerated browser assets.",
+  "intent": {
+    "goal": "Make the app's review surfaces easier to navigate, read, and trust across keyboard, assistive-technology, dark-theme, and narrow-screen use.",
+    "design": "One shared skip link targets focusable main landmarks, the review engine updates a whole owned count label instead of a fragile sibling text node, and two measured CSS corrections raise inactive-tab contrast while containing the 320px chrome without shrinking touch targets.",
+    "sources": [
+      "conversation",
+      "docs/superpowers/specs/2026-07-17-diffstory-signal-foundation-design.md",
+      "docs/superpowers/specs/2026-08-09-beui-react-rewrite-design.md"
+    ],
+    "nonGoals": [
+      "Deliberately preserves the Signal and Thread-Ledger visual language instead of reskinning the product.",
+      "Deliberately keeps the live imperative review engine authoritative rather than replacing its review semantics with a second component runtime."
+    ]
+  },
+  "hotspots": [
+    {
+      "step": "as1",
+      "reason": "Chromium keyboard replay proves first focus and destination focus, but physical VoiceOver and Switch Control navigation were not replayed."
+    },
+    {
+      "step": "as8",
+      "reason": "The 320px correction was measured in Chromium with the current English tab labels; longer future localization would need another containment pass."
+    }
+  ],
+  "storyScope": {
+    "includedFiles": [
+      "client/shared/nav.tsx",
+      "client/surfaces/change/ChangeApp.tsx",
+      "client/surfaces/stories/StoriesApp.tsx",
+      "client/surfaces/review/ReviewApp.tsx",
+      "client/surfaces/review/ReviewView.tsx",
+      "client/surfaces/review/engine/review-engine.js",
+      "client/surfaces/review/review.css",
+      "scripts/capture-ui-atlas.mjs",
+      "test/change-page.test.mjs",
+      "test/story-picker.test.mjs",
+      "test/review-page.test.mjs"
+    ],
+    "reviewerNote": "This story owns skip navigation, comment-count copy, contrast, narrow review chrome, their proof, and atlas replay. Generated dist assets are listed as excluded because the app's bounded review omits generated paths; recoverable repository removal is reviewed separately in recoverable-repository-removal.json.",
+    "excludedFiles": [
+      "dist/client/app.css",
+      "dist/client/change.js",
+      "dist/client/change.js.map",
+      "dist/client/review.js",
+      "dist/client/review.js.map",
+      "dist/client/stories.js",
+      "dist/client/stories.js.map",
+      "dist/client/chunk-FFBCQV55.js",
+      "dist/client/chunk-FFBCQV55.js.map",
+      "dist/client/chunk-5FMTNGRT.js",
+      "dist/client/chunk-5FMTNGRT.js.map"
+    ]
+  },
+  "base": "HEAD",
+  "steps": [
+    {
+      "id": "as1",
+      "order": 1,
+      "chapter": "Skip path",
+      "title": "Shared navigation makes content the first keyboard escape",
+      "file": "client/shared/nav.tsx",
+      "range": [
+        59,
+        87
+      ],
+      "viewport": [
+        51,
+        90
+      ],
+      "highlights": [
+        [
+          59,
+          66
+        ],
+        [
+          67,
+          74
+        ],
+        [
+          76,
+          86
+        ]
+      ],
+      "kind": "changed",
+      "why": "Start here: persistent chrome now begins with a visually hidden-until-focused link that uses logical positioning, a strong focus ring, and one conventional main-content target.",
+      "beats": [
+        {
+          "text": "Start here: keyboard users receive a standard same-page link before the wordmark, breadcrumbs, theme control, and page actions.",
+          "highlights": [
+            [
+              59,
+              66
+            ],
+            [
+              67,
+              74
+            ]
+          ]
+        },
+        {
+          "text": "The shared Nav mounts that link first, so every front-door screen gets the same escape without duplicating focus behavior.",
+          "highlights": [
+            [
+              76,
+              86
+            ]
+          ]
+        }
+      ],
+      "calls": [
+        "as2",
+        "as3",
+        "as4"
+      ],
+      "tags": [
+        "entrypoint",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "as2",
+      "order": 2,
+      "chapter": "Skip path",
+      "title": "Scope selection exposes a focusable main destination",
+      "file": "client/surfaces/change/ChangeApp.tsx",
+      "range": [
+        145,
+        149
+      ],
+      "viewport": [
+        137,
+        158
+      ],
+      "highlights": [
+        [
+          145,
+          149
+        ]
+      ],
+      "kind": "changed",
+      "why": "The shared link lands on the exact scope content owner, and negative tab index lets the browser move focus there without adding main to ordinary tab order.",
+      "beats": [
+        {
+          "text": "The scope page gives the shared target a real main landmark and programmatic focus, so skipping chrome changes both scroll position and keyboard context.",
+          "highlights": [
+            [
+              145,
+              149
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "as1"
+    },
+    {
+      "id": "as3",
+      "order": 3,
+      "chapter": "Skip path",
+      "title": "Review history shares the same content destination",
+      "file": "client/surfaces/stories/StoriesApp.tsx",
+      "range": [
+        114,
+        118
+      ],
+      "viewport": [
+        106,
+        126
+      ],
+      "highlights": [
+        [
+          114,
+          118
+        ]
+      ],
+      "kind": "changed",
+      "why": "The saved-review list now receives the same focusable landmark contract as scope selection, avoiding a page-specific shortcut vocabulary.",
+      "beats": [
+        {
+          "text": "Review history reuses the exact destination id and focus behavior, keeping the first keyboard escape predictable between front-door screens.",
+          "highlights": [
+            [
+              114,
+              118
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "as1"
+    },
+    {
+      "id": "as4",
+      "order": 4,
+      "chapter": "Skip path",
+      "title": "Live review wires the skip link without changing engine ownership",
+      "file": "client/surfaces/review/ReviewApp.tsx",
+      "range": [
+        386,
+        386
+      ],
+      "ranges": [
+        [
+          31,
+          31
+        ],
+        [
+          386,
+          386
+        ],
+        [
+          569,
+          569
+        ]
+      ],
+      "viewport": [
+        378,
+        394
+      ],
+      "highlights": [
+        [
+          384,
+          386
+        ]
+      ],
+      "kind": "changed",
+      "why": "The hand-built review chrome imports and mounts the shared link, then marks its existing main owner as the destination without moving any engine-managed view content.",
+      "beats": [
+        {
+          "text": "The review page adds the same first-focus escape immediately before its custom chrome while leaving the engine-owned document beneath it unchanged.",
+          "highlights": [
+            [
+              384,
+              386
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "as1",
+      "tags": [
+        "sweep",
+        "mechanical",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "as5",
+      "order": 5,
+      "chapter": "Review clarity",
+      "title": "Queued-comment copy has one engine-owned text target",
+      "file": "client/surfaces/review/ReviewView.tsx",
+      "range": [
+        381,
+        383
+      ],
+      "viewport": [
+        373,
+        390
+      ],
+      "highlights": [
+        [
+          379,
+          383
+        ]
+      ],
+      "kind": "changed",
+      "why": "That closes the navigation path. The review summary now marks the whole count phrase, giving the imperative engine one stable node instead of asking it to rewrite a React-created sibling text node.",
+      "beats": [
+        {
+          "text": "The server-rendered count and noun become one deliberately owned target, so later engine refreshes can replace the complete phrase atomically.",
+          "highlights": [
+            [
+              379,
+              383
+            ]
+          ]
+        }
+      ],
+      "calls": [
+        "as6"
+      ]
+    },
+    {
+      "id": "as6",
+      "order": 6,
+      "chapter": "Review clarity",
+      "title": "Count refresh replaces the whole phrase and cannot duplicate its noun",
+      "file": "client/surfaces/review/engine/review-engine.js",
+      "range": [
+        3218,
+        3218
+      ],
+      "viewport": [
+        3209,
+        3224
+      ],
+      "highlights": [
+        [
+          3216,
+          3219
+        ]
+      ],
+      "kind": "changed",
+      "why": "The engine now writes one complete singular or plural phrase, eliminating the leftover React text node that produced commentscomments after a refresh.",
+      "beats": [
+        {
+          "text": "The refresh path replaces one marked node with the full count phrase, so React's original plural text cannot survive beside a partial engine update.",
+          "highlights": [
+            [
+              3216,
+              3219
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "as5"
+    },
+    {
+      "id": "as7",
+      "order": 7,
+      "chapter": "Review clarity",
+      "title": "Inactive dark review tabs clear the normal-text contrast floor",
+      "file": "client/surfaces/review/review.css",
+      "range": [
+        976,
+        976
+      ],
+      "viewport": [
+        970,
+        983
+      ],
+      "highlights": [
+        [
+          975,
+          980
+        ]
+      ],
+      "kind": "changed",
+      "why": "Measured dark inactive tabs move from the dim token to the muted token, raising the composited contrast from 4.40:1 to 5.38:1 while keeping active hierarchy intact.",
+      "beats": [
+        {
+          "text": "The inactive tab keeps its subdued role but now clears normal-text contrast on the real translucent chrome background, while hover and active states remain unchanged.",
+          "highlights": [
+            [
+              975,
+              980
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "as8",
+      "order": 8,
+      "chapter": "Review clarity",
+      "title": "The 320px chrome fits without shrinking its theme target",
+      "file": "client/surfaces/review/review.css",
+      "range": [
+        1296,
+        1296
+      ],
+      "viewport": [
+        1285,
+        1299
+      ],
+      "highlights": [
+        [
+          1295,
+          1296
+        ]
+      ],
+      "kind": "changed",
+      "why": "At the supported floor, redundant gutters collapse and the theme button drops only its extra pseudo-element slop; the visible control remains 44px and horizontal scroll disappears.",
+      "beats": [
+        {
+          "text": "The narrowest breakpoint spends the final pixels on labels and real controls by removing only redundant chrome gaps and padding.",
+          "highlights": [
+            [
+              1295,
+              1296
+            ]
+          ]
+        },
+        {
+          "text": "Because the theme button is already 44px here, clipping its extra invisible slop removes overflow without reducing the actual touch target.",
+          "highlights": [
+            [
+              1296,
+              1296
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "as9",
+      "order": 9,
+      "chapter": "Replay and proof",
+      "title": "Browser replay proves first focus and destination focus",
+      "file": "scripts/capture-ui-atlas.mjs",
+      "range": [
+        363,
+        368
+      ],
+      "ranges": [
+        [
+          31,
+          31
+        ],
+        [
+          107,
+          107
+        ],
+        [
+          363,
+          368
+        ],
+        [
+          444,
+          447
+        ]
+      ],
+      "viewport": [
+        355,
+        374
+      ],
+      "highlights": [
+        [
+          363,
+          368
+        ]
+      ],
+      "kind": "changed",
+      "why": "That closes the CSS fixes; the deterministic review replay now fails unless Tab reaches Skip to content first and Enter focuses the main landmark with the matching hash.",
+      "beats": [
+        {
+          "text": "The replay uses real keyboard input and inspects both ends of the interaction, preventing a visually present link with the wrong tab order or inert destination from passing.",
+          "highlights": [
+            [
+              363,
+              368
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "sweep"
+      ]
+    },
+    {
+      "id": "as10",
+      "order": 10,
+      "chapter": "Replay and proof",
+      "title": "Scope-page contract pins the shared skip path",
+      "file": "test/change-page.test.mjs",
+      "range": [
+        66,
+        72
+      ],
+      "viewport": [
+        57,
+        76
+      ],
+      "highlights": [
+        [
+          66,
+          72
+        ]
+      ],
+      "kind": "changed",
+      "why": "The focused source test requires the target href, visible label, shared Nav adoption, and focusable scope main as one contract.",
+      "beats": [
+        {
+          "text": "This proof fails if either side drifts: the shared link and scope landmark must keep the same id and focus semantics.",
+          "highlights": [
+            [
+              66,
+              72
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "as11",
+      "order": 11,
+      "chapter": "Replay and proof",
+      "title": "History contract keeps its focusable destination",
+      "file": "test/story-picker.test.mjs",
+      "range": [
+        66,
+        69
+      ],
+      "viewport": [
+        58,
+        74
+      ],
+      "highlights": [
+        [
+          66,
+          69
+        ]
+      ],
+      "kind": "changed",
+      "why": "Review history gets its own guard because a future markup cleanup could otherwise leave the shared skip link pointing nowhere on this route.",
+      "beats": [
+        {
+          "text": "The history proof pins the main target independently, so one front-door surface cannot silently fall out of the shared keyboard contract.",
+          "highlights": [
+            [
+              66,
+              69
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "as12",
+      "order": 12,
+      "chapter": "Replay and proof",
+      "title": "Review contracts pin navigation, copy ownership, and 320px targets",
+      "file": "test/review-page.test.mjs",
+      "range": [
+        896,
+        920
+      ],
+      "viewport": [
+        888,
+        925
+      ],
+      "highlights": [
+        [
+          896,
+          902
+        ],
+        [
+          913,
+          919
+        ]
+      ],
+      "kind": "changed",
+      "why": "The live review source guards join the skip destination and whole-label count update with the exact narrow breakpoint and retained 44px theme target.",
+      "beats": [
+        {
+          "text": "The first assertion block keeps the review skip path and full count-label ownership connected across React and the imperative engine.",
+          "highlights": [
+            [
+              896,
+              902
+            ]
+          ]
+        },
+        {
+          "text": "The second block rejects a 320px workaround that restores overflow or shrinks the theme target below its mobile contract.",
+          "highlights": [
+            [
+              913,
+              919
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // Deterministic story lints. Each rule gets a positive and a negative case.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { lintStory, plainText } from '../dist/story-lint.js';
 
 let seq = 0;
@@ -203,4 +204,14 @@ test('depth rules: detailed without primer; long without hotspots', () => {
   const f = lintStory(story(long, { mode: 'detailed' }));
   assert.ok(has(f, 'detailed-without-primer'));
   assert.ok(has(f, 'no-hotspots'));
+});
+
+test('calibration: the best-measured eval stories produce no lint errors', () => {
+  const dir = new URL('./fixtures/stories/', import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  for (const file of files) {
+    const tour = JSON.parse(readFileSync(new URL(file, dir), 'utf8'));
+    const errors = lintStory(tour).filter((f) => f.severity === 'error');
+    assert.deepEqual(errors, [], `${file}: ${JSON.stringify(errors, null, 2)}`);
+  }
 });

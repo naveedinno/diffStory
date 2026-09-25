@@ -1,0 +1,484 @@
+{
+  "version": 3,
+  "mode": "guided",
+  "title": "Choose Zed or VS Code inside diffStory",
+  "summary": "Start with the shared menu's load, save, and keyboard behavior, then follow it into the three product surfaces. Finish on the responsive geometry and focused contract tests; slow down on the unexercised network-failure state and the intentionally tighter mobile review chrome.",
+  "intent": {
+    "goal": "Let reviewers keep both Zed and VS Code available and choose their source-jump destination from a visible place inside diffStory.",
+    "design": "One shared radio menu reads and saves the machine-local editor preference, then appears beside the theme control on the picker, repository navigation, and review toolbar. Shared and review-specific CSS collapse the control without introducing horizontal overflow.",
+    "sources": ["conversation"],
+    "nonGoals": [
+      "Deliberately does not change the existing Command- or Ctrl-click source-jump gesture; it only makes the destination selectable."
+    ]
+  },
+  "hotspots": [
+    {
+      "step": "selector-save",
+      "reason": "The success path was exercised in the browser and the failure copy is pinned statically, but I did not force a live network failure while the menu was open."
+    },
+    {
+      "step": "review-smallest-width",
+      "reason": "At 320px the editor control moves out of the review toolbar to protect the existing 44px actions; the choice remains available on Home, but that tradeoff merits a product glance."
+    }
+  ],
+  "storyScope": {
+    "includedFiles": [
+      "client/shared/editor-menu.tsx",
+      "client/shared/nav.tsx",
+      "client/shared/shared.css",
+      "client/surfaces/picker/Hero.tsx",
+      "client/surfaces/review/ReviewApp.tsx",
+      "client/surfaces/review/review.css",
+      "test/editor-menu.test.mjs"
+    ],
+    "excludedFiles": [
+      ".github/workflows/ci.yml",
+      ".gitignore",
+      "README.md",
+      "client/surfaces/review/engine/review-engine.js",
+      "package.json",
+      "scripts/install-skills.sh",
+      "scripts/install-zed-integration.sh",
+      "scripts/set-source-editor.mjs",
+      "src/editor-preferences.ts",
+      "src/editor.ts",
+      "src/payloads.ts",
+      "src/server.ts",
+      "test/editor-bridge.test.mjs",
+      "test/editor-preferences.test.mjs",
+      "test/review-page.test.mjs",
+      "test/zed-mcp-server.test.mjs",
+      "zed-extension/Cargo.toml",
+      "zed-extension/LICENSE",
+      "zed-extension/README.md",
+      "zed-extension/extension.toml",
+      "zed-extension/server/diffstory-mcp.mjs",
+      "zed-extension/src/lib.rs"
+    ],
+    "reviewerNote": "Focused follow-up: the existing primary story covers the editor preference, source-jump bridge, and Zed extension. This story covers the newly visible chooser, its placement, responsive behavior, and direct tests."
+  },
+  "base": "HEAD",
+  "steps": [
+    {
+      "id": "selector-load",
+      "order": 1,
+      "chapter": "Choice behavior",
+      "title": "The shared menu begins from the persisted editor",
+      "file": "client/shared/editor-menu.tsx",
+      "range": [1, 47],
+      "viewport": [1, 47],
+      "highlights": [[6, 17], [27, 35], [37, 47]],
+      "kind": "new-file",
+      "why": "Start here: every surface mounts this component, which owns one editor vocabulary and loads the current machine preference before naming the trigger.",
+      "beats": [
+        {
+          "text": "The menu permits only Zed or VS Code, so the browser cannot invent a destination the server will reject.",
+          "highlights": [[6, 17]]
+        },
+        {
+          "text": "One component owns preference, disclosure, progress, failure, and announcement state for every placement that follows.",
+          "highlights": [[27, 35]]
+        },
+        {
+          "text": "The initial request resolves the saved choice while preserving an actionable error if settings are unavailable.",
+          "highlights": [[37, 47]]
+        }
+      ],
+      "calls": ["selector-dismiss"],
+      "tags": ["entrypoint", "state"]
+    },
+    {
+      "id": "selector-dismiss",
+      "order": 2,
+      "chapter": "Choice behavior",
+      "title": "Dismissal keeps focus behavior explicit",
+      "file": "client/shared/editor-menu.tsx",
+      "range": [48, 69],
+      "viewport": [48, 69],
+      "highlights": [[49, 54], [56, 59], [61, 68]],
+      "kind": "new-file",
+      "why": "Once the choice is loaded, the menu distinguishes dismissals that should restore trigger focus from pointer and Tab exits that should continue naturally.",
+      "beats": [
+        {
+          "text": "The close helper restores focus only when the interaction contract asks for it, preventing a Tab exit from snapping backward.",
+          "highlights": [[49, 54]]
+        },
+        {
+          "text": "Opening focuses the checked item, so keyboard review starts from the editor that is actually active.",
+          "highlights": [[56, 59]]
+        },
+        {
+          "text": "An outside pointer press closes without stealing the pointer's next destination, matching the Tab behavior reviewed later.",
+          "highlights": [[61, 68]]
+        }
+      ],
+      "calls": ["selector-save"],
+      "returnsTo": "selector-load",
+      "tags": ["focus"]
+    },
+    {
+      "id": "selector-save",
+      "order": 3,
+      "chapter": "Choice behavior",
+      "title": "Selection persists before the menu claims success",
+      "file": "client/shared/editor-menu.tsx",
+      "range": [70, 95],
+      "viewport": [70, 95],
+      "highlights": [[70, 76], [77, 82], [84, 94]],
+      "kind": "new-file",
+      "why": "The chooser does not optimistically rename itself. It waits for the settings endpoint, announces the saved label, and leaves a failed menu open for retry.",
+      "beats": [
+        {
+          "text": "Re-selecting the active editor closes immediately, while a real change enters one busy state and sends only the next editor value.",
+          "highlights": [[70, 76], [77, 82]]
+        },
+        {
+          "text": "The resolved server label updates the trigger before success is announced; a rejected save instead preserves the menu and exposes retry copy.",
+          "highlights": [[84, 94]]
+        }
+      ],
+      "calls": ["selector-keys"],
+      "returnsTo": "selector-dismiss",
+      "tags": ["persistence", "hotspot"]
+    },
+    {
+      "id": "selector-keys",
+      "order": 4,
+      "chapter": "Choice behavior",
+      "title": "Keyboard exits and radio movement have separate jobs",
+      "file": "client/shared/editor-menu.tsx",
+      "range": [96, 118],
+      "viewport": [96, 118],
+      "highlights": [[97, 106], [107, 118]],
+      "kind": "new-file",
+      "why": "Tab closes and advances, Escape closes and restores focus, and directional keys stay inside the two-item radio menu without changing the preference prematurely.",
+      "beats": [
+        {
+          "text": "Tab deliberately keeps its browser default while Escape consumes the key and returns to the trigger, closing the reviewer's reported focus gap.",
+          "highlights": [[97, 106]]
+        },
+        {
+          "text": "Arrow and boundary keys move focus through the available radios; only activation reaches the save path above.",
+          "highlights": [[107, 118]]
+        }
+      ],
+      "calls": ["selector-markup"],
+      "returnsTo": "selector-save",
+      "tags": ["keyboard", "accessibility"]
+    },
+    {
+      "id": "selector-markup",
+      "order": 5,
+      "chapter": "Choice behavior",
+      "title": "The visible control exposes one complete menu contract",
+      "file": "client/shared/editor-menu.tsx",
+      "range": [119, 184],
+      "viewport": [119, 184],
+      "highlights": [[120, 127], [128, 132], [133, 140], [141, 152], [153, 161], [163, 170], [173, 181]],
+      "kind": "new-file",
+      "why": "This markup ties the loaded label, menu disclosure, checked radio, retry action, and quiet live announcement into one reusable control before it is placed around the product.",
+      "beats": [
+        {
+          "text": "The trigger names the actual destination and publishes menu disclosure state even when its compact placement hides visible text.",
+          "highlights": [[120, 127], [128, 132], [133, 140]]
+        },
+        {
+          "text": "The menu explains the source-jump gesture and exposes each destination as a checked radio rather than unrelated action buttons.",
+          "highlights": [[141, 152], [153, 161], [163, 170]]
+        },
+        {
+          "text": "Failure remains retryable in place, while save progress and success use a dedicated polite status instead of announcing on every page load.",
+          "highlights": [[173, 181]]
+        }
+      ],
+      "calls": ["shared-navigation"],
+      "returnsTo": "selector-keys",
+      "tags": ["accessibility", "ui"]
+    },
+    {
+      "id": "shared-navigation",
+      "order": 6,
+      "chapter": "Placement",
+      "title": "Repository navigation keeps the choice beside theme",
+      "file": "client/shared/nav.tsx",
+      "range": [149, 149],
+      "ranges": [[26, 26], [149, 149]],
+      "viewport": [142, 153],
+      "highlights": [[148, 151]],
+      "kind": "changed",
+      "why": "Now that the menu contract is complete, the shared repository bar places it immediately before theme so history and change-selection pages inherit the choice automatically.",
+      "beats": [
+        {
+          "text": "Skim this shared placement: repository pages gain the same editor control without duplicating state or endpoint logic.",
+          "highlights": [[148, 151]]
+        }
+      ],
+      "calls": ["picker-entry"],
+      "tags": ["placement", "sweep"]
+    },
+    {
+      "id": "picker-entry",
+      "order": 7,
+      "chapter": "Placement",
+      "title": "The picker lets the menu escape its decorative masthead",
+      "file": "client/surfaces/picker/Hero.tsx",
+      "range": [9, 14],
+      "viewport": [8, 20],
+      "highlights": [[8, 14]],
+      "kind": "changed",
+      "why": "The Home surface is the fallback placement even on the narrowest review layout. Its masthead must allow the anchored menu to escape instead of clipping it at the section edge.",
+      "beats": [
+        {
+          "text": "The picker imports the shared control and releases the masthead overflow boundary, so the popover can extend beyond the decorative hero.",
+          "highlights": [[8, 14]]
+        }
+      ],
+      "calls": ["picker-actions"],
+      "returnsTo": "shared-navigation",
+      "tags": ["placement", "clipping"]
+    },
+    {
+      "id": "picker-actions",
+      "order": 8,
+      "chapter": "Placement",
+      "title": "Picker actions collapse before the brand overflows",
+      "file": "client/surfaces/picker/Hero.tsx",
+      "range": [29, 38],
+      "viewport": [24, 40],
+      "highlights": [[29, 31], [35, 38]],
+      "kind": "changed",
+      "why": "The selector and theme now share one right-side plate, while the nonessential tagline yields below 400px so both controls remain reachable without horizontal scrolling.",
+      "beats": [
+        {
+          "text": "The descriptive kicker yields first on very narrow screens, preserving the product name and interactive actions.",
+          "highlights": [[29, 31]]
+        },
+        {
+          "text": "Editor and theme controls share one surfaced group, making the new preference discoverable without reading as a page-specific action.",
+          "highlights": [[35, 38]]
+        }
+      ],
+      "calls": ["review-placement"],
+      "returnsTo": "picker-entry",
+      "tags": ["placement", "responsive"]
+    },
+    {
+      "id": "review-placement",
+      "order": 9,
+      "chapter": "Placement",
+      "title": "Review chrome reuses the compact selector",
+      "file": "client/surfaces/review/ReviewApp.tsx",
+      "range": [484, 484],
+      "ranges": [[30, 30], [484, 484]],
+      "viewport": [476, 490],
+      "highlights": [[482, 486]],
+      "kind": "changed",
+      "why": "The review surface uses the same stateful menu in compact form beside theme, keeping story navigation dominant while leaving source destination one click away.",
+      "beats": [
+        {
+          "text": "Skim this second shared placement: the review toolbar gets the same chooser with an icon-only trigger and no parallel preference state.",
+          "highlights": [[482, 486]]
+        }
+      ],
+      "calls": ["selector-shell"],
+      "returnsTo": "picker-actions",
+      "tags": ["placement", "sweep"]
+    },
+    {
+      "id": "selector-shell",
+      "order": 10,
+      "chapter": "Responsive presentation",
+      "title": "The trigger and popover inherit product geometry",
+      "file": "client/shared/shared.css",
+      "range": [338, 401],
+      "viewport": [338, 401],
+      "highlights": [[340, 345], [346, 357], [358, 363], [369, 380], [381, 385], [386, 397], [399, 401]],
+      "kind": "changed",
+      "why": "Placement now hands off to presentation: the trigger uses existing pills and tokens, while the popover anchors above page content with a viewport-bounded width.",
+      "beats": [
+        {
+          "text": "The wrapper and trigger stay flex-stable, preventing the new action from squeezing breadcrumbs or review tabs unpredictably.",
+          "highlights": [[340, 345], [346, 357]]
+        },
+        {
+          "text": "Expanded, compact, hover, and focus states reuse the product's semantic tokens, so the control reads like a sibling of theme rather than an embedded extension badge.",
+          "highlights": [[358, 363], [369, 380], [381, 385]]
+        },
+        {
+          "text": "The menu anchors to the trigger but caps itself against the viewport, closing the original hero-clipping failure without creating a full-screen sheet on desktop.",
+          "highlights": [[386, 397], [399, 401]]
+        }
+      ],
+      "calls": ["selector-options"],
+      "returnsTo": "review-placement",
+      "tags": ["visual", "responsive"]
+    },
+    {
+      "id": "selector-options",
+      "order": 11,
+      "chapter": "Responsive presentation",
+      "title": "Radio rows keep copy, target, and checked state aligned",
+      "file": "client/shared/shared.css",
+      "range": [402, 480],
+      "viewport": [402, 480],
+      "highlights": [[402, 413], [415, 419], [420, 431], [432, 443], [444, 455], [457, 468], [469, 480]],
+      "kind": "changed",
+      "why": "Inside the popover, a three-column row reserves stable space for the editor mark, two-line explanation, and checked indicator without shrinking the hit target.",
+      "beats": [
+        {
+          "text": "The heading separates the menu's purpose from its choices, so the two editor names do not have to carry gesture instructions.",
+          "highlights": [[402, 413], [415, 419]]
+        },
+        {
+          "text": "Each radio row keeps a 54px target and a fixed status column, preventing checked state or longer VS Code copy from shifting alignment.",
+          "highlights": [[420, 431], [432, 443]]
+        },
+        {
+          "text": "The remaining styles preserve readable secondary copy and reveal exactly one semantic check without introducing another color language.",
+          "highlights": [[444, 455], [457, 468], [469, 480]]
+        }
+      ],
+      "calls": ["selector-boundaries"],
+      "returnsTo": "selector-shell",
+      "tags": ["visual", "accessibility"]
+    },
+    {
+      "id": "selector-boundaries",
+      "order": 12,
+      "chapter": "Responsive presentation",
+      "title": "Failure, motion, and narrow-screen states stay bounded",
+      "file": "client/shared/shared.css",
+      "range": [481, 536],
+      "viewport": [481, 536],
+      "highlights": [[481, 488], [489, 494], [496, 507], [510, 518], [519, 526], [527, 535]],
+      "kind": "changed",
+      "why": "The tail of the shared control keeps failure actionable, disables motion when requested, and turns the anchored menu into an inset fixed surface below 560px.",
+      "beats": [
+        {
+          "text": "Save and load failures remain a full-width retry target with semantic danger colors instead of disappearing into the trigger title.",
+          "highlights": [[481, 488], [489, 494]]
+        },
+        {
+          "text": "The pop animation is opt-in to motion preference, while reduced-motion users keep the same states with no transition dependency.",
+          "highlights": [[496, 507], [510, 518]]
+        },
+        {
+          "text": "Below 560px the label collapses and the menu becomes a twelve-pixel inset fixed surface, which is the containment rule verified at 320px.",
+          "highlights": [[519, 526], [527, 535]]
+        }
+      ],
+      "calls": ["review-hit-targets"],
+      "returnsTo": "selector-options",
+      "tags": ["responsive", "motion", "error"]
+    },
+    {
+      "id": "review-hit-targets",
+      "order": 13,
+      "chapter": "Responsive presentation",
+      "title": "Review chrome preserves desktop and touch target sizes",
+      "file": "client/surfaces/review/review.css",
+      "range": [1234, 1234],
+      "ranges": [[1234, 1234], [1287, 1287]],
+      "viewport": [1229, 1238],
+      "highlights": [[1233, 1235]],
+      "kind": "changed",
+      "why": "The compact trigger matches the existing 36px desktop theme control and rises to a 44px target at the review toolbar's mobile breakpoint.",
+      "beats": [
+        {
+          "text": "Skim this paired sizing rule: the editor control follows the review chrome's established desktop and touch target geometry instead of defining a third size.",
+          "highlights": [[1233, 1235]]
+        }
+      ],
+      "calls": ["review-smallest-width"],
+      "returnsTo": "selector-boundaries",
+      "tags": ["responsive", "sweep"]
+    },
+    {
+      "id": "review-smallest-width",
+      "order": 14,
+      "chapter": "Responsive presentation",
+      "title": "The narrowest review toolbar yields the editor control",
+      "file": "client/surfaces/review/review.css",
+      "range": [1296, 1296],
+      "viewport": [1289, 1299],
+      "highlights": [[1296, 1296]],
+      "kind": "changed",
+      "why": "At 470px and below, review tabs and the theme action keep their existing 44px contracts; source-editor selection remains available from Home rather than forcing toolbar overflow.",
+      "beats": [
+        {
+          "text": "Pause on this tradeoff: the smallest review toolbar hides only the editor wrapper, preserving the established tabs and theme target with no horizontal scroll.",
+          "highlights": [[1296, 1296]]
+        }
+      ],
+      "calls": ["selector-test-fixture"],
+      "returnsTo": "review-hit-targets",
+      "tags": ["responsive", "hotspot"]
+    },
+    {
+      "id": "selector-test-fixture",
+      "order": 15,
+      "chapter": "Verification",
+      "title": "The selector suite reads every ownership surface",
+      "file": "test/editor-menu.test.mjs",
+      "range": [1, 12],
+      "viewport": [1, 18],
+      "highlights": [[1, 11]],
+      "kind": "new-file",
+      "why": "The focused suite reads the component, every placement, and both CSS owners directly, so a removed integration point cannot hide behind a passing component-only assertion.",
+      "beats": [
+        {
+          "text": "The fixture loads the menu, all three product placements, and their responsive styles before any contract assertion runs.",
+          "highlights": [[1, 11]]
+        }
+      ],
+      "calls": ["selector-test-choice"],
+      "returnsTo": "review-smallest-width",
+      "tags": ["test"]
+    },
+    {
+      "id": "selector-test-choice",
+      "order": 16,
+      "chapter": "Verification",
+      "title": "Choice tests pin persistence and radio semantics",
+      "file": "test/editor-menu.test.mjs",
+      "range": [13, 22],
+      "viewport": [13, 33],
+      "highlights": [[13, 22]],
+      "kind": "new-file",
+      "why": "These assertions fail if either destination, the PUT request, checked-radio contract, accessible label, or successful save announcement disappears.",
+      "beats": [
+        {
+          "text": "The first test pins both editor values, the persistence call, radio selection semantics, and the label announced after a confirmed save.",
+          "highlights": [[13, 22]]
+        }
+      ],
+      "calls": ["selector-test-boundaries"],
+      "returnsTo": "selector-test-fixture",
+      "tags": ["test", "persistence"]
+    },
+    {
+      "id": "selector-test-boundaries",
+      "order": 17,
+      "chapter": "Verification",
+      "title": "Boundary tests keep keyboard, retry, and reachability intact",
+      "file": "test/editor-menu.test.mjs",
+      "range": [23, 41],
+      "viewport": [23, 41],
+      "highlights": [[24, 34], [36, 41]],
+      "kind": "new-file",
+      "why": "Final proof: the suite names every supported key, the reviewer's Tab fix, retry and live-region behavior, reduced motion, all placements, and the smallest review breakpoint.",
+      "beats": [
+        {
+          "text": "The keyboard test now fails if Tab stops closing without focus restoration, while the remaining assertions retain directional movement, retry, live status, focus styling, and reduced motion.",
+          "highlights": [[24, 34]]
+        },
+        {
+          "text": "The reachability test closes the path by requiring picker, shared navigation, review placement, and the narrow-toolbar containment rule together.",
+          "highlights": [[36, 41]]
+        }
+      ],
+      "returnsTo": "selector-test-choice",
+      "tags": ["test", "accessibility", "responsive"]
+    }
+  ]
+}

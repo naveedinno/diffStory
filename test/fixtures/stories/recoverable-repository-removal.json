@@ -1,0 +1,912 @@
+{
+  "version": 3,
+  "mode": "guided",
+  "title": "Make recent-repository removal recoverable",
+  "summary": "Start where the picker removes a repository, follow the server-owned snapshot through persistence and back into the visible undo action, then inspect the regression and atlas evidence. The final generated-output chapters are intentionally skimmable mirrors of the authored path.",
+  "intent": {
+    "goal": "Make the repository picker safer and clearer by giving every removal a visible, persistent recovery path that works for sighted users and assistive technology.",
+    "design": "The delete endpoint returns the exact removed entry and its prior position, the recents store restores that snapshot without duplication, and one stable picker status surface owns progress, success, errors, retry, dismissal, and undo.",
+    "sources": [
+      "conversation",
+      "docs/superpowers/specs/2026-07-17-diffstory-signal-foundation-design.md"
+    ],
+    "nonGoals": [
+      "Deliberately keeps repository opening as real URL navigation rather than adding a client-side router.",
+      "Deliberately keeps the existing repository-card and folder-browser interaction models intact."
+    ]
+  },
+  "hotspots": [
+    {
+      "step": "rr4",
+      "reason": "The restore endpoint validates the returned snapshot shape, but it does not bind that snapshot to a server-issued one-time token."
+    },
+    {
+      "step": "rr6",
+      "reason": "The deterministic atlas proves the visible desktop state, while physical VoiceOver announcement timing and a real iPhone safe-area inset were not replayed."
+    }
+  ],
+  "storyScope": {
+    "includedFiles": [
+      "client/surfaces/picker/PickerApp.tsx",
+      "src/recents.ts",
+      "src/server.ts",
+      "test/recents.test.mjs",
+      "test/picker.test.mjs",
+      "scripts/capture-ui-atlas.mjs"
+    ],
+    "reviewerNote": "This story owns repository removal, restore, visible feedback, tests, and atlas evidence. Generated dist assets are listed as excluded because the app's bounded review omits generated paths; the separate accessible-review-shell story owns skip navigation, review copy, contrast, and 320px chrome containment.",
+    "excludedFiles": [
+      "dist/recents.js",
+      "dist/server.js",
+      "dist/client/picker.js",
+      "dist/client/picker.js.map",
+      "dist/client/chunk-FVC2WZS6.js",
+      "dist/client/chunk-FVC2WZS6.js.map",
+      "dist/client/chunk-YZM2VFMS.js",
+      "dist/client/chunk-YZM2VFMS.js.map",
+      "dist/client/chunk-NKYRUAS6.js",
+      "dist/client/chunk-NKYRUAS6.js.map",
+      "dist/client/chunk-YYPH7AJF.js",
+      "dist/client/chunk-YYPH7AJF.js.map"
+    ]
+  },
+  "base": "HEAD",
+  "steps": [
+    {
+      "id": "rr1",
+      "order": 1,
+      "chapter": "Recoverable removal",
+      "title": "Removal keeps the server response as the next UI state",
+      "file": "client/surfaces/picker/PickerApp.tsx",
+      "range": [
+        154,
+        160
+      ],
+      "ranges": [
+        [
+          121,
+          121
+        ],
+        [
+          141,
+          141
+        ],
+        [
+          143,
+          143
+        ],
+        [
+          148,
+          148
+        ],
+        [
+          152,
+          152
+        ],
+        [
+          154,
+          160
+        ]
+      ],
+      "viewport": [
+        126,
+        165
+      ],
+      "highlights": [
+        [
+          140,
+          147
+        ],
+        [
+          148,
+          153
+        ],
+        [
+          154,
+          160
+        ],
+        [
+          162,
+          165
+        ]
+      ],
+      "kind": "changed",
+      "why": "Start here: the existing row action now asks the server for both the refreshed list and a recovery snapshot, then keeps failure explicit instead of making deletion feel final.",
+      "beats": [
+        {
+          "text": "Start here: the row action still identifies one repository path, but the response now becomes the authoritative list and recovery payload.",
+          "highlights": [
+            [
+              140,
+              147
+            ]
+          ]
+        },
+        {
+          "text": "A successful removal preserves the human repository name beside the server snapshot, so the next surface can offer a specific undo instead of a generic confirmation.",
+          "highlights": [
+            [
+              148,
+              153
+            ],
+            [
+              154,
+              160
+            ]
+          ]
+        },
+        {
+          "text": "A failed request restores the row control and reports the failure, preventing an inert busy state from masquerading as completion.",
+          "highlights": [
+            [
+              162,
+              165
+            ]
+          ]
+        }
+      ],
+      "calls": [
+        "rr2",
+        "rr4",
+        "rr6"
+      ],
+      "tags": [
+        "sweep",
+        "entrypoint",
+        "core"
+      ]
+    },
+    {
+      "id": "rr2",
+      "order": 2,
+      "chapter": "Recoverable removal",
+      "title": "Pure restore preserves position without duplicating a path",
+      "file": "src/recents.ts",
+      "range": [
+        57,
+        69
+      ],
+      "viewport": [
+        52,
+        79
+      ],
+      "highlights": [
+        [
+          57,
+          63
+        ],
+        [
+          64,
+          68
+        ]
+      ],
+      "kind": "changed",
+      "why": "The picker needs a deterministic inverse for removal. This helper drops any newer duplicate, clamps the former index, and reapplies the global cap.",
+      "beats": [
+        {
+          "text": "The removal path hands its original entry here, so restoration starts from the same persisted snapshot instead of re-inspecting a possibly changed repository.",
+          "highlights": [
+            [
+              57,
+              63
+            ]
+          ]
+        },
+        {
+          "text": "Deduplication and index clamping make retries idempotent and keep a stale position from corrupting the bounded recents order.",
+          "highlights": [
+            [
+              64,
+              68
+            ]
+          ]
+        }
+      ],
+      "calls": [
+        "rr3"
+      ],
+      "returnsTo": "rr1",
+      "tags": [
+        "sweep"
+      ]
+    },
+    {
+      "id": "rr3",
+      "order": 3,
+      "chapter": "Recoverable removal",
+      "title": "Persistence makes undo survive the in-memory transition",
+      "file": "src/recents.ts",
+      "range": [
+        107,
+        117
+      ],
+      "viewport": [
+        101,
+        117
+      ],
+      "highlights": [
+        [
+          108,
+          116
+        ]
+      ],
+      "kind": "changed",
+      "why": "The pure inverse becomes the store operation the HTTP endpoint can call, keeping read, transform, and write in the recents owner.",
+      "beats": [
+        {
+          "text": "Now that the list operation is deterministic, this store boundary writes the restored order before the UI receives its fresh projection.",
+          "highlights": [
+            [
+              108,
+              116
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "rr2"
+    },
+    {
+      "id": "rr4",
+      "order": 4,
+      "chapter": "Recoverable removal",
+      "title": "Delete returns an exact snapshot and restore validates it",
+      "file": "src/server.ts",
+      "range": [
+        603,
+        642
+      ],
+      "ranges": [
+        [
+          597,
+          599
+        ],
+        [
+          603,
+          644
+        ]
+      ],
+      "viewport": [
+        597,
+        647
+      ],
+      "highlights": [
+        [
+          597,
+          606
+        ],
+        [
+          609,
+          618
+        ],
+        [
+          619,
+          626
+        ],
+        [
+          627,
+          635
+        ],
+        [
+          636,
+          646
+        ]
+      ],
+      "kind": "changed",
+      "why": "The row action lands here. Delete captures the persisted entry before forgetting it; restore rebuilds only supported fields and returns the same picker projection.",
+      "beats": [
+        {
+          "text": "Delete captures both the entry and its index before persistence moves, so undo has enough information to reverse the exact user action.",
+          "highlights": [
+            [
+              597,
+              606
+            ]
+          ]
+        },
+        {
+          "text": "Restore rejects missing paths and non-finite timestamps before touching disk, which keeps malformed client state out of the recents file.",
+          "highlights": [
+            [
+              609,
+              618
+            ],
+            [
+              619,
+              626
+            ]
+          ]
+        },
+        {
+          "text": "Only known snapshot fields are reconstructed, then the shared store operation writes and reprojects the list for the picker.",
+          "highlights": [
+            [
+              627,
+              635
+            ],
+            [
+              636,
+              646
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "rr1",
+      "tags": [
+        "sweep"
+      ]
+    },
+    {
+      "id": "rr5",
+      "order": 5,
+      "chapter": "Recoverable removal",
+      "title": "Skim: server imports expose the restore boundary",
+      "file": "src/server.ts",
+      "range": [
+        144,
+        150
+      ],
+      "viewport": [
+        138,
+        154
+      ],
+      "highlights": [
+        [
+          144,
+          150
+        ]
+      ],
+      "kind": "changed",
+      "why": "This compact import change is the compile-time handoff from the HTTP route to the recents owner.",
+      "beats": [
+        {
+          "text": "Skim this wiring: the server now consumes the restore operation and its persisted entry type from the module that owns both.",
+          "highlights": [
+            [
+              144,
+              150
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "skim",
+        "mechanical"
+      ]
+    },
+    {
+      "id": "rr6",
+      "order": 6,
+      "chapter": "Visible feedback",
+      "title": "One stable status surface serves sighted and announced feedback",
+      "file": "client/surfaces/picker/PickerApp.tsx",
+      "range": [
+        34,
+        110
+      ],
+      "viewport": [
+        34,
+        110
+      ],
+      "highlights": [
+        [
+          44,
+          48
+        ],
+        [
+          61,
+          70
+        ],
+        [
+          71,
+          80
+        ],
+        [
+          81,
+          92
+        ],
+        [
+          93,
+          99
+        ],
+        [
+          100,
+          105
+        ]
+      ],
+      "kind": "changed",
+      "why": "That closes the data inverse; this component makes it usable. A permanently mounted polite carrier presents progress, success, failure, undo, retry, and dismissal without relying on color alone.",
+      "beats": [
+        {
+          "text": "The state contract distinguishes progress, success, and error while keeping optional recovery data attached to the message that owns it.",
+          "highlights": [
+            [
+              44,
+              48
+            ]
+          ]
+        },
+        {
+          "text": "The polite atomic carrier is mounted even when empty, so assistive technology observes later updates while sighted users receive the same fixed, safe-area-aware surface.",
+          "highlights": [
+            [
+              61,
+              70
+            ],
+            [
+              71,
+              80
+            ]
+          ]
+        },
+        {
+          "text": "Text, icons, a real Undo or Try again action, and an explicit dismiss control keep every terminal state actionable without making color the only cue.",
+          "highlights": [
+            [
+              81,
+              92
+            ],
+            [
+              93,
+              99
+            ],
+            [
+              100,
+              105
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rr7",
+      "order": 7,
+      "chapter": "Visible feedback",
+      "title": "Undo retries in place and returns the refreshed list",
+      "file": "client/surfaces/picker/PickerApp.tsx",
+      "range": [
+        168,
+        191
+      ],
+      "viewport": [
+        168,
+        191
+      ],
+      "highlights": [
+        [
+          168,
+          176
+        ],
+        [
+          177,
+          181
+        ],
+        [
+          182,
+          188
+        ]
+      ],
+      "kind": "changed",
+      "why": "The visible Undo action posts the retained snapshot, adopts the server projection, and keeps a failed recovery available as Try again rather than discarding it.",
+      "beats": [
+        {
+          "text": "The action reads recovery data from the current message, preventing an older removal from being restored after a newer status replaced it.",
+          "highlights": [
+            [
+              168,
+              176
+            ]
+          ]
+        },
+        {
+          "text": "Success adopts the server list before announcing restoration, so the confirmation matches what the repository stack actually renders.",
+          "highlights": [
+            [
+              177,
+              181
+            ]
+          ]
+        },
+        {
+          "text": "Failure keeps the same payload and relabels the action as Try again, preserving recovery through transient server errors.",
+          "highlights": [
+            [
+              182,
+              188
+            ]
+          ]
+        }
+      ],
+      "returnsTo": "rr6"
+    },
+    {
+      "id": "rr8",
+      "order": 8,
+      "chapter": "Visible feedback",
+      "title": "The picker renders one feedback owner outside quieted subtrees",
+      "file": "client/surfaces/picker/PickerApp.tsx",
+      "range": [
+        234,
+        239
+      ],
+      "viewport": [
+        225,
+        242
+      ],
+      "highlights": [
+        [
+          234,
+          239
+        ]
+      ],
+      "kind": "changed",
+      "why": "The old screen-reader-only paragraph leaves the repository section, and the new status owner sits beside the folder browser so neither quieted child can suppress it.",
+      "beats": [
+        {
+          "text": "The content stack ends without a hidden duplicate announcer; the single shared status surface mounts beside the modal owner and remains available across picker states.",
+          "highlights": [
+            [
+              234,
+              239
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rr9",
+      "order": 9,
+      "chapter": "Visible feedback",
+      "title": "Skim: the picker imports the icons its status states expose",
+      "file": "client/surfaces/picker/PickerApp.tsx",
+      "range": [
+        13,
+        18
+      ],
+      "viewport": [
+        8,
+        28
+      ],
+      "highlights": [
+        [
+          13,
+          18
+        ]
+      ],
+      "kind": "changed",
+      "why": "The feedback contract and icon set arrive together; no additional notification library or live region is introduced.",
+      "beats": [
+        {
+          "text": "Skim this surface wiring: the status states use the existing button primitive and small semantic icons instead of adding another notification system.",
+          "highlights": [
+            [
+              13,
+              18
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "skim",
+        "mechanical"
+      ]
+    },
+    {
+      "id": "rr10",
+      "order": 10,
+      "chapter": "Behavioral proof",
+      "title": "Pure-list proof rejects duplicates and misplaced restores",
+      "file": "test/recents.test.mjs",
+      "range": [
+        73,
+        92
+      ],
+      "viewport": [
+        64,
+        96
+      ],
+      "highlights": [
+        [
+          73,
+          82
+        ],
+        [
+          83,
+          92
+        ]
+      ],
+      "kind": "changed",
+      "why": "The first proof supplies an existing duplicate at the wrong timestamp and requires the original snapshot to return exactly once at its former index.",
+      "beats": [
+        {
+          "text": "Final proof for the pure inverse: an already-present path cannot survive as a duplicate, and the restored snapshot must occupy the requested position.",
+          "highlights": [
+            [
+              73,
+              82
+            ],
+            [
+              83,
+              92
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rr11",
+      "order": 11,
+      "chapter": "Behavioral proof",
+      "title": "Persistence proof round-trips the original recents order",
+      "file": "test/recents.test.mjs",
+      "range": [
+        120,
+        138
+      ],
+      "viewport": [
+        112,
+        138
+      ],
+      "highlights": [
+        [
+          120,
+          128
+        ],
+        [
+          129,
+          137
+        ]
+      ],
+      "kind": "changed",
+      "why": "The store-level proof removes the first item, restores its full entry, and compares both the returned and reloaded lists.",
+      "beats": [
+        {
+          "text": "This test fails if undo only repairs memory: the restored order must survive a fresh read from the temporary home store.",
+          "highlights": [
+            [
+              120,
+              128
+            ],
+            [
+              129,
+              137
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rr12",
+      "order": 12,
+      "chapter": "Behavioral proof",
+      "title": "Skim: recents tests import both restore seams",
+      "file": "test/recents.test.mjs",
+      "range": [
+        7,
+        15
+      ],
+      "viewport": [
+        1,
+        18
+      ],
+      "highlights": [
+        [
+          7,
+          15
+        ]
+      ],
+      "kind": "changed",
+      "why": "The focused tests consume the pure and persisted seams directly, which keeps failures local to the recents owner.",
+      "beats": [
+        {
+          "text": "Skim this test wiring: both inverse layers are exercised without reaching through the HTTP server.",
+          "highlights": [
+            [
+              7,
+              15
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "skim",
+        "mechanical"
+      ]
+    },
+    {
+      "id": "rr13",
+      "order": 13,
+      "chapter": "Behavioral proof",
+      "title": "HTTP proof deletes, restores, and preserves list position",
+      "file": "test/picker.test.mjs",
+      "range": [
+        211,
+        248
+      ],
+      "viewport": [
+        211,
+        248
+      ],
+      "highlights": [
+        [
+          211,
+          220
+        ],
+        [
+          221,
+          230
+        ],
+        [
+          236,
+          242
+        ],
+        [
+          243,
+          248
+        ]
+      ],
+      "kind": "changed",
+      "why": "The real server test now treats deletion and restoration as one contract, including the exact snapshot and original list order.",
+      "beats": [
+        {
+          "text": "The delete response must contain the full stored entry and index, so a server regression cannot silently reduce undo to a path-only guess.",
+          "highlights": [
+            [
+              211,
+              220
+            ],
+            [
+              221,
+              230
+            ]
+          ]
+        },
+        {
+          "text": "Posting that payload must rebuild the original two-item order, proving the user-visible inverse crosses the HTTP boundary.",
+          "highlights": [
+            [
+              236,
+              242
+            ],
+            [
+              243,
+              248
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rr14",
+      "order": 14,
+      "chapter": "Behavioral proof",
+      "title": "Accessibility contracts require visible, recoverable feedback",
+      "file": "test/picker.test.mjs",
+      "range": [
+        408,
+        408
+      ],
+      "ranges": [
+        [
+          408,
+          408
+        ],
+        [
+          410,
+          411
+        ],
+        [
+          415,
+          415
+        ],
+        [
+          445,
+          451
+        ],
+        [
+          586,
+          586
+        ],
+        [
+          601,
+          603
+        ]
+      ],
+      "viewport": [
+        408,
+        447
+      ],
+      "highlights": [
+        [
+          408,
+          415
+        ],
+        [
+          445,
+          447
+        ]
+      ],
+      "kind": "changed",
+      "why": "The source contracts reject a hidden-only announcer and pin the stable status carrier, named recovery copy, Undo, retry, and repository-first ordering.",
+      "beats": [
+        {
+          "text": "The live-region guard now requires one stable polite atomic carrier with a visible status hook outside every quieted subtree.",
+          "highlights": [
+            [
+              408,
+              415
+            ]
+          ]
+        },
+        {
+          "text": "The copy guard pins removal, restoration, retry, and opening language, so dynamic feedback cannot regress into ambiguous or inaccessible wording.",
+          "highlights": [
+            [
+              445,
+              447
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "sweep"
+      ]
+    },
+    {
+      "id": "rr15",
+      "order": 15,
+      "chapter": "Behavioral proof",
+      "title": "Atlas evidence captures the actual Undo surface",
+      "file": "scripts/capture-ui-atlas.mjs",
+      "range": [
+        444,
+        447
+      ],
+      "ranges": [
+        [
+          31,
+          31
+        ],
+        [
+          107,
+          107
+        ],
+        [
+          363,
+          368
+        ],
+        [
+          444,
+          447
+        ]
+      ],
+      "viewport": [
+        438,
+        452
+      ],
+      "highlights": [
+        [
+          444,
+          447
+        ]
+      ],
+      "kind": "changed",
+      "why": "That closes source-level proof; the atlas defines, recognizes, and drives the same temporary removal state before taking its screenshot.",
+      "beats": [
+        {
+          "text": "The capture opens a deterministic repository, removes it through the real control, and waits for the real Undo action before accepting visual evidence.",
+          "highlights": [
+            [
+              444,
+              447
+            ]
+          ]
+        }
+      ],
+      "tags": [
+        "sweep",
+        "mechanical",
+        "visual-proof"
+      ]
+    }
+  ]
+}
