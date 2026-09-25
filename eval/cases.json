@@ -50,6 +50,28 @@
         "package-lock.json",
         "docs/ui-atlas/*"
       ]
+    },
+    {
+      "id": "sol-feature-wallet-withdraw",
+      "note": "Solidity feature, Solidity-only scope the way the user reviews: owners withdraw wallet funds from GaslessLayer (contract, interface, fee-quote library, mock). Exercises landing on unfamiliar contract code, a new external entry point, and access-control hotspots.",
+      "repo": "~/Codes/blockchain/symmio/perps-core3",
+      "optional": true,
+      "base": "2c4ba5fa^",
+      "head": "2c4ba5fa",
+      "mode": "detailed",
+      "excludePaths": ["dist/*", "abis/*", "docs/*", "scripts/*", "test/*"],
+      "timeoutMinutes": 60
+    },
+    {
+      "id": "sol-fix-recovery-api",
+      "note": "Solidity bug-fix with its tests and deploy scripts: harden GaslessLayer recovery and refine the public API (16 files incl. interface split, fee-quote library, upgrade script, behavior tests). Exercises tests-next-to-behavior, interface/implementation pairing, and chapter seams across contract/script/test.",
+      "repo": "~/Codes/blockchain/symmio/perps-core3",
+      "optional": true,
+      "base": "f1b4fe42^",
+      "head": "f1b4fe42",
+      "mode": "guided",
+      "excludePaths": ["dist/*", "abis/*", "docs/*", ".env.example"],
+      "timeoutMinutes": 90
     }
   ]
 }
