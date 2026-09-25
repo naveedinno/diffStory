@@ -133,8 +133,8 @@ skill, and measures again.
 | 024 | App prompts run the checker; repairs land the listener | prompt | no | DONE |
 | 025 | Measure v2 against the baseline, then decide | operations | **yes (~24)** | DONE |
 | 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
-| 027 | Storyteller v2.1: full landings (file and caller, by name) | skill + lint | no | TODO |
-| 028 | Measure v2.1 against v2 and the baseline, then decide | operations | **yes (~36, Muse)** | TODO |
+| 027 | Storyteller v2.1: full landings (file and caller, by name) | skill + lint | no | DONE |
+| 028 | Measure v2.1 against v2 and the baseline, then decide | operations | **yes (~36, Muse)** | DONE |
 
 ### Execution order and dependencies
 
@@ -209,4 +209,5 @@ edit to reverse.
 ### Follow-ups
 
 - v2 grading (2026-09-25): no clear win — landing flat at 3.2 base→v2 while its lint warnings fell 14→0. Next iteration changes ONE thing: landing examples in references/examples.md (caller-first landings agents can imitate).
+- v2.1 grading (2026-09-25): inconclusive — landing 3.17→3.00, v2.1-vs-v2 A/B 3–3, no mechanical regression. Kept; the file-and-caller landing lever needs a larger case set to judge.
   - Refined into plan 027 (2026-09-25): the v2 logs show every run already read `examples.md`, so examples alone are not the lever. The landings were compressed (refactor beats 32 → 16 words) into file-or-module labels with vague callers. 027 makes the landing complete (file plus caller by name), lifts the length pressure off landing beats, and deliberately adds no new lint, because two candidate rules failed to separate the landings the judges preferred.
