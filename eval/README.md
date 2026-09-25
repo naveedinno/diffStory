@@ -151,6 +151,15 @@ also detached at the case `head` (previously `HEAD`), so what the agent reads
 on disk is the post-change code; results from before that change are not
 comparable.
 
+## Real-world corpus
+
+`node scripts/story-corpus-report.mjs` lints every diffStory story under the
+given roots (default `~/Codes`) and prints a Markdown report: basic validity,
+generation-contract errors, and lint findings by rule. There is no coverage
+check — a story's diff has usually moved on since it was written. Pass
+`--since <date>` to show only stories written after a skill change, e.g. to
+check whether the next stories written in real repos pass the checker.
+
 ## What the first runs found (2026-07-20)
 
 Kept because each finding cost a real agent run to discover, and each one is a
