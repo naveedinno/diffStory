@@ -172,7 +172,8 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
   const design = goalHtml && story.intent?.design ? story.intent.design : undefined;
   const map = goalHtml && story.summary ? story.summary : undefined;
   const nonGoals = story.intent?.nonGoals ?? [];
-  const hasContext = !!design || !!map || nonGoals.length > 0;
+  const verification = story.verification ?? [];
+  const hasContext = !!design || !!map || nonGoals.length > 0 || verification.length > 0;
 
   const solidityOnly =
     payload.storyIncludedFiles.length > 0 &&
@@ -282,6 +283,24 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
                         <ul>
                           {nonGoals.map((goal, index) => (
                             <li key={index} dangerouslySetInnerHTML={html(goal.html)} />
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {verification.length ? (
+                      <div className="ds-intro-verification">
+                        <span className="ds-intro-block-kicker">What I ran</span>
+                        <ul>
+                          {verification.map((entry, index) => (
+                            <li key={index} data-result={entry.result}>
+                              <span className="ds-verify-result">
+                                {entry.result === "passed" ? "Passed" : entry.result === "failed" ? "Failed" : "Not run"}
+                              </span>
+                              <span className="ds-verify-check">{entry.check}</span>
+                              {entry.detail ? (
+                                <span className="ds-verify-detail" dangerouslySetInnerHTML={html(entry.detail.html)} />
+                              ) : null}
+                            </li>
                           ))}
                         </ul>
                       </div>
