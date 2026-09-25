@@ -315,6 +315,8 @@ export interface StoryView {
   summary?: Narrative;
   /** Absent when no intent was recovered, or its goal was blank. */
   intent?: StoryIntentView;
+  /** What the author ran; absent when the story has no verification list. */
+  verification?: Array<{ check: string; result: 'passed' | 'failed' | 'not-run'; detail?: Narrative }>;
   arc?: {
     changeType: string;
     changeTypeLabel: string;
@@ -524,6 +526,15 @@ function storyView(repo: string, tour: Tour, storyIdentity?: string): StoryView 
             .filter((nonGoal) => nonGoal.text.trim()),
         }
       : undefined,
+    ...(tour.verification?.length
+      ? {
+          verification: tour.verification.map((entry) => ({
+            check: narrativeText(entry.check),
+            result: entry.result,
+            ...(entry.detail ? { detail: narrative(entry.detail, 'inline') } : {}),
+          })),
+        }
+      : {}),
     ...(tour.storyArc
       ? {
           arc: {

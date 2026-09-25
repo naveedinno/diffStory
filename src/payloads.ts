@@ -295,6 +295,12 @@ export interface ReviewStoryView {
   /** Deliberate omissions, so a reviewer does not flag them as misses. */
     nonGoals: ReviewProse[];
   };
+  /** What the author ran to check the change. */
+  verification?: Array<{
+    check: string;
+    result: 'passed' | 'failed' | 'not-run';
+    detail?: ReviewProse;
+  }>;
   arc?: {
     changeType: string;
     changeTypeLabel: string;

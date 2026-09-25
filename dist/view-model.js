@@ -209,6 +209,15 @@ function storyView(repo, tour, storyIdentity) {
                     .filter((nonGoal) => nonGoal.text.trim()),
             }
             : undefined,
+        ...(tour.verification?.length
+            ? {
+                verification: tour.verification.map((entry) => ({
+                    check: narrativeText(entry.check),
+                    result: entry.result,
+                    ...(entry.detail ? { detail: narrative(entry.detail, 'inline') } : {}),
+                })),
+            }
+            : {}),
         ...(tour.storyArc
             ? {
                 arc: {

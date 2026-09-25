@@ -1546,6 +1546,15 @@ export function renderReviewShell(input: ReviewShellInput): string {
             },
           }
         : {}),
+      ...(model.story.verification
+        ? {
+            verification: model.story.verification.map((entry) => ({
+              check: entry.check,
+              result: entry.result,
+              ...(entry.detail ? { detail: prose(entry.detail) } : {}),
+            })),
+          }
+        : {}),
       ...(model.story.arc ? { arc: model.story.arc } : {}),
       ...(model.story.evolution
         ? {

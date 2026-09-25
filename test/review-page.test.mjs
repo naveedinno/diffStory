@@ -1276,3 +1276,21 @@ test("concept steps do not repeat story position or type above the document", ()
   assert.doesNotMatch(panel, /ds-badge-concept/, "the Mental model eyebrow already identifies the scene");
   assert.doesNotMatch(panel, /ds-step-titlerow/, "concept titles live in the document");
 });
+
+test('story verification reaches the review model with sanitized detail', () => {
+  const tour = {
+    version: 3,
+    title: 'T',
+    summary: 's',
+    verification: [
+      { check: 'npm test', result: 'passed' },
+      { check: 'Safari 17', result: 'not-run', detail: 'Only <code>Chrome</code> was available.' },
+    ],
+    steps: [{ id: 's1', order: 1, title: 'a', file: 'x.ts', range: [1, 1], kind: 'changed', why: 'w' }],
+  };
+  const model = buildReviewModel(process.cwd(), tour, [], undefined, {});
+  assert.deepEqual(model.story.verification.map((v) => [v.check, v.result]), [['npm test', 'passed'], ['Safari 17', 'not-run']]);
+  assert.match(model.story.verification[1].detail.html, /<code>Chrome<\/code>/);
+  const bare = buildReviewModel(process.cwd(), { ...tour, verification: undefined }, [], undefined, {});
+  assert.equal(bare.story.verification, undefined);
+});
