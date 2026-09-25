@@ -3,6 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { storyPrompt } from '../dist/agent.js';
 
 const { cases } = JSON.parse(readFileSync(new URL('../eval/cases.json', import.meta.url), 'utf8'));
@@ -32,7 +35,7 @@ test('every eval case builds the production story prompt', () => {
 
 // The harness module is import-safe: its main block is guarded, so importing it
 // here formats events and checks skill freshness without spawning agent runs.
-const { progressLine, skillInstallState } = await import('../scripts/eval-stories.mjs');
+const { caseRepo, progressLine, skillInstallState } = await import('../scripts/eval-stories.mjs');
 
 test('progressLine turns agent events into one readable line, or nothing', () => {
   assert.equal(progressLine({ type: 'file', action: 'read', target: 'src/render.ts' }), 'read src/render.ts');
@@ -98,4 +101,16 @@ test('the eval harness detects Markdown left in HTML narrative fields', () => {
   const goal = readFileSync(new URL('../eval/GOAL.md', import.meta.url), 'utf8');
   assert.match(goal, /Zero Markdown residue/, 'the exit criteria must gate on it');
   assert.match(goal, /not comparable/, 'pre-change baselines must be flagged as incomparable');
+});
+
+test('caseRepo resolves this repo by default and ~/ paths for external cases', () => {
+  assert.equal(caseRepo({ id: 'x' }), join(fileURLToPath(new URL('.', import.meta.url)), '..'));
+  assert.equal(caseRepo({ id: 'x', repo: '~/Codes/other' }), join(homedir(), 'Codes/other'));
+  assert.equal(caseRepo({ id: 'x', repo: '/abs/path' }), '/abs/path');
+});
+
+test('external-repo cases are optional, because the repo is machine-specific', () => {
+  for (const c of cases.filter((c) => c.repo)) {
+    assert.equal(c.optional, true, `${c.id} names repo ${c.repo}, so it must set optional: true`);
+  }
 });

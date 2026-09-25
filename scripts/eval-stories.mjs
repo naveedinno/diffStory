@@ -15,6 +15,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { storyPrompt, streamCommand, parseClaudeStreamLine, onPath } from '../dist/agent.js';
 import { validateTour, validateNewGeneratedStory } from '../dist/tour.js';
@@ -46,9 +47,13 @@ const parallel = Math.max(1, Number(flag('parallel', '1')) || 1);
 const timeoutMs = Math.max(0, Number(flag('timeout', '40')) || 0) * 60000;
 
 const { cases } = JSON.parse(readFileSync(join(root, 'eval', 'cases.json'), 'utf8'));
-const selected = onlyCases.length ? cases.filter((c) => onlyCases.includes(c.id)) : cases;
+const requested = onlyCases.length ? cases.filter((c) => onlyCases.includes(c.id)) : cases;
+// External-repo cases only run on machines that have that repo.
+const unavailable = requested.filter((c) => c.repo && !existsSync(caseRepo(c)));
+const selected = requested.filter((c) => !unavailable.includes(c));
 if (!selected.length) {
-  console.error(`No cases match ${onlyCases.join(', ')}. Known: ${cases.map((c) => c.id).join(', ')}`);
+  const skipped = unavailable.length ? ` (skipped for a missing repo: ${unavailable.map((c) => c.id).join(', ')})` : '';
+  console.error(`No runnable cases match ${onlyCases.join(', ') || 'the case list'}${skipped}. Known: ${cases.map((c) => c.id).join(', ')}`);
   process.exit(1);
 }
 const outDir = join(root, 'eval', 'results', label);
@@ -80,14 +85,24 @@ function checkInstalledSkill() {
   process.exit(1);
 }
 
-function git(...gitArgs) {
-  const r = spawnSync('git', gitArgs, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+/** The repository a case's refs live in: this repo unless the case names another. */
+export function caseRepo(c) {
+  if (!c.repo) return root;
+  return c.repo.startsWith('~/') ? join(homedir(), c.repo.slice(2)) : c.repo;
+}
+
+function gitIn(cwd, ...gitArgs) {
+  const r = spawnSync('git', gitArgs, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) throw new Error(`git ${gitArgs.join(' ')} failed: ${r.stderr}`);
   return r.stdout;
 }
 
+function git(...gitArgs) {
+  return gitIn(root, ...gitArgs);
+}
+
 function caseDiff(c) {
-  return git('diff', `${c.base}..${c.head}`, '--', ...(c.excludePaths ?? []).map((p) => `:(exclude)${p}`));
+  return gitIn(caseRepo(c), 'diff', `${c.base}..${c.head}`, '--', ...(c.excludePaths ?? []).map((p) => `:(exclude)${p}`));
 }
 
 const startedAt = Date.now();
@@ -260,19 +275,34 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 /**
- * Isolate one case in its own git worktree. Each worktree gets its own
- * `.diffstory/story.json`, so generations never contend for the shared file and
- * the live repo is never mutated. Detached at HEAD: cases address their diffs by
- * explicit ref, so the checked out commit does not matter.
+ * Isolate one case in its own git worktree (or a --shared clone, for cases in
+ * another repository). Each tree gets its own `.diffstory/story.json`, so
+ * generations never contend for the shared file and the live repo is never
+ * mutated. Detached at the case head, so the files the agent reads are the
+ * post-change files, as they are when an agent has just made the change.
  */
 function makeWorktree(c) {
   const path = join(root, '.eval-worktrees', c.id);
   rmSync(path, { recursive: true, force: true });
+  if (c.repo) {
+    // Another repository: clone it (sharing its object store, read-only)
+    // instead of adding a worktree, so the harness never writes into that
+    // repo's .git. Detach at the case head so files on disk are post-change.
+    gitIn(root, 'clone', '--quiet', '--shared', '--no-checkout', caseRepo(c), path);
+    gitIn(path, 'checkout', '--quiet', '--detach', c.head);
+    return {
+      path,
+      storyFile: join(path, '.diffstory', 'story.json'),
+      cleanup: () => rmSync(path, { recursive: true, force: true }),
+    };
+  }
   // A worktree killed mid-run stays registered in .git/worktrees even after its
   // directory is gone, and `worktree add` then refuses the path. Prune first so
   // an interrupted run never blocks the next one.
   git('worktree', 'prune');
-  git('worktree', 'add', '--detach', '--quiet', path, 'HEAD');
+  // Detached at the case head, so the files the agent reads are the
+  // post-change files, as they are when an agent has just made the change.
+  git('worktree', 'add', '--detach', '--quiet', path, c.head);
   return {
     path,
     storyFile: join(path, '.diffstory', 'story.json'),
@@ -571,6 +601,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const plan = [command === 'all' ? 'generate + judge' : command, `${selected.length} case${selected.length === 1 ? '' : 's'}`];
   console.log(`\ndiffStory eval · ${plan.join(' · ')} · label "${label}"`);
   console.log(`Cases: ${selected.map((c) => c.id).join(', ')}`);
+  for (const c of unavailable) console.log(`Skipping ${c.id}: ${c.repo} is not on this machine.`);
   if (command !== 'judge') {
     const runs = selected.length * (command === 'all' ? 2 : 1);
     console.log(`Spawning ${runs} billed claude runs; each generation takes minutes. Ctrl-C to stop safely.`);
