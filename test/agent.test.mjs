@@ -927,6 +927,8 @@ test('storyteller v2 teaches the 2026-09 corpus-audit rules', () => {
     'this is function x, in file z, that y calls when w',
     'never a vague population',
     'a landing beat usually needs 20-40',
+    'Landing field: record the same facts',
+    'a vague caller cannot pass',
   ]) {
     assert.ok(flat.includes(phrase), `skill is missing: ${phrase}`);
   }

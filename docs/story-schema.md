@@ -94,6 +94,7 @@ the two-line clamp and the button's accessible name.
 | `evolution.phases[].title` | The phase heading in commit evolution. |
 | `evolution.phases[].firstCommit` / `lastCommit` | Hex commit boundaries; generation accepts 7-40 characters and expands unique prefixes. |
 | `verification[].check` | What the author ran, as the reviewer would type it. At most 120 characters; rendered in the review-notes verification list. |
+| `steps[].landing.symbol`, `.calledBy[]`, `.role.who`, `.role.gate`, `.when` | Verified "where am I" facts shown under the step title. At most 80 characters each (`role.who` 40); callers must be symbols the checker can find alongside `symbol`. |
 
 No markup at all. Tags are stripped to their text content. A `<table>` in a
 sidebar title is never the right answer, and attribute sinks can only ever show

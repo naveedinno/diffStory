@@ -245,6 +245,13 @@ beats follow it.
   never skipped. A landing is a clause, not a paragraph, but a complete one:
   never bolt a landing sentence onto an existing beat, and never pad it with
   "Look at lines …".
+- Landing field: record the same facts in the step's `landing` so the app can
+  show them and the checker can verify them:
+  `"landing": { "symbol": "_capRate()", "calledBy": ["settleFunding()"], "when": "once per market" }`.
+  For an external entry point with no calling function, name the role and the
+  check that gates it: `"role": { "who": "relayer", "gate": "onlyRole(RELAYER_ROLE)" }`.
+  The checker rejects a caller that no file in the repository mentions
+  together with the symbol, so a vague caller cannot pass.
 - Chapter-seam rule: the FIRST step of every new `chapter` must open by naming the seam
   — what the previous chapter settled and why this one starts — in the same
   sentence as its landing, in a spoken beat, not only in `why`. "That closes

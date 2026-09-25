@@ -36,6 +36,11 @@ The checker enforces every line of this; knowing it saves a rewrite.
 - `context` steps show unchanged code that helps judge a changed path; they
   never claim coverage and never carry `ranges`. `concept` steps are short,
   fileless primers placed immediately before dependent code; same rule.
+- Optional `landing` on code steps (never on concept steps): `symbol`
+  (required), `calledBy` (1-3 names) or `role` (`who`, optional `gate`), and
+  optional `when`; plain text, each at most 80 characters (`role.who` 40). The
+  checker verifies that each caller shares a file with the symbol and that a
+  gate is written in the step's file. The app shows it under the step title.
 
 #### Narrative fields are HTML
 
@@ -45,7 +50,7 @@ Story prose is restricted HTML, not Markdown: `**bold**` renders literally.
 | --- | --- |
 | concept `body` | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
 | `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason`, `moves[].hidden.what` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
-| every `title`, `moves[].label`, `moves[].hidden.tag`, `storyScope.reviewerNote` | plain text — no tags at all |
+| every `title`, `moves[].label`, `moves[].hidden.tag`, `storyScope.reviewerNote`, `landing.*` | plain text — no tags at all |
 
 Allowed attributes: `class` on `<span> <code> <td> <th>` (one of `ds-bit`,
 `ds-slot`, `ds-flag`, `ds-val`, `ds-warn`), `scope` on `<th>`,
@@ -113,6 +118,7 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
         { "text": "I clamp the rate before settlement hands off to the math helper, so over-cap values stop before balance mutation.", "highlights": [[128, 132]] },
         { "text": "The existing settlement call below still receives one chosen rate; check that the balance mutation stays after the clamp.", "highlights": [[133, 136]] }
       ],
+      "landing": { "symbol": "settleFunding()", "role": { "who": "keeper" }, "when": "once per epoch" },
       "calls": ["s2"],
       "moves": [
         { "id": "extract-cap", "kind": "extracted", "before": { "file": "contracts/Funding.sol", "range": [129, 131] }, "after": { "file": "contracts/lib/RateMath.sol", "range": [40, 52] }, "label": "moved out" }
@@ -147,6 +153,7 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
         { "text": "Pause here: this is <code>_capRate()</code>, where <code>settleFunding()</code> lands right after choosing the market cap.", "highlights": [[40, 44]] },
         { "text": "The require is the review hinge because it makes the later unchecked math safe.", "highlights": [[48, 52]] }
       ],
+      "landing": { "symbol": "_capRate()", "calledBy": ["settleFunding()"], "when": "once per market" },
       "calls": ["s3"],
       "returnsTo": "s1"
     },
