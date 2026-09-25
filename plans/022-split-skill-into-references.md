@@ -5,7 +5,7 @@
 > Steps use checkbox (`- [ ]`) syntax. Read `plans/README.md` → "Story quality
 > campaign → Rules for every executor" before starting.
 
-**Goal:** Cut the always-loaded `SKILL.md` from 1,037 to about 578 lines by
+**Goal:** Cut the always-loaded `SKILL.md` from 1,040 to about 581 lines by
 moving reference material verbatim into `references/*.md`, with a one-line
 pointer left at each spot. No rule changes. This is the mechanical half of the
 restructure; plan 023 changes the rules.
@@ -31,9 +31,10 @@ wherever it now lives.
   Task 2 Step 3).
 - `## Schema` must appear exactly once in the corpus (in `references/schema.md`).
   The schema-example test splits on that string.
-- Verified in a scratch copy on 2026-09-25: the script produced a 578-line core
-  and 7 references, and all 67 agent tests passed on the split skill
-  (65 existing + the 2 new guards below).
+- Verified in a scratch copy on 2026-09-25 (after the explicit-only trigger
+  fix, `9a88ea0`): the script produced a 581-line core and 7 references, and
+  all 68 agent tests passed on the split skill (66 existing + the 2 new guards
+  below).
 - Do not run the script twice. It refuses if `references/` exists.
 
 ## Review focus
@@ -89,7 +90,7 @@ export function skillCorpus() {
     below the `node:fs` import;
   - replace every occurrence of
     `readFileSync(new URL('../skills/diffstory-storyteller/SKILL.md', import.meta.url), 'utf8')`
-    with `skillCorpus()` (33 occurrences on 2026-09-25):
+    with `skillCorpus()` (34 occurrences on 2026-09-25):
 
 ```bash
 perl -0pi -e "s/readFileSync\(new URL\('\.\.\/skills\/diffstory-storyteller\/SKILL\.md', import\.meta\.url\), 'utf8'\)/skillCorpus()/g" test/agent.test.mjs
@@ -97,7 +98,7 @@ grep -c "skillCorpus()" test/agent.test.mjs
 grep -n "diffstory-storyteller/SKILL.md" test/agent.test.mjs
 ```
 
-Expected: the count is 33 or more, and the last grep prints nothing.
+Expected: the count is 34 or more, and the last grep prints nothing.
 
 (`test/release-readiness.test.mjs` keeps reading `SKILL.md` directly on
 purpose: "diffStory is UI-only" must stay in the always-loaded core.)
@@ -267,7 +268,7 @@ python3 scripts/split-storyteller-skill.py
 Expected output (line counts may differ by a few if the skill changed since 2026-09-25):
 
 ```
-SKILL.md: 1037 -> 578 lines
+SKILL.md: 1040 -> 581 lines
 references/splitting.md: 37 lines
 references/examples.md: 42 lines
 references/primers.md: 41 lines

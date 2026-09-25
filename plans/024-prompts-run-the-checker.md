@@ -28,7 +28,7 @@ never produces a prompt pointing at a missing file.
 - The prompt-size cap is a drift guard. It rises from 5,700 to 6,000 characters
   only for this instruction, and the test comment says so. Measured on
   2026-09-25 after the change: 5,920 (brief), 5,924 (guided), 5,932 (detailed).
-- Verified in a scratch copy on 2026-09-25: 71/71 agent tests pass (68
+- Verified in a scratch copy on 2026-09-25: 72/72 agent tests pass (71
   existing after plan 023, with the two cap assertions raised, plus 1 new).
 
 ## Review focus

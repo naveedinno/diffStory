@@ -8,7 +8,7 @@
 **Goal:** Rewrite the always-loaded `SKILL.md` around what the corpus audit,
 the user's own feedback, and the research say actually goes wrong. Add two
 references: change-type playbooks and intent/evidence rules. The result is
-a 499-line core (26.7 KB, down from 56 KB) that points to nine on-demand
+a 501-line core (26.8 KB, down from 56 KB) that points to nine on-demand
 references and ends in a checker loop.
 
 **What changes, and why** (evidence in `docs/research/story-corpus-audit-2026-09.md`):
@@ -30,7 +30,7 @@ references and ends in a checker loop.
 | Moves expected for every relocation; restraint only for callouts | "use the diffstory features when you move a method" (D3) |
 | Environment gaps go to `verification`, not hotspots | ~half of hotspots were "not run on device" (F8, D5) |
 | Run the checker until READY; repair the story after later edits | 50-error story shipped; "is my story updated?" ×7 (F1–2) |
-| Narrower trigger in `description` | "I don't need diff story" ×5 (D6) |
+| Keeps the explicit-only trigger from `9a88ea0` (description, intro line, "Don't") | "I don't need diff story" ×5 (D6) |
 
 **Architecture:** Replace three files and add two. All content is below
 verbatim. Three reference files change (`examples.md` gains BAD/GOOD beats and
@@ -51,7 +51,7 @@ example). Four references stay untouched (`audits.md`,
   Replacing files on top of other edits would silently delete them. Step 0
   checks this with a digest.
 - Verified in a scratch copy on 2026-09-25: the result digests to
-  `362c7f6b52b15920`, and all 70 agent tests pass (67 existing, one of them
+  `aa7a6902421eee48`, and all 71 agent tests pass (68 existing, one of them
   updated, plus 3 new).
 - Every file below ends with exactly one trailing newline.
 
@@ -81,7 +81,7 @@ for (const f of files) h.update(f + '\\0' + readFileSync(dir + '/' + f, 'utf8').
 console.log(h.digest('hex').slice(0, 16));"
 ```
 
-Expected: `f47e4da36366fe5f` (the post-022 skill). If it prints anything else,
+Expected: `99d826af3fb5ebfb` (the post-022 skill). If it prints anything else,
 **stop** and report the digest and `git log --oneline -5 -- skills/diffstory-storyteller`.
 Someone changed the skill after plan 022, and this plan would overwrite that work.
 
@@ -103,7 +103,7 @@ four-backtick fences, ending with one newline).
 ````markdown
 ---
 name: diffstory-storyteller
-description: Use when the user asks for a diffStory story, a guided walkthrough, or a narrated review of code changes, or when handing back a large change (roughly 150+ changed lines or 5+ files) in a repository that already has a .diffstory/ folder. Writes .diffstory/story.json (or scoped stories under .diffstory/stories/): a context-first, read-aloud reading path through the diff that opens with the recovered intent and drives exact viewport and highlight beats. Skip docs-only, config-only, and small changes unless asked, and never write one after the user said they do not want a story.
+description: Use only when the user explicitly asks for a diffStory, a story, or a guided walkthrough of code changes ("make a diff story", "write the story for this"), or when a prompt says "Use the diffstory-storyteller skill". Never on your own initiative, not after finishing code changes and not before a commit or push. Produces .diffstory/story.json (or scoped stories under .diffstory/stories/): a context-first, read-aloud reading path through the diff that opens with recovered intent and drives exact viewport and highlight beats.
 ---
 
 # Writing a diffStory
@@ -123,6 +123,9 @@ floor; restored context is the product.
 The story is heard as much as read. Every sentence must work for a listener who
 cannot glance back: name what is on screen, say who reaches it, then say what
 changed and what that now guarantees.
+
+Write a story only when the user (or a prompt) explicitly asks for one. Never
+write or offer one on your own initiative after making changes.
 
 diffStory is UI-only. Never install, invoke, or recommend a `diffstory` CLI.
 The one command you run is the checker script that ships inside this skill
@@ -580,8 +583,7 @@ story picker.
 
 ## Don't
 
-- Don't write a story the user did not ask for on docs-only, config-only, or
-  small changes, or after they said they don't want one.
+- Don't write or offer a story the user did not explicitly ask for.
 - Don't organize by filename, package, or hunk order, or bury core behavior
   behind docs, tests, generated files, or cleanup.
 - Don't restate the diff with "adds", "updates", "modifies", "changes" unless
@@ -1183,7 +1185,7 @@ containing `range`; every beat has `text` (never `body`) and non-empty
 - [ ] **Verify the bytes.** Per-file SHA-256 (first 12 hex chars) must be:
 
 ```text
-49ee3a6f4573  SKILL.md
+08dafec7fbf9  SKILL.md
 1ced51b1ca55  references/change-types.md
 1d276f1ba078  references/intent.md
 fb256d995cfe  references/examples.md
@@ -1197,7 +1199,7 @@ cd skills/diffstory-storyteller && for f in SKILL.md references/change-types.md 
 
 A mismatch is almost always a trailing-newline or copy-paste difference; fix
 the file, do not edit the expected hashes. Then re-run the Task 0 command.
-It must now print `362c7f6b52b15920`.
+It must now print `aa7a6902421eee48`.
 
 ### Task 2: Update the tests that pin skill wording
 
@@ -1274,7 +1276,7 @@ test('change-type playbooks cover every storyArc changeType', () => {
 ```
 
 - [ ] **Step 5: Run** `npm run build && node --test test/agent.test.mjs test/release-readiness.test.mjs`
-  — expected: PASS (70 agent tests on 2026-09-25, plus release-readiness).
+  — expected: PASS (71 agent tests on 2026-09-25, plus release-readiness).
   Then `npm test` — expected: all pass.
 
 - [ ] **Step 6: The checker agrees with the skill's own example.** The schema

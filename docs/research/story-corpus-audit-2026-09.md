@@ -172,9 +172,10 @@ Evidence tags: [E] empirical, [X] expert practice.
 - **D5 — Verification is a field, not a hotspot.** New optional top-level
   `verification` list (what ran, result). Hotspots are first-person doubts
   about the code only.
-- **D6 — Narrower trigger.** The skill runs when asked, or when handing back a
-  large change (roughly 150+ changed lines or 5+ files) in a repo that already
-  has `.diffstory/`. Never when the user said they don't want one.
+- **D6 — Explicit-only trigger (user decision, 2026-09-25; landed in `9a88ea0`).**
+  The skill runs only when the user explicitly asks for a story, or when a
+  prompt names the skill (the app's generation and repair prompts do). Agents
+  never write or offer one on their own initiative.
 - **D7 — Intent opens on the problem.** Replace "We wanted to enable <actor>
   to <capability>" with problem → stakes → fix.
 - **D8 — Skill shape.** Core `SKILL.md` at most ~300 lines; details live in

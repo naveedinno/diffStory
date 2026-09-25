@@ -200,7 +200,7 @@ edit to reverse.
 - **D3** Moves are expected for every relocation; the restraint filter stays for callouts.
 - **D4** Standing preferences live in `.diffstory/preferences.json` (local).
 - **D5** Environment gaps go in a new `verification` field, not in hotspots.
-- **D6** The skill triggers on request, or for large changes in repos with `.diffstory/`.
+- **D6** The skill runs only when explicitly asked (your decision; already landed in `9a88ea0`, pinned by a test).
 - **D7** Intent opens on the problem, not the diff.
 - **D8** Core `SKILL.md` ≤ 520 lines, with references loaded on demand; schema re-read before writing.
 

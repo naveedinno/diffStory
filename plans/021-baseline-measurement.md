@@ -16,7 +16,7 @@ Without this baseline, the campaign cannot tell whether it helped.
 - Plans 014–020 are merged. `git log --oneline | head -20` shows their commits.
 - The skill folder is unchanged since plan 018. Confirm with
   `git log --oneline -3 -- skills/diffstory-storyteller/SKILL.md`: the newest
-  commit must be `4b06526` (the 2026-09-13 rewrite). The `scripts/` bundle
+  commit must be `9a88ea0` (the explicit-only trigger fix, 2026-09-25). The `scripts/` bundle
   from plan 017 is expected.
 - **The user said go.** This plan starts about 12 billed `claude` runs
   (6 generations + 6 judgings) and takes 1–3 hours. If you were not explicitly
@@ -61,7 +61,7 @@ tail -12 /tmp/corpus-baseline.md
 It must contain exactly these sections, filled from the run:
 
 ```md
-# Baseline — storyteller skill as of 4b06526, measured <date>
+# Baseline — storyteller skill as of 9a88ea0, measured <date>
 
 ## Eval (rubric v2, judge sonnet, generator sonnet)
 
