@@ -135,7 +135,7 @@ skill, and measures again.
 | 026 | Backlog briefs (story-format features) | briefs | — | needs planning |
 | 027 | Storyteller v2.1: full landings (file and caller, by name) | skill + lint | no | DONE |
 | 028 | Measure v2.1 against v2 and the baseline, then decide | operations | **yes (~36, Muse)** | DONE |
-| 029 | Verified landings: a `landing` field the checker proves and the app shows | schema + checker + UI + skill | no | TODO |
+| 029 | Verified landings: a `landing` field the checker proves and the app shows | schema + checker + UI + skill | no | DONE |
 
 ### Execution order and dependencies
 
