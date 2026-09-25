@@ -168,3 +168,15 @@ test('scoped stories under .diffstory/stories/ need storyScope', () => {
     assert.match(r.out, /need storyScope\.includedFiles/);
   });
 });
+
+test('the committed checker bundle matches its sources', async () => {
+  const out = join(mkdtempSync(join(tmpdir(), 'ds-bundle-')), 'check-story.mjs');
+  const script = readFileSync(new URL('../scripts/build-skill-checker.mjs', import.meta.url), 'utf8');
+  const banner = script.match(/js: '([^']+)'/)[1].replace(/\\n/g, '\n');
+  await build({
+    entryPoints: [fileURLToPath(new URL('../src/story-check-cli.ts', import.meta.url))],
+    outfile: out, bundle: true, platform: 'node', format: 'esm', target: 'node20',
+    legalComments: 'none', logLevel: 'silent', banner: { js: banner },
+  });
+  assert.equal(readFileSync(out, 'utf8'), readFileSync(CHECKER, 'utf8'), 'run npm run build and commit skills/diffstory-storyteller/scripts/check-story.mjs');
+});
