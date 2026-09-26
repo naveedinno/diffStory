@@ -4,6 +4,9 @@ All notable changes to diffStory are tracked here.
 
 ## Unreleased
 
+- Story format v4: concept steps can be free HTML pages (JavaScript and CDN
+  libraries allowed) rendered in a sandboxed frame, with no cap on how many or
+  where they sit.
 - Tightened the story step header: the step title now leads its own line with
   the step number, kind, and call flow demoted to quiet reference marks at the
   end of the same row, instead of sitting in a band of filled chips above it.

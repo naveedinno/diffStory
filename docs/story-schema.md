@@ -22,9 +22,10 @@ appears on screen as `**bold**`, not as bold text. The fix is to regenerate the
 story; there is no automatic conversion.
 
 `Tour.version` is unrelated to text format: `1` means code-only steps, `2` permits
-concept primers, and `3` permits semantic logic moves. Narrative shape and commit
-evolution are optional additions to version 3, so older version 3 stories remain
-valid and repairable without either field.
+concept primers, `3` permits semantic logic moves, and `4` permits page concepts
+and lifts concept placement rules. Narrative shape and commit evolution are
+optional additions to version 3, so older version 3 stories remain valid and
+repairable without either field.
 
 Reviewer comments (`comments.json` — `body`, `reply`, `turns[].text`) are **not**
 covered by this document. They are human-authored through the review UI and stay
@@ -39,9 +40,11 @@ surrounding markup can legally contain, not by editorial preference.
 
 | Field | Notes |
 | --- | --- |
-| `steps[].body` (concept steps only) | The 60–180 word primer. The only field that may contain tables, lists, headings, or preformatted blocks. |
+| `steps[].body` (concept steps only, legacy) | The 60–180 word primer. The only field that may contain tables, lists, headings, or preformatted blocks. Superseded by `steps[].page` for new stories; still valid and rendered for existing ones. |
+| `steps[].page` | A complete HTML document: any HTML, CSS, JS, CDN resources. Served sandboxed, never sanitized — none of the rules below apply to it. |
+| `steps[].narration` | Plain text Aloud reads for a page concept. |
 
-Allowed: the inline set below, plus
+Allowed for `steps[].body` (the two v4 fields above are exempt): the inline set below, plus
 
 ```
 p  h2  h3  h4  ul  ol  li  blockquote  pre  hr
@@ -99,6 +102,14 @@ the two-line clamp and the button's accessible name.
 No markup at all. Tags are stripped to their text content. A `<table>` in a
 sidebar title is never the right answer, and attribute sinks can only ever show
 markup as literal characters.
+
+## Concept pages and privacy
+
+A page concept runs in an iframe with `sandbox="allow-scripts"` and an opaque
+origin. It cannot read diffStory's storage, call its API, or navigate the app.
+Because pages may load resources from any URL, opening a story can make your
+browser contact servers its author chose, revealing your IP address and that
+the story was opened.
 
 ## Narrative shape and commit evolution
 
@@ -233,8 +244,8 @@ handled.
 
 ## Authoring checklist
 
-- concept `body` is 60–180 words of prose (hard maximum 220), counted as text
-  with tags excluded
+- concept `body` (v2–v3 generated stories) is 60–180 words of prose (hard
+  maximum 220), counted as text with tags excluded
 - a table earns its place only when a prose sentence would be worse; it always
   has a caption that stands alone
 - `beats[].text` is one spoken sentence — inline markup only, and usually none

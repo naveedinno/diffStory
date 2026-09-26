@@ -497,6 +497,7 @@ function narrativeFields(tour) {
     add(`steps[${i}].title`, s.title);
     add(`steps[${i}].why`, s.why);
     add(`steps[${i}].body`, s.body);
+    add(`steps[${i}].narration`, s.narration);
     add(`steps[${i}].diagram.caption`, s.diagram?.caption);
     (s.beats ?? []).forEach((b, j) => add(`steps[${i}].beats[${j}].text`, b.text));
   });
@@ -596,7 +597,7 @@ const RUBRIC = [
   ['declared_path_alignment', '5 = storyArc names a concise reading path that the actual step order follows; 1 = the path is generic, misleading, or disconnected from the steps.'],
   ['evolution_fidelity', 'For eligible fixed history, 5 = contiguous phases explain meaningful implementation development and remain faithful to the manifest and final diff; 1 = commit-message paraphrase, fabricated behavior, or misleading grouping. If evolution is ineligible, score the deliberate omission as 5.'],
   ['narrative_order', 'Would reordering the steps by filename read the same? 5 = the order teaches the runtime/causal path and file order would wreck it; 1 = it is a file list.'],
-  ['thread_continuity', 'Read only titles, concept bodies, and beats, in order, with no code. 5 = one continuous story with no unexplained jump or term; 1 = disconnected captions.'],
+  ['thread_continuity', 'Read only titles, concept bodies or narrations, and beats, in order, with no code. 5 = one continuous story with no unexplained jump or term; 1 = disconnected captions.'],
   // Was `question_falsifiability`, which graded a `question` field that no longer
   // exists — the judge was scoring a phantom. The property it was reaching for is
   // real, so it moved to the fields that actually carry it.
