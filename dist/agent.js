@@ -108,13 +108,13 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
             `- Do not read, narrate, or write steps for them. The coverage gate already excludes them, so it will not ask you to cover them — adding them back only bloats the story.\n\n`
         : '';
     return (`Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
-        `Write ${DATA_DIR}/story.json, set its "version" field to 3, set its "base" field to "${authoredBase}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
+        `Write ${DATA_DIR}/story.json, set its "version" field to 4, set its "base" field to "${authoredBase}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
         `reviewer, not a changelog.\n\n` +
         storyStructureContract(evolutionManifest) +
         storyScopeContract +
         scopeContract +
         `The skill owns the craft. Follow its workflow in order — recover the why, reconstruct the app path, storyboard the camera, then write the steps — and honor every contract it defines: ` +
-        `coverage, ranges, viewport/highlight camera limits, beats, concept-primer budgets, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
+        `coverage, ranges, viewport/highlight camera limits, beats, hotspots, non-goals, truth, and the "${storyMode}" detail level. ` +
         `The app validates the finished story against those contracts and flags violations, so do not improvise a different format or looser limits.\n\n` +
         // The craft lives in the skill, but these exact field names do not survive
         // being read as prose: real runs paraphrased "text" into "body" and "prose",
@@ -127,16 +127,17 @@ export function storyPrompt(baseRef, headRef, mode = 'guided', excludePaths = []
         `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical".\n` +
         `- Optional moves (max 6): "id", "kind", "before"/"after" {"file","range"}, "label" (tag, max 24), "hidden" {"as":path|destination|consequence, "tag" max 48, "what" max 120}; kinds are moved/extracted/inlined/wrapped/unwrapped/condition-changed/reordered/flow.\n` +
         `- Every beat: "text" (not "body" or "prose") and non-empty "highlights". "body" is concept-only.\n` +
+        `- Page concept steps: "id", "order", "title", "kind": "concept", "page", "narration"; optional "preparesFor", "tags", "chapter". "page" is a complete HTML document (any HTML, CSS, SVG, canvas, JavaScript, CDN libraries). "narration" is plain text with no tags. Add as many as teach the change, anywhere in the path.\n` +
         // The format is validator-enforced, so it is pinned here rather than left to
         // the skill: prose about a format does not survive being read as reliably as
         // a field name does, and a Markdown-shaped story now renders its asterisks
         // literally instead of failing loudly.
         `Prose is restricted HTML, never Markdown ("**bold**" renders as literal asterisks):\n` +
-        `- Concept "body" takes block tags: p, h2-h4, ul, ol, li, blockquote, pre, hr, table, caption, thead, tbody, tr, th, td, dl, dt, dd.\n` +
+        `- A legacy concept "body" takes block tags: p, h2-h4, ul, ol, li, blockquote, pre, hr, table, caption, thead, tbody, tr, th, td, dl, dt, dd. New concept steps use "page" instead.\n` +
         `- "why", beat "text", "summary", "intent.goal"/"design"/"nonGoals", "hotspots[].reason", move "hidden.what" take INLINE tags only: code, kbd, strong, em, sup, sub, span, br.\n` +
         `- "title", move "label"/"hidden.tag", and "storyScope.reviewerNote" are plain text with no tags.\n` +
         `- Every <table> needs a <caption>; a table without one is rejected. The caption is what the read-aloud voice speaks instead of the table.\n` +
-        `- No links, images, SVG, id, or style. Writing about a tag means escaping it: &lt;script&gt;.\n` +
+        `- Outside "page": no links, images, SVG, id, or style. Writing about a tag means escaping it: &lt;script&gt;.\n` +
         // The self-check list is what actually gets verified, so it names every
         // required field rather than a sample: a run that checked only order/text/
         // highlights shipped 55 code steps with no "why" at all.
@@ -195,22 +196,22 @@ export function storyRepairPrompt(input) {
         `${instruction}\n\n` +
         `Preservation contract:\n` +
         `- Read the existing story and the real diff before editing. Preserve every unaffected step, the recovered intent, story scope, tone, and useful beat/highlight detail.\n` +
-        `- Preserve every unaffected concept primer exactly, including its body, preparesFor links, diagram, tags, chapter, and just-in-time position. Concept primers do not claim coverage.\n` +
+        `- Preserve every unaffected concept step exactly, including its page, narration, body, preparesFor links, diagram, tags, chapter, and position. Concept steps do not claim coverage.\n` +
         (input.hasStoryArc
             ? `- Preserve "storyArc" exactly. A targeted repair must not change its change type, shape, or reading path.\n`
             : `- Do not add "storyArc" to this older story during a targeted repair.\n`) +
         (input.hasEvolution
             ? `- Preserve "evolution.baseSha", "evolution.headSha", and every phase title, summary, firstCommit, and lastCommit exactly. Only "relatedSteps" may change when replaced or split step ids require it.\n`
             : `- Do not add "evolution" to this story during a targeted repair.\n`) +
-        `- Preserve legacy version 1 or 2 when the repair does not add semantic moves. Upgrade to version 2 when a v1 repair introduces a concept primer, and to version 3 whenever the repair adds moves or pairedView. Preserve version 3 once present.\n` +
+        `- Preserve legacy version 1 or 2 when the repair does not add semantic moves. Upgrade to version 2 when a v1 repair introduces a concept primer and to version 3 whenever the repair adds moves or pairedView. Upgrade to version 4 whenever the repair adds a page concept. Preserve version 3 or 4 once present.\n` +
         `- Do not regenerate the walkthrough from scratch and do not reorder unrelated steps.\n` +
         `- Keep the story causal and review-oriented, in the voice of the steps around the repair.\n` +
         `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n` +
         // Same reason the generation prompt pins it: the repair path is a second
         // authoring entry point, and a repair written in Markdown renders literally.
-        `- Prose is restricted HTML, never Markdown. Concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. No links, images, SVG, id, or style.\n` +
+        `- Prose is restricted HTML, never Markdown. A concept "page" is free HTML; a legacy concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. No links, images, SVG, id, or style.\n` +
         `- Renumber order fields and repair calls/returnsTo/preparesFor only where the targeted edit requires it.\n` +
-        `- Validate every chapter, range, viewport, highlight, beat, concept body, preparesFor target, id, just-in-time primer position, and full-diff coverage before finishing.\n` +
+        `- Validate every chapter, range, viewport, highlight, beat, concept page/narration/body, preparesFor target, id, and full-diff coverage before finishing.\n` +
         `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n\n` +
         checkerInstruction());
 }

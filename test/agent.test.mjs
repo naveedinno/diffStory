@@ -22,7 +22,7 @@ test('storyPrompt names the base and the output file', () => {
   const p = storyPrompt('main (abc123)');
   assert.ok(p.includes('main (abc123)'));
   assert.ok(p.includes('.diffstory/story.json'));
-  assert.ok(p.includes('set its "version" field to 3'));
+  assert.ok(p.includes('set its "version" field to 4'));
   assert.ok(p.includes('Use the diffstory-storyteller skill'));
   assert.ok(!p.includes('diffStory review-tour skill'));
   assert.ok(p.includes('reviewer, not a changelog'));
@@ -70,6 +70,9 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   assert.ok(p.includes('hotspots'));
   assert.ok(p.includes('non-goals'));
   assert.ok(p.includes('The app validates the finished story'));
+  assert.match(p, /set its "version" field to 4/);
+  assert.match(p, /Page concept steps: "id", "order", "title", "kind": "concept", "page", "narration"/);
+  assert.doesNotMatch(p, /concept-primer budgets/);
   // …while the craft contracts live only in SKILL.md, so the two cannot drift.
   for (const duplicated of [
     'Detail level contract', 'Viewport contract', 'Beat contract', 'Context contract',
@@ -90,7 +93,8 @@ test('storyPrompt pins run facts and delegates every craft rule to the skill', (
   // craft-section assertions above remain the real drift guard.
   // Raised to 6000 for the checker instruction: it is how the agent verifies the
   // validator-enforced contracts (and coverage) before the finish gate runs.
-  assert.ok(p.length < 6000, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
+  // Raised to 6500 for the v4 page-concept field contract, which the validator enforces.
+  assert.ok(p.length < 6500, `prompt grew to ${p.length} chars — move craft rules into SKILL.md instead`);
 });
 
 test('storyPrompt supports story detail levels', () => {
@@ -112,7 +116,8 @@ test('storyPrompt supports story detail levels', () => {
     // read — and an out-of-tier tag is now a validation failure. This ceiling
     // buys correctness, not verbosity; keep new prose out of it.
     // Raised to 6000 with the checker instruction (see the test above).
-    assert.ok(prompt.length < 6000, `${mode} prompt grew to ${prompt.length} chars`);
+    // Raised to 6500 for the v4 page-concept field contract, which the validator enforces.
+    assert.ok(prompt.length < 6500, `${mode} prompt grew to ${prompt.length} chars`);
   }
 });
 
@@ -427,13 +432,14 @@ test('storyRepairPrompt preserves unaffected steps and protected narrative histo
   assert.match(prompt, /Split story step "s2" in src\/a\.ts/);
   assert.match(prompt, /Preserve every unaffected step/);
   assert.match(prompt, /Do not regenerate the walkthrough from scratch/);
-  assert.match(prompt, /Preserve every unaffected concept primer/);
+  assert.match(prompt, /Preserve every unaffected concept step exactly/);
   assert.match(prompt, /Preserve legacy version 1 or 2/);
   assert.match(prompt, /version 3 whenever the repair adds moves or pairedView/);
+  assert.match(prompt, /Upgrade to version 4 whenever the repair adds a page concept/);
   assert.match(prompt, /Preserve "storyArc" exactly/);
   assert.match(prompt, /Only "relatedSteps" may change/);
   assert.match(prompt, /firstCommit, and lastCommit exactly/);
-  assert.match(prompt, /concept primers do not claim coverage/i);
+  assert.match(prompt, /concept steps do not claim coverage/i);
   assert.match(prompt, /\.diffstory\/story\.json/);
   assert.match(prompt, /diffstory-storyteller/);
 });
