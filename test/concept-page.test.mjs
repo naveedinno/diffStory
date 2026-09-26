@@ -16,6 +16,21 @@ test('a fragment with no <head> still gets the shim prepended', () => {
   assert.ok(html.indexOf('data-diffstory-shim') < html.indexOf('<svg>'));
 });
 
+test('a headless page keeps its doctype first', () => {
+  const html = conceptPageDocument('<!doctype html><body>x</body>', 'light');
+  assert.match(html, /^<!doctype html>/i);
+  assert.ok(html.indexOf('data-diffstory-shim') < html.indexOf('<body>'));
+});
+
+test('a headless page with an <html> tag keeps doctype and <html> first', () => {
+  const html = conceptPageDocument('<!DOCTYPE html>\n<html lang="en"><body>x</body></html>', 'dark');
+  const htmlOpen = html.indexOf('<html lang="en">');
+  assert.ok(htmlOpen > -1);
+  const shim = html.indexOf('data-diffstory-shim');
+  assert.ok(shim > htmlOpen + '<html lang="en">'.length);
+  assert.ok(shim < html.indexOf('<body>'));
+});
+
 test('an uppercase or attributed <HEAD> is found', () => {
   const html = conceptPageDocument('<HTML><HEAD lang="en"><TITLE>t</TITLE></HEAD><BODY></BODY></HTML>', 'light');
   assert.ok(html.indexOf('data-diffstory-shim') > html.indexOf('<HEAD lang="en">'));
@@ -30,6 +45,22 @@ test('the shim skips text entry and handled keys and only trusts its parent', ()
   assert.match(html, /e\.source!==parent|e\.source !== parent/);
   assert.match(html, /diffstory:key/);
   assert.match(html, /diffstory:theme/);
+});
+
+test('key forwarding is deferred so an author preventDefault still wins', () => {
+  const html = conceptPageDocument('<p>x</p>', 'light');
+  const setTimeoutAt = html.indexOf('setTimeout');
+  assert.ok(setTimeoutAt > -1, 'the shim defers the forward');
+  const defaultPreventedAt = html.indexOf('defaultPrevented');
+  assert.ok(
+    defaultPreventedAt > setTimeoutAt,
+    'the defaultPrevented check runs inside the deferred callback, after dispatch completes',
+  );
+  const postMessageAt = html.indexOf('parent.postMessage');
+  assert.ok(
+    postMessageAt > defaultPreventedAt,
+    'the forward itself also runs inside the deferred callback',
+  );
 });
 
 test('theme tokens are optional variables authors can override', () => {

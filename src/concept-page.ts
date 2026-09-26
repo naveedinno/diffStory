@@ -21,19 +21,33 @@ function shim(theme: ConceptPageTheme): string {
   return `<style data-diffstory-shim>${TOKENS}</style><script data-diffstory-shim>(function(){
 var root=document.documentElement;root.setAttribute('data-ds-theme',${JSON.stringify(theme)});
 function typing(t){if(!t)return false;if(t.isContentEditable)return true;var n=t.tagName;return n==='INPUT'||n==='TEXTAREA'||n==='SELECT';}
-window.addEventListener('keydown',function(e){if(e.defaultPrevented||e.isComposing||typing(e.target))return;
-parent.postMessage({type:'diffstory:key',key:e.key,code:e.code,shiftKey:e.shiftKey,altKey:e.altKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,repeat:e.repeat},'*');});
+window.addEventListener('keydown',function(e){if(e.isComposing||typing(e.target))return;
+setTimeout(function(){if(e.defaultPrevented)return;
+parent.postMessage({type:'diffstory:key',key:e.key,code:e.code,shiftKey:e.shiftKey,altKey:e.altKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,repeat:e.repeat},'*');},0);});
 window.addEventListener('message',function(e){if(e.source!==parent)return;var d=e.data;if(d&&d.type==='diffstory:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-ds-theme',d.theme);});
 })();</script>`;
 }
 
 const HEAD_OPEN = /<head(?:\s[^>]*)?>/i;
+const DOCTYPE = /^\s*<!doctype[^>]*>/i;
+const HTML_OPEN = /^\s*<html(?:\s[^>]*)?>/i;
 
-/** The author's page with the shim injected first inside <head>, or prepended. */
+/**
+ * The author's page with the shim injected first inside <head>. Without a
+ * <head> (legal HTML omits it), the shim still can't land before a leading
+ * doctype or <html> open tag, or the page renders in quirks mode.
+ */
 export function conceptPageDocument(page: string, theme: ConceptPageTheme): string {
   const injected = shim(theme);
   const head = HEAD_OPEN.exec(page);
-  if (!head) return injected + page;
-  const at = head.index + head[0].length;
+  if (head) {
+    const at = head.index + head[0].length;
+    return page.slice(0, at) + injected + page.slice(at);
+  }
+  let at = 0;
+  const doctype = DOCTYPE.exec(page);
+  if (doctype) at = doctype[0].length;
+  const htmlOpen = HTML_OPEN.exec(page.slice(at));
+  if (htmlOpen) at += htmlOpen[0].length;
   return page.slice(0, at) + injected + page.slice(at);
 }
