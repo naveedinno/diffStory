@@ -394,6 +394,16 @@ test("a page concept step-panel is a sandboxed iframe, never the page's own byte
     assert.match(panel, /<iframe[^>]*sandbox="allow-scripts"[^>]*>/);
     assert.doesNotMatch(panel, /allow-same-origin|allow-top-navigation|allow-popups|allow-forms/);
     assert.match(panel, /data-concept-frame data-concept-index="1"/);
+    assert.match(
+      panel,
+      /<iframe[^>]*title="Concept page: How margin moves with price"/,
+      "the frame is named by its title; the narration is announced once, by the speech node",
+    );
+    assert.doesNotMatch(panel, /<iframe[^>]*title="[^"]*Drag the price/);
+    assert.match(
+      panel,
+      /<button[^>]*data-concept-page-fullscreen[^>]*aria-pressed="false"[^>]*aria-label="Open page fullscreen"/,
+    );
     assert.doesNotMatch(
       panel,
       /<iframe[^>]*\ssrc=/,

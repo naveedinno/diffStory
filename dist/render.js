@@ -300,11 +300,12 @@ function conceptPagePanel(s, i) {
         <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
       </div>
       <figure class="ds-concept-page" data-concept-page>
-        <button type="button" class="ds-concept-page-fullscreen" data-concept-page-fullscreen aria-label="Open page fullscreen" title="Open page fullscreen">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+        <button type="button" class="ds-concept-page-fullscreen" data-concept-page-fullscreen aria-pressed="false" aria-label="Open page fullscreen" title="Open page fullscreen">
+          <svg class="ds-concept-page-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+          <svg class="ds-concept-page-collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>
         </button>
         <span class="ds-concept-page-loading">Loading the mental model…</span>
-        <iframe class="ds-concept-page-frame" data-concept-frame data-concept-index="${i + 1}" sandbox="allow-scripts" allow="fullscreen" title="${esc(s.narration?.text ?? s.title.text)}" loading="lazy"></iframe>
+        <iframe class="ds-concept-page-frame" data-concept-frame data-concept-index="${i + 1}" sandbox="allow-scripts" allow="fullscreen" title="${esc(`Concept page: ${s.title.text}`)}" loading="lazy"></iframe>
       </figure>
       <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
     </article>

@@ -492,12 +492,37 @@ export function startReviewEngine(options){
     renderConceptDiagrams(document.body);mountConceptPages(document.body);
   });
   function conceptPageTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';}
+  // A concept page may keep timers, audio, or a canvas running, so only the
+  // active step's page is ever loaded. It learns the theme again on load, in
+  // case the theme changed while it was still loading.
   function mountConceptPages(panel){
+    var live=stepPanels&&stepPanels[active];
     $all('[data-concept-frame]',panel).forEach(function(frame){
-      if(frame._dsMounted)return;frame._dsMounted=true;
+      if(frame._dsMounted||!live||!live.contains(frame))return;frame._dsMounted=true;
       var figure=closest(frame,'[data-concept-page]');
-      frame.addEventListener('load',function(){if(figure)figure.classList.add('is-loaded');});
+      frame.addEventListener('load',function(){if(!frame._dsMounted)return;if(figure)figure.classList.add('is-loaded');if(frame.contentWindow)frame.contentWindow.postMessage({type:'diffstory:theme',theme:conceptPageTheme()},'*');});
       frame.src=reviewPageUrl('/api/review/concept-page?index='+encodeURIComponent(frame.getAttribute('data-concept-index')||'')+'&theme='+conceptPageTheme());
+    });
+  }
+  // Swapping in an unloaded copy tears the old page down completely; the copy
+  // has no address, so it stays empty until its step is active again.
+  function unloadConceptPages(keep){
+    $all('[data-concept-frame]').forEach(function(frame){
+      if(!frame._dsMounted||(keep&&keep.contains(frame)))return;frame._dsMounted=false;
+      var figure=closest(frame,'[data-concept-page]'),blank=frame.cloneNode(false);blank.removeAttribute('src');
+      if(figure&&document.fullscreenElement===figure&&document.exitFullscreen)document.exitFullscreen().catch(function(){});
+      frame.replaceWith(blank);if(figure)figure.classList.remove('is-loaded');
+    });
+  }
+  function toggleConceptPageFullscreen(button){
+    var figure=closest(button,'[data-concept-page]');if(!figure)return;
+    if(document.fullscreenElement===figure){if(document.exitFullscreen)document.exitFullscreen().catch(function(){});return;}
+    if(figure.requestFullscreen)figure.requestFullscreen().catch(function(){});
+  }
+  function syncConceptPageFullscreen(){
+    $all('[data-concept-page-fullscreen]').forEach(function(button){
+      var figure=closest(button,'[data-concept-page]'),on=!!figure&&document.fullscreenElement===figure;if(figure)figure.classList.toggle('is-fullscreen-active',on);
+      button.setAttribute('aria-pressed',on?'true':'false');button.setAttribute('aria-label',on?'Exit page fullscreen':'Open page fullscreen');button.setAttribute('title',on?'Exit page fullscreen (Esc)':'Open page fullscreen');
     });
   }
   function syncConceptPageTheme(){
@@ -1063,7 +1088,7 @@ export function startReviewEngine(options){
     if(tourView)tourView.scrollTop=0;
     var ap=stepPanels[i];if(ap)ap.scrollTop=0;
     if(ap)renderConceptDiagrams(ap);
-    if(ap)mountConceptPages(ap);
+    unloadConceptPages(ap);if(ap)mountConceptPages(ap);
     applyResponsiveStoryMode(ap);
     syncSplitPaneLayouts(ap);
     // A hidden step has no box to measure, and a lazy one brings its own dock and
@@ -3799,7 +3824,7 @@ export function startReviewEngine(options){
     b=closest(t,'[data-goto-file]');if(b){closeDriftDrawer();setView('files');selectFileByPath(b.getAttribute('data-goto-file'));collapseCompactSidebar();return;}
     b=closest(t,'[data-explain]');if(b){repairStory('explain',{file:b.getAttribute('data-story-file'),line:Number(b.getAttribute('data-story-line')||0)});return;}
     b=closest(t,'[data-story-repair]');if(b){repairStory(b.getAttribute('data-story-repair'),{file:b.getAttribute('data-story-file'),stepId:b.getAttribute('data-story-step')});var det=closest(b,'details');if(det)det.open=false;return;}
-    var cpf=closest(t,'[data-concept-page-fullscreen]');if(cpf){var cpfig=closest(cpf,'[data-concept-page]');if(cpfig&&cpfig.requestFullscreen)cpfig.requestFullscreen().catch(function(){});return;}
+    var cpf=closest(t,'[data-concept-page-fullscreen]');if(cpf){toggleConceptPageFullscreen(cpf);return;}
     b=closest(t,'.ds-stepcard');if(b){setActive(Number(b.getAttribute('data-step-index')));collapseCompactSidebar();return;}
   }
   function onKey(e){
@@ -4021,6 +4046,7 @@ export function startReviewEngine(options){
     window.addEventListener('message',onConceptFrameMessage);
     new MutationObserver(syncConceptPageTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
     document.addEventListener('fullscreenchange',syncMermaidFullscreen);
+    document.addEventListener('fullscreenchange',syncConceptPageFullscreen);
     document.addEventListener('pointerover',onFilmPointerOver);
     document.addEventListener('pointerout',onFilmPointerOut);
     document.addEventListener('focusin',onFilmFocusIn);

@@ -111,3 +111,159 @@ test('the engine accepts exactly the keys the page shim forwards', async () => {
   vm.runInContext(keysDecl, context);
   assert.deepEqual([...context.CONCEPT_FRAME_KEYS], [...CONCEPT_PAGE_KEYS]);
 });
+
+// ---- frame lifetime ----------------------------------------------------------
+// A concept page may run timers, audio, or WebGL. Only the active step's page
+// may be loaded; leaving the step unloads it, returning loads it again, and a
+// page that finishes loading after a theme change still gets the current theme.
+
+function lifetime() {
+  const posted = [];
+  const classSet = () => {
+    const set = new Set();
+    return { add: (c) => set.add(c), remove: (c) => set.delete(c), contains: (c) => set.has(c) };
+  };
+  const makeFrame = (index, figure, panel) => {
+    const listeners = {};
+    const attrs = { 'data-concept-frame': '', 'data-concept-index': String(index) };
+    const frame = {
+      figure, panel, listeners,
+      contentWindow: { postMessage: (message) => posted.push([index, message]) },
+      addEventListener: (type, fn) => { listeners[type] = fn; },
+      getAttribute: (name) => (name in attrs ? attrs[name] : null),
+      removeAttribute: (name) => { delete attrs[name]; },
+      get src() { return attrs.src ?? ''; },
+      set src(value) { attrs.src = value; },
+      cloneNode: () => {
+        const copy = makeFrame(index, figure, panel);
+        if ('src' in attrs) copy.src = attrs.src;
+        return copy;
+      },
+      replaceWith: (other) => { panel.frames[panel.frames.indexOf(frame)] = other; },
+    };
+    return frame;
+  };
+  const panels = [1, 2, 3].map((index) => {
+    const panel = { frames: [] };
+    const figure = { classList: classSet() };
+    panel.frames.push(makeFrame(index, figure, panel));
+    panel.contains = (node) => node === panel || panel.frames.includes(node);
+    return panel;
+  });
+  const html = { theme: 'dark', getAttribute: () => (html.theme === 'light' ? 'light' : 'dark') };
+  const context = vm.createContext({
+    stepPanels: panels,
+    active: 0,
+    document: { documentElement: html, fullscreenElement: null },
+    $all: (selector, root) => (root && root.frames ? root.frames : panels.flatMap((p) => p.frames)),
+    closest: (node, selector) => (selector === '[data-concept-page]' ? node.figure : null),
+    reviewPageUrl: (path) => path,
+  });
+  vm.runInContext(engine.match(/  function conceptPageTheme\(\)[^\n]*/)[0], context);
+  for (const name of ['mountConceptPages', 'unloadConceptPages']) {
+    const source = fn(name);
+    assert.ok(source, `${name} exists`);
+    vm.runInContext(source, context);
+  }
+  const activate = (i) => {
+    context.active = i;
+    context.unloadConceptPages(panels[i]);
+    context.mountConceptPages(panels[i]);
+  };
+  return { context, panels, posted, html, activate, frame: (i) => panels[i].frames[0] };
+}
+
+test('only the active step loads its concept page', () => {
+  const t = lifetime();
+  t.activate(1);
+  assert.match(t.frame(1).src, /\/api\/review\/concept-page\?index=2&theme=dark/);
+  assert.equal(t.frame(0).src, '');
+  assert.equal(t.frame(2).src, '');
+  t.context.mountConceptPages({ frames: t.panels.flatMap((p) => p.frames) });
+  assert.equal(t.frame(2).src, '', 'a prefetched or theme-wide mount never loads an off-step page');
+});
+
+test('leaving a step unloads its page and returning loads it again', () => {
+  const t = lifetime();
+  t.activate(1);
+  t.frame(1).listeners.load();
+  assert.ok(t.frame(1).figure.classList.contains('is-loaded'));
+  const running = t.frame(1);
+  t.activate(2);
+  assert.notEqual(t.frame(1), running, 'the running page is torn down');
+  assert.equal(t.frame(1).src, '', 'and its replacement never loads');
+  assert.ok(!t.frame(1)._dsMounted);
+  assert.ok(!t.frame(1).figure.classList.contains('is-loaded'), 'the loading line comes back');
+  assert.match(t.frame(2).src, /index=3/);
+  t.activate(1);
+  assert.match(t.frame(1).src, /index=2/, 'returning remounts the page');
+  assert.equal(t.frame(2).src, '', 'and unloads the one left behind');
+});
+
+test('a page that loads after a theme change gets the current theme', () => {
+  const t = lifetime();
+  t.activate(1);
+  t.html.theme = 'light';
+  t.frame(1).listeners.load();
+  assert.deepEqual(JSON.parse(JSON.stringify(t.posted)), [[2, { type: 'diffstory:theme', theme: 'light' }]]);
+});
+
+test('step activation unloads off-step pages before mounting the active one', () => {
+  assert.match(engine, /unloadConceptPages\(ap\);if\(ap\)mountConceptPages\(ap\);/);
+});
+
+// ---- fullscreen control --------------------------------------------------------
+
+function fullscreen() {
+  const calls = [];
+  const attrs = {};
+  const classes = new Set();
+  const button = { setAttribute: (name, value) => { attrs[name] = value; } };
+  const figure = {
+    requestFullscreen: () => { calls.push('request'); return Promise.resolve(); },
+    classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) },
+  };
+  button.figure = figure;
+  const context = vm.createContext({
+    document: {
+      fullscreenElement: null,
+      exitFullscreen: () => { calls.push('exit'); return Promise.resolve(); },
+    },
+    $all: () => [button],
+    closest: (node, selector) => (selector === '[data-concept-page]' ? node.figure : null),
+  });
+  for (const name of ['syncConceptPageFullscreen', 'toggleConceptPageFullscreen']) {
+    const source = fn(name);
+    assert.ok(source, `${name} exists`);
+    vm.runInContext(source, context);
+  }
+  return { context, calls, attrs, classes, button, figure };
+}
+
+test('the page fullscreen button opens, then exits, and says which', () => {
+  const f = fullscreen();
+  f.context.toggleConceptPageFullscreen(f.button);
+  assert.deepEqual(f.calls, ['request']);
+  f.context.document.fullscreenElement = f.figure;
+  f.context.syncConceptPageFullscreen();
+  assert.equal(f.attrs['aria-pressed'], 'true');
+  assert.equal(f.attrs['aria-label'], 'Exit page fullscreen');
+  assert.ok(f.classes.has('is-fullscreen-active'));
+  f.context.toggleConceptPageFullscreen(f.button);
+  assert.deepEqual(f.calls, ['request', 'exit'], 'clicking while fullscreen exits');
+  f.context.document.fullscreenElement = null;
+  f.context.syncConceptPageFullscreen();
+  assert.equal(f.attrs['aria-pressed'], 'false');
+  assert.equal(f.attrs['aria-label'], 'Open page fullscreen');
+  assert.ok(!f.classes.has('is-fullscreen-active'));
+});
+
+test('fullscreen changes keep the page button in sync', () => {
+  assert.match(engine, /document\.addEventListener\('fullscreenchange',syncConceptPageFullscreen\)/);
+});
+
+test('the concept page heading stacks the eyebrow over the title', () => {
+  const css = readFileSync(new URL('../client/surfaces/review/review.css', import.meta.url), 'utf8');
+  assert.ok(css.includes('.ds-concept-page-stage .ds-concept-heading{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:8px;margin-bottom:0}'));
+  assert.ok(!css.includes('.ds-concept-page-stage .ds-concept-title{margin:0}'), 'the redundant title reset is gone');
+});
