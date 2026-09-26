@@ -406,7 +406,7 @@ function lintDepth(tour, steps, code, add) {
     const concepts = steps.length - code.length;
     const claims = code.filter((s) => s.kind !== "context").length;
     if (tour.mode === "detailed" && claims >= 15 && concepts === 0) {
-        add("detailed-without-primer", "warning", "story", `A detailed story with ${claims} code stops has no concept primer.`, 'List the three terms a newcomer would ask about ("what is a single close?") and teach each where it is first needed: a primer, a context step, or one clause in the landing.');
+        add("detailed-without-primer", "warning", "story", `A detailed story with ${claims} code stops has no concept page.`, 'List the three terms a newcomer would ask about ("what is a single close?") and teach each where it is first needed: a concept page, a context step, or one clause in the landing.');
     }
     if (claims >= 12 && !tour.hotspots?.length) {
         add("no-hotspots", "warning", "story", `${claims} code stops and no hotspots.`, "Name up to three places you are least sure of, in first person.");

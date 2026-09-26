@@ -222,6 +222,10 @@ test('depth rules: detailed without primer; long without hotspots', () => {
   const long = Array.from({ length: 15 }, (_, i) => step({ chapter: `C${Math.floor(i / 5)}` }));
   const f = lintStory(story(long, { mode: 'detailed' }));
   assert.ok(has(f, 'detailed-without-primer'));
+  const depth = f.find((x) => x.rule === 'detailed-without-primer');
+  assert.match(depth.message, /no concept page/);
+  assert.match(depth.fix, /a concept page, a context step/);
+  assert.doesNotMatch(`${depth.message} ${depth.fix}`, /primer/);
   assert.ok(has(f, 'no-hotspots'));
 });
 

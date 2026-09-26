@@ -306,7 +306,8 @@ Plan by code logic, not filenames:
 - Context steps are welcome whenever the caller, contract, storage, or config
   a judgment depends on lives in another file or a distant section; title them
   for the contract they show. Put a concept page wherever its model helps
-  most, first and last included; never stack pages up front as a glossary.
+  most, first and last included; a page teaches a model the code needs, never
+  a glossary.
 - A small change may be one context-rich changed step. No fixed stop count.
 
 ### 7. Storyboard each stop

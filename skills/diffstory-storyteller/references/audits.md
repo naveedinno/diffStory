@@ -41,7 +41,9 @@ Falsifiable checks — run each, do not skim:
 - Concept-gap test: before each code stop, the reviewer already has the
   terminology, roles, relationships, and state model needed to read it.
 - Page test: each concept page teaches one model with a concrete instance from
-  this diff, and its narration makes sense without the page.
+  this diff and shows the model (something to drag, step, toggle, or watch);
+  a page that is mostly paragraphs fails. Its narration makes sense without
+  the page.
 
 ### Context and camera audit
 

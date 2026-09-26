@@ -48,9 +48,12 @@ Pages may open the story, close it, or sit back to back.
   `--ds-surface`, `--ds-text`, `--ds-text-2`, `--ds-text-3`, `--ds-line`,
   `--ds-accent`, `--ds-add`, `--ds-del` match the app's palette. Use them or
   ignore them.
-- Arrow keys and story shortcuts pressed inside the page still move the story
-  unless the page handles them (`preventDefault()`) or the focus is in an
-  input, so claim the keys your page needs.
+- Only story navigation keys leave the page: the left and right arrows, `j`,
+  `k`, and Space. They still move the story (Space plays and pauses
+  narration) unless the page handles them (`preventDefault()`) or focus is in
+  a text field (input, textarea, select, contenteditable), so claim the keys
+  your page needs. Space on a button or link in your page stays with it. Every
+  other key stays in the page.
 - `preparesFor` (optional) names code steps the page sets up.
 - A concept step must not contain `file`, `range`, `ranges`, `viewport`,
   `highlights`, `beats`, `why`, `calls`, or `returnsTo`, nor legacy `focus`.

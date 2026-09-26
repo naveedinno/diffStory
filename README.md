@@ -102,7 +102,10 @@ Inside a repo, diffStory gives you two useful ways to read:
   change introduces a new term, lifecycle, or architectural boundary, the story
   can pause for a short **concept primer** before the code that depends on it.
   Primers are document steps with optional locally rendered Mermaid diagrams;
-  they do not pretend to be files and do not count as diff coverage.
+  they do not pretend to be files and do not count as diff coverage. In story
+  version 4 a concept step can instead be a free HTML page (JavaScript and CDN
+  libraries allowed) rendered in a sandboxed frame; it has network access, so
+  see [the privacy notes](docs/story-schema.md#concept-pages-and-privacy).
 
 The story never replaces the diff. It only explains and orders it. The code you
 read comes from git.

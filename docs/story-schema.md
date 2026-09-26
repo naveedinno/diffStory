@@ -109,10 +109,19 @@ A page concept runs in an iframe with `sandbox="allow-scripts"` and an opaque
 origin. The page is sandboxed however it is loaded: its response carries the
 same sandbox in its `Content-Security-Policy`, so opening the page URL directly
 in a tab does not give it diffStory's origin either. It cannot read diffStory's
-storage, call its API, or navigate the app.
-Because pages may load resources from any URL, opening a story can make your
-browser contact servers its author chose, revealing your IP address and that
-the story was opened.
+storage, call its API, navigate the app, or open popups. Of the keys pressed
+inside it, only story navigation keys reach diffStory, and only while the page
+is focused on the active step.
+
+The page has network access, which is the trade-off for CDN libraries:
+
+- Opening a story can make your browser contact servers its author chose,
+  revealing your IP address and that the story was opened.
+- The page is served from `127.0.0.1`, so it can also send requests to other
+  services on this machine's loopback, such as a local dev server. diffStory
+  itself refuses the page's requests, but any local service that allows
+  cross-origin requests, or acts on a simple request without checking where it
+  came from, is reachable from the page.
 
 ## Narrative shape and commit evolution
 
@@ -253,6 +262,7 @@ handled.
   has a caption that stands alone
 - `beats[].text` is one spoken sentence — inline markup only, and usually none
 - titles are plain text
-- no links, no images, no SVG, no inline styles
+- in prose fields (everything except a concept `page`): no links, no images,
+  no SVG, no inline styles
 - if a story needs an element that is not on the allowlist, the story needs
   rewriting; the allowlist does not grow to accommodate one story
