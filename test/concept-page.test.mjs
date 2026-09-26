@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { conceptPageDocument, CONCEPT_PAGE_CSP } from '../dist/concept-page.js';
 
 test('the shim goes first inside <head>, before any author markup', () => {
@@ -74,4 +75,41 @@ test('the page CSP is permissive but only frameable by diffStory', () => {
   assert.match(CONCEPT_PAGE_CSP, /^sandbox allow-scripts(;|$)/, 'the page is sandboxed even when opened as a top-level document');
   assert.doesNotMatch(CONCEPT_PAGE_CSP, /allow-same-origin|allow-popups|allow-top-navigation|allow-forms/);
   assert.match(CONCEPT_PAGE_CSP, /frame-ancestors 'self'/);
+});
+
+// Run the real shim against a stub window: only story navigation keys leave
+// the page, so a hostile or careless page cannot drive app shortcuts through
+// its own keyboard events either.
+function runShim() {
+  const html = conceptPageDocument('<p>x</p>', 'dark');
+  const script = html.match(/<script data-diffstory-shim>([^]*?)<\/script>/)[1];
+  const handlers = {};
+  const posted = [];
+  const context = vm.createContext({
+    document: { documentElement: { setAttribute() {} } },
+    window: { addEventListener: (type, fn) => { handlers[type] = fn; } },
+    parent: { postMessage: (message) => posted.push(message) },
+    setTimeout: (fn) => fn(),
+  });
+  vm.runInContext(script, context);
+  const target = (tagName, extra = {}) => ({ tagName, isContentEditable: false, closest: () => null, ...extra });
+  const press = (key, t = target('BODY'), extra = {}) => handlers.keydown({ key, code: '', target: t, isComposing: false, defaultPrevented: false, ...extra });
+  return { posted, press, target };
+}
+
+test('the shim forwards only story navigation keys', () => {
+  const s = runShim();
+  for (const key of ['ArrowLeft', 'ArrowRight', 'j', 'k', ' ']) s.press(key);
+  for (const key of ['?', '/', 'c', 'b', 'v', 'n', 'Escape', 'Tab', 'Enter', 'ArrowUp']) s.press(key);
+  assert.deepEqual(s.posted.map((m) => m.key), ['ArrowLeft', 'ArrowRight', 'j', 'k', ' ']);
+  assert.ok(s.posted.every((m) => m.type === 'diffstory:key'));
+});
+
+test('the shim keeps keys the page handles or types', () => {
+  const s = runShim();
+  s.press('j', s.target('INPUT'));
+  s.press('k', s.target('DIV', { isContentEditable: true }));
+  s.press('ArrowRight', s.target('BODY'), { defaultPrevented: true });
+  s.press(' ', s.target('BUTTON', { closest: () => ({}) }));
+  assert.deepEqual(s.posted, [], 'text entry, preventDefault, and Space on a page control stay in the page');
 });

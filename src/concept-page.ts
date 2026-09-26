@@ -22,6 +22,14 @@ export type ConceptPageTheme = 'light' | 'dark';
 export const CONCEPT_PAGE_CSP =
   "sandbox allow-scripts; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
 
+/**
+ * The only keys a page forwards to the app: they step through the story or
+ * play and pause narration, and nothing else. The review engine accepts the
+ * same list (CONCEPT_FRAME_KEYS), and only from the focused frame on the
+ * active step. Space on a control inside the page stays with that control.
+ */
+export const CONCEPT_PAGE_KEYS: readonly string[] = ['ArrowLeft', 'ArrowRight', 'j', 'k', ' '];
+
 // Values mirror client/generated/theme.css so a page that opts in matches the app.
 const TOKENS = `:root{--ds-bg:#0a0c0f;--ds-surface:#14171c;--ds-text:#eef1f5;--ds-text-2:#ccd1d9;--ds-text-3:#b1b9c6;--ds-line:rgba(190,205,225,.11);--ds-accent:#49b7ff;--ds-add:#3ddc97;--ds-del:#ff6b62}
 :root[data-ds-theme="light"]{--ds-bg:#edf0f4;--ds-surface:#ffffff;--ds-text:#14171c;--ds-text-2:#4f5967;--ds-text-3:#5f6976;--ds-line:rgba(20,30,45,.12);--ds-accent:#0072d6;--ds-add:#178a52;--ds-del:#d2372e}`;
@@ -29,10 +37,12 @@ const TOKENS = `:root{--ds-bg:#0a0c0f;--ds-surface:#14171c;--ds-text:#eef1f5;--d
 function shim(theme: ConceptPageTheme): string {
   return `<style data-diffstory-shim>${TOKENS}</style><script data-diffstory-shim>(function(){
 var root=document.documentElement;root.setAttribute('data-ds-theme',${JSON.stringify(theme)});
+var keys=${JSON.stringify(CONCEPT_PAGE_KEYS)};
 function typing(t){if(!t)return false;if(t.isContentEditable)return true;var n=t.tagName;return n==='INPUT'||n==='TEXTAREA'||n==='SELECT';}
-window.addEventListener('keydown',function(e){if(e.isComposing||typing(e.target))return;
+function control(t){return !!(t&&t.closest&&t.closest('button,a,[role="button"],[role="link"]'));}
+window.addEventListener('keydown',function(e){if(e.isComposing||keys.indexOf(e.key)<0||typing(e.target))return;if(e.key===' '&&control(e.target))return;
 setTimeout(function(){if(e.defaultPrevented)return;
-parent.postMessage({type:'diffstory:key',key:e.key,code:e.code,shiftKey:e.shiftKey,altKey:e.altKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,repeat:e.repeat},'*');},0);});
+parent.postMessage({type:'diffstory:key',key:e.key,shiftKey:e.shiftKey,altKey:e.altKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,repeat:e.repeat},'*');},0);});
 window.addEventListener('message',function(e){if(e.source!==parent)return;var d=e.data;if(d&&d.type==='diffstory:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-ds-theme',d.theme);});
 })();</script>`;
 }

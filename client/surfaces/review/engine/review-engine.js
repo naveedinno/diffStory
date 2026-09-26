@@ -504,11 +504,20 @@ export function startReviewEngine(options){
     var theme=conceptPageTheme();
     $all('[data-concept-frame]').forEach(function(frame){if(frame.contentWindow)frame.contentWindow.postMessage({type:'diffstory:theme',theme:theme},'*');});
   }
+  // Any mounted concept page can post to this window, so a forwarded key is
+  // replayed only from the focused frame on the active step, and only when it
+  // moves through the story or plays and pauses narration. The page shim
+  // forwards exactly this list.
+  var CONCEPT_FRAME_KEYS=['ArrowLeft','ArrowRight','j','k',' '];
+  function conceptFrameForMessage(e){
+    var d=e.data;if(!d||d.type!=='diffstory:key'||typeof d.key!=='string'||CONCEPT_FRAME_KEYS.indexOf(d.key)<0)return null;
+    var panel=stepPanels&&stepPanels[active];if(!panel)return null;
+    var frame=null;$all('[data-concept-frame]',panel).forEach(function(f){if(f.contentWindow===e.source)frame=f;});
+    return frame&&document.activeElement===frame?frame:null;
+  }
   function onConceptFrameMessage(e){
-    var d=e.data;if(!d||d.type!=='diffstory:key'||typeof d.key!=='string')return;
-    var frame=null;$all('[data-concept-frame]').forEach(function(f){if(f.contentWindow===e.source)frame=f;});
-    if(!frame)return;
-    onKey({key:d.key,code:String(d.code||''),shiftKey:!!d.shiftKey,altKey:!!d.altKey,ctrlKey:!!d.ctrlKey,metaKey:!!d.metaKey,repeat:!!d.repeat,isComposing:false,target:frame,defaultPrevented:false,preventDefault:function(){},stopPropagation:function(){}});
+    var frame=conceptFrameForMessage(e);if(!frame)return;var d=e.data;
+    onKey({key:d.key,code:d.key===' '?'Space':'',shiftKey:!!d.shiftKey,altKey:!!d.altKey,ctrlKey:!!d.ctrlKey,metaKey:!!d.metaKey,repeat:!!d.repeat,isComposing:false,target:frame,defaultPrevented:false,preventDefault:function(){},stopPropagation:function(){}});
   }
   var STORY_MODELS={
     claude:[['Best quality','opus','Use the strongest available model for the clearest story'],['Lower cost','haiku','Use a smaller model for a faster, cheaper run']],
