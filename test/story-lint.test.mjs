@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { lintStory, plainText } from '../dist/story-lint.js';
+import { lintStory, plainText, narrativeFields } from '../dist/story-lint.js';
 
 let seq = 0;
 /** Letters only: the lint folds digits, so numbered names would read as copies. */
@@ -243,4 +243,16 @@ test('landing-field-missing: code steps without a landing warn once, grouped', (
   assert.match(hit.message, /^2 code steps have no landing field/);
   const exempt = story([step({ landing: undefined, tags: ['sweep'] }), step({ landing: undefined, file: 'docs/guide.md' }), step({ landing: undefined, file: 'config/app.json' })]);
   assert.ok(!has(lintStory(exempt), 'landing-field-missing'));
+});
+
+test('page concepts contribute narration, never page HTML, to narrative lints', () => {
+  const fields = narrativeFields({
+    version: 4, title: 'T', summary: 'S',
+    steps: [
+      { id: 'p', order: 1, title: 'Model', kind: 'concept', page: '<p>**not prose**</p>', narration: 'Watch the line.' },
+      { id: 'c', order: 2, title: 'Code', kind: 'changed', file: 'a.ts', range: [1, 1], why: 'w' },
+    ],
+  });
+  assert.ok(fields.some(([path, text]) => path === 'steps[p].narration' && text === 'Watch the line.'));
+  assert.ok(!fields.some(([path]) => path.startsWith('steps[p].page')), 'page HTML is not narrative');
 });

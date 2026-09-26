@@ -412,7 +412,7 @@ function lintChapters(steps: TourStep[], add: Add): void {
     if (previous !== undefined && !isSweep(step)) {
       const opener =
         step.kind === "concept"
-          ? plainText(step.body ?? step.narration ?? "").slice(0, 220)
+          ? plainText(step.narration ?? step.body ?? "").slice(0, 220)
           : plainText(step.beats?.[0]?.text ?? "");
       const firstSentence = opener.split(/(?<=[.!?])\s/)[0] ?? opener;
       if (!SEAM_CUE.test(firstSentence)) {
@@ -555,6 +555,7 @@ export function narrativeFields(tour: Tour): Array<[string, string]> {
   for (const step of tour.steps ?? []) {
     if (step.kind === "concept") {
       push(`steps[${step.id}].body`, step.body);
+      push(`steps[${step.id}].narration`, step.narration);
       push(`steps[${step.id}].diagram.caption`, step.diagram?.caption);
       continue;
     }
