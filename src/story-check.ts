@@ -100,7 +100,7 @@ export function runStoryCheck(repo: string, storyPath: string): StoryCheckReport
   const tour = parsed as Tour;
   report.tour = tour;
   report.errors.push(
-    ...(tour.version === 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)),
+    ...(tour.version >= 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)),
   );
   if (/(^|\/)\.diffstory\/stories\//.test(story) && !tour.storyScope?.includedFiles?.length) {
     report.errors.push("stories under .diffstory/stories/ need storyScope.includedFiles");

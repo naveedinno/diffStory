@@ -1756,11 +1756,29 @@ function validateConceptDiagram(value, where, errors) {
       errors.push(`${where}.diagram.source cannot contain unsafe ${label}`);
   }
 }
-function validateConceptStep(step, where, errors) {
-  if (isBlankNarrative(step.body)) errors.push(`${where}.body is required`);
-  validateNarrative(step.body, `${where}.body`, "block", errors);
+function validateConceptStep(step, where, storyVersion, errors) {
+  const isPage = step.page !== void 0;
+  if (isPage && step.body !== void 0)
+    errors.push(`${where} concept step takes either page or body, not both`);
+  if (isPage) {
+    if (storyVersion !== 4)
+      errors.push(`${where}.page requires story version 4`);
+    if (typeof step.page !== "string" || !step.page.trim())
+      errors.push(`${where}.page must be a non-empty string`);
+    if (isBlankNarrative(step.narration))
+      errors.push(`${where}.narration is required`);
+    validateNarrative(step.narration, `${where}.narration`, "text", errors);
+    if (step.diagram !== void 0)
+      errors.push(`${where}.diagram is only allowed with body`);
+  } else {
+    if (isBlankNarrative(step.body)) errors.push(`${where}.body is required`);
+    validateNarrative(step.body, `${where}.body`, "block", errors);
+    if (step.narration !== void 0)
+      errors.push(`${where}.narration is only allowed with page`);
+    validateConceptDiagram(step.diagram, where, errors);
+  }
   validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, {
-    required: true,
+    required: storyVersion !== 4,
     nonEmpty: true
   });
   if (Array.isArray(step.preparesFor)) {
@@ -1770,7 +1788,6 @@ function validateConceptStep(step, where, errors) {
     if (new Set(refs).size !== refs.length)
       errors.push(`${where}.preparesFor must not contain duplicate step ids`);
   }
-  validateConceptDiagram(step.diagram, where, errors);
   for (const field of CONCEPT_CODE_FIELDS) {
     if (step[field] !== void 0)
       errors.push(`${where}.${field} is not allowed for a concept step`);
@@ -1921,8 +1938,8 @@ function validateMoveHidden(value, name, errors) {
 }
 function validateMoves(step, where, storyFiles, storyVersion, visibleRange, errors) {
   if (step.moves === void 0 && step.pairedView === void 0) return;
-  if (storyVersion !== 3)
-    errors.push(`${where}.moves and pairedView require story version 3`);
+  if (storyVersion !== 3 && storyVersion !== 4)
+    errors.push(`${where}.moves and pairedView require story version 3 or 4`);
   if (step.kind === "context") {
     if (step.moves !== void 0)
       errors.push(`${where}.moves is not allowed for a context step`);
@@ -2056,8 +2073,8 @@ function validateTour(obj) {
   if (typeof obj !== "object" || obj === null)
     return ["story must be a JSON object"];
   const t = obj;
-  if (t.version !== 1 && t.version !== 2 && t.version !== 3)
-    errors.push("version must be 1, 2, or 3");
+  if (t.version !== 1 && t.version !== 2 && t.version !== 3 && t.version !== 4)
+    errors.push("version must be 1, 2, 3, or 4");
   if (t.diffFingerprint !== void 0 && !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))) {
     errors.push("diffFingerprint must be a SHA-256 hex digest");
   }
@@ -2137,9 +2154,9 @@ function validateTour(obj) {
       return;
     }
     if (stepKind === "concept") {
-      if (t.version !== 2 && t.version !== 3)
-        errors.push(`${where}.kind "concept" requires story version 2 or 3`);
-      validateConceptStep(step, where, errors);
+      if (t.version !== 2 && t.version !== 3 && t.version !== 4)
+        errors.push(`${where}.kind "concept" requires story version 2, 3, or 4`);
+      validateConceptStep(step, where, t.version, errors);
     } else {
       codeStepCount += 1;
       validateCodeStep(step, where, storyFiles, t.version, errors);
@@ -2159,15 +2176,17 @@ function validateTour(obj) {
       const refs2 = Array.isArray(step.preparesFor) ? step.preparesFor.filter(
         (ref) => typeof ref === "string"
       ) : [];
-      const next = readingPath[pathIndex + 1]?.step;
-      if (!next || typeof next !== "object" || next === null) {
-        errors.push(`steps[${i}] concept step cannot be the last step`);
-      } else if (next.kind === "concept") {
-        errors.push(`steps[${i}] concept steps cannot be adjacent`);
-      } else if (typeof next.id === "string" && !refs2.includes(next.id)) {
-        errors.push(
-          `steps[${i}].preparesFor must include the immediately following code step`
-        );
+      if (t.version !== 4) {
+        const next = readingPath[pathIndex + 1]?.step;
+        if (!next || typeof next !== "object" || next === null) {
+          errors.push(`steps[${i}] concept step cannot be the last step`);
+        } else if (next.kind === "concept") {
+          errors.push(`steps[${i}] concept steps cannot be adjacent`);
+        } else if (typeof next.id === "string" && !refs2.includes(next.id)) {
+          errors.push(
+            `steps[${i}].preparesFor must include the immediately following code step`
+          );
+        }
       }
       for (const ref of refs2) {
         const target = stepsById.get(ref);
@@ -2182,7 +2201,7 @@ function validateTour(obj) {
             `steps[${i}].preparesFor must reference later code steps, not concept "${ref}"`
           );
         }
-        if (typeof step.order === "number" && typeof target.order === "number" && target.order <= step.order) {
+        if (t.version !== 4 && typeof step.order === "number" && typeof target.order === "number" && target.order <= step.order) {
           errors.push(
             `steps[${i}].preparesFor must reference later code steps`
           );
@@ -2245,6 +2264,7 @@ function validateGeneratedConceptSteps(tour) {
     (entry) => entry.step.kind === "concept"
   );
   if (!concepts.length) return errors;
+  if (tour.version === 4) return errors;
   const mode = tour.mode ?? "guided";
   const limit = mode === "brief" ? 1 : mode === "detailed" ? 3 : 2;
   if (concepts.length > limit) {
@@ -2270,8 +2290,8 @@ function validateGeneratedConceptSteps(tour) {
 function validateGeneratedTour(tour) {
   const errors = validateTour(tour);
   errors.push(...validateGeneratedConceptSteps(tour));
-  if (tour.version !== 3)
-    errors.push("version must be 3 for a generated story");
+  if (tour.version !== 3 && tour.version !== 4)
+    errors.push("version must be 3 or 4 for a generated story");
   if (!tour.mode) errors.push("mode is required for a generated story");
   if (isBlankNarrative(tour.summary)) {
     errors.push("summary must explain the generated reading path");
@@ -2913,7 +2933,7 @@ function lintChapters(steps, add) {
       );
     }
     if (previous !== void 0 && !isSweep(step)) {
-      const opener = step.kind === "concept" ? plainText(step.body).slice(0, 220) : plainText(step.beats?.[0]?.text ?? "");
+      const opener = step.kind === "concept" ? plainText(step.body ?? step.narration ?? "").slice(0, 220) : plainText(step.beats?.[0]?.text ?? "");
       const firstSentence = opener.split(/(?<=[.!?])\s/)[0] ?? opener;
       if (!SEAM_CUE.test(firstSentence)) {
         add(
@@ -3132,7 +3152,7 @@ function runStoryCheck(repo, storyPath) {
   const tour = parsed;
   report.tour = tour;
   report.errors.push(
-    ...tour.version === 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)
+    ...tour.version >= 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)
   );
   if (/(^|\/)\.diffstory\/stories\//.test(story) && !tour.storyScope?.includedFiles?.length) {
     report.errors.push("stories under .diffstory/stories/ need storyScope.includedFiles");

@@ -77,7 +77,7 @@ test('generated-story validation requires context, camera framing, and narrated 
   assert.deepEqual(validateTour(legacyCompatible), []);
 
   const generatedErrors = validateGeneratedTour(legacyCompatible);
-  assert.ok(generatedErrors.includes('version must be 3 for a generated story'));
+  assert.ok(generatedErrors.includes('version must be 3 or 4 for a generated story'));
   assert.ok(generatedErrors.includes('mode is required for a generated story'));
   assert.ok(generatedErrors.includes('intent is required for a generated story'));
   assert.ok(generatedErrors.includes('steps[0].viewport is required for a generated story'));
@@ -393,7 +393,7 @@ test('accepts the pure deleted-file sentinel anchor', () => {
 });
 
 test('flags unsupported version, missing title, and empty steps', () => {
-  const errs = validateTour({ version: 4, steps: [] });
+  const errs = validateTour({ version: 5, steps: [] });
   assert.ok(errs.some((e) => e.includes('version')));
   assert.ok(errs.some((e) => e.includes('title')));
   assert.ok(errs.some((e) => e.includes('steps')));
@@ -430,7 +430,7 @@ test('story v3 validates semantic moves and cross-file paired views', () => {
   const errors = (step, version = 3, scope = story.storyScope) => validateTour({
     ...story, version, storyScope: scope, steps: [{ ...story.steps[0], ...step }],
   });
-  assert.ok(errors({}, 2).includes('steps[0].moves and pairedView require story version 3'));
+  assert.ok(errors({}, 2).includes('steps[0].moves and pairedView require story version 3 or 4'));
   assert.ok(errors({ moves: [...story.steps[0].moves, ...Array.from({ length: 5 }, (_, i) => ({
     ...story.steps[0].moves[1], id: `extra-${i}`,
   }))] }).includes('steps[0].moves must contain at most 6 moves'));
@@ -1223,4 +1223,93 @@ test('concept steps cannot carry a landing', () => {
     ],
   };
   assert.ok(validateTour(tour).some((e) => e.includes('landing')));
+});
+
+const pageConcept = (overrides = {}) => ({
+  id: 'page',
+  order: 1,
+  title: 'How margin moves with price',
+  kind: 'concept',
+  page: '<!doctype html><html><head><script src="https://cdn.jsdelivr.net/npm/d3@7"></script></head><body><svg id="c"></svg><script>d3.select("#c")</script></body></html>',
+  narration: 'Drag the price and watch the margin line cross the liquidation threshold.',
+  ...overrides,
+});
+const v4Tour = (steps, overrides = {}) => ({ ...v2Tour(steps), version: 4, ...overrides });
+
+test('schema v4 accepts a page concept with no preparesFor', () => {
+  assert.deepEqual(validateTour(v4Tour([pageConcept(), v2CodeStep('code', 2)])), []);
+});
+
+test('page concepts require story version 4', () => {
+  const errors = validateTour({ ...v2Tour([pageConcept(), v2CodeStep('code', 2)]), version: 3 });
+  assert.ok(errors.includes('steps[0].page requires story version 4'), errors.join('; '));
+});
+
+test('page concepts need a non-empty page and plain-text narration', () => {
+  const missing = validateTour(v4Tour([pageConcept({ page: ' ', narration: '' }), v2CodeStep('code', 2)]));
+  assert.ok(missing.includes('steps[0].page must be a non-empty string'), missing.join('; '));
+  assert.ok(missing.includes('steps[0].narration is required'), missing.join('; '));
+  const marked = validateTour(v4Tour([pageConcept({ narration: 'Drag <strong>price</strong>.' }), v2CodeStep('code', 2)]));
+  assert.ok(marked.some((e) => e.startsWith('steps[0].narration ')), marked.join('; '));
+});
+
+test('page and body are mutually exclusive; narration needs page', () => {
+  const both = validateTour(v4Tour([pageConcept({ body: 'text' }), v2CodeStep('code', 2)]));
+  assert.ok(both.includes('steps[0] concept step takes either page or body, not both'), both.join('; '));
+  const legacyWithNarration = validateTour(v4Tour([v2ConceptStep({ narration: 'x' }), v2CodeStep('code', 2)]));
+  assert.ok(legacyWithNarration.includes('steps[0].narration is only allowed with page'), legacyWithNarration.join('; '));
+  const withDiagram = validateTour(v4Tour([pageConcept({ diagram: { type: 'mermaid', source: 'flowchart LR\n A --> B', caption: 'c' } }), v2CodeStep('code', 2)]));
+  assert.ok(withDiagram.includes('steps[0].diagram is only allowed with body'), withDiagram.join('; '));
+});
+
+test('v4 lifts adjacency, last-step, and next-step preparesFor rules', () => {
+  const tour = v4Tour([
+    pageConcept({ id: 'a', order: 1 }),
+    pageConcept({ id: 'b', order: 2 }),
+    v2CodeStep('code', 3),
+    v2ConceptStep({ id: 'legacy', order: 4, preparesFor: ['code'] }),
+    pageConcept({ id: 'z', order: 5 }),
+  ]);
+  const errors = validateTour(tour);
+  assert.ok(!errors.some((e) => /adjacent|last step|immediately following|must reference later/.test(e)), errors.join('; '));
+});
+
+test('v4 preparesFor still must name existing code steps', () => {
+  const errors = validateTour(v4Tour([pageConcept({ preparesFor: ['ghost'] }), v2CodeStep('code', 2)]));
+  assert.ok(errors.some((e) => e.includes('"ghost" is unknown')), errors.join('; '));
+  const toConcept = validateTour(v4Tour([pageConcept({ id: 'a', preparesFor: ['b'] }), pageConcept({ id: 'b', order: 2 }), v2CodeStep('code', 3)]));
+  assert.ok(toConcept.some((e) => e.includes('not concept "b"')), toConcept.join('; '));
+});
+
+test('v4 still rejects code fields on page concepts and still needs a code step', () => {
+  const errors = validateTour(v4Tour([pageConcept({ file: 'x.ts' }), v2CodeStep('code', 2)]));
+  assert.ok(errors.includes('steps[0].file is not allowed for a concept step'), errors.join('; '));
+  assert.ok(validateTour(v4Tour([pageConcept()])).includes('steps must include at least one code step'));
+});
+
+test('v4 generated stories have no concept cap and no word bounds', () => {
+  const tour = v4Tour([
+    pageConcept({ id: 'a', order: 1 }), pageConcept({ id: 'b', order: 2 }),
+    v2ConceptStep({ id: 'short', order: 3, body: 'Tiny.', preparesFor: ['code'] }),
+    pageConcept({ id: 'd', order: 4 }), v2CodeStep('code', 5),
+  ], { mode: 'brief' });
+  assert.deepEqual(validateGeneratedConceptSteps(tour), []);
+});
+
+test('v3 generated stories keep the concept budget and word bounds', () => {
+  const tooMany = { ...v2Tour([
+    v2ConceptStep({ id: 'concept-a', body: longPrimerBody, preparesFor: ['code-a'] }),
+    v2CodeStep('code-a', 2),
+    v2ConceptStep({ id: 'concept-b', order: 3, body: longPrimerBody, preparesFor: ['code-b'] }),
+    v2CodeStep('code-b', 4),
+  ], { mode: 'brief' }), version: 3 };
+  assert.ok(validateGeneratedConceptSteps(tooMany).includes('brief stories can include at most one concept step'));
+});
+
+test('generated stories accept version 3 or 4 and moves are allowed in v4', () => {
+  const errors = validateGeneratedTour(v4Tour([pageConcept(), v2CodeStep('code', 2)], { mode: 'guided' }));
+  assert.ok(!errors.some((e) => e.startsWith('version must')), errors.join('; '));
+  assert.ok(validateGeneratedTour({ ...v2Tour([v2CodeStep('code', 1)]), mode: 'guided' }).includes('version must be 3 or 4 for a generated story'));
+  const moves = validateTour(v4Tour([v2CodeStep('code', 1, { moves: [] })]));
+  assert.ok(!moves.some((e) => e.includes('require story version 3')), moves.join('; '));
 });

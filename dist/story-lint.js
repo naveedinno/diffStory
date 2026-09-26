@@ -270,7 +270,7 @@ function lintChapters(steps, add) {
         }
         if (previous !== undefined && !isSweep(step)) {
             const opener = step.kind === "concept"
-                ? plainText(step.body).slice(0, 220)
+                ? plainText(step.body ?? step.narration ?? "").slice(0, 220)
                 : plainText(step.beats?.[0]?.text ?? "");
             const firstSentence = opener.split(/(?<=[.!?])\s/)[0] ?? opener;
             if (!SEAM_CUE.test(firstSentence)) {

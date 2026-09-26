@@ -8,6 +8,9 @@
 export function isCodeStep(step) {
     return step.kind !== 'concept';
 }
+export function isPageConcept(step) {
+    return step.kind === 'concept' && typeof step.page === 'string';
+}
 /**
  * Every changed span a code step claims for the coverage gate. `ranges` exists so
  * one step can honestly claim scattered edits (a rename across twenty call sites)

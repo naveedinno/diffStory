@@ -22,6 +22,7 @@ export type StepKind = CodeStepKind | 'concept';
 export type StoryStepSceneLayout =
   | 'concept-document'
   | 'concept-diagram'
+  | 'concept-page'
   | 'code-focus'
   | 'logic-move'
   | 'paired-code';
@@ -289,25 +290,48 @@ export interface ConceptDiagram {
 }
 
 /** A short document stop that teaches a mental model before dependent code. */
-export interface ConceptTourStep extends TourStepBase {
+export interface LegacyConceptTourStep extends TourStepBase {
   kind: 'concept';
   /**
    * Block-tier narrative HTML: paragraphs, h2-h4, lists, quotes, `pre`, tables,
-   * and definition lists. The only field that may carry block markup.
-   * See docs/story-schema.md for the element and attribute allowlist.
+   * and definition lists. See docs/story-schema.md for the allowlist.
    */
   body: string;
   /** Later code-step ids this primer exists to prepare the reviewer for. */
   preparesFor: string[];
   /** At most one optional local Mermaid diagram. */
   diagram?: ConceptDiagram;
+  page?: never;
+  narration?: never;
 }
+
+/**
+ * A v4 concept stop the author builds as a whole HTML page. The app never parses
+ * it: the page is served from its own endpoint into a sandboxed iframe.
+ */
+export interface PageConceptTourStep extends TourStepBase {
+  kind: 'concept';
+  /** A complete HTML document. Any markup, script, or CDN resource. */
+  page: string;
+  /** Plain text Aloud speaks and screen readers announce for the page. */
+  narration: string;
+  /** Optional later code-step ids this page prepares the reviewer for. */
+  preparesFor?: string[];
+  body?: never;
+  diagram?: never;
+}
+
+export type ConceptTourStep = LegacyConceptTourStep | PageConceptTourStep;
 
 /** One stop on the guided tour. */
 export type TourStep = CodeTourStep | ConceptTourStep;
 
 export function isCodeStep(step: TourStep): step is CodeTourStep {
   return step.kind !== 'concept';
+}
+
+export function isPageConcept(step: TourStep): step is PageConceptTourStep {
+  return step.kind === 'concept' && typeof (step as PageConceptTourStep).page === 'string';
 }
 
 /**
@@ -321,8 +345,8 @@ export function claimedRanges(step: CodeTourStep): Array<[number, number]> {
 
 /** The whole reading plan the AI emits. */
 export interface Tour {
-  /** v1 contains code-only steps; v2 permits concepts; v3 permits semantic moves. */
-  version: 1 | 2 | 3;
+  /** v1 code-only; v2 concepts; v3 semantic moves; v4 page concepts and free concept placement. */
+  version: 1 | 2 | 3 | 4;
   /** SHA-256 of the exact rendered git diff when the story was last generated or repaired. */
   diffFingerprint?: string;
   /** Immutable post-story repository evidence used for scope-aware freshness and since-story diffs. */

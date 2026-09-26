@@ -64,7 +64,7 @@ export function runStoryCheck(repo, storyPath) {
     }
     const tour = parsed;
     report.tour = tour;
-    report.errors.push(...(tour.version === 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)));
+    report.errors.push(...(tour.version >= 3 ? validateNewGeneratedStory(tour) : validateGeneratedTour(tour)));
     if (/(^|\/)\.diffstory\/stories\//.test(story) && !tour.storyScope?.includedFiles?.length) {
         report.errors.push("stories under .diffstory/stories/ need storyScope.includedFiles");
     }

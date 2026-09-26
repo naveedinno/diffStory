@@ -378,7 +378,7 @@ function buildConceptStep(step, byId) {
         kindLabel: STEP_KIND_LABEL.concept,
         sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined }),
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
-        body: narrative(step.body, 'block'),
+        body: narrative(step.body ?? '', 'block'),
         diagram: step.diagram
             ? {
                 type: step.diagram.type,
@@ -388,7 +388,7 @@ function buildConceptStep(step, byId) {
                 caption: narrative(step.diagram.caption, 'inline'),
             }
             : undefined,
-        preparesFor: step.preparesFor
+        preparesFor: (step.preparesFor ?? [])
             .map((id) => byId.get(id))
             .filter((target) => !!target && isCodeStep(target))
             .map((target) => ({ id: target.id, order: target.order, title: narrative(target.title, 'inline') }))

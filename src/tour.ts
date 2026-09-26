@@ -705,13 +705,34 @@ function validateConceptDiagram(
 function validateConceptStep(
   step: Record<string, unknown>,
   where: string,
+  storyVersion: unknown,
   errors: string[],
 ): void {
-  if (isBlankNarrative(step.body)) errors.push(`${where}.body is required`);
-  // The one block-tier field in the whole story: headings, lists, tables, code.
-  validateNarrative(step.body, `${where}.body`, "block", errors);
+  const isPage = step.page !== undefined;
+  if (isPage && step.body !== undefined)
+    errors.push(`${where} concept step takes either page or body, not both`);
+  if (isPage) {
+    if (storyVersion !== 4)
+      errors.push(`${where}.page requires story version 4`);
+    // The page is the author's own document. It is served into a sandbox and
+    // never parsed here, so the only check is that there is something to serve.
+    if (typeof step.page !== "string" || !step.page.trim())
+      errors.push(`${where}.page must be a non-empty string`);
+    if (isBlankNarrative(step.narration))
+      errors.push(`${where}.narration is required`);
+    validateNarrative(step.narration, `${where}.narration`, "text", errors);
+    if (step.diagram !== undefined)
+      errors.push(`${where}.diagram is only allowed with body`);
+  } else {
+    if (isBlankNarrative(step.body)) errors.push(`${where}.body is required`);
+    // The one block-tier field in the whole story: headings, lists, tables, code.
+    validateNarrative(step.body, `${where}.body`, "block", errors);
+    if (step.narration !== undefined)
+      errors.push(`${where}.narration is only allowed with page`);
+    validateConceptDiagram(step.diagram, where, errors);
+  }
   validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, {
-    required: true,
+    required: storyVersion !== 4,
     nonEmpty: true,
   });
   if (Array.isArray(step.preparesFor)) {
@@ -721,7 +742,6 @@ function validateConceptStep(
     if (new Set(refs).size !== refs.length)
       errors.push(`${where}.preparesFor must not contain duplicate step ids`);
   }
-  validateConceptDiagram(step.diagram, where, errors);
   for (const field of CONCEPT_CODE_FIELDS) {
     if (step[field] !== undefined)
       errors.push(`${where}.${field} is not allowed for a concept step`);
@@ -909,8 +929,8 @@ function validateMoves(
   errors: string[],
 ): void {
   if (step.moves === undefined && step.pairedView === undefined) return;
-  if (storyVersion !== 3)
-    errors.push(`${where}.moves and pairedView require story version 3`);
+  if (storyVersion !== 3 && storyVersion !== 4)
+    errors.push(`${where}.moves and pairedView require story version 3 or 4`);
   if (step.kind === "context") {
     if (step.moves !== undefined)
       errors.push(`${where}.moves is not allowed for a context step`);
@@ -1134,8 +1154,8 @@ export function validateTour(obj: unknown): string[] {
     return ["story must be a JSON object"];
   const t = obj as Record<string, unknown>;
 
-  if (t.version !== 1 && t.version !== 2 && t.version !== 3)
-    errors.push("version must be 1, 2, or 3");
+  if (t.version !== 1 && t.version !== 2 && t.version !== 3 && t.version !== 4)
+    errors.push("version must be 1, 2, 3, or 4");
   if (
     t.diffFingerprint !== undefined &&
     !/^[0-9a-f]{64}$/i.test(String(t.diffFingerprint))
@@ -1232,9 +1252,9 @@ export function validateTour(obj: unknown): string[] {
       return;
     }
     if (stepKind === "concept") {
-      if (t.version !== 2 && t.version !== 3)
-        errors.push(`${where}.kind "concept" requires story version 2 or 3`);
-      validateConceptStep(step, where, errors);
+      if (t.version !== 2 && t.version !== 3 && t.version !== 4)
+        errors.push(`${where}.kind "concept" requires story version 2, 3, or 4`);
+      validateConceptStep(step, where, t.version, errors);
     } else {
       codeStepCount += 1;
       validateCodeStep(step, where, storyFiles, t.version, errors);
@@ -1270,18 +1290,22 @@ export function validateTour(obj: unknown): string[] {
             (ref): ref is string => typeof ref === "string",
           )
         : [];
-      const next = readingPath[pathIndex + 1]?.step;
-      if (!next || typeof next !== "object" || next === null) {
-        errors.push(`steps[${i}] concept step cannot be the last step`);
-      } else if ((next as Record<string, unknown>).kind === "concept") {
-        errors.push(`steps[${i}] concept steps cannot be adjacent`);
-      } else if (
-        typeof (next as Record<string, unknown>).id === "string" &&
-        !refs.includes((next as Record<string, unknown>).id as string)
-      ) {
-        errors.push(
-          `steps[${i}].preparesFor must include the immediately following code step`,
-        );
+      // v4 hands placement to the author: concepts may sit back to back, open
+      // or close the story, and stand alone. Earlier versions keep their rules.
+      if (t.version !== 4) {
+        const next = readingPath[pathIndex + 1]?.step;
+        if (!next || typeof next !== "object" || next === null) {
+          errors.push(`steps[${i}] concept step cannot be the last step`);
+        } else if ((next as Record<string, unknown>).kind === "concept") {
+          errors.push(`steps[${i}] concept steps cannot be adjacent`);
+        } else if (
+          typeof (next as Record<string, unknown>).id === "string" &&
+          !refs.includes((next as Record<string, unknown>).id as string)
+        ) {
+          errors.push(
+            `steps[${i}].preparesFor must include the immediately following code step`,
+          );
+        }
       }
       for (const ref of refs) {
         const target = stepsById.get(ref);
@@ -1297,6 +1321,7 @@ export function validateTour(obj: unknown): string[] {
           );
         }
         if (
+          t.version !== 4 &&
           typeof step.order === "number" &&
           typeof target.order === "number" &&
           target.order <= step.order
@@ -1400,6 +1425,8 @@ export function validateGeneratedConceptSteps(tour: Tour): string[] {
       } => entry.step.kind === "concept",
     );
   if (!concepts.length) return errors;
+  // v4 stories are free: no per-mode cap and no word bounds on any concept.
+  if (tour.version === 4) return errors;
 
   const mode = tour.mode ?? "guided";
   const limit = mode === "brief" ? 1 : mode === "detailed" ? 3 : 2;
@@ -1438,8 +1465,8 @@ export function validateGeneratedTour(tour: Tour): string[] {
   const errors: string[] = validateTour(tour);
   errors.push(...validateGeneratedConceptSteps(tour));
 
-  if (tour.version !== 3)
-    errors.push("version must be 3 for a generated story");
+  if (tour.version !== 3 && tour.version !== 4)
+    errors.push("version must be 3 or 4 for a generated story");
   if (!tour.mode) errors.push("mode is required for a generated story");
   // Callers normally hand this a tour that already passed validateTour(), but it
   // is exported and agent output can be arbitrary — report a missing field
