@@ -18,7 +18,7 @@ import { orderedSteps } from './tour.js';
 import { claimedRanges } from './types.js';
 import { computeCoverage, filesForStoryCoverage } from './coverage.js';
 export { filesForStoryCoverage } from './coverage.js';
-import { isCodeStep } from './types.js';
+import { isCodeStep, isPageConcept } from './types.js';
 import { narrative, narrativeText, type Narrative } from './narrative.js';
 import { diffLineTokens, type IntraSides } from './intra-line.js';
 import { projectStoryStepScene } from './story-scenes.js';
@@ -241,9 +241,13 @@ export interface ConceptDiagramView {
 
 export interface ConceptStepView extends StepViewBase {
   kind: 'concept';
-  /** The only block-tier narrative in the model: headings, lists, tables, code. */
-  body: Narrative;
+  /** The only block-tier narrative in the model: headings, lists, tables, code. Legacy only. */
+  body?: Narrative;
   diagram?: ConceptDiagramView;
+  /** True for a v4 page concept; the page itself never enters the view model. */
+  hasPage: boolean;
+  /** Plain-text narration for a page concept, spoken by Aloud. Page concepts only. */
+  narration?: Narrative;
   preparesFor: Array<{ id: string; order: number; title: Narrative }>;
 }
 
@@ -713,6 +717,7 @@ function buildLogicMoves(step: CodeTourStep, oldFile: string, ordered: TourStep[
 }
 
 function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): ConceptStepView {
+  const hasPage = isPageConcept(step);
   return {
     id: step.id,
     order: step.order,
@@ -720,9 +725,12 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
     chapter: chapterLabel(step),
     kind: 'concept',
     kindLabel: STEP_KIND_LABEL.concept,
-    sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined }),
+    sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined, hasPage }),
     tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
-    body: narrative(step.body ?? '', 'block'),
+    hasPage,
+    // The page itself stays on disk: only the concept-page endpoint serves it.
+    narration: hasPage ? narrative(step.narration, 'text') : undefined,
+    body: hasPage ? undefined : narrative(step.body, 'block'),
     diagram: step.diagram
       ? {
           type: step.diagram.type,

@@ -22,3 +22,8 @@ test('a resolved paired view wins over the general logic-move layout', () => {
     'paired-code',
   );
 });
+
+test('page concepts project to the concept-page scene', () => {
+  assert.equal(projectStoryStepScene({ kind: 'concept', hasDiagram: false, hasPage: true }), 'concept-page');
+  assert.equal(projectStoryStepScene({ kind: 'concept', hasDiagram: true }), 'concept-diagram');
+});

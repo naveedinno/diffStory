@@ -18,7 +18,7 @@ import { orderedSteps } from './tour.js';
 import { claimedRanges } from './types.js';
 import { computeCoverage, filesForStoryCoverage } from './coverage.js';
 export { filesForStoryCoverage } from './coverage.js';
-import { isCodeStep } from './types.js';
+import { isCodeStep, isPageConcept } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
 import { diffLineTokens } from './intra-line.js';
 import { projectStoryStepScene } from './story-scenes.js';
@@ -369,6 +369,7 @@ function buildLogicMoves(step, oldFile, ordered) {
     });
 }
 function buildConceptStep(step, byId) {
+    const hasPage = isPageConcept(step);
     return {
         id: step.id,
         order: step.order,
@@ -376,9 +377,12 @@ function buildConceptStep(step, byId) {
         chapter: chapterLabel(step),
         kind: 'concept',
         kindLabel: STEP_KIND_LABEL.concept,
-        sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined }),
+        sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined, hasPage }),
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
-        body: narrative(step.body ?? '', 'block'),
+        hasPage,
+        // The page itself stays on disk: only the concept-page endpoint serves it.
+        narration: hasPage ? narrative(step.narration, 'text') : undefined,
+        body: hasPage ? undefined : narrative(step.body, 'block'),
         diagram: step.diagram
             ? {
                 type: step.diagram.type,

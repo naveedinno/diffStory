@@ -409,7 +409,7 @@ function conceptStepPanel(
             <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
           </div>
           <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
-          <div class="ds-concept-body ds-md">${s.body.html}</div>
+          <div class="ds-concept-body ds-md">${s.body?.html ?? ""}</div>
         </div>
         ${diagram}
         <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
@@ -435,7 +435,7 @@ function endsSentence(text: string): string {
  * shaping now, so the renderer only decides what is said in what order.
  */
 function conceptSpeechText(s: ConceptStepView): string {
-  return [s.title.speech, s.body.speech, s.diagram?.caption.speech]
+  return [s.title.speech, s.narration?.speech, s.body?.speech, s.diagram?.caption.speech]
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part))
     .map(endsSentence)

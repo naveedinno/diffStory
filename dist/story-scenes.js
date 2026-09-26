@@ -4,8 +4,11 @@
  * cross-file relationship already determines the widest layout.
  */
 export function projectStoryStepScene(facts) {
-    if (facts.kind === 'concept')
+    if (facts.kind === 'concept') {
+        if (facts.hasPage)
+            return 'concept-page';
         return facts.hasDiagram ? 'concept-diagram' : 'concept-document';
+    }
     if (facts.paired)
         return 'paired-code';
     if (facts.hasMoves)

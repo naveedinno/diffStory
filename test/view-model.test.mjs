@@ -142,6 +142,42 @@ test('concept primers stay in reading order but out of file and coverage views',
   assert.equal(model.trust.uncovered.length, 0);
 });
 
+test('a v4 page concept carries narration but never exposes its page HTML', () => {
+  const parsed = parseUnifiedDiff(DIFF);
+  const tour = {
+    version: 4,
+    title: 'Page-concept story',
+    summary: 'Play with the margin simulator, then review the change that backs it.',
+    steps: [
+      {
+        id: 'primer',
+        order: 1,
+        title: 'Margin simulator',
+        kind: 'concept',
+        page: '<html><head><script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head><body>Drag the price</body></html>',
+        narration: 'Drag the price and watch the margin line cross the liquidation threshold.',
+      },
+      {
+        id: 'implementation',
+        order: 2,
+        title: 'Apply the policy',
+        file: 'a.ts',
+        range: [1, 3],
+        kind: 'changed',
+        why: 'The changed line applies the policy.',
+      },
+    ],
+  };
+
+  const model = buildReviewModel(process.cwd(), tour, parsed);
+  const concept = model.steps.find((s) => s.kind === 'concept');
+  assert.equal(concept.hasPage, true);
+  assert.equal(concept.sceneLayout, 'concept-page');
+  assert.equal(concept.narration.text, 'Drag the price and watch the margin line cross the liquidation threshold.');
+  assert.equal(concept.body, undefined);
+  assert.doesNotMatch(JSON.stringify(model), /cdn\.jsdelivr/, 'the page HTML never enters the view model');
+});
+
 test('story shape and verified evolution project into the review model', () => {
   const repo = mkdtempSync(join(tmpdir(), 'ds-view-evolution-'));
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();

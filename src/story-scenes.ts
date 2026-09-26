@@ -4,7 +4,7 @@
 import type { StoryStepSceneLayout } from './types.js';
 
 export type StoryStepSceneFacts =
-  | { kind: 'concept'; hasDiagram: boolean }
+  | { kind: 'concept'; hasDiagram: boolean; hasPage?: boolean }
   | { kind: 'code'; hasMoves: boolean; paired: boolean };
 
 /**
@@ -13,7 +13,10 @@ export type StoryStepSceneFacts =
  * cross-file relationship already determines the widest layout.
  */
 export function projectStoryStepScene(facts: StoryStepSceneFacts): StoryStepSceneLayout {
-  if (facts.kind === 'concept') return facts.hasDiagram ? 'concept-diagram' : 'concept-document';
+  if (facts.kind === 'concept') {
+    if (facts.hasPage) return 'concept-page';
+    return facts.hasDiagram ? 'concept-diagram' : 'concept-document';
+  }
   if (facts.paired) return 'paired-code';
   if (facts.hasMoves) return 'logic-move';
   return 'code-focus';
