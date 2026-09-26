@@ -489,8 +489,27 @@ export function startReviewEngine(options){
       figure.removeAttribute('data-render-state');figure.classList.remove('is-error','is-portrait');
       var output=$('[data-mermaid-output]',figure);if(output)output.textContent='';
     });
-    renderConceptDiagrams(document.body);
+    renderConceptDiagrams(document.body);mountConceptPages(document.body);
   });
+  function conceptPageTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';}
+  function mountConceptPages(panel){
+    $all('[data-concept-frame]',panel).forEach(function(frame){
+      if(frame._dsMounted)return;frame._dsMounted=true;
+      var figure=closest(frame,'[data-concept-page]');
+      frame.addEventListener('load',function(){if(figure)figure.classList.add('is-loaded');});
+      frame.src=reviewPageUrl('/api/review/concept-page?index='+encodeURIComponent(frame.getAttribute('data-concept-index')||'')+'&theme='+conceptPageTheme());
+    });
+  }
+  function syncConceptPageTheme(){
+    var theme=conceptPageTheme();
+    $all('[data-concept-frame]').forEach(function(frame){if(frame.contentWindow)frame.contentWindow.postMessage({type:'diffstory:theme',theme:theme},'*');});
+  }
+  function onConceptFrameMessage(e){
+    var d=e.data;if(!d||d.type!=='diffstory:key'||typeof d.key!=='string')return;
+    var frame=null;$all('[data-concept-frame]').forEach(function(f){if(f.contentWindow===e.source)frame=f;});
+    if(!frame)return;
+    onKey({key:d.key,code:String(d.code||''),shiftKey:!!d.shiftKey,altKey:!!d.altKey,ctrlKey:!!d.ctrlKey,metaKey:!!d.metaKey,repeat:!!d.repeat,isComposing:false,target:frame,defaultPrevented:false,preventDefault:function(){},stopPropagation:function(){}});
+  }
   var STORY_MODELS={
     claude:[['Best quality','opus','Use the strongest available model for the clearest story'],['Lower cost','haiku','Use a smaller model for a faster, cheaper run']],
     // Safe while the live catalog loads: use the default from the exact Codex
@@ -973,7 +992,7 @@ export function startReviewEngine(options){
         var template=document.createElement('template');template.innerHTML=html.trim();var fresh=template.content.firstElementChild;
         if(!fresh||!fresh.classList||!fresh.classList.contains('ds-step'))throw new Error('Invalid story step');
         var callbacks=panel._dsStepCallbacks||[];panel.replaceWith(fresh);stepPanels=$all('.ds-step');
-        mountCommentPins(fresh);adoptStepDocks();renderConceptDiagrams(fresh);setLineWrap(document.body.classList.contains('ds-line-wrap'),false);$all('.ds-filepanel,.ds-diff',fresh).forEach(updateChangeNav);
+        mountCommentPins(fresh);adoptStepDocks();renderConceptDiagrams(fresh);mountConceptPages(fresh);setLineWrap(document.body.classList.contains('ds-line-wrap'),false);$all('.ds-filepanel,.ds-diff',fresh).forEach(updateChangeNav);
         try{var split=localStorage.getItem('ds-split');if(split)$all('.ds-filepanel,.ds-diff',fresh).forEach(function(holder){holder.style.setProperty('--ds-split',split);});}catch(e){}
         syncSplitPaneLayouts(fresh);
         callbacks.forEach(function(callback){callback(true);});
@@ -1035,6 +1054,7 @@ export function startReviewEngine(options){
     if(tourView)tourView.scrollTop=0;
     var ap=stepPanels[i];if(ap)ap.scrollTop=0;
     if(ap)renderConceptDiagrams(ap);
+    if(ap)mountConceptPages(ap);
     applyResponsiveStoryMode(ap);
     syncSplitPaneLayouts(ap);
     // A hidden step has no box to measure, and a lazy one brings its own dock and
@@ -3770,6 +3790,7 @@ export function startReviewEngine(options){
     b=closest(t,'[data-goto-file]');if(b){closeDriftDrawer();setView('files');selectFileByPath(b.getAttribute('data-goto-file'));collapseCompactSidebar();return;}
     b=closest(t,'[data-explain]');if(b){repairStory('explain',{file:b.getAttribute('data-story-file'),line:Number(b.getAttribute('data-story-line')||0)});return;}
     b=closest(t,'[data-story-repair]');if(b){repairStory(b.getAttribute('data-story-repair'),{file:b.getAttribute('data-story-file'),stepId:b.getAttribute('data-story-step')});var det=closest(b,'details');if(det)det.open=false;return;}
+    var cpf=closest(t,'[data-concept-page-fullscreen]');if(cpf){var cpfig=closest(cpf,'[data-concept-page]');if(cpfig&&cpfig.requestFullscreen)cpfig.requestFullscreen().catch(function(){});return;}
     b=closest(t,'.ds-stepcard');if(b){setActive(Number(b.getAttribute('data-step-index')));collapseCompactSidebar();return;}
   }
   function onKey(e){
@@ -3988,6 +4009,8 @@ export function startReviewEngine(options){
     document.addEventListener('click',onClick);
     document.addEventListener('contextmenu',openSelectionMenu);
     document.addEventListener('keydown',onKey);
+    window.addEventListener('message',onConceptFrameMessage);
+    new MutationObserver(syncConceptPageTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
     document.addEventListener('fullscreenchange',syncMermaidFullscreen);
     document.addEventListener('pointerover',onFilmPointerOver);
     document.addEventListener('pointerout',onFilmPointerOut);
