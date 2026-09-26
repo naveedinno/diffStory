@@ -9,8 +9,9 @@ The checker enforces every line of this; knowing it saves a rewrite.
 - Every story under `.diffstory/stories/` carries a top-level `storyScope` with
   `includedFiles`, and every code step's `file` appears in it. The app rejects
   the story otherwise.
-- Newly generated stories use `"version": 3`. Older versions stay readable; do
-  not rewrite an existing story just to modernize its number.
+- Newly generated stories use `"version": 4`. Older versions stay readable; do
+  not rewrite an existing story just to modernize its number. A `page` concept
+  needs version 4, so raise an older story to 4 when you add one.
 - Every newly generated story carries `storyArc` with `changeType`, `shape`, and
   a plain-text `readingPath` naming the real review stages in story order with
   ASCII ` -> ` separators.
@@ -34,8 +35,9 @@ The checker enforces every line of this; knowing it saves a rewrite.
   ranges inside `viewport`; the lines the story is currently talking about.
   Full contracts: `references/camera-and-coverage.md`.
 - `context` steps show unchanged code that helps judge a changed path; they
-  never claim coverage and never carry `ranges`. `concept` steps are short,
-  fileless primers placed immediately before dependent code; same rule.
+  never claim coverage and never carry `ranges`. `concept` steps are fileless
+  pages (`page` + `narration`); same rule. Their full shape is in
+  `references/primers.md`.
 - Optional `landing` on code steps (never on concept steps): `symbol`
   (required), `calledBy` (1-3 names) or `role` (`who`, optional `gate`), and
   optional `when`; plain text, each at most 80 characters (`role.who` 40). The
@@ -48,21 +50,26 @@ Story prose is restricted HTML, not Markdown: `**bold**` renders literally.
 
 | Field | You may write |
 | --- | --- |
-| concept `body` | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
+| concept `body` (legacy) | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
 | `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason`, `moves[].hidden.what` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
+| concept `page` | any complete HTML document; never sanitized; runs sandboxed |
+| concept `narration` | plain text, no tags |
 | every `title`, `moves[].label`, `moves[].hidden.tag`, `storyScope.reviewerNote`, `landing.*` | plain text — no tags at all |
 
 Allowed attributes: `class` on `<span> <code> <td> <th>` (one of `ds-bit`,
 `ds-slot`, `ds-flag`, `ds-val`, `ds-warn`), `scope` on `<th>`,
 `colspan`/`rowspan` (1-20), `data-lang` on `<pre>`. No links, images, SVG,
-`id`, or `style`. Writing about a tag? Escape it: `&lt;script&gt;`.
+`id`, or `style`. Writing about a tag? Escape it: `&lt;script&gt;`. These
+rules cover the prose fields only; a concept `page` is its own document.
 
 **Every `<table>` needs a `<caption>`; a table without one is dropped.** The
 caption is what the read-aloud voice speaks *in place of* the table, so write
 it as the sentence you would say if the table were not there. Use a table only
 when a bit layout, encoding map, or state transition is clearer as a grid.
 
-Use a Mermaid diagram only when it materially clarifies three or more
+Legacy concept steps (a `body` instead of a `page`) may carry a Mermaid
+`diagram`. Keep it intact when repairing; if you must edit it, the legacy rules
+still hold. It earns its place only when it materially clarifies three or more
 actors/components, a real branch, or a state transition: `flowchart`, `sequenceDiagram`, or `stateDiagram-v2`; a caption is required.
 No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives.
 
@@ -70,7 +77,7 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
 
 ```jsonc
 {
-  "version": 3,
+  "version": 4,
   "mode": "guided",
   "title": "Short title for the whole change — plain text, no tags",
   "summary": "1-3 short sentences: how the steps walk the implementation and where to slow down. The goal and designed flow live in intent, not here. Inline tags only, e.g. <code>settleFunding()</code>.",
@@ -128,15 +135,11 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
     {
       "id": "concept-cap-model",
       "order": 2,
-      "title": "How the per-market cap travels",
+      "title": "How the per-market cap clamps a rate",
       "kind": "concept",
-      "body": "One settlement carries a proposed funding rate into a market-specific boundary. The keeper triggers <code>settleFunding()</code>, the entry point chooses the market, and <code>_capRate()</code> applies that market's configured ceiling before balances move. The cap is therefore not a global throttle or a post-settlement correction: it is an input constraint owned by each market. Keep that ownership in mind while reading the helper next. The key review question is whether every caller supplies the matching market configuration and whether the inclusive edge behaves consistently.",
+      "page": "<!doctype html><html><head><style>body{margin:0;padding:24px;font:14px system-ui;background:var(--ds-bg);color:var(--ds-text)}output{display:block;margin-top:12px;color:var(--ds-accent)}</style></head><body><label>Proposed rate, bps <input type=\"range\" id=\"r\" min=\"0\" max=\"300\" value=\"80\"></label><output id=\"o\"></output><script>var r=document.getElementById('r'),o=document.getElementById('o'),cap=200;function f(){var v=+r.value;o.textContent=v>cap?'settles at the cap: '+cap+' bps (asked '+v+')':'settles unchanged: '+v+' bps'}r.oninput=f;f()</script></body></html>",
+      "narration": "Drag the proposed rate. Up to this market's cap of 200 basis points it settles unchanged; past the cap it settles at exactly 200, which is the inclusive check the helper in step 3 owns.",
       "preparesFor": ["s2"],
-      "diagram": {
-        "type": "mermaid",
-        "source": "sequenceDiagram\n  actor Keeper\n  participant Funding\n  participant MarketConfig\n  participant Balances\n  Keeper->>Funding: settle\n  Funding->>MarketConfig: read cap\n  Funding->>Funding: clamp rate\n  Funding->>Balances: mutate with chosen rate",
-        "caption": "The keeper's proposed rate crosses the per-market cap before balance mutation."
-      },
       "tags": ["mental-model"]
     },
     {
@@ -185,7 +188,8 @@ Schema spot-check, especially on long stories. Long stories are where authors
 drift into an abbreviated shape, and the app rejects the whole story over it.
 Confirm, in order: top level has `title` and `summary`; every step has `id`,
 `order` (a number — never omit it), `title`, `kind`; every code step has
-`file`, `range`, `viewport`, `highlights`, `why`, `beats`; a step with
+`file`, `range`, `viewport`, `highlights`, `why`, `beats`; every new concept
+step has `page` and `narration` and none of those code fields; a step with
 `ranges` is a tagged changed/new-file sweep listing every full span and
 containing `range`; every beat has `text` (never `body`) and non-empty
 `highlights`. Those five — top-level `title`, top-level `summary`, step

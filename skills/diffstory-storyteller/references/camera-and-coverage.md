@@ -121,7 +121,7 @@ to save room — beats use `text`, never `body`.
 }
 ```
 
-When narrative elegance and coverage conflict, coverage wins. Concept primers
+When narrative elegance and coverage conflict, coverage wins. Concept pages
 never replace a changed step in the ledger. Generated or oversized files the
 prompt excludes get no steps; with `storyScope.includedFiles`, the ledger
 covers only those files and `storyScope.excludedFiles` are outside this story.

@@ -60,7 +60,7 @@ diffStory app.
 - Top-level `hotspots` (at most 3) anchor your honest doubts to code steps;
   `verification` lists what you ran and what you could not; `intent.nonGoals`
   lists deliberate omissions your evidence supports. Never invent any of them.
-- The file format (`"version": 3`, `storyArc`, `evolution`, `base`/`head`,
+- The file format (`"version": 4`, `storyArc`, `evolution`, `base`/`head`,
   deleted files, `range`/`ranges`/`viewport`/`highlights`) is the File
   contract in `references/schema.md`, and the checker enforces it.
 
@@ -76,12 +76,7 @@ selected files, obey it. Any doubt about splitting: one story.
 The prompt asks for `"mode": "brief"`, `"mode": "guided"`, or
 `"mode": "detailed"`. When neither the request nor the preferences name one,
 use guided; "detailed", "line by line", and "audit" mean detailed. Write the
-field in every story file. Concept-primer budgets are hard maxima, and zero is
-right when there is no real gap:
-
-- Brief: at most 1 concept primer.
-- Guided: at most 2 concept primers.
-- Detailed: at most 3 concept primers.
+field in every story file.
 
 ### Brief mode
 
@@ -206,9 +201,9 @@ see to know who calls the change, what enters it, and what consumes the result.
 List up to three terms, roles, or states a newcomer would ask about ("what is
 a single close?", "what is an uncapped amount?"). Teach each where it is first
 needed: one clause in a landing when a sentence is enough, a `context` step
-when the answer is code in another file, a concept primer when it is a model
-(`references/primers.md`). Unexplained domain terms are the most common reason
-a reviewer stops and asks.
+when the answer is code in another file, a concept page when it is a model
+that lands better shown than told (`references/primers.md`). Unexplained
+domain terms are the most common reason a reviewer stops and asks.
 
 The reviewer is auditing AI-authored code and needs a falsifiable mental model
 fast. The story should help them distrust the right places.
@@ -228,8 +223,8 @@ beats follow it.
   then pinned it with tests." Each step continues that arc.
 - Thread rule: each code step's first beat picks up what the previous stop
   established ("Now that the cap is stored, this is `readCap()`, which …").
-  After a primer, apply its mental model directly to the code so the steps
-  read as one continuous story.
+  After a concept page, apply its mental model directly to the code so the
+  steps read as one continuous story.
 - Landing rule: the first beat of EVERY code step lands the listener before it
   says anything about the change, the way a colleague would orient you: "this
   is function x, in file z, that y calls when w." Name the symbol the camera is
@@ -310,8 +305,8 @@ Plan by code logic, not filenames:
   far-apart highlight islands.
 - Context steps are welcome whenever the caller, contract, storage, or config
   a judgment depends on lives in another file or a distant section; title them
-  for the contract they show. Primers only at their just-in-time boundary,
-  never as an up-front glossary.
+  for the contract they show. Put a concept page wherever its model helps
+  most, first and last included; never stack pages up front as a glossary.
 - A small change may be one context-rich changed step. No fixed stop count.
 
 ### 7. Storyboard each stop
@@ -331,13 +326,14 @@ Beat contract:
 
 - Every code step has `beats`: ordered narration units, each with its own
   `text` and non-empty `highlights`. Each beat is a separate speech unit so the
-  voice and the glow move together. Concept primers use `body` instead.
+  voice and the glow move together. Concept pages use `page` and `narration`
+  instead.
 - Use one beat per highlighted code part. Guided and brief: at most three beats;
   detailed: up to five. More review points mean another stop, not a longer beat.
   Do not put one big speech over several highlight groups.
 - The first beat is the landing beat (Landing rule, step 5). A previous context
-  step or primer does not excuse it. Later beats point at the changed decision
-  and its consequence.
+  step or concept page does not excuse it. Later beats point at the changed
+  decision and its consequence.
 
 #### Beat prose: the layer that most often goes flat
 
@@ -409,7 +405,7 @@ Beat 2: I reject over-cap requests before placement, because the old flow only n
 Beat 3: That keeps the helper in the next step focused on the cap math instead of cleanup.
 ```
 
-Concept primers have their own fileless shape (`references/primers.md`).
+Concept pages have their own fileless shape (`references/primers.md`).
 `calls: ["calleeStep"]` on a caller and `returnsTo: "callerStep"` on its callee
 mark real conceptual jumps only, and the `why` names the handoff.
 
@@ -498,7 +494,7 @@ story picker.
   the sentence also names the consequence or review risk.
 - Don't paste one sentence into several steps or number copies of a step; a
   repeated edit is one sweep step.
-- Don't add primers as a glossary or hotspots as decoration ("this is complex").
+- Don't add concept pages as a glossary or hotspots as decoration ("this is complex").
 - Don't make unsupported confidence claims ("this is safe", "tests cover it")
   without the exact condition or evidence, and don't keep a stop whose evidence
   cannot be wrong.

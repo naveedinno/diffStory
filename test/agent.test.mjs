@@ -181,37 +181,31 @@ test('bundled storyteller declares reading shape and frozen first-parent evoluti
   assert.ok(skill.includes('failure trigger -> trust boundary -> fix -> proof'));
 });
 
-test('bundled diffstory-storyteller skill teaches just-in-time concept primers', () => {
+test('bundled diffstory-storyteller skill teaches free concept pages', () => {
   const skill = skillCorpus();
   assert.ok(skill.includes('Concept-gap test'));
-  assert.ok(skill.includes('terminology, roles, relationships, or state model'));
-  assert.ok(skill.includes('immediately before the first code step that depends on it'));
-  assert.ok(skill.includes('Overview is the whole-change reading map'));
-  assert.ok(skill.includes('primer is a just-in-time mental model'));
-  assert.ok(skill.includes('Never place two concept primers next to each other'));
-  assert.ok(skill.includes('Never end the story with a concept primer'));
+  assert.ok(skill.includes('shown than told'));
+  assert.ok(skill.includes('concrete instance from this diff'));
+  assert.ok(skill.includes('`narration` is what you would say while pointing at the page'));
+  assert.ok(skill.includes('`--ds-accent`'));
+  assert.ok(skill.includes('data-ds-theme'));
+  assert.doesNotMatch(skill, /Never place two concept primers next to each other/);
+  assert.doesNotMatch(skill, /Never end the story with a concept primer/);
 });
 
-test('bundled diffstory-storyteller skill pins concept schema, limits, and diagram safety', () => {
+test('bundled diffstory-storyteller skill pins the v4 concept schema and no budgets', () => {
   const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
-  assert.ok(skill.includes('Newly generated stories use `"version": 3`'));
-  assert.ok(skill.includes('60-180 words'));
-  assert.match(skill, /hard maximum\s+of 220 words/);
-  assert.ok(skill.includes('Brief: at most 1 concept primer'));
-  assert.ok(skill.includes('Guided: at most 2 concept primers'));
-  assert.ok(skill.includes('Detailed: at most 3 concept primers'));
-  assert.ok(skill.includes('Concept primers never claim diff coverage'));
-  assert.match(skill, /three or more\s+actors\/components/);
-  assert.ok(skill.includes('flowchart`, `sequenceDiagram`, or `stateDiagram-v2'));
-  assert.ok(skill.includes('caption is required'));
-  assert.ok(skill.includes('No links, URLs, `click`/`href` directives, init/config directives, HTML, images, or custom styling directives'));
+  assert.ok(skill.includes('Newly generated stories use `"version": 4`'));
+  assert.doesNotMatch(skill, /at most \d concept primers?/);
+  assert.doesNotMatch(skill, /60-180 words/);
+  assert.ok(skill.includes('Concept steps never claim diff coverage'));
   assert.ok(flat.includes('must not contain `file`, `range`, `ranges`, `viewport`, `highlights`, `beats`, `why`, `calls`, or `returnsTo`'));
   for (const tag of ['`skim`', '`sweep`', '`mechanical`']) assert.ok(flat.includes(tag));
   assert.ok(skill.includes('Stories longer than 10 steps'));
 });
 
-test('bundled skill schema example is a valid interleaved v3 story', () => {
+test('bundled skill schema example is a valid interleaved v4 story', () => {
   const skill = skillCorpus();
   const example = JSON.parse(skill.split(/^## Schema$/m)[1].split('```jsonc')[1].split('```')[0]);
   assert.deepEqual(validateTour(example), []);
@@ -223,6 +217,10 @@ test('bundled skill schema example is a valid interleaved v3 story', () => {
     [4, 'context'],
   ]);
   assert.deepEqual(example.steps[1].preparesFor, ['s2']);
+  assert.equal(example.version, 4);
+  assert.match(example.steps[1].page, /^<!doctype html>/);
+  assert.equal(typeof example.steps[1].narration, 'string');
+  assert.equal(example.steps[1].body, undefined);
 });
 
 test('bundled diffstory-storyteller skill makes deleted-file steps use the changed kind', () => {
