@@ -321,6 +321,117 @@ test("the payload is metadata-first: no step ships a rendered diff", async () =>
   }
 });
 
+/**
+ * A v4 story whose first step is a free-HTML page concept: the storyteller
+ * hands the reviewer a live sandbox instead of prose. `page` is the exact
+ * fixture Task 1's tour tests use, so this exercises the same author input
+ * end to end through the panel route.
+ */
+function pageConceptRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "diffstory-review-"));
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+  git("init", "-q", "-b", "main");
+  git("config", "user.email", "test@example.com");
+  git("config", "user.name", "Test");
+  mkdirSync(join(dir, "src"), { recursive: true });
+  writeFileSync(
+    join(dir, "src", "order.ts"),
+    "export function place() {\n  return 1;\n}\n",
+  );
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(
+    join(dir, "src", "order.ts"),
+    "export function place() {\n  return 2;\n}\n",
+  );
+  mkdirSync(join(dir, ".diffstory"), { recursive: true });
+  writeFileSync(
+    join(dir, ".diffstory", "story.json"),
+    JSON.stringify({
+      version: 4,
+      title: "Margin moves with price",
+      summary: "A mental model, then the change.",
+      base: "HEAD",
+      steps: [
+        {
+          id: "page",
+          order: 1,
+          title: "How margin moves with price",
+          kind: "concept",
+          page: '<!doctype html><html><head><script src="https://cdn.jsdelivr.net/npm/d3@7"></script></head><body><svg id="c"></svg><script>d3.select("#c")</script></body></html>',
+          narration:
+            "Drag the price and watch the margin line cross the liquidation threshold.",
+        },
+        {
+          id: "s1",
+          order: 2,
+          title: "Place returns two",
+          file: "src/order.ts",
+          range: [1, 3],
+          kind: "changed",
+          why: "The caller needs the new value.",
+        },
+      ],
+    }),
+  );
+  return dir;
+}
+
+test("a page concept step-panel is a sandboxed iframe, never the page's own bytes", async () => {
+  const repo = pageConceptRepo();
+  const { server, base, route } = await boot(repo);
+  try {
+    const payload = shellPayload(
+      await (await fetch(`${base}${route}/review?story=story.json`)).text(),
+    );
+    const panel = await (
+      await fetch(
+        `${base}/api/review/step-panel?index=1&page=${encodeURIComponent(payload.pageToken)}`,
+      )
+    ).text();
+    assert.match(panel, /data-scene-layout="concept-page"/);
+    assert.match(panel, /<iframe[^>]*sandbox="allow-scripts"[^>]*>/);
+    assert.doesNotMatch(panel, /allow-same-origin|allow-top-navigation|allow-popups|allow-forms/);
+    assert.match(panel, /data-concept-frame data-concept-index="1"/);
+    assert.doesNotMatch(
+      panel,
+      /<iframe[^>]*\ssrc=/,
+      "the engine sets src; the panel never does",
+    );
+    assert.doesNotMatch(
+      panel,
+      /cdn\.jsdelivr|d3\.select/,
+      "the page HTML never ships inside the panel",
+    );
+    assert.match(
+      panel,
+      /data-speech-concept>How margin moves with price\. Drag the price/,
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test("a legacy (v3) concept step-panel still renders ds-concept-body prose, no iframe", async () => {
+  const repo = fixtureRepo();
+  const { server, base, route } = await boot(repo);
+  try {
+    const payload = shellPayload(
+      await (await fetch(`${base}${route}/review?story=story.json`)).text(),
+    );
+    const panel = await (
+      await fetch(
+        `${base}/api/review/step-panel?index=1&page=${encodeURIComponent(payload.pageToken)}`,
+      )
+    ).text();
+    assert.match(panel, /class="ds-concept-body ds-md"/);
+    assert.doesNotMatch(panel, /<iframe/);
+  } finally {
+    server.close();
+  }
+});
+
 test("the payload carries the speech projections a stub needs to plan narration", async () => {
   const repo = fixtureRepo();
   const { server, base, route } = await boot(repo);

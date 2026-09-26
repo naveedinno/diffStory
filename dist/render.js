@@ -245,6 +245,8 @@ function storyRepairMenu(step, iconOnly = false) {
   </details>`;
 }
 function conceptStepPanel(s, i) {
+    if (s.hasPage)
+        return conceptPagePanel(s, i);
     const diagram = s.diagram
         ? `<figure class="ds-concept-diagram" data-concept-diagram>
         <div class="ds-concept-diagram-tools">
@@ -283,6 +285,29 @@ function conceptStepPanel(s, i) {
         <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
       </article>
     </div>
+  </section>`;
+}
+/**
+ * A v4 page concept: the author's HTML runs in an opaque-origin sandbox the
+ * engine points at /api/review/concept-page. The panel carries no page bytes.
+ */
+function conceptPagePanel(s, i) {
+    const speech = conceptSpeechText(s);
+    return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
+    <article class="ds-concept-page-stage" aria-labelledby="ds-concept-title-${i + 1}">
+      <div class="ds-concept-heading">
+        <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
+        <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
+      </div>
+      <figure class="ds-concept-page" data-concept-page>
+        <button type="button" class="ds-concept-page-fullscreen" data-concept-page-fullscreen aria-label="Open page fullscreen" title="Open page fullscreen">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+        </button>
+        <span class="ds-concept-page-loading">Loading the mental model…</span>
+        <iframe class="ds-concept-page-frame" data-concept-frame data-concept-index="${i + 1}" sandbox="allow-scripts" allow="fullscreen" title="${esc(s.narration?.text ?? s.title.text)}" loading="lazy"></iframe>
+      </figure>
+      <span class="ds-sr-only" data-speech-concept>${esc(speech)}</span>
+    </article>
   </section>`;
 }
 /**
