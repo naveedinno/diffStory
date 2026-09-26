@@ -1,0 +1,39 @@
+// Assemble a v4 concept page for its sandboxed frame. The author's HTML is
+// passed through untouched; the only additions are a tiny shim, placed before
+// any author markup, that forwards story keys to the app and follows the app's
+// theme, and a set of optional color variables authors may use or ignore.
+//
+// Isolation does not come from here. It comes from the iframe sandbox (opaque
+// origin, no navigation, no popups) and from the server refusing every request
+// that is not same-origin. This module only keeps the page pleasant to use.
+
+export type ConceptPageTheme = 'light' | 'dark';
+
+/** Anything the author wants to load, run, or fetch, and only diffStory may frame it. */
+export const CONCEPT_PAGE_CSP =
+  "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+
+// Values mirror client/generated/theme.css so a page that opts in matches the app.
+const TOKENS = `:root{--ds-bg:#0a0c0f;--ds-surface:#14171c;--ds-text:#eef1f5;--ds-text-2:#ccd1d9;--ds-text-3:#b1b9c6;--ds-line:rgba(190,205,225,.11);--ds-accent:#49b7ff;--ds-add:#3ddc97;--ds-del:#ff6b62}
+:root[data-ds-theme="light"]{--ds-bg:#edf0f4;--ds-surface:#ffffff;--ds-text:#14171c;--ds-text-2:#4f5967;--ds-text-3:#5f6976;--ds-line:rgba(20,30,45,.12);--ds-accent:#0072d6;--ds-add:#178a52;--ds-del:#d2372e}`;
+
+function shim(theme: ConceptPageTheme): string {
+  return `<style data-diffstory-shim>${TOKENS}</style><script data-diffstory-shim>(function(){
+var root=document.documentElement;root.setAttribute('data-ds-theme',${JSON.stringify(theme)});
+function typing(t){if(!t)return false;if(t.isContentEditable)return true;var n=t.tagName;return n==='INPUT'||n==='TEXTAREA'||n==='SELECT';}
+window.addEventListener('keydown',function(e){if(e.defaultPrevented||e.isComposing||typing(e.target))return;
+parent.postMessage({type:'diffstory:key',key:e.key,code:e.code,shiftKey:e.shiftKey,altKey:e.altKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,repeat:e.repeat},'*');});
+window.addEventListener('message',function(e){if(e.source!==parent)return;var d=e.data;if(d&&d.type==='diffstory:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-ds-theme',d.theme);});
+})();</script>`;
+}
+
+const HEAD_OPEN = /<head(?:\s[^>]*)?>/i;
+
+/** The author's page with the shim injected first inside <head>, or prepended. */
+export function conceptPageDocument(page: string, theme: ConceptPageTheme): string {
+  const injected = shim(theme);
+  const head = HEAD_OPEN.exec(page);
+  if (!head) return injected + page;
+  const at = head.index + head[0].length;
+  return page.slice(0, at) + injected + page.slice(at);
+}

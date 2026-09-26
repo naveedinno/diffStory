@@ -1126,3 +1126,56 @@ test('lazy split and full-file responses honour the story scope like the review 
   assert.equal((src.match(/computeCoverage\(tour, filesForStoryCoverage\(tour, files\)\)/g) || []).length, 2);
   assert.doesNotMatch(src, /computeCoverage\(tour, files\)\n/);
 });
+
+test('concept pages are served into a sandbox with their own policy', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 4, title: 'Page story', summary: 'A page concept first.', base: 'HEAD',
+    steps: [
+      { id: 'page', order: 1, title: 'How it moves', kind: 'concept',
+        page: '<html><head><title>t</title></head><body><script src="https://cdn.jsdelivr.net/npm/d3@7"></script></body></html>',
+        narration: 'Watch the line move.' },
+      { id: 'code', order: 2, title: 'Readme', kind: 'changed', file: 'README.md', range: [1, 1], why: 'The heading changed.' },
+    ],
+  }, null, 2)}\n`);
+  const { server, base } = await boot(repo);
+  try {
+    const route = `/repo/${encodeURIComponent(basename(repo))}/review?story=story.json`;
+    const pageHtml = await (await fetch(`${base}${route}`)).text();
+    const token = reviewPageToken(pageHtml);
+
+    const app = await fetch(`${base}${route}`);
+    assert.match(app.headers.get('content-security-policy') ?? '', /frame-src 'self'/);
+    assert.match(app.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+
+    const res = await fetch(leased(`${base}/api/review/concept-page?index=1&theme=dark`, token));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-frame-options'), null);
+    assert.match(res.headers.get('content-security-policy') ?? '', /default-src \* data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'/);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    const body = await res.text();
+    assert.match(body, /data-diffstory-shim/);
+    assert.match(body, /cdn\.jsdelivr\.net\/npm\/d3@7/);
+    assert.match(body, /data-ds-theme',"dark"/);
+
+    const code = await fetch(leased(`${base}/api/review/concept-page?index=2`, token));
+    assert.equal(code.status, 404, 'code steps have no page');
+    const stale = await fetch(leased(`${base}/api/review/concept-page?index=1`, 'not-a-real-token'));
+    assert.equal(stale.status, 409);
+
+    // The sandboxed page has an opaque origin. Its requests reach the app as
+    // Origin: null / cross-site and must be refused before any route runs.
+    for (const path of ['/api/comments', '/api/fs?path=/', `/api/review/concept-page?index=1&page=${encodeURIComponent(token)}`]) {
+      const hostile = await fetch(`${base}${path}`, { headers: { origin: 'null', 'sec-fetch-site': 'cross-site' } });
+      assert.equal(hostile.status, 403, `${path} refuses the sandboxed page`);
+      assert.equal(hostile.headers.get('access-control-allow-origin'), null);
+    }
+    const hostileWrite = await fetch(`${base}/api/repo/close`, { method: 'POST', headers: { origin: 'null' } });
+    assert.equal(hostileWrite.status, 403);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});

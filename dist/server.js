@@ -20,7 +20,8 @@ import { buildFullFileRows, hunksToSbsBlocks, filesForStoryCoverage, hunkNewRang
 import { buildReviewModel } from "./view-model.js";
 import { loadComments, loadCommentsWithHealth, commentsForStory, addComment, deleteComment, updateComment, InvalidCommentStoreError, } from "./comments.js";
 import { resolveStoryPath, APP_BRAND, DATA_DIR } from "./config.js";
-import { isCodeStep, } from "./types.js";
+import { CONCEPT_PAGE_CSP, conceptPageDocument } from "./concept-page.js";
+import { isCodeStep, isPageConcept, } from "./types.js";
 import { writeJsonAtomic } from "./atomic-json.js";
 import { evolutionPreservationErrors, normalizeEvolutionObject, verifyEvolution, } from "./evolution.js";
 import { availableAgents, streamAgent, storyPrompt, agentPreflight, selectAvailableAgent, normalizeStoryMode, normalizeCodexRunOptions, summarizeAgentFailure, storyRepairPrompt, } from "./agent.js";
@@ -236,6 +237,7 @@ function setLocalResponseHeaders(res) {
         "font-src 'self'",
         "form-action 'self'",
         "frame-ancestors 'none'",
+        "frame-src 'self'",
         "img-src 'self' data:",
         "media-src 'self' blob:",
         "script-src 'self' 'unsafe-inline'",
@@ -658,6 +660,23 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
             if (!page.ok)
                 return sendReviewPageConflict(res, page.error);
             return sendLeasedHtml(res, session, page, renderStoryStepResponse(page, url.searchParams.get("index") ?? ""));
+        }
+        if (method === "GET" && url.pathname === "/api/review/concept-page") {
+            const page = validateReviewPageLease(session, url.searchParams.get("page"));
+            if (!page.ok)
+                return sendReviewPageConflict(res, page.error);
+            const index = Number.parseInt(url.searchParams.get("index") ?? "", 10);
+            const step = !page.storyless && Number.isInteger(index) && index >= 1
+                ? orderedSteps(page.tour)[index - 1]
+                : undefined;
+            if (!step || !isPageConcept(step))
+                return sendJson(res, 404, { error: "This step has no concept page." });
+            const theme = url.searchParams.get("theme") === "light" ? "light" : "dark";
+            // The author's page runs in an opaque-origin sandbox, so it gets its own
+            // permissive policy. diffStory is the only document allowed to frame it.
+            res.removeHeader("X-Frame-Options");
+            res.setHeader("Content-Security-Policy", CONCEPT_PAGE_CSP);
+            return sendLeasedHtml(res, session, page, conceptPageDocument(step.page, theme));
         }
         if (method === "GET" && url.pathname === "/api/review/file-search") {
             const page = validateReviewPageLease(session, url.searchParams.get("page"));
