@@ -440,6 +440,7 @@ test('storyRepairPrompt preserves unaffected steps and protected narrative histo
   assert.match(prompt, /Only "relatedSteps" may change/);
   assert.match(prompt, /firstCommit, and lastCommit exactly/);
   assert.match(prompt, /concept steps do not claim coverage/i);
+  assert.match(prompt, /Outside "page": no links, images, SVG, id, or style/);
   assert.match(prompt, /\.diffstory\/story\.json/);
   assert.match(prompt, /diffstory-storyteller/);
 });

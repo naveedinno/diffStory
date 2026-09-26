@@ -209,7 +209,7 @@ export function storyRepairPrompt(input) {
         `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n` +
         // Same reason the generation prompt pins it: the repair path is a second
         // authoring entry point, and a repair written in Markdown renders literally.
-        `- Prose is restricted HTML, never Markdown. A concept "page" is free HTML; a legacy concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. No links, images, SVG, id, or style.\n` +
+        `- Prose is restricted HTML, never Markdown. A concept "page" is free HTML; a legacy concept "body" takes block tags; "why", beat "text", "summary", "intent", and "hotspots[].reason" take inline tags only (code, kbd, strong, em, sup, sub, span, br); every "title" is plain text. Every <table> needs a <caption>. Outside "page": no links, images, SVG, id, or style.\n` +
         `- Renumber order fields and repair calls/returnsTo/preparesFor only where the targeted edit requires it.\n` +
         `- Validate every chapter, range, viewport, highlight, beat, concept page/narration/body, preparesFor target, id, and full-diff coverage before finishing.\n` +
         `- Write the repaired JSON back to ${DATA_DIR}/story.json. Do not ask questions.\n\n` +
