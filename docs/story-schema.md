@@ -106,7 +106,10 @@ markup as literal characters.
 ## Concept pages and privacy
 
 A page concept runs in an iframe with `sandbox="allow-scripts"` and an opaque
-origin. It cannot read diffStory's storage, call its API, or navigate the app.
+origin. The page is sandboxed however it is loaded: its response carries the
+same sandbox in its `Content-Security-Policy`, so opening the page URL directly
+in a tab does not give it diffStory's origin either. It cannot read diffStory's
+storage, call its API, or navigate the app.
 Because pages may load resources from any URL, opening a story can make your
 browser contact servers its author chose, revealing your IP address and that
 the story was opened.

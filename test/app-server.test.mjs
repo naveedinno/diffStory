@@ -1154,6 +1154,10 @@ test('concept pages are served into a sandbox with their own policy', async () =
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('x-frame-options'), null);
     assert.match(res.headers.get('content-security-policy') ?? '', /default-src \* data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'/);
+    // Opened directly as a top-level tab the page must still get an opaque
+    // origin: the sandbox travels in the header, not only on the iframe.
+    assert.match(res.headers.get('content-security-policy') ?? '', /sandbox allow-scripts(;|$)/);
+    assert.doesNotMatch(res.headers.get('content-security-policy') ?? '', /allow-same-origin/);
     assert.equal(res.headers.get('cache-control'), 'no-store');
     const body = await res.text();
     assert.match(body, /data-diffstory-shim/);

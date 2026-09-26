@@ -71,5 +71,7 @@ test('theme tokens are optional variables authors can override', () => {
 
 test('the page CSP is permissive but only frameable by diffStory', () => {
   assert.match(CONCEPT_PAGE_CSP, /default-src \* data: blob: 'unsafe-inline' 'unsafe-eval'/);
+  assert.match(CONCEPT_PAGE_CSP, /^sandbox allow-scripts(;|$)/, 'the page is sandboxed even when opened as a top-level document');
+  assert.doesNotMatch(CONCEPT_PAGE_CSP, /allow-same-origin|allow-popups|allow-top-navigation|allow-forms/);
   assert.match(CONCEPT_PAGE_CSP, /frame-ancestors 'self'/);
 });

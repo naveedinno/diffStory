@@ -3,11 +3,20 @@
 // any author markup, that forwards story keys to the app and follows the app's
 // theme, and a set of optional color variables authors may use or ignore.
 //
-// Isolation does not come from here. It comes from the iframe sandbox (opaque
-// origin, no navigation, no popups) and from the server refusing every request
-// that is not same-origin. This module only keeps the page pleasant to use.
-/** Anything the author wants to load, run, or fetch, and only diffStory may frame it. */
-export const CONCEPT_PAGE_CSP = "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+// Isolation does not come from the shim. It comes from the sandbox (opaque
+// origin, no navigation, no popups), which the CSP below applies however the
+// page is loaded, framed or opened directly in a tab, and from the server
+// refusing every request that is not same-origin.
+//
+// The review-page lease token rides in the frame URL, so the page can read it
+// from its own location. That is acceptable only because the token is not a
+// credential on its own: every route that takes it also requires a
+// same-origin request, which an opaque-origin page can never make.
+/**
+ * Sandboxed with scripts only, whether framed or opened top-level; anything
+ * the author wants to load, run, or fetch; and only diffStory may frame it.
+ */
+export const CONCEPT_PAGE_CSP = "sandbox allow-scripts; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
 // Values mirror client/generated/theme.css so a page that opts in matches the app.
 const TOKENS = `:root{--ds-bg:#0a0c0f;--ds-surface:#14171c;--ds-text:#eef1f5;--ds-text-2:#ccd1d9;--ds-text-3:#b1b9c6;--ds-line:rgba(190,205,225,.11);--ds-accent:#49b7ff;--ds-add:#3ddc97;--ds-del:#ff6b62}
 :root[data-ds-theme="light"]{--ds-bg:#edf0f4;--ds-surface:#ffffff;--ds-text:#14171c;--ds-text-2:#4f5967;--ds-text-3:#5f6976;--ds-line:rgba(20,30,45,.12);--ds-accent:#0072d6;--ds-add:#178a52;--ds-del:#d2372e}`;
