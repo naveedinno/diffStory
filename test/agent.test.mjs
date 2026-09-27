@@ -186,6 +186,8 @@ test('bundled diffstory-storyteller skill teaches free concept pages', () => {
   assert.ok(skill.includes('Concept-gap test'));
   assert.ok(skill.includes('shown than told'));
   assert.ok(skill.includes('concrete instance from this diff'));
+  assert.ok(skill.includes('The page has no background of its own'));
+  assert.doesNotMatch(skill, /--ds-bg/);
   assert.ok(skill.includes('`narration` is what you would say while pointing at the page'));
   assert.ok(skill.includes('`--ds-accent`'));
   assert.ok(skill.includes('data-ds-theme'));

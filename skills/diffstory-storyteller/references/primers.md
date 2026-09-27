@@ -43,11 +43,15 @@ Pages may open the story, close it, or sit back to back.
 - `narration` is what you would say while pointing at the page. Plain text,
   no tags. Aloud reads it and screen readers announce it, so it must make
   sense without seeing the page.
+- The page has no background of its own. It sits directly on diffStory's
+  background, which shows through, so don't paint `html` or `body` (the frame
+  forces both transparent anyway). Inner elements may have fills: a card, a
+  legend chip, a bar.
 - Optional theming: the frame sets `data-ds-theme="light"` or `"dark"` on
-  `<html>` and follows the app's theme live. The variables `--ds-bg`,
-  `--ds-surface`, `--ds-text`, `--ds-text-2`, `--ds-text-3`, `--ds-line`,
-  `--ds-accent`, `--ds-add`, `--ds-del` match the app's palette. Use them or
-  ignore them.
+  `<html>` and follows the app's theme live. The variables `--ds-surface`,
+  `--ds-text`, `--ds-text-2`, `--ds-text-3`, `--ds-line`, `--ds-accent`,
+  `--ds-add`, `--ds-del` match the app's palette. Use them or ignore them, but
+  pick text colors that read on both the light and the dark app background.
 - Only story navigation keys leave the page: the left and right arrows, `j`,
   `k`, and Space. They still move the story (Space plays and pauses
   narration) unless the page handles them (`preventDefault()`) or focus is in

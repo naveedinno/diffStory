@@ -41,7 +41,7 @@ surrounding markup can legally contain, not by editorial preference.
 | Field | Notes |
 | --- | --- |
 | `steps[].body` (concept steps only, legacy) | The 60–180 word primer. The only field that may contain tables, lists, headings, or preformatted blocks. Superseded by `steps[].page` for new stories; still valid and rendered for existing ones. |
-| `steps[].page` | A complete HTML document: any HTML, CSS, JS, CDN resources. Served sandboxed, never sanitized — none of the rules below apply to it. |
+| `steps[].page` | A complete HTML document: any HTML, CSS, JS, CDN resources. Served sandboxed, never sanitized — none of the rules below apply to it. It has no background of its own: the frame keeps `html` and `body` transparent so the app background shows through. |
 | `steps[].narration` | Plain text Aloud reads for a page concept. |
 
 Allowed for `steps[].body` (the two v4 fields above are exempt): the inline set below, plus

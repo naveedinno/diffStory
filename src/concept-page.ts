@@ -31,8 +31,12 @@ export const CONCEPT_PAGE_CSP =
 export const CONCEPT_PAGE_KEYS: readonly string[] = ['ArrowLeft', 'ArrowRight', 'j', 'k', ' '];
 
 // Values mirror client/generated/theme.css so a page that opts in matches the app.
-const TOKENS = `:root{--ds-bg:#0a0c0f;--ds-surface:#14171c;--ds-text:#eef1f5;--ds-text-2:#ccd1d9;--ds-text-3:#b1b9c6;--ds-line:rgba(190,205,225,.11);--ds-accent:#49b7ff;--ds-add:#3ddc97;--ds-del:#ff6b62}
-:root[data-ds-theme="light"]{--ds-bg:#edf0f4;--ds-surface:#ffffff;--ds-text:#14171c;--ds-text-2:#4f5967;--ds-text-3:#5f6976;--ds-line:rgba(20,30,45,.12);--ds-accent:#0072d6;--ds-add:#178a52;--ds-del:#d2372e}`;
+// The page itself never paints a background: it sits on the step, so html and
+// body stay transparent. Its color-scheme must match the app's, or the browser
+// paints an opaque backdrop behind the frame.
+const TOKENS = `html,body{background:transparent!important}
+:root{color-scheme:dark!important;--ds-surface:#14171c;--ds-text:#eef1f5;--ds-text-2:#ccd1d9;--ds-text-3:#b1b9c6;--ds-line:rgba(190,205,225,.11);--ds-accent:#49b7ff;--ds-add:#3ddc97;--ds-del:#ff6b62}
+:root[data-ds-theme="light"]{color-scheme:light!important;--ds-surface:#ffffff;--ds-text:#14171c;--ds-text-2:#4f5967;--ds-text-3:#5f6976;--ds-line:rgba(20,30,45,.12);--ds-accent:#0072d6;--ds-add:#178a52;--ds-del:#d2372e}`;
 
 function shim(theme: ConceptPageTheme): string {
   return `<style data-diffstory-shim>${TOKENS}</style><script data-diffstory-shim>(function(){

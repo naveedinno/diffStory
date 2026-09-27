@@ -137,7 +137,7 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
       "order": 2,
       "title": "How the per-market cap clamps a rate",
       "kind": "concept",
-      "page": "<!doctype html><html><head><style>body{margin:0;padding:24px;font:14px system-ui;background:var(--ds-bg);color:var(--ds-text)}output{display:block;margin-top:12px;color:var(--ds-accent)}</style></head><body><label>Proposed rate, bps <input type=\"range\" id=\"r\" min=\"0\" max=\"300\" value=\"80\"></label><output id=\"o\"></output><script>var r=document.getElementById('r'),o=document.getElementById('o'),cap=200;function f(){var v=+r.value;o.textContent=v>cap?'settles at the cap: '+cap+' bps (asked '+v+')':'settles unchanged: '+v+' bps'}r.oninput=f;f()</script></body></html>",
+      "page": "<!doctype html><html><head><style>body{margin:0;padding:24px;font:14px system-ui;color:var(--ds-text)}output{display:block;margin-top:12px;color:var(--ds-accent)}</style></head><body><label>Proposed rate, bps <input type=\"range\" id=\"r\" min=\"0\" max=\"300\" value=\"80\"></label><output id=\"o\"></output><script>var r=document.getElementById('r'),o=document.getElementById('o'),cap=200;function f(){var v=+r.value;o.textContent=v>cap?'settles at the cap: '+cap+' bps (asked '+v+')':'settles unchanged: '+v+' bps'}r.oninput=f;f()</script></body></html>",
       "narration": "Drag the proposed rate. Up to this market's cap of 200 basis points it settles unchanged; past the cap it settles at exactly 200, which is the inclusive check the helper in step 3 owns.",
       "preparesFor": ["s2"],
       "tags": ["mental-model"]
