@@ -17,8 +17,10 @@
 //      make the compare segment look selected, because nothing has been
 //      selected yet.
 //
-// Typing into a ref field navigates on a 700 ms debounce; committing a field
-// (choosing a row, or leaving it after an edit) navigates at once.
+// Typing waits 700ms and then navigates only when the text exactly matches a
+// cached ref — pausing mid-word on a partial ref must not leave the page. A
+// field also commits when a row is chosen, Enter is pressed, or the field is
+// left after an edit.
 //
 // ── beUI adoption notes ──────────────────────────────────────────────────────
 //
@@ -82,6 +84,7 @@ import { Input, type InputClassNames } from "../../vendor/beui/motion/input";
 import { Loader } from "../../vendor/beui/motion/loader";
 import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import { cn } from "../../shared/cn";
+import { EASE_SIGNAL_OUT } from "../../shared/motion";
 import { useQuietSubtree } from "../../shared/quiet";
 import type { ChangePayload } from "../../../src/payloads";
 import { RefListbox, useRefPicker, type FieldProps } from "./RefPicker";
@@ -91,7 +94,7 @@ type Panel = "commit" | "branch" | "compare";
 
 /** Signal colours for the portalled bubble, which ships with none of its own. */
 const TOOLTIP_SURFACE =
-  "max-w-[min(90vw,52ch)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
+  "max-w-[min(90vw,52ch)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 px-2.5 py-1 text-sm font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
 
 // The four segments sit INSIDE a recessed track rather than floating on the
 // card as separate tiles. Tiles with their own fill and their own hairline read
@@ -107,7 +110,7 @@ const SEGMENT_TRACK = cn(
 const SEGMENT_BASE = cn(
   // `h-auto` and `items-stretch justify-start` undo the height and the centring
   // that beUI's base/size classes bake into every Button.
-  "flex h-auto min-h-16 cursor-pointer flex-col items-stretch justify-start gap-1 rounded-[var(--radius)] border border-transparent bg-transparent px-3 py-2.5 text-left no-underline",
+  "flex h-auto min-h-16 cursor-pointer flex-col items-stretch justify-start gap-1 rounded-[var(--radius)] border border-transparent bg-transparent px-3 py-2.5 text-start no-underline",
   "transition-[background-color,border-color,transform,box-shadow] duration-[var(--motion-duration-fast)] ease-out",
   "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
   "motion-reduce:transition-none motion-reduce:active:transform-none",
@@ -118,7 +121,7 @@ const SEGMENT_BASE = cn(
 const SEGMENT_PRESS = 0.985;
 
 /** A critically damped-feeling unfold for disclosure content, never page arrival. */
-const PANEL_EASE = [0.32, 0.72, 0, 1] as const;
+const PANEL_EASE = EASE_SIGNAL_OUT;
 
 /**
  * Selected and open are DIFFERENT things and now look it.
@@ -166,10 +169,10 @@ const FIELD_CLASSNAMES: InputClassNames = {
   root: "min-w-0 gap-0",
   field: "h-7 min-w-0 rounded-none border-transparent bg-transparent ring-0",
   input: cn(
-    "h-7 pr-0 pl-[22px] font-mono text-[13.5px] font-semibold text-text",
+    "h-7 pe-0 ps-[22px] font-mono text-lg font-semibold text-text sm:text-base",
     "placeholder:font-sans placeholder:text-[13px] placeholder:font-normal placeholder:text-text-3",
   ),
-  leftIcon: "left-0 text-text-3 [&_svg]:h-[15px] [&_svg]:w-[15px]",
+  leftIcon: "start-0 text-text-3 [&_svg]:h-[15px] [&_svg]:w-[15px]",
 };
 
 // One endpoint of the diff, in one geometry. The compare editor and the
@@ -189,7 +192,7 @@ const SLOT_EDIT = cn(SLOT, "cursor-text bg-fill-1 focus-within:border-accent-lin
 /** Resolved: the accent tint that marks "this is the answer, not the question". */
 const SLOT_DONE = cn(SLOT, "overflow-hidden bg-[color-mix(in_srgb,var(--accent)_5%,var(--fill-1))]");
 
-const KICKER_BASE = "font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] uppercase";
+const KICKER_BASE = "font-mono text-xs font-medium tracking-[var(--tracking-kicker)] uppercase";
 
 // The resolved kickers live inside SLOT_DONE, whose fill is accent-tinted. On
 // that tint --text-3 lands at 4.26:1 (light) / 4.34:1 (dark) — the only AA miss
@@ -210,7 +213,7 @@ const KICKER_EDIT = cn(KICKER_BASE, "text-text-2");
 // in test/change-page.test.mjs that keeps these sides labelled by meaning reads
 // for the literal `Source <i` / `Target <i`, and a component would hide the
 // labelling from it.
-const GLOSS = "ml-[5px] font-normal tracking-normal normal-case not-italic opacity-80";
+const GLOSS = "ms-[5px] font-normal tracking-normal normal-case not-italic opacity-80";
 
 function Arrow({ className }: { className?: string }) {
   return (
@@ -263,7 +266,7 @@ function SummaryValue({ value, mono, className }: { value: string; mono?: boolea
           // is the one value here that is prose ("Uncommitted changes"), so it
           // keeps the sans display face — setting a sentence in mono would say
           // it is a ref when it is not.
-          mono ? "font-mono text-[13.5px] font-semibold" : "text-[15px] font-bold",
+          mono ? "font-mono text-base font-semibold" : "text-lg font-bold",
           className,
         )}
       >
@@ -392,8 +395,16 @@ export function ScopeCard({ payload }: ScopeCardProps) {
    *
    * `onChange` takes the next string, not the event: that is beUI's `Input`
    * signature, and the event was never read for anything but `target.value`.
+   * Typing always waits 700ms; the `commit` closures below only schedule the
+   * navigation when the text exactly matches a cached ref, so pausing
+   * mid-word on a partial ref never leaves the page.
    */
-  const wire = (kind: FieldKind, id: string, value: string, commit: (value: string, delay: number) => void) => {
+  const wire = (
+    kind: FieldKind,
+    id: string,
+    value: string,
+    commit: (value: string, delay: number) => void,
+  ) => {
     const props: FieldProps = picker.fieldProps(kind, id);
     return {
       ...props,
@@ -416,31 +427,63 @@ export function ScopeCard({ payload }: ScopeCardProps) {
     };
   };
 
+  /**
+   * Whether the typed text already names a cached ref exactly. The picker's
+   * rows are the cached `/api/refs` list filtered to the previous query, so an
+   * exact value match means the keystrokes so far spell a real branch, commit,
+   * or HEAD — the one case where typing navigates. The worktree and
+   * auto-detect sentinels never match anything typed, and the loading row has
+   * no value, so all three are excluded.
+   *
+   * Every keystroke clears the pending navigation first: without that, typing
+   * one more character after an exact match would still sail to the stale
+   * destination when the old timer fires.
+   */
+  const isCachedRef = (next: string): boolean => {
+    const current = next.trim();
+    if (!current) return false;
+    return picker.rows.some((row) => row.value === current && row.value !== WORKTREE && row.value !== AUTO_PARENT);
+  };
+  const commitIfKnown = (value: string, delay: number, apply: () => void, url: string): void => {
+    apply();
+    if (navTimer.current) window.clearTimeout(navTimer.current);
+    if (isCachedRef(value)) scheduleNavTo(url, delay);
+  };
+
   const commitField = wire("commit", "commitRef", commitValue, (value, delay) => {
-    setCommitValue(value);
-    scheduleNavTo(commitUrl(value), delay);
+    commitIfKnown(value, delay, () => setCommitValue(value), commitUrl(value));
   });
 
   const branchField = wire("branch", "branchRef", branchValue, (value, delay) => {
-    setBranchValue(value);
-    scheduleNavTo(branchUrl(value, fromValue, fromAuto), delay);
+    commitIfKnown(value, delay, () => setBranchValue(value), branchUrl(value, fromValue, fromAuto));
   });
 
   const fromField = wire("from", "branchFrom", fromValue, (value, delay) => {
-    setFromValue(value);
-    setFromAuto(false);
-    scheduleNavTo(branchUrl(branchValue, value, false), delay);
+    commitIfKnown(
+      value,
+      delay,
+      () => {
+        setFromValue(value);
+        setFromAuto(false);
+      },
+      branchUrl(branchValue, value, false),
+    );
   });
 
   const baseField = wire("base", "cmpBase", baseValue, (value, delay) => {
-    setBaseValue(value);
-    scheduleNavTo(compareUrl(value, headValue, headWorktree), delay);
+    commitIfKnown(value, delay, () => setBaseValue(value), compareUrl(value, headValue, headWorktree));
   });
 
   const headField = wire("head", "cmpHead", headValue, (value, delay) => {
-    setHeadValue(value);
-    setHeadWorktree(false);
-    scheduleNavTo(compareUrl(baseValue, value, false), delay);
+    commitIfKnown(
+      value,
+      delay,
+      () => {
+        setHeadValue(value);
+        setHeadWorktree(false);
+      },
+      compareUrl(baseValue, value, false),
+    );
   });
 
   const summaryKicker =
@@ -500,7 +543,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "uncommitted", false)}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Uncommitted</span>
-          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Working tree vs HEAD</span>
+          <span className="text-sm leading-[1.3] max-[600px]:hidden">Working tree vs HEAD</span>
         </ButtonLink>
         <Button
           type="button"
@@ -513,7 +556,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "commit", openPanel === "commit")}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Single commit</span>
-          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Parent → selected commit</span>
+          <span className="text-sm leading-[1.3] max-[600px]:hidden">Parent → selected commit</span>
         </Button>
         <Button
           type="button"
@@ -526,7 +569,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "branch", openPanel === "branch")}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Whole branch</span>
-          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">Fork point → branch tip</span>
+          <span className="text-sm leading-[1.3] max-[600px]:hidden">Fork point → branch tip</span>
         </Button>
         <Button
           type="button"
@@ -539,7 +582,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           className={segmentClass(active === "compare", openPanel === "compare")}
         >
           <span className="text-[13px] leading-[1.2] font-bold text-text max-[600px]:text-xs">Compare any refs</span>
-          <span className="text-[11.5px] leading-[1.3] max-[600px]:hidden">
+          <span className="text-sm leading-[1.3] max-[600px]:hidden">
             Source → target, any branch or commit
           </span>
         </Button>
@@ -608,7 +651,7 @@ export function ScopeCard({ payload }: ScopeCardProps) {
           </div>
           <p className="m-0 px-0.5 text-xs leading-[1.4] text-text-3">
             Shows every commit on the branch since it split from its parent.{" "}
-            <a href={`${routeBase}/change?scope=branch`} className="font-semibold text-accent-text underline-offset-2 hover:underline">
+            <a href={`${routeBase}/change?scope=branch`} className="font-semibold text-accent-text underline-offset-2 decoration-from-font hover:underline">
               Use the current branch
             </a>
           </p>

@@ -57,7 +57,7 @@ export interface StoryRowProps {
 
 function Fact({ children }: { children: React.ReactNode }) {
   return (
-    <span className="border-l border-line-soft px-[11px] first:border-l-0 first:pl-0 max-[460px]:px-2">
+    <span className="border-l border-line-soft px-[11px] first:border-l-0 first:ps-0 max-[460px]:px-2">
       {children}
     </span>
   );
@@ -81,7 +81,7 @@ function ScopeChip({ scope }: { scope: StoryRowView["scope"] }) {
       // that. Unlike a visually hidden span it does not join the row link's
       // accessible name, which is computed from the card's contents.
       aria-description={scope.command || undefined}
-      className="rounded-[var(--radius-sm)] bg-fill-3 px-[7px] py-0.5 font-mono text-[11.5px] tracking-normal text-text"
+      className="rounded-[var(--radius-sm)] bg-fill-3 px-[7px] py-0.5 font-mono text-sm tracking-normal text-text"
     >
       {scope.label}
     </span>
@@ -91,7 +91,7 @@ function ScopeChip({ scope }: { scope: StoryRowView["scope"] }) {
     <Tooltip
       content={scope.command}
       side="top"
-      className="max-w-[min(52ch,90vw)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 font-mono text-[11.5px] whitespace-pre-wrap text-text shadow-signal"
+      className="max-w-[min(52ch,90vw)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 font-mono text-sm whitespace-pre-wrap text-text shadow-signal"
     >
       {chip}
     </Tooltip>
@@ -107,6 +107,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
     ? story.summary || "No summary yet."
     : story.error || "This story file could not be read.";
   const codeStops = Math.max(0, story.steps - story.primers);
+  const fileCount = story.liveFiles || story.files;
   const href = `${routeBase}/review?story=${encodeURIComponent(story.id)}`;
 
   return (
@@ -147,8 +148,8 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
         </span>
 
         <span className="flex min-w-0 flex-1 flex-col gap-[5px]">
-          <span className="flex min-w-0 items-center gap-2 max-[760px]:pr-11 max-[460px]:flex-col max-[460px]:items-start">
-            <span className="min-w-0 truncate text-[15.5px] font-semibold tracking-[-.01em] max-[460px]:line-clamp-2 max-[460px]:whitespace-normal max-[460px]:leading-[1.28]">
+          <span className="flex min-w-0 items-center gap-2 max-[760px]:pe-11 max-[460px]:flex-col max-[460px]:items-start">
+            <span className="min-w-0 truncate text-lg font-semibold tracking-[-.01em] max-[460px]:line-clamp-2 max-[460px]:whitespace-normal max-[460px]:leading-[1.28]">
               {title}
             </span>
             <AnimatedBadge
@@ -158,7 +159,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
               contentKey={state.label}
               className={cn(
                 "h-auto flex-none rounded-[var(--radius-sm)] border-0 px-[7px] py-[3px]",
-                "font-mono text-[9.5px] font-semibold tracking-[var(--tracking-kicker)] uppercase",
+                "font-mono text-xs font-semibold tracking-[var(--tracking-kicker)] uppercase",
                 BADGE_CLASS[state.tone],
               )}
             >
@@ -168,7 +169,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
 
           <span
             className={cn(
-              "line-clamp-2 text-[13.5px] leading-[1.42]",
+              "line-clamp-2 text-base leading-[1.42]",
               story.valid ? "text-text-2" : RED_INK,
             )}
           >
@@ -177,16 +178,16 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
 
           <span className="mt-[5px] flex flex-wrap items-center font-mono text-[11px] text-text-2 max-[460px]:leading-[1.65]">
             <Fact>
-              <b className="text-text tabular-nums">{story.liveFiles || story.files}</b> files
+              <b className="text-text tabular-nums">{fileCount}</b> {fileCount === 1 ? "file" : "files"}
             </Fact>
             {liveEvidence ? (
               <Fact>
                 <b className={cn("tabular-nums", GREEN_INK)}>+{story.additions}</b>{" "}
-                <b className={cn("ml-[3px] tabular-nums", RED_INK)}>−{story.deletions}</b>
+                <b className={cn("ms-[3px] tabular-nums", RED_INK)}>−{story.deletions}</b>
               </Fact>
             ) : null}
             <Fact>
-              <b className="text-text tabular-nums">{codeStops}</b> code stops
+              <b className="text-text tabular-nums">{codeStops}</b> {codeStops === 1 ? "code stop" : "code stops"}
               {story.primers ? ` + ${plural(story.primers, "primer")}` : ""}
             </Fact>
             {story.openComments ? (
@@ -223,7 +224,7 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           className={cn(
             "story-glance inline-flex min-h-[36px] items-center justify-center gap-[6px] overflow-hidden rounded-full border border-transparent bg-accent-soft px-[12px]",
             "text-[12.5px] font-semibold whitespace-nowrap",
-            "transition-[background-color,box-shadow,transform] duration-[var(--motion-duration-ui)] ease-[var(--motion-ease-out)]",
+            "transition-[background-color,box-shadow,transform] duration-[var(--motion-duration-fast)] ease-[var(--motion-ease-out)]",
             "group-hover:bg-[color-mix(in_srgb,var(--accent-soft)_72%,var(--surface))]",
             "[@media_(hover:hover)_and_(pointer:fine)]:group-hover:-translate-y-px [@media_(hover:hover)_and_(pointer:fine)]:group-hover:shadow-[0_8px_22px_rgba(0,0,0,.18)]",
             "max-[760px]:col-start-2 max-[760px]:mt-0.5 max-[760px]:justify-self-start",
@@ -236,15 +237,15 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           <span
             aria-hidden="true"
             className={cn(
-              "story-glance-detail max-w-0 translate-x-1 overflow-hidden opacity-0",
-              "text-[11px] font-medium text-text-2",
-              "transition-[max-width,opacity,transform] duration-[var(--motion-duration-ui)] ease-[var(--motion-ease-out)]",
-              "[@media_(hover:hover)_and_(pointer:fine)]:group-hover:max-w-[150px] [@media_(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0 [@media_(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-              "group-focus-visible:max-w-[150px] group-focus-visible:translate-x-0 group-focus-visible:opacity-100",
+              "story-glance-detail w-0 translate-x-1 overflow-hidden opacity-0",
+              "text-[11px] font-medium whitespace-nowrap text-text-2",
+              "transition-[opacity,transform] duration-[var(--motion-duration-fast)] ease-[var(--motion-ease-out)]",
+              "[@media_(hover:hover)_and_(pointer:fine)]:group-hover:w-[150px] [@media_(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0 [@media_(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+              "group-focus-visible:w-[150px] group-focus-visible:translate-x-0 group-focus-visible:opacity-100",
               "motion-reduce:transition-none max-[760px]:hidden",
             )}
           >
-            · {story.liveFiles || story.files} files · {codeStops} stops
+            · {plural(fileCount, "file")} · {plural(codeStops, "stop")}
           </span>
           <ChevronRight
             // The nudge is behind hover:hover — a touch device fires a false
@@ -271,10 +272,10 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           Its label duplicates `aria-label`, which is what keeps this honest for
           a reader who never sees the bubble. */}
       <Tooltip
-        content="Remove story"
+        content="Remove review"
         side="left"
-        wrapperClassName="absolute top-[13px] right-[13px] z-[2]"
-        className="rounded-[var(--radius-sm)] border-line-soft bg-surface-3 text-[11.5px] text-text shadow-signal"
+        wrapperClassName="absolute top-[13px] end-[13px] z-[2]"
+        className="rounded-[var(--radius-sm)] border-line-soft bg-surface-3 text-sm text-text shadow-signal"
       >
         <Button
           type="button"

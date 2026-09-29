@@ -3,7 +3,10 @@
 import { resolveBase, describeBase, numstat } from './git.js';
 /** Describe the current change. `base`/`head` override the smart default (resolveBase). */
 export function summarizeChange(repo, base, head) {
-    const resolved = resolveBase(repo, base);
+    let fellBackFrom = '';
+    const resolved = resolveBase(repo, base, (requested) => {
+        fellBackFrom = requested;
+    });
     const files = numstat(repo, resolved, head);
     return {
         base: resolved,
@@ -11,5 +14,8 @@ export function summarizeChange(repo, base, head) {
         files,
         totalChanged: files.length,
         hasChanges: files.length > 0,
+        ...(fellBackFrom
+            ? { note: `${fellBackFrom} is not a known ref, showing ${describeBase(repo, resolved)} instead.` }
+            : {}),
     };
 }

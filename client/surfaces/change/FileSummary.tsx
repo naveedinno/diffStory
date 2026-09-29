@@ -16,15 +16,12 @@
 //
 // ── beUI adoption notes ──────────────────────────────────────────────────────
 //
-//   - `BouncyAccordion` replaces the `<details>` around generated output, for
-//     the same reason it replaced one in the repo picker: `<details>` cannot
-//     animate its own height, so the list used to appear instantly under a
-//     header that had just rotated a chevron smoothly. It renders closed with
-//     `initial={false}`, so nothing about it animates on arrival — which is the
-//     rule this whole surface is built around. Its content wrapper hardcodes
-//     `px-5 pb-5`; the rows have to sit flush against the panel edge like the
-//     primary ones, and because the measured element is the padded one, the
-//     negative margins are also what keep the animated height honest.
+//   - The generated-output disclosure is a native `<details>`: it opens
+//     instantly with no overshoot on a control the reviewer hits constantly,
+//     keeps find-in-page and free keyboard/screen-reader semantics, and needs
+//     no reduced-motion branch. The default marker is hidden in favour of a
+//     ChevronDown that rotates 180deg on open over the fast token (gated off
+//     under reduced motion), and the rows sit flush like the primary ones.
 //   - `AnimatedBadge` carries "working tree clean". That line is a status and
 //     was drawn as one with a `✓` text glyph, which renders at a different
 //     weight in every font on the fallback chain; the badge draws a real Check.
@@ -35,9 +32,8 @@
 //   - No `useQuietSubtree`: neither of these two carries a live region, and the
 //     one component on this surface that does is quieted where it is imported.
 
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { AnimatedBadge } from "../../vendor/beui/motion/animated-badge";
-import { BouncyAccordion } from "../../vendor/beui/motion/bouncy-accordion";
 import { Button, ButtonLink } from "../../vendor/beui/motion/button/base";
 import { cn } from "../../shared/cn";
 import type { ChangeFileView } from "../../../src/payloads";
@@ -53,7 +49,7 @@ function FileRow({ file, inset }: { file: ChangeFileView; inset?: boolean }) {
       className={cn(
         "frow flex items-center gap-3 border-b border-line-soft px-[15px] py-[9px] text-[13px] last:border-b-0",
         "max-[600px]:gap-[9px] max-[600px]:px-[13px]",
-        inset && "bg-[color-mix(in_srgb,var(--fill-1)_50%,transparent)] pl-[25px]",
+        inset && "bg-[color-mix(in_srgb,var(--fill-1)_50%,transparent)] ps-[25px]",
       )}
     >
       <span className="flex min-w-0 flex-1 items-baseline overflow-hidden font-mono" title={file.path}>
@@ -85,7 +81,7 @@ function FileRow({ file, inset }: { file: ChangeFileView; inset?: boolean }) {
                 light card, which is exactly the case `--diff-add-text` and
                 `--diff-del-text` exist for. Identical to `--add`/`--del` in dark. */}
             {file.added ? <span className="text-diff-add-text">+{file.added}</span> : null}
-            {file.removed ? <span className="ml-1.5 text-diff-del-text">−{file.removed}</span> : null}
+            {file.removed ? <span className="ms-1.5 text-diff-del-text">−{file.removed}</span> : null}
           </>
         ) : (
           <span className="text-text-3">metadata</span>
@@ -109,10 +105,10 @@ function EmptyState({ routeBase }: { routeBase: string }) {
             working tree clean
           </AnimatedBadge>
         </p>
-        <h2 className="empty-title m-0 mb-2 font-display text-[19px] font-bold tracking-[var(--tracking-tight)] text-text">
+        <h2 className="empty-title m-0 mb-2 font-display text-xl font-bold tracking-[var(--tracking-tight)] text-balance text-text">
           Nothing to review
         </h2>
-        <p className="mx-auto mb-5 max-w-[46ch] text-[12.5px] leading-[1.6] text-text-2">
+        <p className="mx-auto mb-5 max-w-[46ch] text-[12.5px] leading-[1.6] text-pretty text-text-2">
           Pick another scope above, or make a change. When your agent writes code, the changes appear here.
         </p>
         <div className="flex items-center justify-center gap-2">
@@ -123,7 +119,7 @@ function EmptyState({ routeBase }: { routeBase: string }) {
             onClick={() => window.location.reload()}
             className="h-[var(--control-h)] rounded-full bg-fill-2 px-3.5 text-[12.5px] font-semibold text-text hover:bg-fill-2"
           >
-            Re-check
+            Reload
           </Button>
           <ButtonLink
             href={`${routeBase}/stories`}
@@ -186,12 +182,12 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
         </span>
         <ButtonLink
           href={diffHref}
-          aria-label={`Start review of ${reviewCount}`}
+          aria-label={`Review ${reviewCount}`}
           pressScale={0.97}
           whileHover={undefined}
           className={cn(
-            "ml-auto h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-[15px] text-[12.5px] font-semibold text-on-accent hover:bg-accent-solid-hover",
-            "max-[600px]:ml-0 max-[600px]:w-full",
+            "ms-auto h-[var(--control-h)] gap-[7px] rounded-full bg-accent px-[15px] text-[12.5px] font-semibold text-on-accent hover:bg-accent-solid-hover",
+            "max-[600px]:ms-0 max-[600px]:w-full",
           )}
         >
           Review {reviewCount}
@@ -204,51 +200,26 @@ function Inventory({ files, diffHref }: { files: ChangeFileView[]; diffHref: str
           <FileRow key={file.path} file={file} />
         ))}
         {generated.length ? (
-          <BouncyAccordion
-            className="border-t border-line-soft"
-            items={[
-              {
-                id: "generated",
-                title: (
-                  <span className="flex items-center justify-between gap-3">
-                    <span>Generated output</span>
-                    <span className="font-normal text-text-3">
-                      {generated.length} {plural(generated.length, "file", "files")}
-                    </span>
-                  </span>
-                ),
-                description: (
-                  <div>
-                    {generated.map((file) => (
-                      <FileRow key={file.path} file={file} inset />
-                    ))}
-                  </div>
-                ),
-              },
-            ]}
-            classNames={{
-              // The vendored row ANIMATES a 28px corner radius onto itself as an
-              // inline style, which a plain utility cannot outrank — and a
-              // rounded block floating inside a flush file list is not what this
-              // is. `!` is what beats an inline style that carries no `!` of its
-              // own. Measured in Chrome: 28px before, 0px after.
-              item: "rounded-none! bg-fill-1",
-              // `outline-none` is baked into the vendored trigger, so the focus
-              // ring has to come back from here or the control has none at all.
-              trigger: cn(
-                "min-h-0 gap-3 px-[15px] py-[11px] hover:bg-fill-2",
-                "focus-visible:bg-fill-2 focus-visible:shadow-[var(--shadow-focus)]",
-              ),
-              title: "overflow-visible text-xs font-semibold text-ellipsis text-text-2",
-              chevron: "h-4 w-4 text-text-3",
-              content: "bg-surface-2",
-              // The vendored content wrapper hardcodes `px-5 pb-5`; these rows
-              // have to sit flush like the primary ones above. The measured
-              // element is the padded one, so `-mb-5` is also what keeps the
-              // animated height honest.
-              description: "-mx-5 -mb-5 text-[unset] leading-[unset] text-text",
-            }}
-          />
+          <details id="generated" className="group border-t border-line-soft bg-fill-1">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-[15px] py-[11px] text-start text-xs font-semibold text-text-2 outline-none hover:bg-fill-2 focus-visible:bg-fill-2 focus-visible:shadow-[var(--shadow-focus)] [&::-webkit-details-marker]:hidden">
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                <span>Generated output</span>
+                <span className="font-normal text-text-3">
+                  {generated.length} {plural(generated.length, "file", "files")}
+                </span>
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                strokeWidth={2}
+                className="h-4 w-4 flex-none text-text-3 transition-transform duration-[var(--motion-duration-fast)] ease-out group-open:rotate-180 motion-reduce:transition-none"
+              />
+            </summary>
+            <div className="bg-surface-2">
+              {generated.map((file) => (
+                <FileRow key={file.path} file={file} inset />
+              ))}
+            </div>
+          </details>
         ) : null}
       </div>
     </div>

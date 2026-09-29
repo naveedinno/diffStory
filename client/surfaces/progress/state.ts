@@ -435,7 +435,7 @@ export function blockRun(state: ProgressState, error: ProgressError = {}): Progr
     liveCount: "",
   };
   return showError(next, {
-    label: error.label || "Could not start",
+    label: error.label || "Could not start.",
     detail: error.detail ?? "Try again.",
     ...(error.technicalDetail ? { technicalDetail: error.technicalDetail } : {}),
   });

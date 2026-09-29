@@ -79,7 +79,7 @@ export function renderToken(t: Token, changed = false, column?: number): string 
   if (!cls && !navigable) return esc(t.text);
   const classAttr = cls ? ` class="${cls}"` : '';
   const navigationAttrs = navigable
-    ? ` data-vscode-symbol data-vscode-column="${column}" title="Open implementation in VS Code (Command/Ctrl-click)"`
+    ? ` data-vscode-symbol data-vscode-column="${column}" title="Open implementation in your editor (Command/Ctrl-click)"`
     : '';
   return `<span${classAttr}${navigationAttrs}>${esc(t.text)}</span>`;
 }

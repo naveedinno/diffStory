@@ -72,7 +72,7 @@ function ReviewPath() {
       aria-label="Review workflow"
       className={cn(
         "mt-[18px] flex items-center border-y border-line-soft py-2.5",
-        "font-mono text-[10px] font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase",
+        "font-mono text-[10px] font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase contrast-more:text-text",
         "max-[600px]:mt-4 max-[600px]:w-full max-[600px]:py-[9px] contrast-more:border-text",
       )}
     >
@@ -94,7 +94,7 @@ function ReviewPath() {
               aria-current={active ? "step" : undefined}
               className={cn(
                 "flex items-center gap-2 whitespace-nowrap",
-                active ? "text-accent-text max-[600px]:gap-[7px] max-[600px]:text-[10.5px]" : "max-[600px]:flex-none max-[600px]:gap-0 max-[600px]:text-[0px]",
+                active ? "text-accent-text max-[600px]:gap-[7px] max-[600px]:text-xs" : "max-[600px]:flex-none max-[600px]:gap-0 max-[600px]:text-[0px]",
               )}
             >
               {/* An upcoming stage inherits the row's --text-3 rather than
@@ -123,7 +123,7 @@ function ReviewPath() {
 }
 
 export function ChangeApp({ payload }: { payload: ChangePayload }) {
-  const { repoName, routeBase, base, head, files, notice } = payload;
+  const { repoName, routeBase, base, head, files, notice, scopeNotice } = payload;
   const total = totals(files);
   const diffHref = `${routeBase}/diff${scopeQuery(base, head)}`;
 
@@ -150,14 +150,14 @@ export function ChangeApp({ payload }: { payload: ChangePayload }) {
         <header className="mb-[18px] max-[600px]:mb-4">
           <div className="m-0 flex items-center justify-between gap-8 max-[600px]:block">
             <div>
-              <p className="m-0 mb-[7px] font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-accent-text uppercase">
+              <p className="m-0 mb-[7px] font-mono text-xs font-medium tracking-[var(--tracking-kicker)] text-accent-text uppercase">
                 Review session
               </p>
-              <h1 className="m-0 font-display text-[26px] font-bold tracking-[-.02em] max-[600px]:text-[28px]">
+              <h1 className="m-0 font-display text-[26px] font-bold tracking-[-.02em] text-balance max-[600px]:text-2xl">
                 Choose what to review
               </h1>
-              <p className="m-0 mt-2 max-w-[62ch] text-sm leading-[1.45] text-text-2">
-                Set the exact git scope, confirm the changed files, then start with the real diff. A guided story stays
+              <p className="m-0 mt-2 max-w-[62ch] text-sm leading-[1.45] text-pretty text-text-2 contrast-more:text-text">
+                Set the exact Git scope, confirm the changed files, then start with the real diff. A guided story stays
                 optional.
               </p>
             </div>
@@ -165,7 +165,7 @@ export function ChangeApp({ payload }: { payload: ChangePayload }) {
                 scope controls rather than wrapping under the heading. */}
             <div
               aria-label="Current scope summary"
-              className="flex flex-none items-center text-[12.5px] text-text-2 max-[980px]:hidden"
+              className="flex flex-none items-center text-[12.5px] text-text-2 contrast-more:text-text max-[980px]:hidden"
             >
               <Metric value={String(files.length)} label={plural(files.length, "file", "files")} />
               <Metric value={`+${total.added}`} label="added" tone="add" />
@@ -176,9 +176,15 @@ export function ChangeApp({ payload }: { payload: ChangePayload }) {
         </header>
 
         {notice ? (
-          <div className="mb-4 rounded-[var(--radius-lg)] border border-amber bg-amber-soft px-[15px] py-3 text-[13.5px] leading-[1.5] text-text contrast-more:border-text">
-            <b className="font-semibold">That review couldn&rsquo;t be loaded.</b> {notice} Open the diff viewer below,
+          <div className="mb-4 rounded-[var(--radius-lg)] border border-amber bg-amber-soft px-[15px] py-3 text-base leading-[1.5] text-text contrast-more:border-text">
+            <b className="font-semibold">That review couldn&rsquo;t be loaded.</b> {notice} Start the review below,
             then generate a fresh story from the Story tab.
+          </div>
+        ) : null}
+
+        {scopeNotice ? (
+          <div className="mb-4 rounded-[var(--radius-lg)] border border-amber bg-amber-soft px-[15px] py-3 text-base leading-[1.5] text-text contrast-more:border-text">
+            {scopeNotice}
           </div>
         ) : null}
 

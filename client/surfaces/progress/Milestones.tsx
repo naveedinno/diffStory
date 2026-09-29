@@ -46,8 +46,7 @@ export function Milestones({ state, compact }: { state: ProgressState; compact: 
             data-tone={tone}
             className={cn(
               "relative flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center",
-              "font-mono text-[8.5px] tracking-[0.05em] uppercase",
-              compact && "text-[9.5px]",
+              "font-mono text-xs tracking-[0.05em] uppercase",
               tone === "done" && "text-[var(--pp-muted)]",
               tone === "active" && "text-[var(--pp-text)]",
               tone === "error" && "text-[var(--pp-err)]",
@@ -60,7 +59,7 @@ export function Milestones({ state, compact }: { state: ProgressState; compact: 
               className={cn(
                 "relative h-[5px] w-full flex-none overflow-hidden rounded-full bg-[var(--pp-line)]",
                 "after:absolute after:inset-0 after:origin-left after:scale-x-0 after:rounded-[inherit] after:content-['']",
-                "after:transition-transform after:duration-500 after:ease-[cubic-bezier(.23,1,.32,1)] motion-reduce:after:transition-none",
+                "after:transition-transform after:duration-500 after:ease-[var(--motion-ease-out)] motion-reduce:after:transition-none",
                 (tone === "done" || tone === "active") && "after:scale-x-100 after:bg-[var(--pp-blue)]",
                 tone === "error" && "after:scale-x-100 after:bg-[var(--pp-err)]",
                 tone === "active" &&

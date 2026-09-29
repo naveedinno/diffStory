@@ -375,7 +375,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     path = String(JSON.parse(body || "{}").path ?? "");
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 if (!path)
                     return sendJson(res, 400, { error: "Missing repository path." });
@@ -398,7 +398,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     raw = JSON.parse(body || "{}");
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 const candidate = raw.undo?.entry;
                 const path = typeof candidate?.path === "string" ? candidate.path : "";
@@ -446,7 +446,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     value = JSON.parse(body || "{}").editor;
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 if (!isSourceEditor(value)) {
                     return sendJson(res, 400, {
@@ -470,7 +470,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     input = JSON.parse(body || "{}");
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 const file = typeof input.file === "string" ? input.file : "";
                 const line = Number(input.line);
@@ -535,10 +535,10 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     path = String(JSON.parse(body || "{}").path ?? "");
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 if (!path || !isGitRepo(path)) {
-                    return sendJson(res, 400, { error: "Not a git repository." });
+                    return sendJson(res, 400, { error: "Not a Git repository." });
                 }
                 if (session.repo && session.repo !== path)
                     liveHub.closeRepo(session.repo);
@@ -577,7 +577,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                     id = String(JSON.parse(body || "{}").id ?? "");
                 }
                 catch {
-                    return sendJson(res, 400, { error: "invalid JSON" });
+                    return sendJson(res, 400, { error: "Invalid JSON." });
                 }
                 if (!id)
                     return sendJson(res, 400, { error: "Missing story id." });
@@ -844,7 +844,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
                         sendJson(res, 200, updated);
                     }
                     else
-                        sendJson(res, 404, { error: "no such comment" });
+                        sendJson(res, 404, { error: "No such comment." });
                 }
                 catch (e) {
                     sendCommentMutationError(res, e);
@@ -896,7 +896,7 @@ function handle(req, res, session, home, liveHub, aloud, openEditor) {
 function pickerStub(home) {
     return renderShell({
         surface: "picker",
-        title: "pick a repo",
+        title: "Pick a repository",
         bodyClass: "ds-map-bg",
         payload: { recents: recentRowsForPicker(home), home, now: Date.now() },
     });
@@ -944,7 +944,7 @@ function storyChooser(session, refreshEvidence = false) {
     const repoName = basename(repo);
     return renderShell({
         surface: "stories",
-        title: `${repoName} review history`,
+        title: `${repoName} Review history`,
         bodyClass: "ds-map-bg",
         payload: {
             repoName,
@@ -1080,9 +1080,10 @@ function changeScreen(session, params, notice) {
 function renderChange(session, scope, notice) {
     const repo = session.repo;
     const summary = summarizeChange(repo, session.base, session.head);
+    const scopeNotice = [scope.substitutionNote, summary.note].filter(Boolean).join(' ');
     return renderShell({
         surface: "change",
-        title: "choose review scope",
+        title: "Choose review scope",
         bodyClass: "ds-map-bg",
         payload: {
             repoName: basename(repo),
@@ -1095,6 +1096,7 @@ function renderChange(session, scope, notice) {
             ...(scope.from ? { branchFrom: scope.from } : {}),
             files: summary.files,
             ...(notice ? { notice } : {}),
+            ...(scopeNotice ? { scopeNotice } : {}),
         },
     });
 }
@@ -2474,7 +2476,7 @@ function runAloudSpeak(res, aloud, body) {
         input = JSON.parse(body || "{}");
     }
     catch {
-        return sendJson(res, 400, { error: "invalid JSON" });
+        return sendJson(res, 400, { error: "Invalid JSON." });
     }
     const text = typeof input.text === "string" ? input.text.trim() : "";
     if (!text)
@@ -2503,7 +2505,7 @@ function runAloudPrepare(res, aloud, body) {
         input = JSON.parse(body || "{}");
     }
     catch {
-        return sendJson(res, 400, { error: "invalid JSON" });
+        return sendJson(res, 400, { error: "Invalid JSON." });
     }
     const text = typeof input.text === "string" ? input.text.trim() : "";
     if (!text)
@@ -2543,7 +2545,7 @@ function runAloudControl(res, aloud, body) {
         action = input.action;
     }
     catch {
-        return sendJson(res, 400, { error: "invalid JSON" });
+        return sendJson(res, 400, { error: "Invalid JSON." });
     }
     aloud
         .control(action)

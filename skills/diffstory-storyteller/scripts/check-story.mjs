@@ -264,7 +264,7 @@ function gitOutputAllowingDiffExit(repo, args) {
   if (result.status === 0 || result.status === 1) return result.stdout ?? "";
   return null;
 }
-function resolveBase(repo, override) {
+function resolveBase(repo, override, onFallback) {
   if (override) {
     try {
       assertSafeRef(override);
@@ -276,7 +276,9 @@ function resolveBase(repo, override) {
       ]) !== null) {
         return override;
       }
+      onFallback?.(override);
     } catch {
+      onFallback?.(override);
     }
   }
   const hasHead = tryGit(repo, ["rev-parse", "--verify", "HEAD"]) !== null;

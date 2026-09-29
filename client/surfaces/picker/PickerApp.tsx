@@ -45,6 +45,7 @@ type Status = {
   text: string;
   tone: "progress" | "success" | "error";
   undo?: { payload: RecentUndo; name: string; actionLabel?: string };
+  retry?: { kind: "open" | "remove"; path: string };
 } | null;
 
 function StatusToast({
@@ -83,7 +84,7 @@ function StatusToast({
             aria-hidden="true"
           />
           <span className="min-w-0 flex-1 text-pretty">{status.text}</span>
-          {status.undo ? (
+          {status.undo || status.retry ? (
             <Button
               type="button"
               variant="ghost"
@@ -93,7 +94,7 @@ function StatusToast({
               className="h-9 flex-none gap-1.5 rounded-full bg-fill-2 px-3 text-[12.5px] font-semibold text-text hover:bg-fill-3"
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              {status.undo.actionLabel ?? "Undo"}
+              {status.undo ? (status.undo.actionLabel ?? "Undo") : "Try again"}
             </Button>
           ) : null}
           <Button
@@ -137,7 +138,11 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
         window.location.href = data?.route || fallbackRepoRoute(path);
       })
       .catch((cause: unknown) => {
-        setStatus({ text: failureMessage(cause, "Could not open that path."), tone: "error" });
+        setStatus({
+          text: failureMessage(cause, "Could not open that path."),
+          tone: "error",
+          retry: { kind: "open", path },
+        });
       });
   };
 
@@ -165,7 +170,11 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
       })
       .catch((cause: unknown) => {
         setRemoving(null);
-        setStatus({ text: failureMessage(cause, "Could not remove repository."), tone: "error" });
+        setStatus({
+          text: failureMessage(cause, "Could not remove repository."),
+          tone: "error",
+          retry: { kind: "remove", path },
+        });
       });
   };
 
@@ -203,7 +212,7 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
 
         <section className="ds-reveal ds-reveal-2 mb-14 min-w-0 max-[760px]:mb-10">
           <div className="mt-0.5 mb-3.5 flex items-end justify-between gap-[18px] max-[480px]:items-center">
-            <h2 className="m-0 font-display text-2xl leading-[1.1] font-bold tracking-[-.02em] max-[480px]:text-[21px]">
+            <h2 className="m-0 font-display text-2xl leading-[1.1] font-bold tracking-[-.02em] text-balance max-[480px]:text-xl">
               Repositories
             </h2>
             {/* Icon-only below 760px; the accessible name has to survive that.
@@ -240,7 +249,16 @@ export function PickerApp({ payload }: { payload: PickerPayload }) {
       </main>
 
       <FolderBrowser ref={browser} background={main} onOpenRepo={openRepo} />
-      <StatusToast status={status} onDismiss={() => setStatus(null)} onUndo={restoreRepo} />
+      <StatusToast
+        status={status}
+        onDismiss={() => setStatus(null)}
+        onUndo={() => {
+          if (status?.retry) {
+            if (status.retry.kind === "open") openRepo(status.retry.path);
+            else removeRepo(status.retry.path);
+          } else restoreRepo();
+        }}
+      />
     </>
   );
 }

@@ -114,9 +114,9 @@ export function RemoveStoryDialog({
           id="remove-story-title"
           className="m-0 font-display text-lg leading-[1.15] font-semibold tracking-[-.012em]"
         >
-          Remove this review?
+          Remove this story?
         </h2>
-        <p id="remove-story-body" className="mt-2 mb-0 text-[13.5px] leading-[1.45] text-text-2">
+        <p id="remove-story-body" className="mt-2 mb-0 text-base leading-[1.45] text-text-2">
           Remove “{story?.title ?? ""}” from this repo? The story file is deleted; the code and any
           comments you left stay where they are.
         </p>

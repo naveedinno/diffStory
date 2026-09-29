@@ -39,7 +39,7 @@ export function Elapsed({ startedAt, running }: { startedAt: number; running: bo
     <span
       role="timer"
       aria-live="off"
-      className="tabular-nums before:mr-2 before:text-[var(--pp-faint)] before:content-['·']"
+      className="tabular-nums before:me-2 before:text-[var(--pp-faint)] before:content-['·']"
     >
       <span className="sr-only">Elapsed </span>
       <span data-pp-elapsed="">{label}</span>

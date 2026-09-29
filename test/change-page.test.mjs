@@ -136,7 +136,7 @@ test('the change route serves a React shell, not a hand-built page', async () =>
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
 
-    assert.match(html, /<title>diffStory — choose review scope<\/title>/);
+    assert.match(html, /<title>diffStory — Choose review scope<\/title>/);
     assert.match(html, /<body class="ds-map-bg" data-surface="change">/, 'the dot field paints before React mounts');
     assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
     assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/change\.js"><\/script>/);
@@ -391,7 +391,7 @@ test('the ref combobox keeps its combobox/listbox accessibility contract', () =>
   assert.match(refPicker, /"aria-controls": "refPicker"/);
   assert.match(refPicker, /"aria-expanded": owns/);
   assert.match(refPicker, /"aria-activedescendant": owns && index >= 0 \? `ref-option-\$\{id\}-\$\{index\}` : undefined/);
-  assert.match(refPicker, /id="refPicker"\s+role="listbox"\s+aria-label="Available git references"/);
+  assert.match(refPicker, /id="refPicker"\s+role="listbox"\s+aria-label="Available Git references"/);
   assert.match(refPicker, /role="option"/);
   assert.match(refPicker, /aria-selected=\{position === index\}/);
   assert.match(refPicker, /tabIndex=\{-1\}/, 'options stay out of the tab ring');
@@ -406,7 +406,7 @@ test('the ref combobox keeps its combobox/listbox accessibility contract', () =>
 });
 
 test('the option list is different for each field, and says so while it loads', () => {
-  assert.match(refs, /if \(!data\) return \[option\("", "Loading refs…", "reading local git refs", ""\)\];/);
+  assert.match(refs, /if \(!data\) return \[option\("", "Loading refs…", "reading local Git refs", ""\)\];/);
   assert.match(refs, /if \(kind === "commit"\) return \[option\("HEAD", "HEAD", "current HEAD", "head"\)\]\.concat\(commitOptions\(data\)\)/);
   assert.match(refs, /option\(WORKTREE, WORKTREE_LABEL, "HEAD plus uncommitted edits", "worktree"\)/);
   // The compare SOURCE gets branches then commits and no worktree pseudo-row:
@@ -475,7 +475,7 @@ test('selection comes from the URL and disclosure does not', () => {
   assert.match(scopeCard, /function segmentClass\(selected: boolean, open: boolean\)/);
   assert.match(scopeCard, /selected\s*\?\s*"border-accent-line bg-accent-soft/, 'selected wins over open');
   assert.equal(
-    (scopeCard.match(/text-\[11\.5px\] leading-\[1\.3\] max-\[600px\]:hidden/g) ?? []).length,
+    (scopeCard.match(/text-sm leading-\[1\.3\] max-\[600px\]:hidden/g) ?? []).length,
     4,
     'scope descriptions inherit the segment state color instead of pinning muted ink over the selected tint',
   );
@@ -580,7 +580,7 @@ test('the change page touches no browser storage of its own', () => {
 });
 
 test('the change page opens no live connection and embeds no progress panel', () => {
-  assert.ok(!/EventSource/.test(changeSource), 'freshness here is manual: Reload, Re-check, or a scope navigation');
+  assert.ok(!/EventSource/.test(changeSource), 'freshness here is manual: Reload or a scope navigation');
   for (const gone of [/ds-pp-plan/, /ProgressPanel/, /run_done/, /\/api\/generate/, /\/api\/story\/repair/]) {
     assert.doesNotMatch(changeSource, gone, `${gone} belongs to the review page`);
   }
@@ -598,10 +598,10 @@ test('the surface does not animate its own arrival', () => {
   assert.ok(!/layoutId|layout=/.test(changeSource), 'the segments do not animate between selections');
   assert.ok(!/ds-scope-thread|ds-thread-layer/.test(changeSource), 'no decorative thread on this surface');
   // The one entrance that IS wanted, with the vanilla timing and Signal easing.
-  assert.match(refPicker, /const EASE_SIGNAL_OUT = \[0\.23, 1, 0\.32, 1\] as const;/);
+  assert.match(refPicker, /import \{ EASE_SIGNAL_OUT \} from "\.\.\/\.\.\/shared\/motion";/);
   assert.match(refPicker, /clipPath: "inset\(0px 0px 100% round 10px\)"/);
   assert.match(refPicker, /open\s*\? \{ duration: 0\.24, ease: EASE_SIGNAL_OUT \}/);
-  assert.match(refPicker, /\{ duration: 0\.18, ease: \[0\.68, 0, 0\.77, 0\] \}/);
+  assert.match(refPicker, /: \{ duration: 0\.16, ease: EASE_SIGNAL_OUT \}/);
   assert.match(refPicker, /onAnimationComplete=\{\(\) => \{\s*if \(!open\) setPresent\(false\);/);
   assert.match(refPicker, /const reduce = useReducedMotion\(\);/, 'and it steps instead of animating under reduced motion');
   assert.match(scopeCard, /height: open \? "auto" : 0/);
@@ -695,7 +695,7 @@ test('the file inventory keeps its reading order, its generated split, and its c
   assert.match(fileSummary, /const reviewCount = `\$\{files\.length\} \$\{plural\(files\.length, "file", "files"\)\}`;/, 'the CTA counts every file, generated output included');
   assert.match(format, /acc\.added \+ \(file\.added \?\? 0\)/, 'so does the ledger');
   // The CTA spells out the verb for assistive technology.
-  assert.match(fileSummary, /aria-label=\{`Start review of \$\{reviewCount\}`\}/);
+  assert.match(fileSummary, /aria-label=\{`Review \$\{reviewCount\}`\}/);
   // Binary files get a hatch and a word, never a fake +0/−0.
   assert.match(fileSummary, /binary \/ metadata/);
   assert.match(fileSummary, /const binary = file\.added === null \|\| file\.removed === null;/);
@@ -704,14 +704,14 @@ test('the file inventory keeps its reading order, its generated split, and its c
   assert.match(fileSummary, /"frow flex items-center/);
   assert.match(fileSummary, /className="empty-title/);
   // Generated output is still a disclosure, still collapsed, still counted.
-  assert.match(fileSummary, /id: "generated"/);
+  assert.match(fileSummary, /<details id="generated"/);
   assert.match(fileSummary, /<span>Generated output<\/span>/);
   assert.match(fileSummary, /\{generated\.length\} \{plural\(generated\.length, "file", "files"\)\}/);
-  assert.ok(!/defaultValue=/.test(fileSummary), 'and it does not arrive open');
-  // The vendored accordion animates a 28px corner radius onto its row as an
-  // inline style. Dropping the `!` leaves a rounded island sitting in the middle
-  // of a flush file list, and no ordinary utility can outrank an inline style.
-  assert.match(fileSummary, /item: "rounded-none! /);
+  assert.ok(!/<details[^>]*open/.test(fileSummary), 'and it does not arrive open');
+  // The native disclosure stays flush with the file list: no rounding, no
+  // island. (The vendored accordion it replaced needed a rounded-none!
+  // override for the 28px radius it animated onto its row.)
+  assert.match(fileSummary, /<details id="generated" className="group border-t border-line-soft bg-fill-1">/);
 });
 
 test('the scope picker declines the vendored components that would change what it means', () => {
@@ -760,14 +760,14 @@ test('the empty working tree keeps its honest, non-error copy', () => {
   assert.match(fileSummary, /working tree clean/);
   assert.match(fileSummary, /Nothing to review/);
   assert.match(fileSummary, /Pick another scope above, or make a change\. When your agent writes code, the changes appear here\./);
-  assert.match(fileSummary, /Re-check/);
+  assert.match(fileSummary, /^\s*Reload$/m);
   assert.match(fileSummary, /Review history →/);
   assert.doesNotMatch(fileSummary, /Nothing to review for /, 'does not repeat long refs in the empty-state headline');
 });
 
 test('the failure notice keeps its wording and its way forward', () => {
   assert.match(changeApp, /That review couldn&rsquo;t be loaded\./);
-  assert.match(changeApp, /Open the diff viewer below,\s*\n?\s*then generate a fresh story from the Story tab\./);
+  assert.match(changeApp, /Start the review below,\s*\n?\s*then generate a fresh story from the Story tab\./);
   assert.match(changeApp, /\{notice\}/, 'and the server’s own reason, verbatim');
   assert.match(changeApp, /border-amber bg-amber-soft/);
   assert.ok(
@@ -779,7 +779,7 @@ test('the failure notice keeps its wording and its way forward', () => {
 test('the session header keeps the heading primary and the workflow stepper secondary', () => {
   assert.match(changeApp, /Review session/);
   assert.match(changeApp, /Choose what to review/);
-  assert.match(changeApp, /Set the exact git scope, confirm the changed files, then start with the real diff\./);
+  assert.match(changeApp, /Set the exact Git scope, confirm the changed files, then start with the real diff\./);
   // Four stages, three connectors, stage 01 current, numerals not badges.
   assert.match(changeApp, /\["01", "Scope"\],\s*\n\s*\["02", "Read"\],\s*\n\s*\["03", "Resolve"\],\s*\n\s*\["04", "Decide"\],/);
   assert.match(changeApp, /\{index > 0 \? \(/, 'the connector is skipped before the first stage, which is what makes it three');
@@ -878,7 +878,7 @@ test('the built bundle actually ships the change behaviour', (t) => {
     'HEAD or a commit SHA',
     'branch, tag, or commit',
     'Shows that commit against its first parent',
-    'Available git references',
+    'Available Git references',
     'Loading refs…',
     'No matching refs',
     'HEAD plus uncommitted edits',
@@ -887,17 +887,17 @@ test('the built bundle actually ships the change behaviour', (t) => {
     'Selected review scope',
     'Nothing to review',
     'working tree clean',
-    'Re-check',
+    'Pick another scope above',
     'Review history →',
     'Generated output',
     'binary / metadata',
-    'Start review of ',
+    'Retry',
     'Reload current scope',
     'Review workflow',
     // The failure branch a user only ever sees when something has gone wrong is
     // the easiest string on the surface to lose and the hardest to notice.
     'That review couldn',
-    'Open the diff viewer below, then generate a fresh story from the Story tab.',
+    'Start the review below, then generate a fresh story from the Story tab.',
   ]) {
     assert.ok(js.includes(text), `bundle should contain ${JSON.stringify(text)}`);
   }

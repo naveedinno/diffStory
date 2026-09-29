@@ -37,7 +37,7 @@ test("source editor choice is reachable from every primary product surface", () 
   assert.match(nav, /<EditorMenu \/>/);
   assert.match(hero, /<EditorMenu \/>/);
   assert.match(review, /<EditorMenu compact \/>/);
-  assert.match(reviewCss, /max-width:470px[\s\S]{0,420}\.ds-editor-wrap\{display:none\}/);
+  assert.match(reviewCss, /max-width:470px[\s\S]{0,480}\.ds-editor-wrap\{display:none\}/);
 });
 
 test("source editor menu clears sticky review controls", () => {

@@ -65,6 +65,7 @@ import { Button } from "../../vendor/beui/motion/button/base";
 import { Loader } from "../../vendor/beui/motion/loader";
 import { NumberTicker } from "../../vendor/beui/motion/number-ticker";
 import { cn } from "../../shared/cn";
+import { EASE_SIGNAL_DRAWER, EASE_SIGNAL_OUT } from "../../shared/motion";
 import { useQuietSubtree } from "../../shared/quiet";
 import { ActivityText } from "./ActivityText";
 import { Elapsed } from "./Elapsed";
@@ -73,27 +74,25 @@ import { PlanList } from "./PlanList";
 import { planCountSuffix, type ProgressVariant } from "./state";
 import type { ProgressRun } from "./use-progress-run";
 
-// Dark by default; the light branch only lightens, never inverts.
+// A dark console in both themes. The panel root pins `data-theme="dark"` so
+// these aliases always resolve to the dark token values; there is no
+// OS-scheme branch because the app switches on `data-theme`, not the OS.
 const PALETTE = [
-  "[--pp-bg:#14171c]",
-  "[--pp-elev:#1e232b]",
-  "[--pp-text:#eef1f5]",
-  "[--pp-muted:#98a2b3]",
-  "[--pp-faint:#98a2b3]",
-  "[--pp-line:rgba(190,205,225,0.12)]",
-  "[--pp-blue:#3fb2ff]",
-  "[--pp-err:#ff6b62]",
-  "[--pp-ok:#3ddc97]",
-  "[@media(prefers-color-scheme:light)]:[--pp-bg:#181b20]",
-  "[@media(prefers-color-scheme:light)]:[--pp-elev:#242a32]",
-  "[@media(prefers-color-scheme:light)]:[--pp-muted:#a6b0bf]",
-  "[@media(prefers-color-scheme:light)]:[--pp-faint:#a6b0bf]",
+  "[--pp-bg:var(--surface)]",
+  "[--pp-elev:var(--surface-3)]",
+  "[--pp-text:var(--text)]",
+  "[--pp-muted:var(--text-3)]",
+  "[--pp-faint:var(--text-3)]",
+  "[--pp-line:var(--line)]",
+  "[--pp-blue:var(--accent)]",
+  "[--pp-err:var(--del)]",
+  "[--pp-ok:var(--add)]",
 ].join(" ");
 
 const VARIANT: Record<ProgressVariant, string> = {
   // The parked home: a console in the corner of the review page.
   floating:
-    "fixed right-[18px] bottom-[18px] z-50 w-[min(460px,calc(100vw-36px))] max-h-[min(72vh,580px)] shadow-[0_18px_50px_rgba(0,0,0,0.5)]",
+    "fixed end-[calc(18px+env(safe-area-inset-right))] bottom-[calc(18px+env(safe-area-inset-bottom))] z-50 w-[min(460px,calc(100vw-36px))] max-h-[min(72vh,580px)] shadow-[0_18px_50px_rgba(0,0,0,0.5)]",
   inline: "mt-5 max-h-[min(66vh,580px)]",
   // In the story stage the panel IS the content, so it gets room to breathe and
   // no scroll cap of its own.
@@ -160,14 +159,15 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
           ? {
               opacity: 0,
               transform: "translateY(8px) scale(0.99)",
-              transition: { duration: 0.16, ease: [0.23, 1, 0.32, 1] },
+              transition: { duration: 0.16, ease: EASE_SIGNAL_OUT },
             }
           : { opacity: 0, transition: { duration: 0.12 } }
       }
       // --motion-duration-spatial + --ease-drawer, the pair the folder-browser
       // sheet uses. Exit is faster than entry: a dismissal should get out of
       // the way.
-      transition={{ duration: 0.34, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.34, ease: EASE_SIGNAL_DRAWER }}
+      data-theme="dark"
       data-progress-panel=""
       data-variant={variant}
       data-state={state.phase}
@@ -222,8 +222,8 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         <span
           data-pp-title=""
           className={cn(
-            "min-w-0 font-mono text-[10.5px] font-medium tracking-[0.14em] text-[var(--pp-blue)] uppercase",
-            stage && "text-[11.5px]",
+            "min-w-0 font-mono text-xs font-medium tracking-[0.14em] text-[var(--pp-blue)] uppercase",
+            stage && "text-sm",
             "max-[520px]:col-start-2 max-[520px]:row-start-1 max-[520px]:self-center",
           )}
         >
@@ -236,7 +236,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
             data-pp-agent=""
             className={cn(
               "max-w-[220px] overflow-hidden rounded-md border border-[var(--pp-line)] bg-[var(--pp-elev)]",
-              "px-[7px] py-0.5 text-[11.5px] text-ellipsis whitespace-nowrap text-[var(--pp-muted)]",
+              "px-[7px] py-0.5 text-sm text-ellipsis whitespace-nowrap text-[var(--pp-muted)]",
               "max-[520px]:col-start-2 max-[520px]:row-start-2 max-[520px]:max-w-full max-[520px]:justify-self-start",
             )}
           >
@@ -276,7 +276,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         <div className="flex items-start gap-2.5 px-3.5 pt-2.5 pb-0.5">
           <span
             data-pp-repo=""
-            className="min-w-0 flex-1 font-mono text-[11.5px] break-words text-[var(--pp-muted)]"
+            className="min-w-0 flex-1 font-mono text-sm break-words text-[var(--pp-muted)]"
           >
             {state.repo}
           </span>
@@ -315,7 +315,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
         data-pp-live=""
         data-tone={state.liveTone}
         className={cn(
-          "flex items-center gap-2 border-t border-[var(--pp-line)] px-3.5 py-2.5 text-[11.5px] tabular-nums",
+          "flex items-center gap-2 border-t border-[var(--pp-line)] px-3.5 py-2.5 text-sm tabular-nums",
           state.liveTone === "error" ? "text-[var(--pp-muted)]" : "text-[var(--pp-faint)]",
         )}
       >
@@ -336,13 +336,13 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
           lets the leading digit roll instead of jumping; `planCountSuffix` keeps
           the wording in one place.
         */}
-        <span data-pp-live-count="" className="ml-auto">
+        <span data-pp-live-count="" className="ms-auto">
           {state.hasPlan ? (
             <>
               <NumberTicker
                 value={state.planDone}
                 startOnView={false}
-                duration={0.45}
+                duration={0.28}
                 stagger={0}
               />
               {planCountSuffix(state.planTotal)}
@@ -378,7 +378,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
               {state.error.label || "The run failed"}
             </div>
             {state.error.detail ? (
-              <div className="mt-[5px] font-mono text-[10.5px] leading-[1.6] break-words text-[var(--pp-muted)]">
+              <div className="mt-[5px] font-mono text-xs leading-[1.6] break-words text-[var(--pp-muted)]">
                 {state.error.detail}
               </div>
             ) : null}
@@ -400,7 +400,7 @@ export function ProgressPanel({ run, variant = "floating", foot, className }: Pr
       */}
       {state.showDetails ? (
         <details className="border-t border-[var(--pp-line)] px-3.5 pt-2 pb-2.5">
-          <summary className="cursor-pointer text-[10.5px] tracking-[0.04em] text-[var(--pp-muted)] uppercase">
+          <summary className="cursor-pointer text-xs tracking-[0.04em] text-[var(--pp-muted)] uppercase">
             Technical details
           </summary>
           <pre

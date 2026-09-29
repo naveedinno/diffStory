@@ -70,3 +70,12 @@
     background: transparent;
   }
 }
+
+/* Forced-colors fallback: the box-shadow focus ring above cannot render when
+ * forced colors are active. Unlayered so it wins over `outline: none`. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

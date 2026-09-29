@@ -85,7 +85,9 @@ function DriftStatus({ drift }: { drift: NonNullable<ReviewPayload["storyDrift"]
   const needsRefresh = drift.inScopeFiles > 0;
   const parts = [
     drift.inScopeFiles ? `${drift.inScopeFiles} story ${plural(drift.inScopeFiles, "file")}` : "",
-    drift.outsideScopeFiles ? `${drift.outsideScopeFiles} side ${plural(drift.outsideScopeFiles, "file")}` : "",
+    drift.outsideScopeFiles
+      ? `${drift.outsideScopeFiles} ${plural(drift.outsideScopeFiles, "file")} outside the story`
+      : "",
   ]
     .filter(Boolean)
     .join(" + ");
@@ -113,10 +115,11 @@ function ReadingPath({ arc }: { arc: NonNullable<ReviewPayload["story"]["arc"]> 
   const visible = stages.length > 1 ? stages.join(" → ") : arc.readingPath.replaceAll("->", "→");
   const spoken = stages.length > 1 ? stages.join(", then ") : arc.readingPath.replaceAll("->", ", then ");
   return (
-    <p className="ds-intro-reading" aria-label={`${arc.changeTypeLabel}. Reading path: ${spoken}`}>
-      <span>{arc.changeTypeLabel}</span>
+    <p className="ds-intro-reading">
+      <span aria-hidden="true">{arc.changeTypeLabel}</span>
       <span aria-hidden="true">·</span>
       <span aria-hidden="true">{visible}</span>
+      <span className="ds-sr-only">{`${arc.changeTypeLabel}. Reading path: ${spoken}`}</span>
     </p>
   );
 }
@@ -229,7 +232,7 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
 
         {story.evolution ? <EvolutionDetails evolution={story.evolution} /> : null}
 
-        <div className="ds-intro-utility" aria-label="Story scope and optional review material">
+        <div className="ds-intro-utility" role="group" aria-label="Story scope and optional review material">
           <span className="ds-intro-scope">{scopeText}</span>
           {hotspots.length || hasContext ? (
             <details className="ds-intro-notes">
@@ -389,7 +392,7 @@ function StoryScopeControls({ files }: { files: ReviewPayload["files"] }) {
             <span aria-hidden="true">⌕</span>
             <input type="search" data-story-file-search placeholder="Find a file" aria-label="Find a story file" />
           </label>
-          <div className="ds-storyscope-actions" aria-label="Story file selection shortcuts">
+          <div className="ds-storyscope-actions" role="group" aria-label="Story file selection shortcuts">
             {(
               [
                 ["all", "Select all"],
@@ -574,7 +577,7 @@ function GenerateCta({ payload }: { payload: ReviewPayload }) {
                 <span className="ds-intro-arrow">→</span>
               </span>
               <span className="ds-intro-start-sub" data-storygen-cta-sub>
-                {plural(filesChanged, "file")} selected · gaps are flagged as Unexplained
+                {filesChanged} {plural(filesChanged, "file")} selected · gaps are flagged as Unexplained
               </span>
             </button>
             <p className="ds-storygen-warn" id="storySkillWarn" hidden>
@@ -658,6 +661,7 @@ function FilmstripThread({ steps }: { steps: ReviewStepView[] }) {
               data-thread-node="0"
               data-goto-step="0"
               aria-label="Overview"
+              tabIndex={0}
             >
               <span className="ds-filmnode-num" aria-hidden="true">
                 ◆
@@ -672,6 +676,7 @@ function FilmstripThread({ steps }: { steps: ReviewStepView[] }) {
                 data-thread-node={index + 1}
                 data-goto-step={index + 1}
                 aria-label={`Step ${index + 1}: ${step.title.text}`}
+                tabIndex={-1}
               >
                 <span className="ds-filmnode-num" aria-hidden="true">
                   {numeral(index + 1)}
@@ -702,7 +707,10 @@ export function StoryView({ payload }: { payload: ReviewPayload }) {
           <nav className="ds-filmthread is-storyless" data-filmthread aria-label="Review navigation">
             <div className="ds-filmthread-scroll" />
             <button type="button" className="ds-filmthread-allfiles" data-goto-review="exclusions">
-              Review excluded file <span aria-hidden="true">→</span>
+              {payload.excludedFiles.length === 1
+                ? "Review excluded file"
+                : `Review ${payload.excludedFiles.length} ${plural(payload.excludedFiles.length, "excluded file")}`}{" "}
+              <span aria-hidden="true">→</span>
             </button>
           </nav>
         ) : null

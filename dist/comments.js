@@ -94,7 +94,7 @@ function writableComments(repo) {
 /** Validate + persist a new comment. Returns the stored comment or throws. */
 export function addComment(repo, input) {
     if (!input || typeof input.body !== "string" || !input.body.trim()) {
-        throw new Error("comment body is required");
+        throw new Error("Comment body is required.");
     }
     if (typeof input.file !== "string" || !input.file)
         throw new Error("comment file is required");
@@ -175,7 +175,7 @@ export function updateComment(repo, id, input, storyId) {
     }
     if (input.body !== undefined) {
         if (typeof input.body !== "string" || !input.body.trim())
-            throw new Error("comment body is required");
+            throw new Error("Comment body is required.");
         target.body = input.body.trim();
     }
     if (input.status !== undefined) {

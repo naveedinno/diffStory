@@ -30,12 +30,15 @@
 // adopting one would not change the clamp, it would delete it. beUI supplies
 // the entrance instead — the clip-path reveal is a Motion animation rather than
 // the vanilla `@keyframes change-picker-in`, with the same 200ms and the same
-// Signal easing curve — and a `Loader` for the one row that is not an option.
+// Signal easing curve — a `Loader` for the one row that is not an option, and
+// `Tooltip`s for the truncated labels, in the ScopeCard surface.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Loader } from "../../vendor/beui/motion/loader";
+import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import { cn } from "../../shared/cn";
+import { EASE_SIGNAL_OUT } from "../../shared/motion";
 import { useQuietSubtree } from "../../shared/quiet";
 import {
   defaultIndex,
@@ -43,20 +46,23 @@ import {
   normalizeRefs,
   optionsFor,
   placePicker,
+  REFS_ERROR,
+  REFS_RETRY,
   type FieldKind,
   type RefData,
   type RefOption,
   type RefsResponse,
 } from "./refs";
 
-/** The Signal `--motion-ease-out` curve, as Motion wants it. */
-const EASE_SIGNAL_OUT = [0.23, 1, 0.32, 1] as const;
+/** Signal colours for the portalled bubble, which ships with none of its own. */
+const TOOLTIP_SURFACE =
+  "max-w-[min(90vw,52ch)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 px-2.5 py-1 text-sm font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
 
-// `GET /api/refs` is fetched at most once per page. `inflight` collapses
-// concurrent openings onto one request; a failure clears BOTH so the next
-// interaction retries — which is the only retry this surface has, because a
-// refs failure is deliberately silent (the list keeps saying "Loading refs…"
-// rather than shouting at someone who was only browsing scopes).
+// `GET /api/refs` is fetched once per page and cached. `inflight` collapses
+// concurrent openings onto that one request; a failure clears it so the next
+// interaction retries. The first attempt stays silent — the list shows its
+// "Loading refs…" row — but a failed load says so, with an error row and a
+// Retry row, instead of loading forever.
 let cachedRefs: RefData | null = null;
 let inflightRefs: Promise<RefData | null> | null = null;
 
@@ -133,6 +139,10 @@ const EMPTY_QUERIES: Record<FieldKind, string> = { commit: "", base: "", head: "
 
 export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker {
   const [data, setData] = useState<RefData | null>(cachedRefs);
+  // A failed load is a state, not silence: the list swaps its loading row for
+  // an error row plus a Retry row. The first attempt shows no error — the
+  // fetch simply has not landed yet.
+  const [failed, setFailed] = useState(false);
   const [active, setActive] = useState<FieldKind | null>(null);
   const [queries, setQueries] = useState<Record<FieldKind, string>>(EMPTY_QUERIES);
   const inputs = useRef<Partial<Record<FieldKind, HTMLInputElement | null>>>({});
@@ -162,14 +172,20 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
 
   const ensureRefs = useCallback(() => {
     if (cachedRefs) return;
+    setFailed(false);
     loadRefs().then((loaded) => {
-      if (loaded) setData(loaded);
+      if (loaded) {
+        setData(loaded);
+        setFailed(false);
+      } else {
+        setFailed(true);
+      }
     });
   }, []);
 
   const rows = useMemo(
-    () => (active ? filterOptions(optionsFor(active, data), queries[active]) : []),
-    [active, data, queries],
+    () => (active ? filterOptions(optionsFor(active, data, failed), queries[active]) : []),
+    [active, data, failed, queries],
   );
 
   // The active row is recomputed whenever the list is rebuilt — on open, on
@@ -216,11 +232,18 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
   const choose = useCallback(
     (value: string) => {
       if (!active || !value) return;
+      // The failed-load rows are never a choice: Retry reruns the fetch, and
+      // the error row is not actionable.
+      if (value === REFS_RETRY) {
+        ensureRefs();
+        return;
+      }
+      if (value === REFS_ERROR) return;
       setQueries((current) => ({ ...current, [active]: "" }));
       onChoose(active, value);
       close();
     },
-    [active, close, onChoose],
+    [active, close, ensureRefs, onChoose],
   );
 
   // Anchor the listbox under the active field, and keep it anchored. `scroll`
@@ -355,13 +378,11 @@ export function useRefPicker({ values, onChoose }: RefPickerOptions): RefPicker 
 export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose }: ListboxProps) {
   const reduce = useReducedMotion();
   const [present, setPresent] = useState(open);
-  const shown = { opacity: 1, clipPath: "inset(0px round 10px)", filter: "blur(0px)", y: 0, scale: 1 };
+  const shown = { opacity: 1, clipPath: "inset(0px round 10px)", transform: "translateY(0px) scale(1)" };
   const concealed = {
     opacity: 0,
     clipPath: "inset(0px 0px 100% round 10px)",
-    filter: reduce ? "blur(0px)" : "blur(3px)",
-    y: -5,
-    scale: 0.985,
+    transform: "translateY(-5px) scale(0.985)",
   };
   useEffect(() => {
     if (open) setPresent(true);
@@ -378,7 +399,7 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
       ref={ref}
       id="refPicker"
       role="listbox"
-      aria-label="Available git references"
+      aria-label="Available Git references"
       aria-hidden={!open}
       inert={!open}
       hidden={!open && !present}
@@ -389,7 +410,7 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
           ? { duration: 0 }
           : open
             ? { duration: 0.24, ease: EASE_SIGNAL_OUT }
-            : { duration: 0.18, ease: [0.68, 0, 0.77, 0] }
+            : { duration: 0.16, ease: EASE_SIGNAL_OUT }
       }
       onAnimationComplete={() => {
         if (!open) setPresent(false);
@@ -420,18 +441,34 @@ export function RefListbox({ ref, rows, index, open, optionId, onHover, onChoose
               onChoose(row.value);
             }}
             className={cn(
-              "refpick-row grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-left",
+              "refpick-row grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-start",
               "transition-transform duration-[var(--motion-duration-press)] ease-out active:scale-[.995] motion-reduce:transition-none motion-reduce:active:transform-none",
               position === index && "bg-fill-2 shadow-[inset_2px_0_0_var(--accent)]",
               "hover:bg-fill-2",
             )}
           >
-            <span className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-text">{row.label}</span>
-            <span className="col-start-1 min-w-0 truncate text-[11.5px] text-text-2">{row.meta}</span>
+            <Tooltip
+              content={row.label}
+              side="bottom"
+              className={TOOLTIP_SURFACE}
+              wrapperClassName="block min-w-0 max-w-full"
+            >
+              <span className="block min-w-0 truncate font-mono text-[12.5px] font-semibold text-text">
+                {row.label}
+              </span>
+            </Tooltip>
+            <Tooltip
+              content={row.meta}
+              side="bottom"
+              className={TOOLTIP_SURFACE}
+              wrapperClassName="col-start-1 block min-w-0 max-w-full"
+            >
+              <span className="block min-w-0 truncate text-sm text-text-2">{row.meta}</span>
+            </Tooltip>
             {/* The placeholder row has no value and no kind, so the tag column
                 is free for a spinner: the row then reads as work in progress
                 rather than as a ref you could pick called "Loading refs…". */}
-            <span className="col-start-2 row-start-1 row-span-2 self-center text-[10.5px] font-bold tracking-[.05em] text-text-3 uppercase">
+            <span className="col-start-2 row-start-1 row-span-2 self-center text-xs font-bold tracking-[.05em] text-text-3 uppercase">
               {row.value ? row.kind : <Loader variant="spinner" size={13} label="" className="text-text-3" />}
             </span>
           </button>

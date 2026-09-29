@@ -50,7 +50,7 @@ export function StoryRepairMenu({ step, iconOnly = true }: { step: ReviewStepVie
   const actions: [string, string, string][] = [
     ["rewrite", "Rewrite explanation", "Make the claim and evidence sharper without changing the review path."],
     ["shorten", "Make shorter", "Condense this explanation without dropping its risk."],
-    ["split", "Split into smaller stops", "Give each decision its own local camera."],
+    ["split", "Split into smaller stops", "Give each decision its own stop."],
   ];
   return (
     <details className={`ds-story-tune${iconOnly ? " is-icon" : ""}`}>
@@ -94,7 +94,7 @@ export function StoryRepairMenu({ step, iconOnly = true }: { step: ReviewStepVie
 function RailBeats({ step, stepIndex }: { step: ReviewStepView; stepIndex: number }) {
   if (!step.beats.length) return null;
   return (
-    <div className="ds-railbeats" aria-label={`Review beats for ${step.title.text}`}>
+    <div className="ds-railbeats">
       <div className="ds-railbeats-head">
         <span>Review beats</span>
         {step.health?.broad ? (
@@ -335,7 +335,7 @@ function FileItem({
       </span>
       <span className="ds-fileitem-meta">
         {file.untoured ? (
-          <span className="ds-fileitem-flag" title={`${file.untoured} unexplained ${plural(file.untoured, "change")}`}>
+          <span className="ds-fileitem-flag" aria-hidden="true" title={`${file.untoured} unexplained ${plural(file.untoured, "change")}`}>
             ▲
           </span>
         ) : null}
@@ -381,6 +381,7 @@ function TreeChildren({ children, depth, commented }: { children: TreeChild[]; d
                 {child.untoured ? (
                   <span
                     className="ds-fileitem-flag"
+                    aria-hidden="true"
                     title={`${child.untoured} unexplained ${plural(child.untoured, "change")}`}
                   >
                     ▲
@@ -607,14 +608,7 @@ export function Sidebar({ payload }: { payload: ReviewPayload }) {
           title="Resize sidebar"
         />
       </aside>
-      <button
-        className="ds-rail-scrim"
-        data-sidebar-scrim
-        type="button"
-        aria-label="Close review navigation"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
+      <div className="ds-rail-scrim" data-sidebar-scrim aria-hidden="true" />
     </>
   );
 }

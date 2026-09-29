@@ -620,7 +620,7 @@ test("the overview keeps reading shape quiet and commit evolution native", () =>
   assert.match(storyView, /function ReadingPath/);
   assert.match(storyView, /stages\.join\(" → "\)/);
   assert.match(storyView, /stages\.join\(", then "\)/);
-  assert.match(storyView, /aria-label=\{`\$\{arc\.changeTypeLabel\}\. Reading path:/);
+  assert.match(storyView, /<span className="ds-sr-only">\{\`\$\{arc\.changeTypeLabel\}\. Reading path:/);
   assert.match(storyView, /<details className="ds-intro-evolution">/);
   assert.match(storyView, /How this evolved/);
   assert.match(storyView, /data-goto-step=\{phase\.relatedPanelIndex\}/);
@@ -1235,7 +1235,7 @@ test("the built bundle actually ships the review behaviour", (t) => {
     "Live updates interrupted.",
     "The review changed while this page was open",
     "Opening implementation in ",
-    "Remove this queued comment?",
+    "Remove this comment?",
     "invalid diagram SVG",
     "ds-review-ui:",
     "ds-viewed:",

@@ -34,6 +34,9 @@ function commitScope(repo, requested) {
         head: commit,
         label: commit === 'HEAD' ? 'Latest commit' : `Commit ${describeCommit(repo, commit)}`,
         active: 'commit',
+        ...(commit === requested
+            ? {}
+            : { substitutionNote: `${requested} is not a known commit, showing the latest commit instead.` }),
     };
 }
 /**
@@ -48,12 +51,20 @@ function branchScope(repo, requested, from) {
     const parent = from && resolveCommit(repo, from) ? from : undefined;
     const fork = branchForkPoint(repo, branch, parent);
     const pinned = parent ? { from: parent } : {};
+    const notes = [];
+    if (requested && branch !== requested) {
+        notes.push(`${requested} is not a known branch, showing ${branch} instead.`);
+    }
+    if (from && !parent) {
+        notes.push(`${from} is not a known ref, the parent was auto-detected instead.`);
+    }
+    const note = notes.length ? { substitutionNote: notes.join(' ') } : {};
     if (!fork) {
         const why = parent ? `shares no history with ${parent}` : 'has no fork point from another branch';
-        return { base: branch, head: branch, label: `${branch} ${why}`, active: 'branch', branch, ...pinned };
+        return { base: branch, head: branch, label: `${branch} ${why}`, active: 'branch', branch, ...pinned, ...note };
     }
     if (fork.ahead === 0) {
-        return { base: fork.base, head: branch, label: `${branch} is already in ${fork.parent}`, active: 'branch', branch, ...pinned };
+        return { base: fork.base, head: branch, label: `${branch} is already in ${fork.parent}`, active: 'branch', branch, ...pinned, ...note };
     }
     const commits = `${fork.ahead} commit${fork.ahead === 1 ? '' : 's'}`;
     return {
@@ -63,5 +74,6 @@ function branchScope(repo, requested, from) {
         active: 'branch',
         branch,
         ...pinned,
+        ...note,
     };
 }

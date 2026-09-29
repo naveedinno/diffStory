@@ -54,7 +54,9 @@ export function storyState(story: StoryRowView, liveEvidence: boolean): StorySta
       tone: "warn",
       detail: story.inStoryDrift
         ? `${plural(story.inStoryDrift, "story file")} changed${
-            story.outsideStoryDrift ? ` · ${plural(story.outsideStoryDrift, "side file")} also changed` : ""
+            story.outsideStoryDrift
+              ? ` · ${plural(story.outsideStoryDrift, "file")} outside the story also changed`
+              : ""
           }`
         : "Regenerate the story for the current diff",
     };
@@ -70,7 +72,7 @@ export function storyState(story: StoryRowView, liveEvidence: boolean): StorySta
     label: "Current",
     tone: "ready",
     detail: story.outsideStoryDrift
-      ? `Story current · ${plural(story.outsideStoryDrift, "side file")} changed`
+      ? `Story current · ${plural(story.outsideStoryDrift, "file")} outside the story changed`
       : "Story matches its captured scope",
   };
 }

@@ -57,17 +57,27 @@ export function ThemeMenu({ className }: { className?: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  // Arrow-open target: set by the toggle key handler, consumed by the open effect.
+  const pendingFocus = useRef<number | null>(null);
 
   const close = useCallback((restoreFocus: boolean) => {
+    pendingFocus.current = null;
     setOpen((wasOpen) => {
       if (wasOpen && restoreFocus) toggle.current?.focus();
       return false;
     });
   }, []);
 
-  // Opening focuses the checked item, matching the vanilla control.
+  // Opening focuses the checked item, matching the vanilla control — unless an
+  // arrow key on the toggle requested the first or last item instead.
   useEffect(() => {
     if (!open) return;
+    const pending = pendingFocus.current;
+    pendingFocus.current = null;
+    if (pending !== null) {
+      menu.current?.querySelectorAll<HTMLElement>("[data-theme-choice]")?.[pending]?.focus();
+      return;
+    }
     menu.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
   }, [open, theme]);
 
@@ -100,6 +110,29 @@ export function ThemeMenu({ className }: { className?: string }) {
 
   const label = `Color theme: ${LABEL[theme]}`;
 
+  // Arrow keys on the toggle open the menu at the first/last item, mirroring
+  // onMenuKeyDown's wrap direction. Enter/Space fall through to native click.
+  const onToggleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const count = menu.current?.querySelectorAll("[data-theme-choice]").length ?? 0;
+    if (!count) return;
+    pendingFocus.current = event.key === "ArrowDown" ? 0 : count - 1;
+    setOpen(true);
+  };
+
+  // A theme flip restyles the whole document; suppress transitions for that one
+  // frame so segment tiles, buttons, and tabs cut over instead of smearing.
+  const choose = (mode: ThemeMode) => {
+    const override = document.createElement("style");
+    override.textContent = "*,*::before,*::after{transition:none!important}";
+    document.head.appendChild(override);
+    setTheme(mode);
+    void document.body.offsetHeight;
+    requestAnimationFrame(() => override.remove());
+    close(true);
+  };
+
   return (
     <div ref={wrap} className={cn("ds-theme-wrap", className)}>
       <button
@@ -112,6 +145,7 @@ export function ThemeMenu({ className }: { className?: string }) {
         aria-label={label}
         title={label}
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={onToggleKeyDown}
       >
         <span>
           <ThemeIcon mode={theme} />
@@ -132,10 +166,7 @@ export function ThemeMenu({ className }: { className?: string }) {
             role="menuitemradio"
             data-theme-choice={mode}
             aria-checked={theme === mode}
-            onClick={() => {
-              setTheme(mode);
-              close(true);
-            }}
+            onClick={() => choose(mode)}
           >
             <span className="ds-theme-choice-icon">
               <ThemeIcon mode={mode} />

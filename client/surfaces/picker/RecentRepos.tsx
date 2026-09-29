@@ -1,5 +1,5 @@
-// The recents stack: one card per remembered workspace, plus the "unavailable
-// workspaces" disclosure and the no-repositories-yet empty state.
+// The recents stack: one card per remembered repository, plus the "unavailable
+// repositories" disclosure and the no-repositories-yet empty state.
 //
 // Two details that look cosmetic and are not:
 //
@@ -39,10 +39,11 @@
 //     attribute is global ARIA, so on a plain `<div>` they are ignored, while
 //     `contextmenu`, touch long-press and Shift+F10 still reach the handler by
 //     bubbling up from whichever control in the row has focus.
-//   - `BouncyAccordion` replaces `<details>`, which cannot animate its own
-//     height. Its content wrapper hardcodes `px-5 pb-5`; the description cancels
-//     that with negative margins, and because the measured element is the padded
-//     one, `-mb-5` is also what keeps the animated height honest.
+//   - The unavailable-repos disclosure is a native `<details>`, not
+//     `BouncyAccordion`: a bounce on a frequent control is noise, and `<summary>`
+//     gives keyboard, screen-reader, and find-in-page behaviour for free.
+//     (Pairing note for the recheck: FileSummary's generated-output disclosure
+//     is the same pattern — plan 016 lands it there.)
 //   - `useQuietSubtree` covers the whole stack because `Loader` bakes in
 //     `role="status"`. A spinner that announces itself once per removed row is
 //     noise on top of the picker's real status paragraph, which lives in
@@ -51,7 +52,6 @@
 import { Fragment, useRef, type ReactNode } from "react";
 import { ChevronRight, Folder, GitBranch, Trash2 } from "lucide-react";
 import { AnimatedBadge } from "../../vendor/beui/motion/animated-badge";
-import { BouncyAccordion } from "../../vendor/beui/motion/bouncy-accordion";
 import { Button } from "../../vendor/beui/motion/button/base";
 import {
   ContextMenu,
@@ -60,7 +60,6 @@ import {
   ContextMenuTrigger,
 } from "../../vendor/beui/motion/context-menu";
 import { Loader } from "../../vendor/beui/motion/loader";
-import { NumberTicker } from "../../vendor/beui/motion/number-ticker";
 import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import type { RecentRow } from "../../../src/payloads";
 import { cn } from "../../shared/cn";
@@ -69,7 +68,7 @@ import { plural, prettyPath, relativeTime } from "./format";
 
 /** Signal colours for the portalled tooltip bubble, which has none of its own. */
 export const TOOLTIP_SURFACE =
-  "max-w-[min(90vw,560px)] rounded-[var(--radius-sm)] border-line bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
+  "max-w-[min(90vw,560px)] rounded-[var(--radius-sm)] border-line bg-surface-3 px-2.5 py-1 text-sm font-medium break-all whitespace-normal text-text shadow-[var(--shadow)]";
 
 /** Menu rows are focused programmatically, so `:focus` — not `:focus-visible`. */
 const MENU_ITEM = "focus:bg-fill-2 focus:outline-none";
@@ -151,18 +150,18 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
             whileHover={undefined}
             onClick={() => onOpen(row.path)}
             className={cn(
-              "flex h-auto w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-left text-text",
+              "flex h-auto w-full items-center gap-[13px] rounded-[var(--radius-island)] border border-transparent bg-surface-2 px-4 py-3.5 text-start text-text",
               "transition-[background-color,border-color] duration-[var(--motion-duration-fast)] ease-out",
               "hover:border-line hover:bg-fill-1",
               "contrast-more:border-text",
-              "max-[480px]:pr-[54px]",
+              "max-[480px]:pe-[54px]",
             )}
           >
             <span
               aria-hidden="true"
               className={cn(
                 "w-5 flex-none text-right font-mono text-xs font-semibold tracking-[-.01em] max-[480px]:hidden",
-                row.isGit ? "text-[var(--numeral)]" : "text-[var(--numeral-dim)]",
+                row.isGit ? "text-[var(--numeral)]" : "text-[var(--text-3)]",
               )}
             >
               {String(index + 1).padStart(2, "0")}
@@ -177,7 +176,19 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
               <span className="flex items-center gap-2">
-                <span className="truncate text-[15px] font-semibold tracking-[-.012em]">{row.name}</span>
+                {/* Same hover-to-reveal contract as the path below: the name
+                    truncates, so the full string lives in the tooltip. */}
+                <Tooltip
+                  content={row.name}
+                  side="bottom"
+                  delay={350}
+                  className={TOOLTIP_SURFACE}
+                  wrapperClassName="min-w-0 max-w-full"
+                >
+                  <span className="block min-w-0 truncate text-lg font-semibold tracking-[-.012em]">
+                    {row.name}
+                  </span>
+                </Tooltip>
                 {row.isGit ? null : (
                   <AnimatedBadge
                     status="danger"
@@ -229,7 +240,7 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
             content="Remove from recent repositories"
             side="left"
             className={TOOLTIP_SURFACE}
-            wrapperClassName="w-11 items-stretch max-[480px]:absolute max-[480px]:top-3 max-[480px]:right-3 max-[480px]:z-[2] max-[480px]:w-[34px]"
+            wrapperClassName="w-11 items-stretch max-[480px]:absolute max-[480px]:top-3 max-[480px]:end-3 max-[480px]:z-[2] max-[480px]:w-[34px]"
           >
             <Button
               type="button"
@@ -244,7 +255,7 @@ function RepoRow({ row, index, home, now, busy, onOpen, onRemove }: RowProps) {
                 onRemove(row.path);
               }}
               className={cn(
-                "relative flex h-auto w-full items-center justify-center rounded-[var(--radius-island)] border border-transparent bg-surface-2 text-text-3",
+                "relative flex h-auto w-full items-center justify-center rounded-[var(--radius-island)] border border-transparent bg-transparent text-text-3",
                 "transition-colors duration-[var(--motion-duration-fast)] hover:bg-del-soft hover:text-danger-text disabled:opacity-55",
                 "contrast-more:border-text",
                 // Compact layout: the control overlays the card's reserved right
@@ -342,46 +353,29 @@ export function RecentRepos({ recents, home, now, removing, onOpen, onRemove }: 
       {recents.length ? null : <EmptyRecents />}
       {available.map((row, i) => rowFor(row, i))}
       {missing.length ? (
-        <BouncyAccordion
-          className="mt-3 border-t border-line-soft pt-2"
-          items={[
-            {
-              id: "unavailable",
-              title: (
-                <>
-                  <NumberTicker value={missing.length} duration={0.5} startOnView={false} className="align-middle" />
-                  {" unavailable "}
-                  {plural(missing.length, "workspace", "workspaces")}
-                </>
-              ),
-              description: (
-                <div className="grid grid-cols-[minmax(0,1fr)] gap-2 pt-0.5">
-                  {missing.map((row, i) => rowFor(row, available.length + i))}
-                </div>
-              ),
-            },
-          ]}
-          classNames={{
-            item: "overflow-visible bg-transparent",
-            trigger: cn(
-              "min-h-0 gap-2 px-[3px] py-2",
-              // `outline-none` is baked into the vendored trigger, so the focus
-              // ring has to come back from here or the control has none at all.
+        <details className="group mt-3 border-t border-line-soft pt-2">
+          <summary
+            className={cn(
+              "flex cursor-pointer list-none items-center gap-2 px-[3px] py-2 text-xs font-semibold text-text-3",
+              // `list-none` drops the marker in Firefox; WebKit needs the
+              // pseudo-element.
+              "[&::-webkit-details-marker]:hidden",
               "focus-visible:shadow-[var(--shadow-focus)]",
-            ),
-            // Deliberately NOT a flex container. The ticker is one word in a
-            // sentence, and flexbox strips the leading and trailing space from
-            // an anonymous text item — "2unavailable workspaces". Inline flow
-            // keeps the spaces; `overflow-visible` undoes the vendored
-            // `truncate` so the rolling digit is not clipped vertically.
-            title: "overflow-visible text-xs font-semibold text-text-3",
-            chevron: "h-3.5 w-3.5 text-text-3",
-            // The vendored content wrapper hardcodes `px-5 pb-5`. The rows have to
-            // line up with the available ones above, and the measured element is
-            // the padded one, so `-mb-5` is also what keeps the height honest.
-            description: "-mx-5 -mb-5 text-[unset] leading-[unset] text-text",
-          }}
-        />
+            )}
+          >
+            <ChevronRight
+              className="h-3.5 w-3.5 text-text-3 transition-transform duration-[var(--motion-duration-fast)] group-open:rotate-90 motion-reduce:transition-none"
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <span>
+              {missing.length} unavailable {plural(missing.length, "repository", "repositories")}
+            </span>
+          </summary>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 pt-0.5">
+            {missing.map((row, i) => rowFor(row, available.length + i))}
+          </div>
+        </details>
       ) : null}
     </div>
   );

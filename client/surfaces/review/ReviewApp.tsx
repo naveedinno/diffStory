@@ -143,10 +143,10 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
   const summary = report.inScopeFiles
     ? `${report.inScopeFiles} story ${plural(report.inScopeFiles, "file")}${
         report.outsideScopeFiles
-          ? ` and ${report.outsideScopeFiles} side ${plural(report.outsideScopeFiles, "file")}`
+          ? ` and ${report.outsideScopeFiles} ${plural(report.outsideScopeFiles, "file")} outside the story`
           : ""
       } changed after this story was captured.`
-    : `${report.outsideScopeFiles} side ${plural(report.outsideScopeFiles, "file")} changed. The story's selected files still match its baseline.`;
+    : `${report.outsideScopeFiles} ${plural(report.outsideScopeFiles, "file")} outside the story changed. The story's selected files still match its baseline.`;
   return (
     <div
       className="ds-drawer-root"
@@ -212,7 +212,7 @@ function DriftDrawer({ payload }: { payload: ReviewPayload }) {
                   </span>
                   <span className="ds-drift-file-meta">
                     <em className={`is-${file.scope}`}>
-                      {file.scope === "story" ? "Story" : "Side"}
+                      {file.scope === "story" ? "Story" : "Outside story"}
                     </em>
                     {file.additions !== undefined ||
                     file.deletions !== undefined ? (
@@ -252,16 +252,16 @@ const COMMANDS: [string, string, string, string][] = [
     "review",
     "Open Review",
     "",
-    "Unresolved notes, coverage evidence, and the challenge pass",
+    "Unresolved comments, coverage evidence, and the challenge pass",
   ],
   ["next-unviewed", "Next unreviewed file", "", "Keep the review moving"],
   [
     "toggle-viewed",
     "Toggle current file reviewed",
     "V",
-    "Bind completion to this exact file diff",
+    "Mark this file reviewed for this exact diff.",
   ],
-  ["read-aloud", "Toggle read aloud", "Space", "Pause or resume narration"],
+  ["read-aloud", "Toggle read aloud", "Space", "Pause or resume read aloud"],
 ];
 
 function CommandPalette() {
@@ -325,6 +325,11 @@ function CommandPalette() {
           </span>
           <span>
             <kbd>?</kbd> commands
+          </span>
+          <span>
+            <label>
+              <input type="checkbox" data-shortcuts-toggle defaultChecked /> Single-key shortcuts
+            </label>
           </span>
         </div>
       </div>
@@ -485,7 +490,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 <span
                   className="ds-tab-badge"
                   id="ds-open-count"
-                  title="Unresolved notes"
+                  title="Unresolved comments"
                   hidden={!chrome.openCount}
                 >
                   <b>{chrome.openCount}</b>

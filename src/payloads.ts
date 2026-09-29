@@ -102,6 +102,8 @@ export interface ChangePayload {
  files: ChangeFileView[];
  /** Set only when a review route could not load its story. */
  notice?: string;
+ /** Set only when a requested scope ref fell back to something else. */
+ scopeNotice?: string;
 }
 
 /**

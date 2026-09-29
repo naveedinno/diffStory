@@ -717,7 +717,7 @@ test('app server drives picker → open → refs → recent → close', async ()
     // the built bundle. What this test still owns is that / serves the picker
     // shell at all, with the right title and entry point.
     const rootText = await root.text();
-    assert.match(rootText, /<title>diffStory — pick a repo<\/title>/);
+    assert.match(rootText, /<title>diffStory — Pick a repository<\/title>/);
     assert.match(rootText, /<body class="ds-map-bg" data-surface="picker">/);
     assert.match(rootText, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/picker\.js"><\/script>/);
     assert.match(rootText.toLowerCase(), /pick a repo/);

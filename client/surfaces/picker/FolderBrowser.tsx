@@ -106,6 +106,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
   const list = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<View>({ kind: "loading" });
+  const [refetching, setRefetching] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(-1);
   // Set just before a selection change that should also scroll; hover must not.
@@ -113,6 +114,13 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
   // Guards a stale listing from overwriting a newer one when a slow parent
   // directory resolves after a fast child.
   const browseId = useRef(0);
+  // Latest view for `browse()`, which keeps a mounted listing on refetch and so
+  // must know whether there is one. Same assign-during-render idiom as the
+  // modal hook's `openCb` — an idempotent write of derived state.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // Last path `browse()` was asked for, so the error branch can retry it.
+  const lastPath = useRef<string | null>(null);
 
   // Strip the live regions the vendored Input and Loader bake in, but keep the
   // one this surface owns — see the adoption note at the top of the file.
@@ -131,12 +139,18 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
 
   const browse = useCallback((path: string | null) => {
     const id = ++browseId.current;
+    lastPath.current = path;
     setQuery("");
     setSelected(-1);
-    setView({ kind: "loading" });
+    // A listing already on screen stays mounted at reduced opacity behind a
+    // small loading row; the full spinner is only for the first open, when
+    // there is nothing to keep.
+    if (viewRef.current.kind === "ready") setRefetching(true);
+    else setView({ kind: "loading" });
     requestJson<FsListing>("/api/fs" + (path ? "?path=" + encodeURIComponent(path) : ""))
       .then((listing) => {
         if (browseId.current !== id) return;
+        setRefetching(false);
         setView({ kind: "ready", listing });
         // Descending replaces every row, so focus has to come back to the field
         // or it lands on a button that no longer exists. Only while the sheet is
@@ -145,6 +159,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
       })
       .catch(() => {
         if (browseId.current !== id) return;
+        setRefetching(false);
         setView({ kind: "error" });
       });
   }, []);
@@ -278,7 +293,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
         className="ds-sheet flex max-h-[76vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[var(--radius-island)] border border-line-soft bg-surface-3 shadow-[var(--shadow)] contrast-more:border-text"
       >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4 py-3.5">
-          <span className="flex-1 text-[15px] font-semibold">Choose a repository</span>
+          <span className="flex-1 text-lg font-semibold">Choose a repository</span>
           <Tooltip content="Close" side="left" className={TOOLTIP_SURFACE}>
             <Button
               type="button"
@@ -378,13 +393,13 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
                 "data-[state=focused]:border-accent-line contrast-more:border-text",
               ),
               input: cn(
-                "pl-[35px] text-[13px] leading-[34px] text-text",
-                hasFilter ? "pr-[34px]" : "pr-3.5",
+                "ps-[35px] text-lg leading-[34px] text-text sm:text-[13px]",
+                hasFilter ? "pe-[34px]" : "pe-3.5",
                 "placeholder:text-text-3",
                 "[&::-webkit-search-cancel-button]:appearance-none",
               ),
-              leftIcon: "left-[11px] text-text-3",
-              rightIcon: "right-1.5 [&_button]:size-[23px] [&_svg]:h-3 [&_svg]:w-3",
+              leftIcon: "start-[11px] text-text-3",
+              rightIcon: "end-1.5 [&_button]:size-[23px] [&_svg]:h-3 [&_svg]:w-3",
             }}
           />
           <span className="ds-sr-only" role="status" aria-live="polite">
@@ -392,53 +407,97 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
           </span>
         </div>
 
-        <div ref={list} id="fslist" role="listbox" aria-label="Folders in this location" className="min-h-[120px] flex-1 overflow-y-auto p-1.5">
+        <div
+          ref={list}
+          id="fslist"
+          role="listbox"
+          aria-label="Folders in this location"
+          aria-busy={refetching || undefined}
+          className="min-h-[120px] flex-1 overflow-y-auto p-1.5"
+        >
           {view.kind === "loading" ? (
             <div className="flex flex-col items-center gap-2.5 p-[26px] text-center text-[13px] text-text-3">
               <Loader variant="dots" size={20} label="" />
               <span>Loading…</span>
             </div>
           ) : view.kind === "error" ? (
-            <div className="p-[26px] text-center text-[13px] text-text-3">{READ_ERROR}</div>
-          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 p-[26px] text-center text-[13px] text-text-3">
+              <span>{READ_ERROR}</span>
+              {/* Ghost idiom mirrors the crumb buttons above: the variant's own
+                  colours are displaced, so the accent ink is pinned back on. */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                pressScale={0.97}
+                whileHover={undefined}
+                onClick={() => browse(lastPath.current)}
+                className="h-auto px-3 py-1.5 text-[13px] font-semibold text-accent-text hover:bg-fill-2 hover:text-accent-text"
+              >
+                Try again
+              </Button>
+            </div>
+          ) : filtered.length === 0 && !refetching ? (
             <div className="p-[26px] text-center text-[13px] text-text-3">
               {trimmed ? `No folders match “${trimmed}”.` : "No subfolders here."}
             </div>
           ) : (
-            filtered.map((entry, index) => (
-              <button
-                key={entry.path}
-                id={`fs-entry-${index}`}
-                type="button"
-                role="option"
-                tabIndex={-1}
-                aria-selected={index === activeIndex}
-                onMouseEnter={() => select(index, false)}
-                onClick={() => activate(entry)}
-                className={cn(
-                  "flex w-full items-center gap-[11px] rounded-[var(--radius)] px-2.5 py-[9px] text-left",
-                  "hover:bg-fill-2",
-                  index === activeIndex && "bg-fill-2 shadow-[inset_0_0_0_1px_var(--accent-line)]",
-                )}
-              >
-                <span className="flex flex-none text-accent">
-                  <Folder className="h-5 w-5" strokeWidth={1.7} />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-left text-sm">{entry.name}</span>
-                {entry.isGit ? (
-                  <span className="rounded-[var(--radius-sm)] bg-add-soft px-[7px] py-px text-[11px] font-semibold text-diff-add-text">repo</span>
-                ) : (
-                  <span className="flex flex-none text-text-3 opacity-50" aria-hidden="true">
-                    <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                  </span>
-                )}
-              </button>
-            ))
+            <>
+              {/* Refetch keeps the previous rows mounted at reduced opacity
+                  with pointer events on, behind the loading row below. */}
+              <div className={refetching ? "opacity-55" : undefined}>
+                {filtered.map((entry, index) => (
+                  <button
+                    key={entry.path}
+                    id={`fs-entry-${index}`}
+                    type="button"
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={index === activeIndex}
+                    onMouseEnter={() => select(index, false)}
+                    onClick={() => activate(entry)}
+                    className={cn(
+                      "flex w-full items-center gap-[11px] rounded-[var(--radius)] px-2.5 py-[9px] text-start",
+                      "hover:bg-fill-2",
+                      index === activeIndex && "bg-fill-2 shadow-[inset_0_0_0_1px_var(--accent-line)]",
+                    )}
+                  >
+                    <span className="flex flex-none text-accent">
+                      <Folder className="h-5 w-5" strokeWidth={1.7} />
+                    </span>
+                    <Tooltip
+                      content={entry.name}
+                      side="bottom"
+                      delay={350}
+                      className={TOOLTIP_SURFACE}
+                      wrapperClassName="min-w-0 max-w-full flex-1"
+                    >
+                      <span className="block min-w-0 truncate text-start text-sm">{entry.name}</span>
+                    </Tooltip>
+                    {entry.isGit ? (
+                      <span className="rounded-[var(--radius-sm)] bg-add-soft px-[7px] py-px text-[11px] font-semibold text-diff-add-text">repo</span>
+                    ) : (
+                      <span className="flex flex-none text-text-3 opacity-50" aria-hidden="true">
+                        <ChevronRight className="h-4 w-4" strokeWidth={2} />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {refetching ? (
+                <div className="flex items-center justify-center gap-2 p-3 text-md text-text-3">
+                  <Loader variant="dots" size={16} label="" />
+                  <span>Loading…</span>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
 
         <div className="flex items-center gap-2.5 border-t border-line-soft px-4 py-[13px]">
-          <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-text-3">{current}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-sm text-text-3" title={current || undefined}>
+            {current}
+          </span>
           <Button
             type="button"
             pressScale={0.97}
@@ -446,7 +505,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
             onClick={() => {
               if (currentIsGit) onOpenRepo(current);
             }}
-            // The disabled label is not a label, it is the reason — "Not a git
+            // The disabled label is not a label, it is the reason — "Not a Git
             // repo" is the sheet's whole answer to "why can't I pick this?".
             // Fading an accent pill to 40% put that sentence at 2.35:1, the
             // least legible text on the surface, which is backwards. Disabled
@@ -459,7 +518,7 @@ export const FolderBrowser = forwardRef<FolderBrowserHandle, FolderBrowserProps>
               "disabled:bg-fill-2 disabled:text-text-2 disabled:opacity-100",
             )}
           >
-            {currentIsGit ? "Open this folder" : "Not a git repo"}
+            {currentIsGit ? "Open this folder" : "Not a Git repo"}
           </Button>
         </div>
       </div>

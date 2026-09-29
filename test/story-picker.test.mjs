@@ -165,7 +165,7 @@ test('review history serves a React shell, not a hand-built page', async () => {
       assert.equal(response.status, 200);
       assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
 
-      assert.match(html, /<title>diffStory — [^<]* review history<\/title>/);
+      assert.match(html, /<title>diffStory — [^<]* Review history<\/title>/);
       assert.match(html, /<body class="ds-map-bg" data-surface="stories">/, 'the dot field paints before React mounts');
       assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
       assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/stories\.js"><\/script>/);
@@ -416,8 +416,8 @@ test('the badge state machine keeps its order and its wording', () => {
   // Drift wording counts files, and the side-file clause only appears when
   // there are side files.
   assert.match(storyState, /plural\(story\.inStoryDrift, "story file"\)\} changed/);
-  assert.match(storyState, /story\.outsideStoryDrift \? ` · \$\{plural\(story\.outsideStoryDrift, "side file"\)\} also changed` : ""/);
-  assert.match(storyState, /Story current · \$\{plural\(story\.outsideStoryDrift, "side file"\)\} changed/);
+  assert.match(storyState, /` · \$\{plural\(story\.outsideStoryDrift, "file"\)\} outside the story also changed`/);
+  assert.match(storyState, /Story current · \$\{plural\(story\.outsideStoryDrift, "file"\)\} outside the story changed/);
   // "Saved" is the one tone with no colour of its own — neutral on purpose.
   assert.match(storyState, /saved: "text-neutral-status-text bg-fill-2"/);
 });
@@ -580,7 +580,7 @@ test('review history keeps its accessibility contracts', () => {
     /if \(!scope\.command\) return chip;/,
     'and a scope with no command opens no bubble at all, exactly as the attribute did',
   );
-  assert.match(storyRow, /content="Remove story"/);
+  assert.match(storyRow, /content="Remove review"/);
   assert.ok(!/\stitle=["{]/.test(storyRow), 'no native tooltip fires a second time on top of the styled one');
   // A tooltip only supplies `aria-describedby` while it is open, and the chip
   // is not focusable, so it only ever opens on hover. Measured in Chrome, the
@@ -633,9 +633,9 @@ test('review history uses the shared spatial tier with no per-row stagger', () =
 test('saved reviews reveal a glance preview without hiding information on touch', () => {
   assert.match(storyRow, /"story-glance inline-flex/);
   assert.match(storyRow, /<Eye[^>]*aria-hidden="true"/s);
-  assert.match(storyRow, /story-glance-detail max-w-0 translate-x-1 overflow-hidden opacity-0/);
-  assert.match(storyRow, /group-focus-visible:max-w-\[150px\]/);
-  assert.match(storyRow, /\[@media_\(hover:hover\)_and_\(pointer:fine\)\]:group-hover:max-w-\[150px\]/);
+  assert.match(storyRow, /story-glance-detail w-0 translate-x-1 overflow-hidden opacity-0/);
+  assert.match(storyRow, /group-focus-visible:w-\[150px\]/);
+  assert.match(storyRow, /\[@media_\(hover:hover\)_and_\(pointer:fine\)\]:group-hover:w-\[150px\]/);
   assert.match(storyRow, /max-\[760px\]:hidden/);
   assert.match(storyRow, /motion-reduce:transform-none motion-reduce:transition-none/);
 });
@@ -715,7 +715,7 @@ test('the built bundle actually ships the review-history behaviour', (t) => {
     'Story matches its captured scope',
     'No summary yet.',
     'This story file could not be read.',
-    'Remove this review?',
+    'Remove this story?',
     'from this repo?',
     'Could not remove story.',
     // The confirm's three states, which are a component contract now rather

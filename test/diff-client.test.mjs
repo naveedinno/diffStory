@@ -229,7 +229,7 @@ test('unwrapped diffs scroll horizontally without disturbing vertical row naviga
   // The toolbar is sized from the measured scroller viewport, never a fixed
   // scrollbar deduction — that left a strip of code past the toolbar's right
   // edge whenever the diff was too short to need a vertical scrollbar.
-  assert.match(DIFF_CSS, /\.ds-difftoolbar\{[^}]*left:0[^}]*width:var\(--ds-diffviewport-w,100cqw\)[^}]*max-width:var\(--ds-diffviewport-w,100cqw\)/);
+  assert.match(DIFF_CSS, /\.ds-difftoolbar\{[^}]*inset-inline-start:0[^}]*width:var\(--ds-diffviewport-w,100cqw\)[^}]*max-width:var\(--ds-diffviewport-w,100cqw\)/);
   assert.doesNotMatch(DIFF_CSS, /\.ds-difftoolbar\{[^}]*100cqw - 11px/);
   // The step's tune menu opens over the sticky toolbar (9) and file head (10).
   assert.match(DIFF_CSS, /\.ds-story-tune-pop\{[^}]*z-index:11/);
@@ -270,7 +270,7 @@ test('split panes resize independently of line length and scroll their code loca
   assert.match(DIFF_CSS, /\.ds-split-scrollbars\{[^}]*display:flex/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-left\{flex-grow:var\(--ds-split,50\)/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-right\{flex-grow:calc\(100 - var\(--ds-split,50\)\)/);
-  assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*left:-12px;right:-12px/);
+  assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*inset-inline-start:-12px;inset-inline-end:-12px/);
 });
 
 test('split panes share native grid tracks without scroll-driven geometry', () => {
@@ -299,6 +299,6 @@ test('compact file toolbars wrap identity and review controls onto separate rows
   assert.match(DIFF_CSS, /@media \(max-width:720px\)[\s\S]*\.ds-filepanel-head\{flex-wrap:wrap/);
   assert.match(DIFF_CSS, /\.ds-filepanel-head::after\{content:'';order:6;flex-basis:100%/);
   assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-linewrap-toggle\{order:9\}/);
-  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:10;margin-left:auto\}/);
+  assert.match(DIFF_CSS, /\.ds-filepanel-head>\.ds-modetoggle\{order:10;margin-inline-start:auto\}/);
   assert.match(DIFF_CSS, /@media \(max-width:470px\)[\s\S]*\.ds-reviewchrome-main>\.ds-titlewrap\{display:none\}/);
 });

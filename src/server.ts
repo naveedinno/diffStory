@@ -632,7 +632,7 @@ function handle(
             (JSON.parse(body || "{}") as { path?: string }).path ?? "",
           );
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         if (!path)
           return sendJson(res, 400, { error: "Missing repository path." });
@@ -656,7 +656,7 @@ function handle(
         try {
           raw = JSON.parse(body || "{}") as typeof raw;
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         const candidate = raw.undo?.entry;
         const path = typeof candidate?.path === "string" ? candidate.path : "";
@@ -704,7 +704,7 @@ function handle(
         try {
           value = (JSON.parse(body || "{}") as { editor?: unknown }).editor;
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         if (!isSourceEditor(value)) {
           return sendJson(res, 400, {
@@ -726,7 +726,7 @@ function handle(
         try {
           input = JSON.parse(body || "{}") as typeof input;
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         const file = typeof input.file === "string" ? input.file : "";
         const line = Number(input.line);
@@ -806,10 +806,10 @@ function handle(
             (JSON.parse(body || "{}") as { path?: string }).path ?? "",
           );
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         if (!path || !isGitRepo(path)) {
-          return sendJson(res, 400, { error: "Not a git repository." });
+          return sendJson(res, 400, { error: "Not a Git repository." });
         }
         if (session.repo && session.repo !== path)
           liveHub.closeRepo(session.repo);
@@ -845,7 +845,7 @@ function handle(
         try {
           id = String((JSON.parse(body || "{}") as { id?: string }).id ?? "");
         } catch {
-          return sendJson(res, 400, { error: "invalid JSON" });
+          return sendJson(res, 400, { error: "Invalid JSON." });
         }
         if (!id) return sendJson(res, 400, { error: "Missing story id." });
         const path = storyPathForId(repo, id);
@@ -1226,7 +1226,7 @@ function handle(
           const updated = updateComment(repo, id, input, story);
           if (updated) {
             sendJson(res, 200, updated);
-          } else sendJson(res, 404, { error: "no such comment" });
+          } else sendJson(res, 404, { error: "No such comment." });
         } catch (e) {
           sendCommentMutationError(res, e);
         }
@@ -1281,7 +1281,7 @@ function handle(
 function pickerStub(home: string): string {
   return renderShell<PickerPayload>({
     surface: "picker",
-    title: "pick a repo",
+    title: "Pick a repository",
     bodyClass: "ds-map-bg",
     payload: { recents: recentRowsForPicker(home), home, now: Date.now() },
   });
@@ -1330,7 +1330,7 @@ function storyChooser(session: Session, refreshEvidence = false): string {
   const repoName = basename(repo);
   return renderShell<StoriesPayload>({
     surface: "stories",
-    title: `${repoName} review history`,
+    title: `${repoName} Review history`,
     bodyClass: "ds-map-bg",
     payload: {
       repoName,
@@ -1485,9 +1485,10 @@ function changeScreen(
 function renderChange(session: Session, scope: Scope, notice?: string): string {
   const repo = session.repo as string;
   const summary = summarizeChange(repo, session.base, session.head);
+  const scopeNotice = [scope.substitutionNote, summary.note].filter(Boolean).join(' ');
   return renderShell<ChangePayload>({
     surface: "change",
-    title: "choose review scope",
+    title: "Choose review scope",
     bodyClass: "ds-map-bg",
     payload: {
       repoName: basename(repo),
@@ -1500,6 +1501,7 @@ function renderChange(session: Session, scope: Scope, notice?: string): string {
       ...(scope.from ? { branchFrom: scope.from } : {}),
       files: summary.files,
       ...(notice ? { notice } : {}),
+      ...(scopeNotice ? { scopeNotice } : {}),
     },
   });
 }
@@ -3476,7 +3478,7 @@ function runAloudSpeak(
   try {
     input = JSON.parse(body || "{}") as typeof input;
   } catch {
-    return sendJson(res, 400, { error: "invalid JSON" });
+    return sendJson(res, 400, { error: "Invalid JSON." });
   }
   const text = typeof input.text === "string" ? input.text.trim() : "";
   if (!text) return sendJson(res, 400, { error: "No text to speak." });
@@ -3510,7 +3512,7 @@ function runAloudPrepare(
   try {
     input = JSON.parse(body || "{}") as typeof input;
   } catch {
-    return sendJson(res, 400, { error: "invalid JSON" });
+    return sendJson(res, 400, { error: "Invalid JSON." });
   }
   const text = typeof input.text === "string" ? input.text.trim() : "";
   if (!text) return sendJson(res, 400, { error: "No text to prepare." });
@@ -3557,7 +3559,7 @@ function runAloudControl(
     }
     action = input.action;
   } catch {
-    return sendJson(res, 400, { error: "invalid JSON" });
+    return sendJson(res, 400, { error: "Invalid JSON." });
   }
   aloud
     .control(action)

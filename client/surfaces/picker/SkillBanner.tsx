@@ -117,7 +117,7 @@ export function SkillBanner() {
   return (
     <>
       {shimmering ? <style>{TEXT_SHIMMER_KEYFRAMES}</style> : null}
-      <p className="mt-3.5 flex items-center gap-2.5 border-t border-line-soft px-0.5 pt-2.5 text-[11.5px] leading-[1.45] text-text-2 contrast-more:border-text">
+      <p className="mt-3.5 flex items-center gap-2.5 border-t border-line-soft px-0.5 pt-2.5 text-sm leading-[1.45] text-text-2 contrast-more:border-text">
         {/* Polite + atomic: the text is replaced wholesale, so a partial read
             would be misleading. */}
         <span className="min-w-0 flex-1" role="status" aria-live="polite" aria-atomic="true">
@@ -139,7 +139,7 @@ export function SkillBanner() {
           pressScale={0.97}
           disabled={override?.busy ?? false}
           onClick={update}
-          className="h-auto flex-none rounded-full bg-fill-1 px-[11px] py-1.5 text-[11.5px] font-semibold text-text-2 hover:bg-fill-2 hover:text-text disabled:opacity-55"
+          className="h-auto flex-none rounded-full bg-fill-1 px-[11px] py-1.5 text-sm font-semibold text-text-2 hover:bg-fill-2 hover:text-text disabled:opacity-55"
         >
           {label}
         </Button>

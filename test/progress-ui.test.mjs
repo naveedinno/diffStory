@@ -338,7 +338,7 @@ test('the panel keeps all five of its states', () => {
   // cannot start
   assert.match(state, /export function blockRun/);
   assert.match(state, /title: "Cannot start"/);
-  assert.match(state, /label: error\.label \|\| "Could not start"/);
+  assert.match(state, /label: error\.label \|\| "Could not start\."/);
 
   // The milestone pulse freezes once a run lands, in every state.
   assert.match(state, /finished: true/);
@@ -363,7 +363,7 @@ test('the stage variant and the elapsed clock survive the port', () => {
   // title, roomier milestones and note, and no scroll cap of its own.
   assert.match(panel, /stage: "mt-7 max-h-none"/);
   assert.match(panel, /const stage = variant === "stage";/);
-  assert.match(panel, /stage && "text-\[11\.5px\]"/);
+  assert.match(panel, /stage && "text-sm"/);
   assert.match(milestones, /compact && "px-4 pt-3\.5 pb-1"/);
 
   // Elapsed formatting: "42s" below a minute, "1m 5s" above it.
@@ -443,7 +443,7 @@ test('the built bundle ships the panel behaviour', (t) => {
     'Sent to ChatGPT',
     'Message delivered',
     'Cannot start',
-    'Could not start',
+    'Could not start.',
     'The connection to the agent ended',
     'reopen diffStory and check the technical details',
     'The run failed',

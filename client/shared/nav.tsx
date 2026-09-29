@@ -91,7 +91,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
         title="Home — your repositories"
         aria-label="Home"
         className={cn(
-          "-ml-[7px] inline-flex flex-none items-center gap-2 rounded-[var(--radius)] px-[7px] py-[5px] text-text no-underline",
+          "-ms-[7px] inline-flex flex-none items-center gap-2 rounded-[var(--radius)] px-[7px] py-[5px] text-text no-underline",
           "transition-[background-color,transform,box-shadow] duration-[var(--motion-duration-press)] ease-out",
           "hover:bg-fill-2 active:scale-[.98]",
           "focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
@@ -102,7 +102,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
           className="block [--ds-brand-node-a:var(--text)] [--ds-brand-node-b:var(--accent-hi)] [--ds-brand-node-c:var(--text)] [--ds-brand-path:var(--accent)]"
           size={22}
         />
-        <span className="text-[15px] tracking-[-.01em] max-[560px]:hidden">
+        <span className="text-lg tracking-[-.01em] max-[560px]:hidden">
           <span className="font-medium text-text-2">diff</span>
           <span className="font-semibold text-text">Story</span>
         </span>
@@ -115,7 +115,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
             {crumbs.map((crumb, index) => {
               const last = index === crumbs.length - 1;
               const shape =
-                "max-w-[42ch] truncate rounded-[var(--radius-sm)] px-1.5 py-[3px] text-[13.5px] whitespace-nowrap";
+                "max-w-[42ch] truncate rounded-[var(--radius-sm)] px-1.5 py-[3px] text-base whitespace-nowrap";
               return (
                 <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-[3px]">
                   {index > 0 ? (
@@ -126,6 +126,7 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
                   {crumb.href && !last ? (
                     <a
                       href={crumb.href}
+                      title={crumb.label}
                       className={cn(
                         shape,
                         "text-accent-text no-underline hover:bg-fill-2 focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
@@ -134,7 +135,11 @@ export function Nav({ home = "/repos", crumbs = [], right }: NavProps) {
                       {crumb.label}
                     </a>
                   ) : (
-                    <span className={cn(shape, "cursor-default font-semibold text-text")} aria-current="page">
+                    <span
+                      className={cn(shape, "cursor-default font-semibold text-text")}
+                      aria-current="page"
+                      title={crumb.label}
+                    >
                       {crumb.label}
                     </span>
                   )}

@@ -219,7 +219,7 @@ test("read aloud focus is static and routine playback state stays in the control
   // above the play button — below it is off the bottom of the viewport.
   assert.match(
     PAGE_CSS,
-    /\.ds-narration-stop\{position:absolute;z-index:13;bottom:calc\(100% \+ 14px\);left:0;width:62px;height:32px/,
+    /\.ds-narration-stop\{position:absolute;z-index:13;bottom:calc\(100% \+ 14px\);inset-inline-start:0;width:62px;height:32px/,
   );
   assert.doesNotMatch(PAGE_CSS, /ds-playstep/);
   assert.match(

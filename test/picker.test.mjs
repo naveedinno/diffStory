@@ -108,7 +108,7 @@ test('the picker route serves a React shell, not a hand-built page', async () =>
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
 
-    assert.match(html, /<title>diffStory — pick a repo<\/title>/);
+    assert.match(html, /<title>diffStory — Pick a repository<\/title>/);
     assert.match(html, /<body class="ds-map-bg" data-surface="picker">/, 'the dot field paints before React mounts');
     assert.match(html, /<link rel="stylesheet" href="\/assets\/client\/app\.css">/);
     assert.match(html, /<script type="module" blocking="render" data-ds-entry src="\/assets\/client\/picker\.js"><\/script>/);
@@ -347,7 +347,7 @@ test('the folder browser keeps its combobox/listbox accessibility contract', () 
   assert.match(folderBrowser, /aria-controls="fslist"/);
   assert.match(folderBrowser, /aria-label="Filter folders in this location"/);
   assert.match(folderBrowser, /aria-activedescendant=\{activeIndex >= 0 \? `fs-entry-\$\{activeIndex\}` : undefined\}/);
-  assert.match(folderBrowser, /id="fslist" role="listbox" aria-label="Folders in this location"/);
+  assert.match(folderBrowser, /id="fslist"\s+role="listbox"\s+aria-label="Folders in this location"/);
   assert.match(folderBrowser, /aria-selected=\{index === activeIndex\}/);
   assert.match(folderBrowser, /aria-current="location"/, 'the current breadcrumb segment is not a link');
   assert.match(folderBrowser, /className="ds-sr-only" role="status" aria-live="polite"/);
@@ -461,18 +461,16 @@ test('the recents list keeps its numbering, its one status pill, and its per-row
   assert.match(recentRepos, /missing\.map\(\(row, i\) => rowFor\(row, available\.length \+ i\)\)/);
   assert.match(recentRepos, /String\(index \+ 1\)\.padStart\(2, "0"\)/);
   // Pluralisation of the unavailable count, recomputed from the live list.
-  //
-  // CHANGED with the beUI adoption: the bare `{missing.length}` is now a
-  // NumberTicker, which rolls the digit when a row is removed. Both halves still
-  // have to read the live array — a ticker fed a stale prop, or a plural fixed
-  // at render, is exactly the bug the original assertion was guarding.
-  assert.match(recentRepos, /<NumberTicker value=\{missing\.length\}/);
-  assert.match(recentRepos, /\{" unavailable "\}\s*\{plural\(missing\.length, "workspace", "workspaces"\)\}/);
-  // The disclosure is a beUI accordion now, not <details>, because a native
-  // disclosure cannot animate its own height. What must survive is that the
-  // missing rows are its content and nothing else moved into it.
-  assert.match(recentRepos, /<BouncyAccordion/);
-  assert.ok(!/<details/.test(recentRepos), 'the disclosure was replaced, not doubled up');
+  // The count renders statically (no load animation) and both halves still
+  // have to read the live array — a stale prop, or a plural fixed at render,
+  // is exactly the bug the original assertion was guarding.
+  assert.match(recentRepos, /\{missing\.length\} unavailable/);
+  assert.match(recentRepos, /\{plural\(missing\.length, "repository", "repositories"\)\}/);
+  // The disclosure is a native <details> again: the bouncy accordion overshot
+  // the product's calm motion. What must survive is that the missing rows are
+  // its content and nothing else moved into it.
+  assert.match(recentRepos, /<details className="group/);
+  assert.ok(!/<BouncyAccordion/.test(recentRepos), 'the bouncy disclosure was replaced, not doubled up');
   // Per-row actions hang off the row wrapper, never off the card button:
   // ContextMenuTrigger clones aria-haspopup="menu" + aria-expanded onto its
   // child, and on the card those would describe a button that actually
@@ -596,7 +594,7 @@ test('the built bundle actually ships the picker behaviour', (t) => {
     'No subfolders here.',
     'No folders match',
     'Open this folder',
-    'Not a git repo',
+    'Not a Git repo',
     'No repositories yet',
     'from recent repositories.',
     'Undo',

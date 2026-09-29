@@ -168,8 +168,10 @@ test("Review queue cards can be edited and removed", () => {
   assert.match(PAGE_JS, /function saveQueuedComment\(card\)/);
   assert.match(PAGE_JS, /method:'PATCH'/);
   assert.match(PAGE_JS, /JSON\.stringify\(\{type:type,body:body\}\)/);
-  assert.match(PAGE_JS, /function removeQueuedComment\(id\)/);
-  assert.match(PAGE_JS, /window\.confirm\('Remove this queued comment\?'\)/);
+  assert.match(PAGE_JS, /function askRemoveQueuedComment\(id,btn\)/);
+  assert.match(PAGE_JS, /function deleteQueuedComment\(id,box\)/);
+  assert.match(PAGE_JS, /Remove this comment\?/);
+  assert.doesNotMatch(PAGE_JS, /window\.confirm/);
   assert.match(PAGE_JS, /method:'DELETE'/);
 });
 
@@ -204,7 +206,7 @@ test("Copy all exports queued comments only, including exact code context", () =
   assert.match(PAGE_JS, /button\.classList\.remove\('is-copied'\)/);
   assert.match(PAGE_JS, /label\.textContent='Copy all'/);
   assert.match(PAGE_CSS, /\.ds-copy-action\.is-copied/);
-  assert.match(PAGE_CSS, /\.ds-copy-action\.is-copied \.ds-copy-action-check\{opacity:1;transform:scale\(1\) rotate\(0\)\}/);
+  assert.match(PAGE_CSS, /\.ds-copy-action\.is-copied \.ds-copy-action-check\{opacity:1;transform:scale\(1\);filter:blur\(0\)\}/);
 });
 
 test("the review-comment feature contains no AI delivery or conversation machinery", () => {

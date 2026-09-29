@@ -14,11 +14,16 @@ export interface ChangeSummary {
   files: ChangeFile[];
   totalChanged: number;
   hasChanges: boolean;
+  /** Set when the requested base override fell back, so the UI can say so. */
+  note?: string;
 }
 
 /** Describe the current change. `base`/`head` override the smart default (resolveBase). */
 export function summarizeChange(repo: string, base?: string, head?: string): ChangeSummary {
-  const resolved = resolveBase(repo, base);
+  let fellBackFrom = '';
+  const resolved = resolveBase(repo, base, (requested) => {
+    fellBackFrom = requested;
+  });
   const files = numstat(repo, resolved, head);
   return {
     base: resolved,
@@ -26,5 +31,8 @@ export function summarizeChange(repo: string, base?: string, head?: string): Cha
     files,
     totalChanged: files.length,
     hasChanges: files.length > 0,
+    ...(fellBackFrom
+      ? { note: `${fellBackFrom} is not a known ref, showing ${describeBase(repo, resolved)} instead.` }
+      : {}),
   };
 }

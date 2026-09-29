@@ -247,8 +247,8 @@ function TrustEvidence({ payload }: { payload: ReviewPayload }) {
         ) : null}
         <div className="ds-trust-foot">
           {storyless
-            ? "The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities."
-            : "Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility."}
+            ? "The page shows the bounded diff directly. You still need to inspect excluded files and reconcile divergent staged state before deciding."
+            : "Coverage means every rendered changed range is fully claimed by story steps. You still need to inspect excluded files before deciding."}
         </div>
       </section>
 
@@ -288,7 +288,7 @@ function TrustEvidence({ payload }: { payload: ReviewPayload }) {
             Outside the bounded renderer <span className="ds-option-count">{excludedFiles.length}</span>
           </h2>
           <p className="ds-exclusions-note">
-            These files are part of the git change but are not included in story coverage or the default diff DOM.
+            These files are part of the Git change but are not included in story coverage or the default diff DOM.
             Inspect them deliberately before deciding.
           </p>
           {excludedFiles.map((file) => (
@@ -312,7 +312,7 @@ function TrustEvidence({ payload }: { payload: ReviewPayload }) {
             <input type="checkbox" data-exclusions-ack />
             <span>
               <strong>I inspected these exclusions</strong>
-              <small>Bound to this exact diff; a code change clears the acknowledgement.</small>
+              <small>Bound to this exact diff; a code change clears the acknowledgment.</small>
             </span>
           </label>
         </section>
@@ -550,8 +550,8 @@ export function ReviewPage({ payload }: { payload: ReviewPayload }) {
             </h2>
             <div className="ds-review-section">
               <a className="ds-review-option" href={`${routeBase}/stories`}>
-                <span className="ds-review-option-title">Saved reviews</span>
-                <span className="ds-review-option-desc">Open older review sessions for this repository.</span>
+                <span className="ds-review-option-title">Review history</span>
+                <span className="ds-review-option-desc">Open an earlier saved review for this repository.</span>
               </a>
             </div>
           </section>

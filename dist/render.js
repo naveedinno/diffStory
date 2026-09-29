@@ -241,7 +241,7 @@ function storyRepairMenu(step, iconOnly = false) {
         : "";
     return `<details class="ds-story-tune${iconOnly ? " is-icon" : ""}">
     <summary aria-label="Repair this story step" title="Story repair options.${esc(healthTitle)}">${iconOnly ? repairStepIcon() : "<span>Repair step</span>"}</summary>
-    <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the claim and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each decision its own local camera.</small></button></div>
+    <div class="ds-story-tune-pop"><button type="button" data-story-repair="rewrite" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Rewrite explanation</strong><small>Make the claim and evidence sharper without changing the review path.</small></button><button type="button" data-story-repair="shorten" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Make shorter</strong><small>Condense this explanation without dropping its risk.</small></button><button type="button" data-story-repair="split" data-story-step="${esc(step.id)}" data-story-file="${esc(step.file)}"><strong>Split into smaller stops</strong><small>Give each decision its own stop.</small></button></div>
   </details>`;
 }
 function conceptStepPanel(s, i) {
@@ -734,7 +734,7 @@ export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDi
       <div class="ds-trust-stat warn"><div class="ds-trust-num">${trust.uncoveredLines}</div><div class="ds-trust-lbl">${plural(trust.uncoveredLines, "change")} no step explains</div></div>
     </div>`}
     ${verdict}
-    <div class="ds-trust-foot">${storyless ? "The page shows the bounded diff directly. Excluded files and divergent staged state remain separate reviewer responsibilities." : "Coverage means every rendered changed range is fully claimed by story steps. Excluded files remain a separate reviewer responsibility."}</div>
+    <div class="ds-trust-foot">${storyless ? "The page shows the bounded diff directly. You still need to inspect excluded files and reconcile divergent staged state before deciding." : "Coverage means every rendered changed range is fully claimed by story steps. You still need to inspect excluded files before deciding."}</div>
   </section>`;
     const unexplained = trust.pending || storyless || clean
         ? ""
@@ -744,7 +744,7 @@ export function renderTrustEvidence(trust, stepIndexById, excludedFiles, indexDi
         <h2 class="ds-reviewpage-h" id="ds-exclusions-title">Outside the bounded renderer <span class="ds-option-count">${excludedFiles.length}</span></h2>
         <p class="ds-exclusions-note">These files are part of the git change but are not included in story coverage or the default diff DOM. Inspect them deliberately before deciding.</p>
         ${excludedFiles.map(excludedFileCard).join("")}
-        <label class="ds-exclusion-ack"><input type="checkbox" data-exclusions-ack><span><strong>I inspected these exclusions</strong><small>Bound to this exact diff; a code change clears the acknowledgement.</small></span></label>
+        <label class="ds-exclusion-ack"><input type="checkbox" data-exclusions-ack><span><strong>I inspected these exclusions</strong><small>Bound to this exact diff; a code change clears the acknowledgment.</small></span></label>
       </section>`
         : "";
     const stagedState = indexDivergentFiles.length

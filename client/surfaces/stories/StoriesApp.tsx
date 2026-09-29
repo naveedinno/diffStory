@@ -28,12 +28,14 @@
 // and more honest.
 
 import { useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ActionSwapRollText } from "../../vendor/beui/motion/action-swap-roll";
 import { ButtonLink } from "../../vendor/beui/motion/button/base";
 import { Tooltip } from "../../vendor/beui/motion/tooltip";
 import type { StoriesPayload, StoryRowView } from "../../../src/payloads";
 import { failureMessage, requestJson } from "../../shared/api";
 import { cn } from "../../shared/cn";
+import { EASE_SIGNAL_OUT } from "../../shared/motion";
 import { Nav, navActionClass } from "../../shared/nav";
 import { EmptyHistory } from "./EmptyHistory";
 import { RemoveStoryDialog } from "./RemoveStoryDialog";
@@ -47,6 +49,7 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const main = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
 
   const cancel = () => {
     if (busy) return;
@@ -70,7 +73,7 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
         setTarget(null);
         setError(null);
         // Dropping the row is what renumbers the list, recounts the heading and
-        // the open-notes status, and swaps in the empty state. The vanilla page
+        // the open-comments status, and swaps in the empty state. The vanilla page
         // reached the last of those with `location.reload()`.
         setStories((rows) => rows.filter((row) => row.id !== story.id));
         setStatus(`Removed ${story.title || story.id}.`);
@@ -102,7 +105,7 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
               content="Recompute live diff and drift evidence for every saved review"
               side="bottom"
               wrapperClassName="flex-none"
-              className="max-w-[min(44ch,90vw)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 text-[11.5px] whitespace-normal text-text shadow-signal"
+              className="max-w-[min(44ch,90vw)] rounded-[var(--radius-sm)] border-line-soft bg-surface-3 text-sm whitespace-normal text-text shadow-signal"
             >
               <a className={navActionClass} href={`${routeBase}/stories?evidence=refresh`}>
                 Refresh evidence
@@ -118,11 +121,11 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
         >
           <header className="mb-[22px] flex items-end justify-between gap-7 border-b border-line-soft pb-[22px] max-[760px]:items-start max-[560px]:block">
             <div className="min-w-0">
-              <p className="m-0 mb-1.5 font-mono text-[10.5px] font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase">
+              <p className="m-0 mb-1.5 font-mono text-xs font-medium tracking-[var(--tracking-kicker)] text-text-3 uppercase">
                 {repoName}
               </p>
               <div className="flex flex-wrap items-center gap-3.5">
-                <h1 className="m-0 font-display text-[26px] font-bold tracking-[-.02em]">Review history</h1>
+                <h1 className="m-0 font-display text-[26px] font-bold tracking-[-.02em] text-balance">Review history</h1>
                 {/* Exactly one "Start review" exists on this page, and it lives
                     with the title rather than in the empty state — the empty
                     state must not become the only way to start. */}
@@ -136,23 +139,23 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                   pressScale={0.97}
                   className={cn(
                     "h-[var(--control-h-lg)] rounded-full bg-accent px-4",
-                    "text-[13.5px] font-semibold text-on-accent no-underline hover:bg-accent-solid-hover",
+                    "text-base font-semibold text-on-accent no-underline hover:bg-accent-solid-hover",
                     "transition-colors duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none",
                   )}
                 >
                   Start review
                 </ButtonLink>
               </div>
-              <p className="mt-[7px] mb-0 max-w-[58ch] text-[13.5px] leading-[1.45] text-text-2">
+              <p className="mt-[7px] mb-0 max-w-[58ch] text-base leading-[1.45] text-pretty text-text-2">
                 Resume a saved review when you need its scope or its notes.
               </p>
             </div>
             {openNotes ? (
               <span
                 aria-label="Review history status"
-                className="flex items-center gap-3.5 text-[12px] whitespace-nowrap text-text-2 max-[560px]:mt-3.5"
+                className="flex items-center gap-3.5 text-md whitespace-nowrap text-text-2 max-[560px]:mt-3.5"
               >
-                {/* Removing a story with open notes changes this count while
+                {/* Removing a story with open comments changes this count while
                     the page stays put, and beUI's ActionSwapText is the one
                     swap primitive here that does NOT animate on mount
                     (`AnimatePresence initial={false}`) — so the count rolls
@@ -161,7 +164,7 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                 <ActionSwapRollText value={`notes-${openNotes}`}>
                   <span>
                     <b className="text-text tabular-nums">{openNotes}</b>{" "}
-                    {openNotes === 1 ? "review has" : "reviews have"} open notes
+                    {openNotes === 1 ? "review has" : "reviews have"} open comments
                   </span>
                 </ActionSwapRollText>
               </span>
@@ -183,18 +186,26 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                 </h2>
               </div>
               <div id="storyList" className="grid gap-3">
-                {stories.map((story, index) => (
-                  <StoryRow
-                    key={story.id}
-                    story={story}
-                    index={index}
-                    routeBase={routeBase}
-                    now={now}
-                    liveEvidence={liveEvidence}
-                    busy={busy && target?.id === story.id}
-                    onRemove={setTarget}
-                  />
-                ))}
+                <AnimatePresence initial={false}>
+                  {stories.map((story, index) => (
+                    <motion.div
+                      key={story.id}
+                      layout={!reduceMotion}
+                      exit={reduceMotion ? undefined : { opacity: 0, y: -12 }}
+                      transition={{ duration: 0.2, ease: EASE_SIGNAL_OUT }}
+                    >
+                      <StoryRow
+                        story={story}
+                        index={index}
+                        routeBase={routeBase}
+                        now={now}
+                        liveEvidence={liveEvidence}
+                        busy={busy && target?.id === story.id}
+                        onRemove={setTarget}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </section>
           ) : (

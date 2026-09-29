@@ -278,7 +278,7 @@
     color: var(--text);
     font: inherit;
     font-size: 12.5px;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
   }
   .ds-theme-menu button:hover,
@@ -310,7 +310,7 @@
         transform var(--motion-duration-press) var(--motion-ease-out);
     }
     .ds-theme-toggle:active {
-      transform: scale(0.94);
+      transform: scale(0.97);
     }
     @keyframes ds-anchored-pop {
       from {
@@ -430,7 +430,7 @@
     background: transparent;
     color: var(--text);
     font: inherit;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
   }
   .ds-editor-menu [data-editor-choice]:hover,
@@ -489,7 +489,7 @@
     font: inherit;
     font-size: 10.5px;
     line-height: 1.35;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
   }
 
@@ -527,8 +527,8 @@
     .ds-editor-menu {
       position: fixed;
       top: 64px;
-      right: 12px;
-      left: 12px;
+      inset-inline-end: 12px;
+      inset-inline-start: 12px;
       width: auto;
       transform-origin: calc(100% - 58px) 0;
     }
@@ -546,5 +546,14 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+/* Forced-colors fallback: box-shadow focus rings cannot render when forced
+ * colors are active. Unlayered so it wins over layered `outline: none`. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

@@ -11,9 +11,11 @@ interface EditorPreferenceResponse {
   label: string;
 }
 
+const EDITOR_DETAIL = "Opens the workspace at the exact source line";
+
 const EDITORS: Array<{ value: SourceEditor; label: string; detail: string }> = [
-  { value: "zed", label: "Zed", detail: "Workspace and exact source line with Zed" },
-  { value: "vscode", label: "VS Code", detail: "Workspace and exact source line with VS Code" },
+  { value: "zed", label: "Zed", detail: EDITOR_DETAIL },
+  { value: "vscode", label: "VS Code", detail: EDITOR_DETAIL },
 ];
 
 function EditorGlyph() {
@@ -33,6 +35,8 @@ export function EditorMenu({ className, compact = false }: { className?: string;
   const wrap = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  // Arrow-open target: set by the toggle key handler, consumed by the open effect.
+  const pendingFocus = useRef<number | null>(null);
 
   const load = useCallback(() => {
     setError("");
@@ -47,6 +51,7 @@ export function EditorMenu({ className, compact = false }: { className?: string;
   useEffect(load, [load]);
 
   const close = useCallback((restoreFocus: boolean) => {
+    pendingFocus.current = null;
     setOpen((wasOpen) => {
       if (wasOpen && restoreFocus) toggle.current?.focus();
       return false;
@@ -55,6 +60,12 @@ export function EditorMenu({ className, compact = false }: { className?: string;
 
   useEffect(() => {
     if (!open) return;
+    const pending = pendingFocus.current;
+    pendingFocus.current = null;
+    if (pending !== null) {
+      menu.current?.querySelectorAll<HTMLElement>("[data-editor-choice]")?.[pending]?.focus();
+      return;
+    }
     menu.current?.querySelector<HTMLElement>(editor ? `[data-editor-choice="${editor}"]` : "[data-editor-choice]")?.focus();
   }, [open, editor]);
 
@@ -120,6 +131,17 @@ export function EditorMenu({ className, compact = false }: { className?: string;
   const currentLabel = editor === "zed" ? "Zed" : editor === "vscode" ? "VS Code" : "Editor";
   const accessibleLabel = error ? `Source editor setting unavailable: ${error}` : `Source editor: ${currentLabel}`;
 
+  // Arrow keys on the toggle open the menu at the first/last item, mirroring
+  // onMenuKeyDown's wrap direction. Enter/Space fall through to native click.
+  const onToggleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const count = menu.current?.querySelectorAll("[data-editor-choice]").length ?? 0;
+    if (!count) return;
+    pendingFocus.current = event.key === "ArrowDown" ? 0 : count - 1;
+    setOpen(true);
+  };
+
   return (
     <div ref={wrap} className={cn("ds-editor-wrap", className)}>
       <button
@@ -134,6 +156,7 @@ export function EditorMenu({ className, compact = false }: { className?: string;
           if (error) load();
           setOpen((value) => !value);
         }}
+        onKeyDown={onToggleKeyDown}
       >
         <EditorGlyph />
         <span className="ds-editor-toggle-label">{currentLabel}</span>

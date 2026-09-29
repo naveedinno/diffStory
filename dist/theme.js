@@ -34,7 +34,7 @@ export function themeControlStyles() {
 .ds-theme-menu button:hover,.ds-theme-menu button:focus-visible{background:var(--nv-fill,var(--fill-2,var(--hover,var(--app-fill))))}
 .ds-theme-choice-icon{width:16px;height:16px;color:var(--nv-mut,var(--muted,var(--label2,var(--app-l2))))}
 .ds-theme-check{color:var(--nv-blue,var(--accent,var(--blue,var(--app-blue))));font-weight:700;opacity:0}.ds-theme-menu button[aria-checked="true"] .ds-theme-check{opacity:1}
-@media (prefers-reduced-motion:no-preference){.ds-theme-menu:not([hidden]){animation:ds-anchored-pop var(--motion-duration-ui,200ms) var(--motion-ease-out,cubic-bezier(.23,1,.32,1)) backwards}.ds-theme-toggle{transition:background-color var(--motion-duration-fast,150ms) ease,color var(--motion-duration-fast,150ms) ease,transform var(--motion-duration-press,120ms) var(--motion-ease-out,cubic-bezier(.23,1,.32,1))}.ds-theme-toggle:active{transform:scale(.94)}@keyframes ds-anchored-pop{from{opacity:0;clip-path:inset(0 0 100% 72% round 10px);transform:translateY(-4px) scale(.96)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
+@media (prefers-reduced-motion:no-preference){.ds-theme-menu:not([hidden]){animation:ds-anchored-pop var(--motion-duration-ui,200ms) var(--motion-ease-out,cubic-bezier(.23,1,.32,1)) backwards}.ds-theme-toggle{transition:background-color var(--motion-duration-fast,150ms) ease,color var(--motion-duration-fast,150ms) ease,transform var(--motion-duration-press,120ms) var(--motion-ease-out,cubic-bezier(.23,1,.32,1))}.ds-theme-toggle:active{transform:scale(.97)}@keyframes ds-anchored-pop{from{opacity:0;clip-path:inset(0 0 100% 72% round 10px);transform:translateY(-4px) scale(.96)}to{opacity:1;clip-path:inset(0 round 10px);transform:none}}}
 @media (prefers-reduced-motion:reduce){.ds-theme-toggle,.ds-theme-menu button{transition:none}.ds-theme-toggle:active{transform:none}}
 `;
 }
@@ -66,7 +66,10 @@ export function themeBootstrapScript() {
   function resolved(mode){return mode==='system'?(media&&media.matches?'dark':'light'):mode;}
   function apply(mode){
     var value=resolved(mode),root=document.documentElement,previous=root.getAttribute('data-theme');
+    var swap=document.createElement('style');swap.setAttribute('data-ds-theme-swap','');swap.appendChild(document.createTextNode('*,*::before,*::after{transition:none!important}'));(document.head||root).appendChild(swap);
     root.setAttribute('data-theme',value);root.setAttribute('data-theme-mode',mode);root.style.colorScheme=value;
+    void root.offsetWidth;
+    var removeSwap=function(){if(swap.parentNode)swap.parentNode.removeChild(swap);};if(window.requestAnimationFrame)window.requestAnimationFrame(removeSwap);else removeSwap();
     var meta=document.querySelector('meta[data-ds-theme-color]');if(meta)meta.setAttribute('content',value==='dark'?'#0a0c0f':'#edf0f4');
     syncControls(mode);
     if(previous&&previous!==value&&typeof CustomEvent==='function')document.dispatchEvent(new CustomEvent('ds-theme-change',{detail:{theme:value,mode:mode}}));

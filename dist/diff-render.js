@@ -37,7 +37,7 @@ function movedTagHtml(moved) {
         return '';
     const text = moved.side === 'right' ? `Moved to ${moved.line}` : `Moved from ${moved.line}`;
     const where = `${moved.side === 'right' ? 'after' : 'before'} line ${moved.line}`;
-    return `<button type="button" class="ds-moved-tag" data-moved-jump data-moved-side="${moved.side}" data-moved-line="${moved.line}" title="Jump to ${where}" aria-label="${text}: jump to ${where}">${text}</button>`;
+    return `<button type="button" class="ds-moved-tag" style="padding-top:4px;padding-bottom:4px" data-moved-jump data-moved-side="${moved.side}" data-moved-line="${moved.line}" title="Jump to ${where}" aria-label="${text}: jump to ${where}">${text}</button>`;
 }
 function highlightedCode(code, target) {
     return target?.side === 'right' ? highlightNavigable(code) : highlight(code);

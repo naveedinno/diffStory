@@ -34,7 +34,7 @@ import { cn } from "../../shared/cn";
 import { ActivityText } from "./ActivityText";
 import type { ProgressState } from "./state";
 
-const MARK = "flex-none w-3.5 text-left text-[11px] leading-[inherit]";
+const MARK = "flex-none w-3.5 text-start text-[11px] leading-[inherit]";
 
 export function PlanList({ state }: { state: ProgressState }) {
   if (!state.hasPlan) return null;
@@ -87,7 +87,7 @@ export function PlanList({ state }: { state: ProgressState }) {
                   <ActivityText
                     live={!state.finished}
                     tone="faint"
-                    className="font-mono text-[11.5px] break-words"
+                    className="font-mono text-sm break-words"
                   >
                     {state.current}
                   </ActivityText>

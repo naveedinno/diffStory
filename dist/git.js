@@ -89,7 +89,7 @@ export function isGitRepo(repo) {
  *   3. HEAD (just the uncommitted changes)
  *   4. the empty tree (a fresh repo with no commits yet)
  */
-export function resolveBase(repo, override) {
+export function resolveBase(repo, override, onFallback) {
     if (override) {
         try {
             assertSafeRef(override);
@@ -101,8 +101,10 @@ export function resolveBase(repo, override) {
             ]) !== null) {
                 return override;
             }
+            onFallback?.(override);
         }
         catch {
+            onFallback?.(override);
             // Unsafe or malformed overrides are ignored; callers fall back to the
             // ordinary review base instead of passing user text to git.
         }

@@ -12,6 +12,9 @@
 //     with `Auto-detect`.
 //   - before the fetch resolves, the list is a single unselectable "Loading
 //     refs…" row rather than an empty listbox, so the field never looks broken.
+//   - when the fetch FAILS, the list is an error row plus a Retry row instead
+//     of the loading row, so a dead endpoint never reads as ongoing work. Both
+//     carry sentinel values the hook refuses to choose; Retry reruns the fetch.
 //   - the filter matches value + label + meta + kind, so typing "remote" or a
 //     commit subject finds rows whose value contains neither.
 
@@ -29,8 +32,12 @@ export const AUTO_PARENT_LABEL = "Auto-detect";
 /** The literal shown in the target field when it means the working tree. */
 export const WORKTREE_LABEL = "Working tree";
 
+/** Sentinel values for the failed-load rows. Never a ref; the hook never chooses them. */
+export const REFS_ERROR = "__REFS_ERROR__";
+export const REFS_RETRY = "__REFS_RETRY__";
+
 export interface RefOption {
-  /** Empty for the non-selectable loading row. */
+  /** Empty for the non-selectable loading row; a `REFS_*` sentinel for the failed-load rows (also never chosen). */
   value: string;
   label: string;
   meta: string;
@@ -97,9 +104,15 @@ function commitOptions(data: RefData): RefOption[] {
   return data.commits.map((commit) => option(commit.sha, commit.sha, commitMeta(commit), "commit"));
 }
 
-/** `null` data means the fetch has not landed yet. */
-export function optionsFor(kind: FieldKind, data: RefData | null): RefOption[] {
-  if (!data) return [option("", "Loading refs…", "reading local git refs", "")];
+/** `null` data means the fetch has not landed yet; `failed` means it never will without a retry. */
+export function optionsFor(kind: FieldKind, data: RefData | null, failed = false): RefOption[] {
+  if (!data && failed) {
+    return [
+      option(REFS_ERROR, "Couldn't load refs", "the ref list didn't arrive", "error"),
+      option(REFS_RETRY, "Retry", "load the ref list again", "retry"),
+    ];
+  }
+  if (!data) return [option("", "Loading refs…", "reading local Git refs", "")];
   if (kind === "commit") return [option("HEAD", "HEAD", "current HEAD", "head")].concat(commitOptions(data));
   if (kind === "branch") return branchOptions(data);
   if (kind === "from") {
@@ -118,6 +131,7 @@ export function filterOptions(options: RefOption[], query: string): RefOption[] 
   const needle = query.trim().toLowerCase();
   return options.filter((row) => {
     if (!row.value) return true;
+    if (row.value === REFS_ERROR || row.value === REFS_RETRY) return true;
     if (!needle) return true;
     return `${row.value} ${row.label} ${row.meta} ${row.kind}`.toLowerCase().indexOf(needle) >= 0;
   });
