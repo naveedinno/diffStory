@@ -193,15 +193,13 @@ test('bare hunk gap names the skipped content without decorative dots', () => {
   assert.equal(renderHunkGap(), '<div class="ds-hunkgap"><span class="ds-gaplabel">Skipped lines</span></div>');
 });
 
-test('split hunk gap is two halves: the right one canonical, the left a mirror', () => {
+test('split hunk gap is two halves: the right one canonical with every control, the left an inert mirror', () => {
   const { left, right } = renderSplitGapHalves({ file: 'a.ts', from: 10, to: 30 }, {}, 4);
   assert.match(right, /^<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-r" data-ri="4" data-gap data-gap-file="a\.ts" data-gap-from="10" data-gap-to="30" data-gap-chunk="5">/);
   assert.match(right, /<button type="button" class="ds-gapbtn" data-expand="all"[^>]*aria-label="Show all hidden lines"[^>]*>Show all</);
   assert.match(right, /aria-label="Show 5 lines above"[^>]*>↑ 5 lines</);
-  assert.doesNotMatch(right, /data-expand="down"/);
-  assert.match(left, /^<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-l" data-ri="4" data-gap-mirror>/);
-  assert.match(left, /aria-label="Show 5 lines below"[^>]*>↓ 5 lines</);
-  assert.doesNotMatch(left, /data-gap-file|data-expand="all"|data-expand="up"/);
+  assert.match(right, /data-expand="down"[^]*data-expand="all"[^]*data-expand="up"/, 'same order as the unified gap');
+  assert.equal(left, '<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-l" data-ri="4" data-gap-mirror></div>');
   assert.doesNotMatch(left + right, /⋯|ds-gapdots|ds-gap-mid|ds-gap-side/);
 });
 
@@ -218,7 +216,8 @@ test('split viewport edge exposes only the adjacent five-line direction', () => 
   assert.doesNotMatch(before.left + before.right, /data-expand="down"/);
 
   const after = renderSplitGapHalves({ file: 'a.ts', from: 50, to: 'eof' }, { edge: 'after' });
-  assert.match(after.left, /data-expand="down"/);
+  assert.match(after.right, /data-expand="down"/);
+  assert.doesNotMatch(after.left, /data-expand/, 'the controls never switch columns');
   assert.doesNotMatch(after.left + after.right, /data-expand="up"/);
 });
 
@@ -337,8 +336,9 @@ test('consecutive unexplained rows carry one tag with the run length', () => {
 test('hunk gap buttons carry readable labels', () => {
   const { left, right } = renderSplitGapHalves({ file: 'a.ts', from: 10, to: 40 });
   assert.match(right, />↑ 5 lines</);
-  assert.match(left, />↓ 5 lines</);
+  assert.match(right, />↓ 5 lines</);
   assert.match(right, />Show all</);
+  assert.doesNotMatch(left, /ds-gapbtn/);
 });
 
 test('a merged change pair renders as two halves with one navigation unit on the right', () => {

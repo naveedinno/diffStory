@@ -2137,16 +2137,17 @@ export function startReviewEngine(options){
       var after=move.after&&move.after.local?(regions[move.id+':after']||[]):[];
       before.forEach(function(run){boxes.push(annotationBox(move.id,'left',move.kind,run));});
       after.forEach(function(run){boxes.push(annotationBox(move.id,'right',move.kind,run));});
-      if(move.tag){
-        var tw=annotationTagWidth(move.tag);
-        [['left',before],['right',after]].forEach(function(pair){
-          var side=pair[0],runs=pair[1],run=runs[0];if(!run)return;
-          var box=annotationBox(move.id,side,move.kind,run);if(box.w<tw+14)return;
+      // One label per move, on the box the reader starts from; the arrow carries it across.
+      var tagEndpoint=annotationTagEndpoint(move);
+      if(tagEndpoint){
+        var tw=annotationTagWidth(move.tag),side=tagEndpoint==='before'?'left':'right',run=(tagEndpoint==='before'?before:after)[0];
+        var box=run&&annotationBox(move.id,side,move.kind,run);
+        if(box&&box.w>=tw+14){
           var laneKey=side+':'+box.x+':'+box.y+':'+box.w,lane=tagLanes[laneKey]||0;tagLanes[laneKey]=lane+1;
           tags.push({id:move.id,text:String(move.tag).toUpperCase(),x:annotationRound(box.x+box.w-tw-8),y:annotationRound(box.y+10+lane*18),w:tw,side:side,lane:lane});
-        });
+        }
       }
-      if(!move.arrow||geom.gutterRight-geom.gutterLeft<24||geom.width<640)return;
+      if(!move.arrow||geom.gutterRight-geom.gutterLeft<16||geom.width<640)return;
       if(move.kind==='reordered'&&before.length>1&&after.length>1){
         arrows.push(annotationArrow(move.id,move.kind,(before[0].top+before[0].bottom)/2,(after[1].top+after[1].bottom)/2,geom,false,false));
         arrows.push(annotationArrow(move.id,move.kind,(before[1].top+before[1].bottom)/2,(after[0].top+after[0].bottom)/2,geom,false,false));
@@ -2159,37 +2160,61 @@ export function startReviewEngine(options){
     });
     return {boxes:boxes,arrows:arrows,tags:tags};
   }
+  function annotationTagEndpoint(move){
+    if(!move.tag)return null;
+    return move.before&&move.before.local?'before':move.after&&move.after.local?'after':null;
+  }
+  // The row across the divider that shares this row's grid track, if any.
+  function flowTrackTwin(body,row){
+    var flow=body._dsFlow,es=flow?flow.entries:[];
+    for(var k=0;k<es.length;k++){var e=es[k];if(e.l&&e.l.el===row)return e.r?e.r.el:null;if(e.r&&e.r.el===row)return e.l?e.l.el:null;}
+    return null;
+  }
   function moveEndpointRows(panel,id,endpoint){
     var token=id+':'+endpoint;
     return $all('[data-move]',panel).filter(function(row){return (row.getAttribute('data-move')||'').split(/\s+/).indexOf(token)>=0;});
   }
   function clearAnnotationTagLanes(root){
-    $all('.ds-row[data-annot-tag-lanes]',root||document).forEach(function(row){row.removeAttribute('data-annot-tag-lanes');row.style.removeProperty('--ds-annot-tag-space');});
+    $all('.ds-row[data-annot-tag-lanes]',root||document).forEach(function(row){row.removeAttribute('data-annot-tag-lanes');row.removeAttribute('data-annot-tag-here');row.style.removeProperty('--ds-annot-tag-space');});
   }
+  // A label is top padding on its row. The row across the divider shares that
+  // grid track, so it takes the same padding and both code lines stay level;
+  // CSS turns that space into a margin outside its cell, so its box hugs the
+  // code. data-annot-tag-here marks the labelled row.
   function prepareAnnotationTagLanes(body,spec){
     var desired=[];
-    function rowEntry(row){for(var i=0;i<desired.length;i++)if(desired[i].row===row)return desired[i];var entry={row:row,left:0,right:0};desired.push(entry);return entry;}
+    function rowEntry(row){for(var i=0;i<desired.length;i++)if(desired[i].row===row)return desired[i];var entry={row:row,lanes:0,tags:0};desired.push(entry);return entry;}
     spec.moves.forEach(function(move){
-      if(!move.tag)return;
-      [['before','left'],['after','right']].forEach(function(pair){
-        var endpoint=pair[0],side=pair[1],anchor=move[endpoint];if(!anchor||!anchor.local)return;
-        var rows=moveEndpointRows(body,move.id,endpoint),selector=side==='left'?'.ds-cell-l .ds-code':'.ds-cell-r .ds-code',row=null,code=null;
-        for(var i=0;i<rows.length;i++){code=$(selector,rows[i]);if(code&&code.getClientRects().length){row=rows[i];break;}}
-        if(!row||!code||code.getBoundingClientRect().width-4<annotationTagWidth(move.tag)+14)return;
-        rowEntry(row)[side]++;
-      });
+      var endpoint=annotationTagEndpoint(move);if(!endpoint)return;
+      var rows=moveEndpointRows(body,move.id,endpoint),selector=endpoint==='before'?'.ds-cell-l':'.ds-cell-r',row=null,cell=null;
+      for(var i=0;i<rows.length;i++){cell=$(selector,rows[i]);if(cell&&cell.getClientRects().length){row=rows[i];break;}}
+      if(!row||!cell||cell.getBoundingClientRect().width-4<annotationTagWidth(move.tag)+14)return;
+      var entry=rowEntry(row);entry.tags++;entry.lanes=Math.max(entry.lanes,entry.tags);
     });
-    $all('.ds-row[data-annot-tag-lanes]',body).forEach(function(row){var keep=false;for(var i=0;i<desired.length;i++)if(desired[i].row===row){keep=true;break;}if(!keep){row.removeAttribute('data-annot-tag-lanes');row.style.removeProperty('--ds-annot-tag-space');}});
-    desired.forEach(function(entry){var lanes=Math.max(entry.left,entry.right);if(entry.row.getAttribute('data-annot-tag-lanes')!==String(lanes)){entry.row.setAttribute('data-annot-tag-lanes',String(lanes));entry.row.style.setProperty('--ds-annot-tag-space',String(lanes*18)+'px');}});
+    desired.slice().forEach(function(entry){
+      var twin=flowTrackTwin(body,entry.row);if(!twin||!twin.classList.contains('ds-row'))return;
+      var other=rowEntry(twin);other.lanes=Math.max(other.lanes,entry.lanes);
+    });
+    $all('.ds-row[data-annot-tag-lanes]',body).forEach(function(row){var keep=false;for(var i=0;i<desired.length;i++)if(desired[i].row===row){keep=true;break;}if(!keep){row.removeAttribute('data-annot-tag-lanes');row.removeAttribute('data-annot-tag-here');row.style.removeProperty('--ds-annot-tag-space');}});
+    desired.forEach(function(entry){
+      if(entry.row.getAttribute('data-annot-tag-lanes')!==String(entry.lanes)){entry.row.setAttribute('data-annot-tag-lanes',String(entry.lanes));entry.row.style.setProperty('--ds-annot-tag-space',String(entry.lanes*18)+'px');}
+      if(entry.tags)entry.row.setAttribute('data-annot-tag-here','');else entry.row.removeAttribute('data-annot-tag-here');
+    });
   }
+  // Boxes wrap whole cells, line numbers included, so the arrow between them
+  // only crosses the divider and never draws over a line number.
   function annotationRuns(body,id,endpoint,side){
-    var bodyRect=body.getBoundingClientRect(),selector=side==='left'?'.ds-cell-l .ds-code':'.ds-cell-r .ds-code';
-    var rects=moveEndpointRows(body,id,endpoint).map(function(row){var code=$(selector,row);if(!code||!code.getClientRects().length)return null;var rect=code.getBoundingClientRect();return {top:annotationRound(rect.top-bodyRect.top),bottom:annotationRound(rect.bottom-bodyRect.top),left:annotationRound(rect.left-bodyRect.left),right:annotationRound(rect.right-bodyRect.left)};}).filter(Boolean).sort(function(a,b){return a.top-b.top;});
-    var runs=[];rects.forEach(function(rect){var last=runs[runs.length-1];if(last&&rect.top-last.bottom<=1&&Math.abs(rect.left-last.left)<=1&&Math.abs(rect.right-last.right)<=1){last.bottom=rect.bottom;}else runs.push({top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right});});return runs;
+    var bodyRect=body.getBoundingClientRect(),selector=side==='left'?'.ds-cell-l':'.ds-cell-r';
+    var rects=moveEndpointRows(body,id,endpoint).map(function(row){
+      var cell=$(selector,row);if(!cell||!cell.getClientRects().length)return null;
+      var rect=cell.getBoundingClientRect(),gap=parseFloat(window.getComputedStyle(cell).marginTop)||0;
+      return {edge:annotationRound(rect.top-bodyRect.top-gap),top:annotationRound(rect.top-bodyRect.top),bottom:annotationRound(rect.bottom-bodyRect.top),left:annotationRound(rect.left-bodyRect.left),right:annotationRound(rect.right-bodyRect.left)};
+    }).filter(Boolean).sort(function(a,b){return a.top-b.top;});
+    var runs=[];rects.forEach(function(rect){var last=runs[runs.length-1];if(last&&rect.edge-last.bottom<=1&&Math.abs(rect.left-last.left)<=1&&Math.abs(rect.right-last.right)<=1){last.bottom=rect.bottom;}else runs.push({top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right});});return runs;
   }
   function measureAnnotations(body,spec){
     var regions=Object.create(null);spec.moves.forEach(function(move){if(move.before&&move.before.local)regions[move.id+':before']=annotationRuns(body,move.id,'before','left');if(move.after&&move.after.local)regions[move.id+':after']=annotationRuns(body,move.id,'after','right');});
-    var bodyRect=body.getBoundingClientRect(),leftCode=$('.ds-cell-l .ds-code',body),rightCode=$('.ds-cell-r .ds-code',body),divider=$('.ds-celldiv',body),left=leftCode?leftCode.getBoundingClientRect().right-bodyRect.left:(divider?divider.getBoundingClientRect().left-bodyRect.left-32:bodyRect.width/2-32),right=rightCode?rightCode.getBoundingClientRect().left-bodyRect.left:(divider?divider.getBoundingClientRect().right-bodyRect.left+32:bodyRect.width/2+32);
+    var bodyRect=body.getBoundingClientRect(),leftCell=$('.ds-cell-l:not(.ds-cell-empty)',body),rightCell=$('.ds-cell-r:not(.ds-cell-empty)',body),divider=$('.ds-celldiv',body),left=leftCell?leftCell.getBoundingClientRect().right-bodyRect.left:(divider?divider.getBoundingClientRect().left-bodyRect.left:bodyRect.width/2-16),right=rightCell?rightCell.getBoundingClientRect().left-bodyRect.left:(divider?divider.getBoundingClientRect().right-bodyRect.left:bodyRect.width/2+16);
     return {regions:regions,geom:{gutterLeft:annotationRound(left),gutterRight:annotationRound(Math.max(left,right)),width:annotationRound(bodyRect.width),height:annotationRound(bodyRect.height)}};
   }
   function annotationSvgElement(name,attrs){var node=document.createElementNS('http://www.w3.org/2000/svg',name);Object.keys(attrs).forEach(function(key){node.setAttribute(key,String(attrs[key]));});return node;}
@@ -2211,6 +2236,7 @@ export function startReviewEngine(options){
     var holder=$('[data-story-diff]',panel),split=holder&&$('[data-split-inner]',holder);if(!holder||!split||split.hidden)return;
     var body=$('.ds-diffbody',split),data=$('[data-annotations]',split);if(!body||!data)return;
     $('.ds-annot',body)?.remove();var spec;try{spec=JSON.parse(data.textContent||'{}');}catch(e){return;}
+    if(!body._dsFlow&&body.classList.contains('ds-diffbody-cols'))measureSplitFlow(body);
     prepareAnnotationTagLanes(body,spec);
     var measured=measureAnnotations(body,spec),shapes=computeAnnotations(spec,measured.regions,measured.geom),trace=!prefersReducedMotion()&&panel.getAttribute('data-annot-traced')!=='1';paintAnnotations(body,shapes,measured.geom,trace);panel.setAttribute('data-annot-traced','1');
     if(typeof ResizeObserver==='function'){
@@ -2314,25 +2340,29 @@ export function startReviewEngine(options){
   // Split columns share grid tracks. Missing halves leave a track empty;
   // paired rows keep the same height even when only one side wraps.
   // Scrolling never changes code geometry or repaints the divider.
-  var flowFrame=0,flowObserver=null;
+  var flowFrame=0,flowObserver=null,bandFadeSeq=0;
   function flowBodies(root){return $all('.ds-diffbody-cols',root||document).filter(function(body){return !!body.offsetParent;});}
   function flowScroller(body){return closest(body,'.ds-diffscroll')||closest(body,'.ds-filedetail');}
   function flowRi(node){var v=node&&node.getAttribute?node.getAttribute('data-ri'):null;if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
   function flowItems(col){
     var out=[],kids=col.children;
-    for(var i=0;i<kids.length;i++){var k=kids[i];if(k.hidden||k.classList.contains('ds-annot')||k.classList.contains('ds-fill'))continue;out.push({el:k,y:k.offsetTop,h:k.offsetHeight,ri:flowRi(k),change:flowChangeHalf(k),moved:k.classList.contains('ds-row-moved')});}
+    for(var i=0;i<kids.length;i++){var k=kids[i];if(k.hidden||k.classList.contains('ds-annot')||k.classList.contains('ds-fill'))continue;out.push({el:k,y:k.offsetTop,h:k.offsetHeight,ri:flowRi(k),change:flowChangeHalf(k),moved:k.classList.contains('ds-row-moved'),callout:k.classList.contains('ds-annot-callout'),annotated:k.hasAttribute('data-move')});}
     return out;
   }
   function flowChangeHalf(elm){var c=elm.classList;return c.contains('ds-row-add')||c.contains('ds-row-del')||c.contains('ds-row-pair')||c.contains('ds-row-pair-l');}
   // Merge both columns into shared tracks by row index. Within a change, the
   // one-sided rows are queued per side and laid side by side from the same
   // track, so a replacement never becomes a staircase of deletions above
-  // additions. Anything two-sided or unindexed ends the run.
+  // additions. Anything two-sided or unindexed ends the run, except a move
+  // callout: it joins its side's queue so it sits right under the box it
+  // explains instead of after the whole run's filler.
   function flowEntries(L,R){
     var entries=[],lq=[],rq=[],i=0,j=0;
     function flush(){while(lq.length||rq.length)entries.push({l:lq.shift()||null,r:rq.shift()||null});}
     while(i<L.length||j<R.length){
       var a=L[i],b=R[j],e;
+      if(a&&a.ri==null&&a.callout&&lq.length){lq.push(a);i++;continue;}
+      if(b&&b.ri==null&&b.callout&&rq.length){rq.push(b);j++;continue;}
       if(a&&a.ri==null){e={l:a,r:null};i++;}
       else if(b&&b.ri==null){e={l:null,r:b};j++;}
       else if(a&&(!b||a.ri<b.ri)){e={l:a,r:null};i++;}
@@ -2364,7 +2394,8 @@ export function startReviewEngine(options){
     for(var k=0;k<entries.length;k++){
       var e=entries[k];
       if(!e.change){cur=null;continue;}
-      if(!cur){cur={idx:k,l0:null,l1:null,r0:null,r1:null,adds:0,dels:0,moved:0,rows:0};bands.push(cur);}
+      if(!cur){cur={idx:k,l0:null,l1:null,r0:null,r1:null,adds:0,dels:0,moved:0,rows:0,annotL:false,annotR:false};bands.push(cur);}
+      if(e.l&&e.l.annotated)cur.annotL=true;if(e.r&&e.r.annotated)cur.annotR=true;
       cur.rows++;if((!e.l||e.l.moved)&&(!e.r||e.r.moved))cur.moved++;
       if(e.l){if(cur.l0==null)cur.l0=e.l.y;cur.l1=e.l.y+e.l.h;}
       if(e.r){if(cur.r0==null)cur.r0=e.r.y;cur.r1=e.r.y+e.r.h;}
@@ -2405,6 +2436,17 @@ export function startReviewEngine(options){
     var l0=b.l1==null?b.r0:b.l0,l1=b.l1==null?b.r1:b.l1,r0=b.r1==null?l0:b.r0,r1=b.r1==null?l1:b.r1,c=w/2,f=function(n){return n.toFixed(1);};
     return 'M0 '+f(l0)+' C'+f(c)+' '+f(l0)+' '+f(c)+' '+f(r0)+' '+w+' '+f(r0)+' V'+f(r1)+' C'+f(c)+' '+f(r1)+' '+f(c)+' '+f(l1)+' 0 '+f(l1)+' Z';
   }
+  // A one-sided block has nothing to bridge to, so its band fades out toward
+  // the empty side instead of painting a solid block beside the filler.
+  function bandFade(svg,fades,kind){
+    if(fades[kind])return fades[kind];
+    var id='ds-band-fade-'+(++bandFadeSeq),defs=$('defs',svg);
+    if(!defs){defs=annotationSvgElement('defs',{});svg.insertBefore(defs,svg.firstChild);}
+    var grad=annotationSvgElement('linearGradient',{id:id,x1:kind==='add'?0:1,x2:kind==='add'?1:0,y1:0,y2:0});
+    grad.appendChild(annotationSvgElement('stop',{offset:0,class:'ds-band-stop ds-band-stop-'+kind,'stop-opacity':0}));
+    grad.appendChild(annotationSvgElement('stop',{offset:1,class:'ds-band-stop ds-band-stop-'+kind}));
+    defs.appendChild(grad);fades[kind]=id;return id;
+  }
   function flowSvgClear(svg){while(svg.firstChild)svg.removeChild(svg.firstChild);}
   function paintFlowBands(flow,shift,winTop,winH){
     var svg=$('.ds-bands',flow.d);if(!svg)return;
@@ -2417,12 +2459,18 @@ export function startReviewEngine(options){
     svg.setAttribute('preserveAspectRatio','none');svg.style.height=h+'px';
     svg.style.transform='translateY('+winTop+'px)';
     flowSvgClear(svg);
+    var fades={};
     flow.bands.forEach(function(b){
       var y=function(v,s){return v==null?null:v+s-winTop;};
       var g={l0:y(b.l0,shift.l),l1:y(b.l1,shift.l),r0:y(b.r0,shift.r),r1:y(b.r1,shift.r)};
       if(Math.max(g.l1==null?-Infinity:g.l1,g.r1==null?-Infinity:g.r1)<-40||Math.min(g.l0==null?Infinity:g.l0,g.r0==null?Infinity:g.r0)>winH+40)return;
+      // An annotation arrow already bridges a block boxed on both sides; a
+      // tinted band under it reads as a smudge, not a link.
+      if(b.annotL&&b.annotR)return;
       var kind=b.moved===b.rows?'moved':b.dels&&!b.adds?'del':b.adds&&!b.dels?'add':'pair';
-      svg.appendChild(annotationSvgElement('path',{class:'ds-band ds-band-'+kind,d:flowBridgePath(g,w)}));
+      var path=annotationSvgElement('path',{class:'ds-band ds-band-'+kind,d:flowBridgePath(g,w)});
+      if(kind==='add'||kind==='del')path.style.fill='url(#'+bandFade(svg,fades,kind)+')';
+      svg.appendChild(path);
     });
   }
   function applySplitFlow(body){
