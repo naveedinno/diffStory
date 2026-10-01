@@ -547,16 +547,17 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-beat.is-active .ds-beat-text{color:var(--accent-text)}
 .ds-step.is-code-step .ds-beat:not(.is-selected) .ds-beat-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
 .ds-step.is-code-step .ds-beat:not(.is-selected){padding-top:5px;padding-bottom:5px}
-/* Same type and shape as the wrap toggle beside it; the label names what it opens
-   so it never reads as a second copy of the All files tab. */
-.ds-full-diff{height:30px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid transparent;border-radius:var(--radius-pill);background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:650;white-space:nowrap;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}.ds-full-diff:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+/* The diff's own label doubles as the way out: clicking the path opens every
+   change in this file under All files. The directory gives way before the name. */
+.ds-diff-path{display:inline-flex;align-items:center;min-width:0;height:30px;margin-inline-end:auto;margin-inline-start:-7px;padding:0 7px;border:0;border-radius:7px;background:transparent;color:var(--text);font-family:var(--mono);font-size:12px;white-space:nowrap;cursor:pointer}.ds-diff-path .ds-dim{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dim)}.ds-diff-path .ds-cardpath-base{flex:none;font-weight:600}.ds-diff-path:hover{background:var(--fill-2)}.ds-diff-path:hover .ds-cardpath-base{text-decoration:underline;text-underline-offset:3px}.ds-diff-path:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
 .ds-step.is-code-step .ds-difftoolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center;padding:4px 10px}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}
 /* The wrap toggle is the tallest control here and alone set the toolbar's
    height. Coarse pointers keep their 44px target via the min-height above. */
 .ds-step.is-code-step .ds-difftoolbar .ds-linewrap-toggle{height:30px}
-/* The card, not the browser viewport, owns this toolbar's available width. The
-   global Files tab remains the scope escape when its local duplicate disappears. */
-@container (max-width:420px){.ds-step.is-code-step .ds-full-diff{display:none}}
+/* The card, not the browser viewport, owns this toolbar's available width. A
+   narrow card keeps the file name and drops its directory. */
+@container (max-width:420px){.ds-step.is-code-step .ds-diff-path .ds-dim{display:none}}
+@container (max-width:340px){.ds-step.is-code-step .ds-diff-path{display:none}}
 @container (max-width:340px){.ds-step.is-code-step .ds-linewrap-toggle [data-line-wrap-label]{display:none}.ds-step.is-code-step .ds-diffview-controls{width:100%;gap:4px}.ds-step.is-code-step .ds-linewrap-toggle{width:34px;padding:0;justify-content:center}.ds-step.is-code-step .ds-modetoggle{flex:1;min-width:0}.ds-step.is-code-step .ds-modetoggle button{flex:1;min-width:0;padding:0 6px}}
 
 /* ---- review comments ---- */
@@ -1143,7 +1144,7 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head .ds-modetoggle button{padding-inline-start:8px;padding-inline-end:8px}
   .ds-hunkgap-side{padding:0 6px;gap:6px}
 }
-@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle,.ds-full-diff{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
+@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle,.ds-diff-path{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
 @media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-row.is-voice-focus,.ds-urow.is-voice-focus,.ds-row.is-change-jump,.ds-urow.is-change-jump{animation:none!important;filter:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
 
 .ds-top{height:56px;padding:0 14px;gap:10px;background:var(--panel3);border-bottom-color:var(--line)}

@@ -207,10 +207,14 @@ test('line wrapping is an accessible persisted option and defaults to off', () =
 });
 
 test('story diff actions stay together and split panes cannot paint through the divider', () => {
+  // The file path labels the diff and opens it under All files; no separate
+  // "Whole diff" button sits beside the display-mode controls.
   assert.match(
     RENDER_SRC,
-    /<div class="ds-diffview-controls">\s*<button class="ds-full-diff"[^>]*>Whole diff<\/button>\s*\$\{lineWrapToggle\(\)\}/,
+    /<div class="ds-difftoolbar">\s*<button class="ds-diff-path" type="button" data-open-full-diff=/,
   );
+  assert.match(RENDER_SRC, /<div class="ds-diffview-controls">\s*\$\{lineWrapToggle\(\)\}/);
+  assert.doesNotMatch(RENDER_SRC, />Whole diff</);
   assert.match(
     DIFF_CSS,
     /\.ds-step\.is-code-step \.ds-difftoolbar\{[^}]*display:flex[^}]*justify-content:flex-end/,
@@ -219,7 +223,8 @@ test('story diff actions stay together and split panes cannot paint through the 
     DIFF_CSS,
     /\[data-split-inner\]:not\(\[hidden\]\) \.ds-cell\{overflow:hidden;clip-path:inset\(0\)\}/,
   );
-  assert.match(DIFF_CSS, /@container \(max-width:420px\)\{\.ds-step\.is-code-step \.ds-full-diff\{display:none\}/);
+  assert.match(DIFF_CSS, /@container \(max-width:420px\)\{\.ds-step\.is-code-step \.ds-diff-path \.ds-dim\{display:none\}/);
+  assert.match(DIFF_CSS, /@container \(max-width:340px\)\{\.ds-step\.is-code-step \.ds-diff-path\{display:none\}/);
   assert.match(DIFF_CSS, /@container \(max-width:340px\)\{\.ds-step\.is-code-step \.ds-linewrap-toggle \[data-line-wrap-label\]\{display:none\}/);
 });
 

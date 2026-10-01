@@ -86,9 +86,8 @@ function codeStepPanel(s, i, comments) {
     <div class="ds-diffscroll">
       <div class="ds-diff" id="${diffRegionId}" data-diff data-story-diff data-file="${esc(s.file)}" role="region" aria-label="${esc(s.file)} story diff"${s.newFile ? ' data-newfile="1"' : ""}>
         <div class="ds-difftoolbar">
-          <span class="ds-flex"></span>
+          <button class="ds-diff-path" type="button" data-open-full-diff="${esc(s.file)}" aria-label="${esc(`Open ${s.file} in All files`)}" title="${esc(`Open every change in ${s.file} under All files`)}"><span class="ds-dim">${esc(splitPath(s.file)[0])}</span><span class="ds-cardpath-base">${esc(splitPath(s.file)[1])}</span></button>
           <div class="ds-diffview-controls">
-            <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}" title="${esc(`Open every change in ${s.file} under All files`)}">Whole diff</button>
             ${lineWrapToggle()}
             <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
               <button data-mode="diff" aria-pressed="false">Unified</button>
