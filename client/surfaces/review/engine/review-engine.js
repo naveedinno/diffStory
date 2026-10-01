@@ -318,7 +318,7 @@ export function startReviewEngine(options){
     mermaidModulePromise=import(/* @vite-ignore */ MERMAID_ASSET_URL).then(function(mod){
       var mermaid=mod.default||mod;
       var dark=document.documentElement.getAttribute('data-theme')==='dark';
-      mermaid.initialize({startOnLoad:false,securityLevel:'strict',htmlLabels:false,suppressErrorRendering:true,maxTextSize:8000,maxEdges:120,theme:'base',look:'neo',fontFamily:'IBM Plex Sans, sans-serif',fontSize:14,themeVariables:mermaidThemeVariables(dark),flowchart:{htmlLabels:false,useMaxWidth:true,nodeSpacing:32,rankSpacing:44,wrappingWidth:180,diagramPadding:12,curve:'basis'}});
+      mermaid.initialize({startOnLoad:false,securityLevel:'strict',htmlLabels:false,suppressErrorRendering:true,maxTextSize:8000,maxEdges:120,theme:'base',look:'neo',fontFamily:'IBM Plex Sans, sans-serif',fontSize:14,themeVariables:mermaidThemeVariables(dark),flowchart:{htmlLabels:false,useMaxWidth:true,nodeSpacing:32,rankSpacing:44,wrappingWidth:180,diagramPadding:12,curve:'basis'},sequence:{useMaxWidth:true,wrap:true,mirrorActors:false,width:200,actorMargin:40,messageMargin:32,boxMargin:8,noteMargin:10,diagramMarginX:16,diagramMarginY:12,messageFontSize:14,actorFontSize:14,noteFontSize:13}});
       return mermaid;
     });
     return mermaidModulePromise;
@@ -370,6 +370,10 @@ export function startReviewEngine(options){
     var svg=mermaidDiagramSvg(figure);if(!figure||!svg)return;
     var base=mermaidBaseView(svg);
     figure.classList.toggle('is-portrait',base.height>base.width*1.35);
+    // Landscape frames take their height from the drawing, so a wide diagram
+    // is not centred in a tall empty box.
+    figure.style.setProperty('--ds-diagram-aspect',String(Math.round(base.width/base.height*1000)/1000));
+    figure.style.setProperty('--ds-diagram-height',Math.round(base.height)+'px');
   }
   function mermaidCanvasIsFullscreen(figure){return !!figure&&(document.fullscreenElement===figure||figure.classList.contains('is-mermaid-fullscreen'));}
   function applyMermaidView(figure){
@@ -486,7 +490,7 @@ export function startReviewEngine(options){
   document.addEventListener('ds-theme-change',function(){
     mermaidModulePromise=null;
     $all('[data-concept-diagram]').forEach(function(figure){
-      figure.removeAttribute('data-render-state');figure.classList.remove('is-error','is-portrait');
+      figure.removeAttribute('data-render-state');figure.classList.remove('is-error','is-portrait');figure.style.removeProperty('--ds-diagram-aspect');figure.style.removeProperty('--ds-diagram-height');
       var output=$('[data-mermaid-output]',figure);if(output)output.textContent='';
     });
     renderConceptDiagrams(document.body);mountConceptPages(document.body);

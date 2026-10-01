@@ -832,6 +832,10 @@ test("Mermaid diagrams use app typography and readable multiline spacing", () =>
   assert.match(engine, /var lineSpacing=1\.7/);
   assert.match(engine, /function classifyMermaidInlineShape\(figure\)/);
   assert.match(engine, /classList\.toggle\('is-portrait',base\.height>base\.width\*1\.35\)/);
+  assert.match(engine, /figure\.style\.setProperty\('--ds-diagram-aspect',/);
+  // Sequence diagrams wrap long messages and draw the actor row once, so a
+  // chatty diagram stays close to the frame's shape instead of shrinking.
+  assert.match(engine, /sequence:\{[^}]*wrap:true[^}]*mirrorActors:false/);
   assert.match(engine, /classifyMermaidInlineShape\(figure\);figure\.setAttribute\('data-render-state','ready'\)/);
 });
 

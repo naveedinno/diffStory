@@ -159,11 +159,17 @@ test("concept steps use a plain full-stage canvas instead of an inner card", () 
   assert.doesNotMatch(source, /ds-concept-next|Next in code/);
   assert.match(
     source,
-    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*grid-template-columns:minmax\(360px,720px\) minmax\(0,1fr\);grid-template-rows:minmax\(0,1fr\);grid-template-areas:"copy diagram";align-items:center[^}]*height:100%;min-height:100%/,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-document\{[^}]*grid-template-columns:fit-content\(720px\) minmax\(0,1fr\);grid-template-rows:minmax\(0,1fr\);grid-template-areas:"copy diagram";align-items:center[^}]*height:100%;min-height:100%/,
   );
   assert.match(
     source,
-    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-copy\{grid-area:copy;align-self:center\}/,
+    /\.ds-step\[data-scene-layout="concept-diagram"\] \.ds-concept-copy\{grid-area:copy;align-self:center;min-width:360px\}/,
+  );
+  // A landscape diagram's frame takes its height from the drawing's aspect
+  // ratio, so a wide diagram is not letterboxed inside a tall empty box.
+  assert.match(
+    source,
+    /\.ds-concept-diagram\[data-render-state="ready"\]:not\(\.is-portrait\):not\(\.is-fullscreen-active\) \.ds-concept-diagram-output\{flex:0 1 auto;height:min\(calc\(\(100cqw - 48px\) \/ var\(--ds-diagram-aspect,1\.6\) \+ 48px\),calc\(var\(--ds-diagram-height,9999px\) \* 1\.25 \+ 48px\)\)/,
   );
   assert.match(
     source,
