@@ -273,9 +273,11 @@ export function renderHunkGap(gap, opts = {}) {
     return `<div class="ds-hunkgap is-expandable"${gapDataAttrs(gap, chunk)}>${down}${all}${up}</div>`;
 }
 /** The same separator as two column halves. The right half is the canonical
- *  expandable gap (`data-gap`) and carries Show all plus the upward expander;
- *  the left half mirrors it (`data-gap-mirror`) with the downward expander, so
- *  the engine updates both from the canonical one by their shared `data-ri`. */
+ *  expandable gap (`data-gap`) and carries every control, in the unified
+ *  order, so the expanders sit in one place at the top, between hunks and at
+ *  the end of the file alike. The left half is an inert mirror
+ *  (`data-gap-mirror`) that keeps the band continuous across the divider; the
+ *  engine removes both by their shared `data-ri`. */
 export function renderSplitGapHalves(gap, opts = {}, ri) {
     const riAttr = ri === undefined ? '' : ` data-ri="${ri}"`;
     if (!gap) {
@@ -288,7 +290,7 @@ export function renderSplitGapHalves(gap, opts = {}, ri) {
     const chunk = SPLIT_CONTEXT_CHUNK;
     const { up, down, all } = gapButtons(gap, chunk, opts.edge);
     return {
-        left: `<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-l"${riAttr} data-gap-mirror>${down}</div>`,
-        right: `<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-r"${riAttr}${gapDataAttrs(gap, chunk)}>${all}${up}</div>`,
+        left: `<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-l"${riAttr} data-gap-mirror></div>`,
+        right: `<div class="ds-hunkgap is-expandable ds-hunkgap-side ds-hunkgap-r"${riAttr}${gapDataAttrs(gap, chunk)}>${down}${all}${up}</div>`,
     };
 }

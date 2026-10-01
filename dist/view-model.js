@@ -21,7 +21,7 @@ import { computeCoverage, filesForStoryCoverage } from './coverage.js';
 export { filesForStoryCoverage } from './coverage.js';
 import { isCodeStep, isPageConcept } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
-import { diffLineTokens } from './intra-line.js';
+import { runSides } from './intra-line.js';
 import { projectStoryStepScene } from './story-scenes.js';
 import { cachedEvolutionVerification } from './evolution.js';
 import { createHash } from 'node:crypto';
@@ -845,6 +845,11 @@ function emitPairedRun(dels, adds, out, sides) {
     const mates = new Map();
     for (let k = 0; k < Math.min(pairDels.length, pairAdds.length); k++)
         mates.set(pairDels[k], pairAdds[k]);
+    // Word marks come from the whole run, so a reflowed statement still shows its
+    // real change; rows left unpaired keep their own side's marks.
+    const marks = runSides(pairDels.map((row) => row.content), pairAdds.map((row) => row.content));
+    const leftMarks = new Map(pairDels.map((row, k) => [row, marks.left[k]]));
+    const rightMarks = new Map(pairAdds.map((row, k) => [row, marks.right[k]]));
     let di = 0;
     let ai = 0;
     while (di < dels.length || ai < adds.length) {
@@ -859,21 +864,27 @@ function emitPairedRun(dels, adds, out, sides) {
                 ai++;
                 continue;
             }
-            out.push(mergePair(del, mate, sides));
+            out.push(mergePair(del, mate, sides, { left: leftMarks.get(del), right: rightMarks.get(mate) }));
             di++;
             ai++;
             continue;
         }
         if (del) {
+            const left = leftMarks.get(del);
+            if (left !== undefined)
+                sides.set(del, { left });
             out.push(del);
             di++;
             continue;
         }
+        const right = rightMarks.get(add);
+        if (right !== undefined)
+            sides.set(add, { right });
         out.push(adds[ai++]);
     }
 }
 /** A deletion and an addition read as one before/after row, word-diffed. */
-function mergePair(del, add, sides) {
+function mergePair(del, add, sides, intra) {
     const merged = {
         type: 'ctx',
         changePair: true,
@@ -886,8 +897,7 @@ function mergePair(del, add, sides) {
         comment: true,
         untoured: add.untoured,
     };
-    const intra = diffLineTokens(del.content, add.content);
-    if (intra)
+    if (intra.left !== undefined || intra.right !== undefined)
         sides.set(merged, intra);
     return merged;
 }
