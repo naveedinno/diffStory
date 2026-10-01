@@ -19,7 +19,7 @@
 
 import type { ReviewPayload, ReviewStepView } from "../../../src/payloads";
 import { ExcludedScopeNotice, StoryMark } from "./Sidebar";
-import { fileExtension, html, numeral, plural, withBreaks } from "./format";
+import { fileExtension, html, numeral, plural, refLabel, withBreaks } from "./format";
 
 /** The invisible narration index inside a lazy stub. */
 function SpeechCache({ step }: { step: ReviewStepView }) {
@@ -233,7 +233,20 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
         {story.evolution ? <EvolutionDetails evolution={story.evolution} /> : null}
 
         <div className="ds-intro-utility" role="group" aria-label="Story scope and optional review material">
-          <span className="ds-intro-scope">{scopeText}</span>
+          <span className="ds-intro-scope">
+            {scopeText}
+            <span className="ds-intro-base">
+              {payload.headRef ? (
+                <>
+                  <b>{payload.baseLabel}</b> → <b>{refLabel(payload.headRef)}</b>
+                </>
+              ) : (
+                <>
+                  Working tree vs <b>{payload.baseLabel}</b>
+                </>
+              )}
+            </span>
+          </span>
           {hotspots.length || hasContext ? (
             <details className="ds-intro-notes">
               <summary>

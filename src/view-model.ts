@@ -15,6 +15,7 @@
 import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
+import { landingSearchName } from './landing-verify.js';
 import { claimedRanges } from './types.js';
 import { computeCoverage, filesForStoryCoverage } from './coverage.js';
 export { filesForStoryCoverage } from './coverage.js';
@@ -212,14 +213,17 @@ export interface CodeStepView extends StepViewBase {
   newFile: boolean;
   context: boolean;
   why: Narrative;
-  /** Verified "where am I" facts, shown under the step title. */
+  /** Verified "where am I" facts, drawn under the step title as a one-hop call graph. */
   landing?: {
     symbol: string;
     /** Basename of the step's file. */
     file: string;
-    calledBy: string[];
+    /** Authored callers; one that is another step's landing symbol links to it. */
+    callers: LandingNodeView[];
     role?: { who: string; gate?: string };
     when?: string;
+    /** The steps this one leads into (`calls`), by landing symbol or title. */
+    callees: LandingNodeView[];
   };
   /** Author-declared distrust reason when this step is a story hotspot. */
   hotspot?: Narrative;
@@ -230,6 +234,14 @@ export interface CodeStepView extends StepViewBase {
   note?: string;
   moves: LogicMoveView[];
   pairedView?: string;
+}
+
+/** One node of a landing's call graph; `panelIndex` is set when it is a story step. */
+export interface LandingNodeView {
+  label: string;
+  /** Plain prose (a step title) rather than a symbol. */
+  prose?: boolean;
+  panelIndex?: number;
 }
 
 /** A primer's diagram: the caption is prose, the source is Mermaid the client parses. */
@@ -426,6 +438,7 @@ export function buildReviewModel(
     if (reason.text.trim() && !hotspotByStep.has(spot.step)) hotspotByStep.set(spot.step, reason);
   }
 
+  const landingGraph = landingGraphIndex(steps);
   const stepViews = steps.map((step, index) =>
     isCodeStep(step)
       ? buildCodeStep(
@@ -437,6 +450,7 @@ export function buildReviewModel(
           steps,
           opts?.baseRef,
           opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index),
+          landingGraph,
         )
       : buildConceptStep(step, byId),
   );
@@ -594,6 +608,7 @@ function buildCodeStep(
   ordered?: TourStep[],
   baseRef?: string,
   detailed = true,
+  landingGraph: LandingGraphIndex = landingGraphIndex(ordered ?? [step]),
 ): CodeStepView {
   const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef, baseRef) : { blocks: [] };
   const diffFile = files.find((f) => f.newPath === step.file);
@@ -632,7 +647,7 @@ function buildCodeStep(
           landing: {
             symbol: narrativeText(step.landing.symbol),
             file: step.file.split('/').pop() ?? step.file,
-            calledBy: (step.landing.calledBy ?? []).map((caller) => narrativeText(caller)),
+            callers: (step.landing.calledBy ?? []).map((caller) => landingCaller(caller, step.id, landingGraph)),
             ...(step.landing.role
               ? {
                   role: {
@@ -642,6 +657,7 @@ function buildCodeStep(
                 }
               : {}),
             ...(step.landing.when ? { when: narrativeText(step.landing.when) } : {}),
+            callees: (step.calls ?? []).flatMap((id) => landingCallee(id, landingGraph)),
           },
         }
       : {}),
@@ -714,6 +730,45 @@ function buildLogicMoves(step: CodeTourStep, oldFile: string, ordered: TourStep[
       },
     };
   });
+}
+
+/** Story steps keyed for the landing graph: by id, and by landing search name (first step wins). */
+interface LandingGraphIndex {
+  byId: Map<string, { step: TourStep; panelIndex: number }>;
+  bySymbol: Map<string, { id: string; panelIndex: number }>;
+}
+
+function landingGraphIndex(ordered: TourStep[]): LandingGraphIndex {
+  const byId = new Map<string, { step: TourStep; panelIndex: number }>();
+  const bySymbol = new Map<string, { id: string; panelIndex: number }>();
+  ordered.forEach((step, index) => {
+    byId.set(step.id, { step, panelIndex: index + 1 });
+    if (!isCodeStep(step) || !step.landing) return;
+    const name = landingSearchName(step.landing.symbol);
+    if (name && !bySymbol.has(name)) bySymbol.set(name, { id: step.id, panelIndex: index + 1 });
+  });
+  return { byId, bySymbol };
+}
+
+/**
+ * A caller links only when its name is another step's landing symbol. The
+ * checker verified the name, not the edge, so nothing here is inferred.
+ */
+function landingCaller(caller: string, selfId: string, graph: LandingGraphIndex): LandingNodeView {
+  const target = graph.bySymbol.get(landingSearchName(caller));
+  return {
+    label: narrativeText(caller),
+    ...(target && target.id !== selfId ? { panelIndex: target.panelIndex } : {}),
+  };
+}
+
+function landingCallee(id: string, graph: LandingGraphIndex): LandingNodeView[] {
+  const target = graph.byId.get(id);
+  if (!target) return [];
+  const { step, panelIndex } = target;
+  return isCodeStep(step) && step.landing
+    ? [{ label: narrativeText(step.landing.symbol), panelIndex }]
+    : [{ label: narrativeText(step.title), prose: true, panelIndex }];
 }
 
 function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): ConceptStepView {

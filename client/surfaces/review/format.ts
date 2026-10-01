@@ -11,6 +11,11 @@ export function plural(n: number, word: string): string {
   return n === 1 ? word : `${word}s`;
 }
 
+/** A full object id reads as noise in a scope line; branch and tag names stay whole. */
+export function refLabel(ref: string): string {
+  return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 8) : ref;
+}
+
 /** Split a path into its directory prefix (with trailing slash) and base name. */
 export function splitPath(p: string): [string, string] {
   const i = p.lastIndexOf("/");

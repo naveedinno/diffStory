@@ -105,24 +105,51 @@ function codeStepPanel(s, i, comments) {
     ${stepStoryHtml(s, diffRegionId, i + 1)}
   </section>`;
 }
-/** "Where am I": the symbol on screen, its file, who reaches it, and when. Not narrated. */
+/**
+ * "Where am I": a one-hop call graph, shown in the header's map island — who reaches the symbol on screen, the
+ * symbol and its file, and the steps it leads into. Nodes that are story steps
+ * jump to them; callers outside the story stay quiet text. Not narrated.
+ */
 function landingLine(s) {
     const landing = s.landing;
     if (!landing)
         return "";
-    const parts = [
-        `<code class="ds-landing-symbol">${esc(landing.symbol)}</code>`,
-        `<span class="ds-landing-file">${esc(landing.file)}</span>`,
-    ];
-    if (landing.calledBy.length) {
-        parts.push(`<span class="ds-landing-callers">called by ${landing.calledBy.map((caller) => `<code>${esc(caller)}</code>`).join(", ")}</span>`);
+    const node = (n) => {
+        const label = n.prose ? esc(n.label) : `<code>${esc(n.label)}</code>`;
+        return n.panelIndex === undefined
+            ? `<span class="ds-landing-node is-external" title="${esc(n.label)}">${label}</span>`
+            : `<button type="button" class="ds-landing-node is-step" data-goto-step="${n.panelIndex}" title="Go to step ${n.panelIndex}: ${esc(n.label)}">${label}</button>`;
+    };
+    // An arrow and its column wrap as one hop, so a narrow header never strands an arrow.
+    const hop = (...items) => `<span class="ds-landing-hop">${items.join("")}</span>`;
+    // The map sits in a fixed-height header, so a column shows its first node and
+    // folds the rest behind a "+N" chip instead of stacking.
+    const column = (kind, name, items, noun) => {
+        const [first, ...rest] = items;
+        const more = rest.length
+            ? `<li><details class="ds-landing-more"><summary title="${rest.length} more ${noun}${rest.length === 1 ? "" : "s"}" aria-label="${rest.length} more ${noun}${rest.length === 1 ? "" : "s"}">+${rest.length}</summary><ul class="ds-landing-more-list">${rest
+                .map((item) => `<li>${item}</li>`)
+                .join("")}</ul></details></li>`
+            : "";
+        return `<ul class="ds-landing-col is-${kind}" aria-label="${name}"><li>${first}</li>${more}</ul>`;
+    };
+    const edge = '<span class="ds-landing-edge" aria-hidden="true"></span>';
+    const parts = [];
+    if (landing.callers.length) {
+        parts.push(hop(column("callers", "Called by", landing.callers.map(node), "caller"), edge));
     }
     else if (landing.role) {
-        parts.push(`<span class="ds-landing-callers">called by the ${esc(landing.role.who)}${landing.role.gate ? ` through <code>${esc(landing.role.gate)}</code>` : ""}</span>`);
+        parts.push(hop(column("callers", "Called by", [`<span class="ds-landing-node is-external is-role">the ${esc(landing.role.who)}</span>`], "caller"), landing.role.gate
+            ? `<span class="ds-landing-edge has-label"><span class="ds-sr-only">through </span><code>${esc(landing.role.gate)}</code></span>`
+            : edge));
     }
-    if (landing.when)
-        parts.push(`<span class="ds-landing-when">${esc(landing.when)}</span>`);
-    return `<p class="ds-landing" aria-label="Where this step is">${parts.join('<span class="ds-landing-sep" aria-hidden="true">·</span>')}</p>`;
+    parts.push(`<div class="ds-landing-here" aria-current="location"><code class="ds-landing-symbol">${esc(landing.symbol)}</code><span class="ds-landing-meta"><span class="ds-landing-file">${esc(landing.file)}</span>${landing.when
+        ? `<span class="ds-landing-sep" aria-hidden="true">·</span><span class="ds-landing-when">${esc(landing.when)}</span>`
+        : ""}</span></div>`);
+    if (landing.callees.length)
+        parts.push(hop(edge, column("callees", "Calls", landing.callees.map(node), "call")));
+    // Inert until the engine copies it into the header's map island on activation.
+    return `<template data-step-landing><div class="ds-landing" role="group" aria-label="Where this step is">${parts.join("")}</div></template>`;
 }
 function moveRangeLabel(file, [start, end]) {
     return `${file}:${start}${start === end ? "" : `–${end}`}`;

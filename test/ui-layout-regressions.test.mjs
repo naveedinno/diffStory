@@ -270,7 +270,7 @@ test("compact review surfaces are width-contained while code and film navigation
   );
   assert.match(
     source,
-    /\.ds-reviewchrome>\.ds-reviewchrome-rail\{display:none;position:fixed/,
+    /\.ds-reviewchrome-island>\.ds-reviewchrome-rail\{display:none;position:fixed/,
     "the compact rail must outrank the shared positioned-child rule instead of pushing header utilities off canvas",
   );
   // The thread is a row inside the dock island now, so the island is what has to

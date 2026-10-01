@@ -402,38 +402,33 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
           ? { "data-storyless-chrome": "" }
           : { "data-story-chrome": "" })}
       >
-        <div className="ds-reviewchrome-rail">
-          <div className="ds-reviewchrome-nav">
-            <SidebarToggle />
-            <CloseStory routeBase={routeBase} />
+        {/* Two islands: where the reader is (the active step's call map, copied
+            in by the engine; the story title where there is no map), and the
+            actions. */}
+        <div className="ds-reviewchrome-island is-where">
+          <div className="ds-reviewchrome-rail">
+            <div className="ds-reviewchrome-nav">
+              <SidebarToggle />
+            </div>
+          </div>
+          <div className="ds-reviewchrome-main">
+            <div className="ds-reviewchrome-mobile-nav">
+              <SidebarToggle />
+            </div>
+            <div className="ds-titlewrap" data-landing-fallback>
+              <div
+                className="ds-title"
+                title={
+                  storyless ? "Reviewing the diff" : payload.story.title.text
+                }
+              >
+                {storyless ? "Diff review" : payload.story.title.text}
+              </div>
+            </div>
+            <div className="ds-landing-host" data-landing-host hidden />
           </div>
         </div>
-        <div className="ds-reviewchrome-main">
-          <div className="ds-reviewchrome-mobile-nav">
-            <SidebarToggle />
-            <CloseStory routeBase={routeBase} srOnlyLabel />
-          </div>
-          <div className="ds-titlewrap">
-            <div
-              className="ds-title"
-              title={
-                storyless ? "Reviewing the diff" : payload.story.title.text
-              }
-            >
-              {storyless ? "Diff review" : payload.story.title.text}
-            </div>
-            <div className="ds-reviewchrome-subtitle">
-              {payload.headRef ? (
-                <>
-                  <b>{payload.baseLabel}</b> <span>→</span> <b>{refLabel(payload.headRef)}</b>
-                </>
-              ) : (
-                <>
-                  Working tree <span>vs</span> <b>{payload.baseLabel}</b>
-                </>
-              )}
-            </div>
-          </div>
+        <div className="ds-reviewchrome-island is-actions">
           <div className="ds-reviewchrome-utilities">
             <div
               className="ds-viewtoggle"
@@ -518,6 +513,7 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
                 </button>
               ) : null}
             </div>
+            <CloseStory routeBase={routeBase} srOnlyLabel />
           </div>
         </div>
       </header>
@@ -613,9 +609,4 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
       </noscript>
     </>
   );
-}
-
-/** A full object id reads as noise in a subtitle; branch and tag names stay whole. */
-function refLabel(ref: string): string {
-  return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 8) : ref;
 }

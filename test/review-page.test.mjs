@@ -1416,7 +1416,7 @@ test('story verification reaches the review model with sanitized detail', () => 
   assert.equal(bare.story.verification, undefined);
 });
 
-test('a code step with a landing renders the "where am I" line, escaped', () => {
+test('a code step with a landing renders the "where am I" call graph, escaped', () => {
   const tour = {
     version: 3,
     title: 't',
@@ -1443,13 +1443,87 @@ test('a code step with a landing renders the "where am I" line, escaped', () => 
   ];
   const model = buildReviewModel(process.cwd(), tour, files, undefined, {});
   const first = renderStoryStepPanel(process.cwd(), model, [], 0);
-  assert.match(first, /<p class="ds-landing" aria-label="Where this step is">/);
-  assert.match(first, /<code class="ds-landing-symbol">capRate\(\)<\/code>/);
+  assert.match(first, /<div class="ds-landing" role="group" aria-label="Where this step is">/);
+  assert.match(first, /<ul class="ds-landing-col is-callers" aria-label="Called by">/);
+  assert.match(first, /<span class="ds-landing-node is-external" title="settleFunding\(\)"><code>settleFunding\(\)<\/code><\/span>/, 'a caller outside the story is not a link');
+  assert.match(first, /<span class="ds-landing-node is-external" title="runKeeper\(\)"><code>runKeeper\(\)<\/code><\/span>/);
+  assert.match(first, /<div class="ds-landing-here" aria-current="location"><code class="ds-landing-symbol">capRate\(\)<\/code>/);
   assert.match(first, /<span class="ds-landing-file">a\.ts<\/span>/);
-  assert.match(first, /called by <code>settleFunding\(\)<\/code>, <code>runKeeper\(\)<\/code>/);
   assert.match(first, /<span class="ds-landing-when">once per market, while rate &lt; cap &amp; fresh<\/span>/, 'plain text is escaped');
+  assert.doesNotMatch(first, /is-callees/, 'no callees column without calls');
+  // The map rides in the header island; the panel only carries it as a template.
+  assert.match(first, /<template data-step-landing><div class="ds-landing"/);
+  assert.equal(first.replace(/<template data-step-landing>[\s\S]*?<\/template>/, '').includes('ds-landing'), false, 'no visible map row inside the step');
+  // One caller shows; the rest fold behind a +N chip so the header keeps its height.
+  assert.match(first, /<li><details class="ds-landing-more"><summary title="1 more caller" aria-label="1 more caller">\+1<\/summary><ul class="ds-landing-more-list"><li><span class="ds-landing-node is-external" title="runKeeper\(\)">/);
   const second = renderStoryStepPanel(process.cwd(), model, [], 1);
-  assert.match(second, /called by the relayer through <code>onlyRole\(RELAYER_ROLE\)<\/code>/);
+  assert.match(second, /<span class="ds-landing-node is-external is-role">the relayer<\/span>/);
+  assert.match(first, /<span class="ds-landing-hop"><ul class="ds-landing-col is-callers"[^]*?<\/ul><span class="ds-landing-edge" aria-hidden="true"><\/span><\/span>/, 'an arrow wraps with its column');
+  assert.match(second, /<span class="ds-landing-edge has-label"><span class="ds-sr-only">through <\/span><code>onlyRole\(RELAYER_ROLE\)<\/code><\/span>/);
   const bare = buildReviewModel(process.cwd(), { ...tour, steps: [{ ...tour.steps[0], landing: undefined }] }, files, undefined, {});
   assert.doesNotMatch(renderStoryStepPanel(process.cwd(), bare, [], 0), /ds-landing/);
+});
+
+test('landing graph nodes that are story steps jump to them', () => {
+  const step = (id, order, symbol, extra = {}) => ({
+    id, order, title: `Step ${id}`, file: 'src/IvyVaultRules.sol', range: [1, 1], kind: 'changed',
+    why: 'I changed this so the rules hash covers the pairs.', ...extra,
+    ...(symbol ? { landing: { symbol, ...(extra.landing ?? {}) } } : {}),
+  });
+  const tour = {
+    version: 3,
+    title: 't',
+    summary: 's',
+    steps: [
+      step('adopt', 1, 'IvyVaultRules.adoptRules()', { calls: ['terms'], landing: { calledBy: ['createVault()'] } }),
+      step('terms', 2, '_termsHash()', { calls: ['pairs', 'plain'], landing: { calledBy: ['adoptRules()', 'previewRules()'], when: 'once per vault' } }),
+      step('pairs', 3, '_pairsHash()', { landing: { calledBy: ['_termsHash()'] } }),
+      step('plain', 4, undefined, { title: 'The <b>pair</b> encoder' }),
+    ],
+  };
+  const model = buildReviewModel(process.cwd(), tour, [], undefined, {});
+  const terms = renderStoryStepPanel(process.cwd(), model, [], 1);
+  assert.match(
+    terms,
+    /<li><button type="button" class="ds-landing-node is-step" data-goto-step="1" title="Go to step 1: adoptRules\(\)"><code>adoptRules\(\)<\/code><\/button><\/li>/,
+    'a caller matches another step by its searchable name',
+  );
+  assert.match(terms, /<span class="ds-landing-node is-external" title="previewRules\(\)"><code>previewRules\(\)<\/code><\/span>/);
+  assert.match(terms, /<ul class="ds-landing-col is-callees" aria-label="Calls">/);
+  assert.match(terms, /data-goto-step="3" title="Go to step 3: _pairsHash\(\)"><code>_pairsHash\(\)<\/code><\/button>/, 'a callee is labeled by its landing symbol');
+  assert.match(terms, /data-goto-step="4" title="Go to step 4: The pair encoder">The pair encoder<\/button>/, 'a callee without a landing falls back to its plain title');
+  const pairs = renderStoryStepPanel(process.cwd(), model, [], 2);
+  assert.match(pairs, /data-goto-step="2" title="Go to step 2: _termsHash\(\)"><code>_termsHash\(\)<\/code>/);
+  // A self-named caller (recursion) never links back to the step being read.
+  const self = buildReviewModel(process.cwd(), { ...tour, steps: [step('r', 1, 'walk()', { landing: { calledBy: ['walk()'] } })] }, [], undefined, {});
+  assert.doesNotMatch(renderStoryStepPanel(process.cwd(), self, [], 0), /data-goto-step/);
+});
+
+test('landing graph links are not mistaken for a step boundary focus target', () => {
+  assert.match(engine, /\[data-goto-step\]:not\(\.ds-landing-node\)/);
+});
+
+test('the header is two islands: the active step\'s call map, and the actions', () => {
+  assert.match(reviewApp, /className="ds-reviewchrome-island is-where"/);
+  assert.match(reviewApp, /className="ds-reviewchrome-island is-actions"/);
+  assert.match(reviewApp, /data-landing-host/);
+  assert.match(reviewApp, /data-landing-fallback/);
+  // The story title is only the fallback for scenes without a map; the scope
+  // line moved to the Overview, where it is read once.
+  assert.doesNotMatch(reviewApp, /ds-reviewchrome-subtitle/);
+  assert.match(storyView, /className="ds-intro-base"/);
+  const actions = reviewApp.slice(reviewApp.indexOf('is-actions'));
+  assert.match(actions, /<CloseStory routeBase=\{routeBase\} srOnlyLabel \/>/, 'Close is the last action');
+  assert.doesNotMatch(reviewApp.slice(0, reviewApp.indexOf('is-actions')).slice(reviewApp.indexOf('<header')), /<CloseStory/);
+});
+
+test('the engine copies the active step\'s map into the header and falls back off-map', () => {
+  assert.match(engine, /function syncLandingSlot\(\)\{/);
+  const body = engine.slice(engine.indexOf('function syncLandingSlot(){'));
+  assert.match(body.slice(0, 900), /template\[data-step-landing\]/);
+  assert.match(body.slice(0, 900), /currentView\(\)==='tour'/, 'Files and Review show the story title');
+  const calls = engine.match(/syncLandingSlot\(\);/g) || [];
+  assert.ok(calls.length >= 3, 'synced on step change, view change, and lazy load');
+  assert.match(engine, /\.ds-story-tune\[open\],\.ds-landing-more\[open\]/, 'outside click and Escape close the +N list');
+  assert.match(engine, /chrome=\$\('\.ds-reviewchrome-main'\),actions=\$\('\.ds-reviewchrome-island\.is-actions'\)/, 'the compact sidebar overlay inerts both islands');
 });

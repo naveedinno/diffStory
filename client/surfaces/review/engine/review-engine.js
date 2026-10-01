@@ -747,9 +747,9 @@ export function startReviewEngine(options){
     var canvas=panel&&$('.ds-concept-document',panel);if(canvas)conceptFitObserver.observe(canvas);
   }
   function syncSidebarOverlay(collapsed){
-    var open=compactScreen()&&!collapsed,main=$('.ds-main'),chrome=$('.ds-reviewchrome-main'),scrim=$('[data-sidebar-scrim]');
+    var open=compactScreen()&&!collapsed,main=$('.ds-main'),chrome=$('.ds-reviewchrome-main'),actions=$('.ds-reviewchrome-island.is-actions'),scrim=$('[data-sidebar-scrim]');
     if(main){if(open)main.setAttribute('inert','');else main.removeAttribute('inert');}
-    if(chrome){if(open)chrome.setAttribute('inert','');else chrome.removeAttribute('inert');}
+    [chrome,actions].forEach(function(island){if(!island)return;if(open)island.setAttribute('inert','');else island.removeAttribute('inert');});
     if(scrim){scrim.tabIndex=open?0:-1;scrim.setAttribute('aria-hidden',open?'false':'true');}
   }
   function openCompactSidebar(trigger){
@@ -997,6 +997,7 @@ export function startReviewEngine(options){
       if(v==='files'||v==='tour')syncSplitPaneLayouts(v==='files'?filesView:tourView);
       $all('.ds-tab').forEach(function(t){var on=t.getAttribute('data-view')===v;t.classList.toggle('is-active',on);t.setAttribute('aria-selected',on?'true':'false');t.tabIndex=on?0:-1;});
       $all('[data-rail]').forEach(function(r){r.hidden=r.getAttribute('data-rail')!==v;});
+      syncLandingSlot();
       revealResumeReview();
       // Files parks focus on its own tab, so entering it from a click would steal
       // focus back off whatever was clicked. Story and Review both have a real
@@ -1012,6 +1013,19 @@ export function startReviewEngine(options){
     saveReviewPositionSoon();
   }
 
+  // The header's map island shows the active story step's call map, copied from
+  // the template its panel carries; Files, Review, and map-less scenes show the
+  // story title instead. Keyed by step, so re-syncing the same step is free.
+  function syncLandingSlot(){
+    var host=$('[data-landing-host]'),fallback=$('[data-landing-fallback]');if(!host)return;
+    var panel=currentView()==='tour'&&stepPanels?stepPanels[active]:null;
+    var tpl=panel&&$('template[data-step-landing]',panel),key=tpl?String(active):'';
+    if(host.getAttribute('data-landing-for')===key)return;
+    host.setAttribute('data-landing-for',key);
+    // pi-lens-ignore: ast-grep:no-inner-html-js
+    host.innerHTML=tpl?tpl.innerHTML:'';
+    host.hidden=!tpl;if(fallback)fallback.hidden=!!tpl;
+  }
   function loadStoryStep(i,done){
     var panel=stepPanels&&stepPanels[i];if(!panel||!panel.hasAttribute('data-step-lazy')){if(done)done(true);return;}
     panel._dsStepCallbacks=panel._dsStepCallbacks||[];if(done)panel._dsStepCallbacks.push(done);
@@ -1029,6 +1043,7 @@ export function startReviewEngine(options){
         mountCommentPins(fresh);adoptStepDocks();renderConceptDiagrams(fresh);mountConceptPages(fresh);setLineWrap(document.body.classList.contains('ds-line-wrap'),false);$all('.ds-filepanel,.ds-diff',fresh).forEach(updateChangeNav);
         try{var split=localStorage.getItem('ds-split');if(split)$all('.ds-filepanel,.ds-diff',fresh).forEach(function(holder){holder.style.setProperty('--ds-split',split);});}catch(e){}
         syncSplitPaneLayouts(fresh);
+        if(i===active)syncLandingSlot();
         callbacks.forEach(function(callback){callback(true);});
       })
       .catch(function(err){
@@ -1060,6 +1075,7 @@ export function startReviewEngine(options){
       var activeCard=stepCards[i],chapter=activeCard?closest(activeCard,'[data-story-chapter]'):null;if(chapter)chapter.open=true;
       $all('[data-thread-node]').forEach(function(n){var k=parseInt(n.getAttribute('data-thread-node')||'-1',10);n.classList.toggle('is-active',k===i);n.classList.toggle('is-visited',!!visited[k]&&k!==i);});
       syncDockStage();
+      syncLandingSlot();
       var thread=$('[data-filmthread]');
       document.body.classList.toggle('ds-overview-active',i===0);
       if(thread){
@@ -1284,7 +1300,7 @@ export function startReviewEngine(options){
       if(!ok||active!==stepIndex)return;
       var panel=stepPanels&&stepPanels[stepIndex],beats=panel?$all('[data-story-beat]',beatHost(panel)):[];
       if(!beats.length){
-        var boundaryTarget=panel?$('.ds-intro-start',panel)||$('[data-goto-step]',panel):null;
+        var boundaryTarget=panel?$('.ds-intro-start',panel)||$('[data-goto-step]:not(.ds-landing-node)',panel):null;
         if(!boundaryTarget)boundaryTarget=$('[data-thread-node="'+stepIndex+'"]');
         var conceptScroll=panel&&$('.ds-concept-scroll',panel);
         if(conceptScroll)conceptScroll.scrollTop=atEnd?conceptScroll.scrollHeight:0;
@@ -3700,8 +3716,8 @@ export function startReviewEngine(options){
       button._dsCopyTimer=setTimeout(function(){button.classList.remove('is-copied');button.setAttribute('aria-label','Copy all queued comments');if(label)label.textContent='Copy all';button._dsCopyTimer=0;},1800);
     });
   }
-  function closeStoryTuneMenus(){
-    $all('.ds-story-tune[open]').forEach(function(menu){menu.open=false;});
+  function closeStoryTuneMenus(except){
+    $all('.ds-story-tune[open],.ds-landing-more[open]').forEach(function(menu){if(menu!==except)menu.open=false;});
   }
 
   // Blame: which commit put a line here, or took it away. Opened from a row's
@@ -3810,7 +3826,7 @@ export function startReviewEngine(options){
 
   function onClick(e){
     var t=e.target,b;
-    if(!closest(t,'.ds-story-tune'))closeStoryTuneMenus();
+    closeStoryTuneMenus(closest(t,'.ds-story-tune,.ds-landing-more'));
     if(blameOpen()&&!closest(t,'.ds-blame-pop')&&!closest(t,'.ds-no'))closeBlame(false);
     b=closest(t,'[data-moved-jump]');if(b){e.preventDefault();jumpToMovedLine(b);return;}
     b=closest(t,'.ds-no');
@@ -3924,7 +3940,7 @@ export function startReviewEngine(options){
     if(e.key==='Escape'){
       var mermaidFullscreen=document.fullscreenElement&&closest(document.fullscreenElement,'[data-concept-diagram]')||$('.is-mermaid-fullscreen');
       if(mermaidFullscreen){e.preventDefault();setMermaidFullscreen(mermaidFullscreen,false);return;}
-      var openTune=$('.ds-story-tune[open]');if(openTune){
+      var openTune=$('.ds-story-tune[open],.ds-landing-more[open]');if(openTune){
         e.preventDefault();openTune.open=false;var tuneSummary=$('summary',openTune);if(tuneSummary)tuneSummary.focus();return;
       }
       var inlineComposer=$('.ds-composer');if(inlineComposer){e.preventDefault();removeComposer(inlineComposer,true);return;}

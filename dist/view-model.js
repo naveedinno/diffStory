@@ -15,6 +15,7 @@
 import { changedRanges, rangesOverlap } from './diff.js';
 import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
+import { landingSearchName } from './landing-verify.js';
 import { claimedRanges } from './types.js';
 import { computeCoverage, filesForStoryCoverage } from './coverage.js';
 export { filesForStoryCoverage } from './coverage.js';
@@ -125,8 +126,9 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
         if (reason.text.trim() && !hotspotByStep.has(spot.step))
             hotspotByStep.set(spot.step, reason);
     }
+    const landingGraph = landingGraphIndex(steps);
     const stepViews = steps.map((step, index) => isCodeStep(step)
-        ? buildCodeStep(repo, step, files, headRef, hotspotByStep.get(step.id), steps, opts?.baseRef, opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index))
+        ? buildCodeStep(repo, step, files, headRef, hotspotByStep.get(step.id), steps, opts?.baseRef, opts?.detailedStepIndexes === undefined || opts.detailedStepIndexes.has(index), landingGraph)
         : buildConceptStep(step, byId));
     // Built from the step views, not the raw steps: the title is already projected
     // there, and parsing it twice would be the second parse this module exists to
@@ -250,7 +252,7 @@ function storyView(repo, tour, storyIdentity) {
             : {}),
     };
 }
-function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, detailed = true) {
+function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, detailed = true, landingGraph = landingGraphIndex(ordered ?? [step])) {
     const { blocks, note } = detailed ? stepBlocks(repo, step, files, headRef, baseRef) : { blocks: [] };
     const diffFile = files.find((f) => f.newPath === step.file);
     const viewport = stepViewport(step);
@@ -288,7 +290,7 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
                 landing: {
                     symbol: narrativeText(step.landing.symbol),
                     file: step.file.split('/').pop() ?? step.file,
-                    calledBy: (step.landing.calledBy ?? []).map((caller) => narrativeText(caller)),
+                    callers: (step.landing.calledBy ?? []).map((caller) => landingCaller(caller, step.id, landingGraph)),
                     ...(step.landing.role
                         ? {
                             role: {
@@ -298,6 +300,7 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
                         }
                         : {}),
                     ...(step.landing.when ? { when: narrativeText(step.landing.when) } : {}),
+                    callees: (step.calls ?? []).flatMap((id) => landingCallee(id, landingGraph)),
                 },
             }
             : {}),
@@ -367,6 +370,39 @@ function buildLogicMoves(step, oldFile, ordered) {
             },
         };
     });
+}
+function landingGraphIndex(ordered) {
+    const byId = new Map();
+    const bySymbol = new Map();
+    ordered.forEach((step, index) => {
+        byId.set(step.id, { step, panelIndex: index + 1 });
+        if (!isCodeStep(step) || !step.landing)
+            return;
+        const name = landingSearchName(step.landing.symbol);
+        if (name && !bySymbol.has(name))
+            bySymbol.set(name, { id: step.id, panelIndex: index + 1 });
+    });
+    return { byId, bySymbol };
+}
+/**
+ * A caller links only when its name is another step's landing symbol. The
+ * checker verified the name, not the edge, so nothing here is inferred.
+ */
+function landingCaller(caller, selfId, graph) {
+    const target = graph.bySymbol.get(landingSearchName(caller));
+    return {
+        label: narrativeText(caller),
+        ...(target && target.id !== selfId ? { panelIndex: target.panelIndex } : {}),
+    };
+}
+function landingCallee(id, graph) {
+    const target = graph.byId.get(id);
+    if (!target)
+        return [];
+    const { step, panelIndex } = target;
+    return isCodeStep(step) && step.landing
+        ? [{ label: narrativeText(step.landing.symbol), panelIndex }]
+        : [{ label: narrativeText(step.title), prose: true, panelIndex }];
 }
 function buildConceptStep(step, byId) {
     const hasPage = isPageConcept(step);
