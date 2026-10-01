@@ -1022,10 +1022,6 @@ body.ds-line-wrap .ds-filepanel-body{width:100%;min-width:0}
 body.ds-line-wrap .ds-diffscroll{overflow-x:hidden}
 body.ds-line-wrap .ds-diff{width:100%;min-width:0;max-width:100%}
 body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
-/* Lines inside an annotation box always wrap: the box says "read this", so the
-   end of the condition must never sit past the pane edge or under its border. */
-.ds-split-mode [data-split-inner] .ds-row[data-move] .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
-body:not(.ds-line-wrap) .ds-split-mode [data-split-inner]:not([hidden]) .ds-row[data-move] .ds-code{transform:none}
 .ds-code-add{color:var(--diff-add-text)}
 .ds-code-del{color:var(--diff-del-text)}
 /* Sticky so the tag stays at the visible edge when long lines scroll the card. */

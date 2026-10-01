@@ -126,9 +126,8 @@ test('a block boxed on both sides gets no tinted band under its arrow; one-sided
   assert.match(css, /\.ds-band-stop-add\{stop-color:var\(--add-rail\)\}/);
 });
 
-test('annotated lines always wrap in the split view', () => {
-  assert.match(css, /\.ds-split-mode \[data-split-inner\] \.ds-row\[data-move\] \.ds-code\{white-space:pre-wrap;overflow-wrap:anywhere\}/);
-  assert.match(css, /\.ds-row\[data-move\] \.ds-code\{transform:none\}/);
+test('annotated lines scroll with their pane instead of wrapping', () => {
+  assert.doesNotMatch(css, /\.ds-row\[data-move\] \.ds-code\{[^}]*(pre-wrap|transform:none)/);
 });
 
 test('a consequence callout reads as an explanation, not a new hazard', () => {
