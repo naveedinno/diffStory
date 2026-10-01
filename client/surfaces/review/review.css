@@ -641,7 +641,7 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-composer-tab[data-flavor="change"].is-active .ds-composer-type-icon{color:var(--del)}
 .ds-composer-tab[data-flavor="question"].is-active .ds-composer-type-icon{color:var(--accent-blue)}
 .ds-composer-tab[data-flavor="nit"].is-active .ds-composer-type-icon{color:var(--amber-text)}
-.ds-composer-ta{width:100%;min-height:82px;max-height:180px;box-sizing:border-box;resize:vertical;padding:9px 10px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel2);color:var(--text);font-size:12.5px;font-family:var(--sans);line-height:1.5;outline:none}
+.ds-composer-ta{width:100%;min-height:82px;max-height:180px;box-sizing:border-box;resize:vertical;overflow-x:hidden;overflow-wrap:anywhere;padding:9px 10px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel2);color:var(--text);font-size:12.5px;font-family:var(--sans);line-height:1.5;outline:none}
 .ds-composer-ta::placeholder{color:var(--dim)}.ds-composer-ta:focus{border-color:var(--accent-line);box-shadow:0 0 0 2px var(--accent-soft)}
 .ds-composer-foot{display:flex;align-items:center;justify-content:flex-end}.ds-composer-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}.ds-composer-actions button{min-height:34px;height:34px;padding:0 12px;border-radius:7px}.ds-composer-copy{min-width:72px}.ds-composer-add{border-color:var(--line-soft);color:var(--muted)}.ds-composer-add:hover{color:var(--text)}
 @media (max-width:620px){.ds-composer{padding:10px}.ds-composer-actions{display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}.ds-composer-actions button{width:100%;min-width:0}}
