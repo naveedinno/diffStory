@@ -1064,6 +1064,12 @@ test("the accessibility contract the old renderer guaranteed is still in the mar
   );
   assert.match(reviewApp, /<SkipLink \/>/);
   assert.match(reviewApp, /<main id="main-content" tabIndex=\{-1\} className="ds-main">/);
+  // <main> takes focus only as the skip-link target; it is not a control, so
+  // it never wears the focus ring around the whole page.
+  assert.match(
+    read("styles.css"),
+    /@layer base \{[\s\S]*main\[tabindex="-1"\]:focus-visible \{\s*box-shadow: none;\s*\}/,
+  );
   assert.match(reviewViewSrc, /data-review-summary-count/);
   assert.match(
     engine,

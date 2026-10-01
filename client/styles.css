@@ -54,6 +54,12 @@
     box-shadow: var(--shadow-focus);
   }
 
+  /* <main> is focusable only as the skip-link target. It is not a control, so a
+     ring around the whole page says nothing about where input goes. */
+  main[tabindex="-1"]:focus-visible {
+    box-shadow: none;
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
