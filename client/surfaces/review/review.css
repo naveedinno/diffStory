@@ -1010,6 +1010,9 @@ body:not(.ds-line-wrap) .ds-split-mode [data-split-inner]:not([hidden]) .ds-cell
 .ds-split-mode [data-split-inner]:not([hidden]) .ds-sign{background:inherit}
 .ds-split-scrollbars{position:sticky;bottom:0;z-index:7;display:flex;align-items:stretch;width:100%;height:13px;border-top:1px solid var(--diff-rule);background:var(--panel2)}
 .ds-split-scrollbars[hidden]{display:none}
+/* The isolated column grid caps an open composer's z-index, so the pinned bars
+   would paint across its textarea. Unpin them while one is open. */
+.ds-split-mode:has(.ds-composer) .ds-split-scrollbars{position:relative}
 .ds-pane-scroll{height:13px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
 .ds-pane-scroll-left{flex-grow:var(--ds-split,50);flex-shrink:1;flex-basis:0}
 .ds-pane-scroll-right{flex-grow:calc(100 - var(--ds-split,50));flex-shrink:1;flex-basis:0}

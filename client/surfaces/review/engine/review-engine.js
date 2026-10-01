@@ -2358,16 +2358,27 @@ export function startReviewEngine(options){
     });
   }
   // Split panes clip their code and scroll through the bars pinned under the
-  // diff, so a sideways trackpad swipe or shift+wheel over a pane drives that
-  // pane's bar. Vertical scrolling falls through to the page untouched.
+  // diff, so a sideways trackpad swipe, a thumb wheel or shift+wheel anywhere
+  // over a pane drives that pane's bar. The pane is found by pointer position,
+  // not the event target: gutters, filler rows and the annotation layer sit
+  // over the code too. Vertical scrolling falls through to the page untouched.
+  function splitUnderPointer(x,y){
+    var found=null;
+    $all('.ds-split-mode [data-split-inner]:not([hidden])').some(function(split){
+      if(!split.offsetParent)return false;
+      var r=split.getBoundingClientRect();
+      if(x<r.left||x>r.right||y<r.top||y>r.bottom)return false;
+      found=split;return true;
+    });
+    return found;
+  }
   function onSplitPaneWheel(e){
     if(e.ctrlKey||document.body.classList.contains('ds-line-wrap'))return;
     var dx=e.deltaX;if(!dx&&e.shiftKey)dx=e.deltaY;
     if(!dx||Math.abs(dx)<Math.abs(e.shiftKey?0:e.deltaY))return;
-    var cell=closest(e.target,'.ds-cell-l,.ds-cell-r');if(!cell)return;
-    var split=closest(cell,'[data-split-inner]');if(!split)return;
-    var holder=closest(split,'.ds-split-mode');if(!holder)return;
-    var side=cell.classList.contains('ds-cell-l')?'left':'right';
+    var split=splitUnderPointer(e.clientX,e.clientY);if(!split)return;
+    var divider=$('.ds-celldiv[role="separator"]',split);if(!divider)return;
+    var d=divider.getBoundingClientRect(),side=e.clientX<d.left+d.width/2?'left':'right';
     var scroller=$('[data-split-scrollbars]:not([hidden]) [data-split-pane-scroll="'+side+'"]',split);
     if(!scroller||scroller.classList.contains('is-idle'))return;
     var unit=e.deltaMode===1?16:e.deltaMode===2?Math.max(scroller.clientWidth,1):1;
