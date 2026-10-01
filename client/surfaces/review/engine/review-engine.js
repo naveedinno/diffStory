@@ -2353,6 +2353,24 @@ export function startReviewEngine(options){
       holder.style.removeProperty(side==='left'?'--ds-left-scroll':'--ds-right-scroll');
     });
   }
+  // Split panes clip their code and scroll through the bars pinned under the
+  // diff, so a sideways trackpad swipe or shift+wheel over a pane drives that
+  // pane's bar. Vertical scrolling falls through to the page untouched.
+  function onSplitPaneWheel(e){
+    if(e.ctrlKey||document.body.classList.contains('ds-line-wrap'))return;
+    var dx=e.deltaX;if(!dx&&e.shiftKey)dx=e.deltaY;
+    if(!dx||Math.abs(dx)<Math.abs(e.shiftKey?0:e.deltaY))return;
+    var cell=closest(e.target,'.ds-cell-l,.ds-cell-r');if(!cell)return;
+    var split=closest(cell,'[data-split-inner]');if(!split)return;
+    var holder=closest(split,'.ds-split-mode');if(!holder)return;
+    var side=cell.classList.contains('ds-cell-l')?'left':'right';
+    var scroller=$('[data-split-scrollbars]:not([hidden]) [data-split-pane-scroll="'+side+'"]',split);
+    if(!scroller||scroller.classList.contains('is-idle'))return;
+    var unit=e.deltaMode===1?16:e.deltaMode===2?Math.max(scroller.clientWidth,1):1;
+    var max=Math.max(0,scroller.scrollWidth-scroller.clientWidth),next=Math.max(0,Math.min(max,scroller.scrollLeft+dx*unit));
+    if(next===scroller.scrollLeft)return;
+    e.preventDefault();scroller.scrollLeft=next;
+  }
   // Split columns share grid tracks. Missing halves leave a track empty;
   // paired rows keep the same height even when only one side wraps.
   // Scrolling never changes code geometry or repaints the divider.
@@ -4198,6 +4216,7 @@ export function startReviewEngine(options){
     document.addEventListener('click',onClick);
     document.addEventListener('contextmenu',openSelectionMenu);
     document.addEventListener('keydown',onKey);
+    document.addEventListener('wheel',onSplitPaneWheel,{passive:false});
     window.addEventListener('message',onConceptFrameMessage);
     // A dirty composer holds an unqueued draft; stash it and warn before the
     // tab goes away so a reload restores the text on reopen.
