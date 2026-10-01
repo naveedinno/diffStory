@@ -209,7 +209,7 @@ test('line wrapping is an accessible persisted option and defaults to off', () =
 test('story diff actions stay together and split panes cannot paint through the divider', () => {
   assert.match(
     RENDER_SRC,
-    /<div class="ds-diffview-controls">\s*<button class="ds-full-diff"[^>]*>All files<\/button>\s*\$\{lineWrapToggle\(\)\}/,
+    /<div class="ds-diffview-controls">\s*<button class="ds-full-diff"[^>]*>Whole diff<\/button>\s*\$\{lineWrapToggle\(\)\}/,
   );
   assert.match(
     DIFF_CSS,

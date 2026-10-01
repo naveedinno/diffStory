@@ -547,7 +547,9 @@ body.ds-sidebar-resizing .ds-rail,body.ds-sidebar-resizing .ds-main{user-select:
 .ds-beat.is-active .ds-beat-text{color:var(--accent-text)}
 .ds-step.is-code-step .ds-beat:not(.is-selected) .ds-beat-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
 .ds-step.is-code-step .ds-beat:not(.is-selected){padding-top:5px;padding-bottom:5px}
-.ds-full-diff{height:29px;padding:0 8px;border:1px solid var(--line-soft);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;font-weight:700;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}
+/* Same type and shape as the wrap toggle beside it; the label names what it opens
+   so it never reads as a second copy of the All files tab. */
+.ds-full-diff{height:30px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid transparent;border-radius:var(--radius-pill);background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:650;white-space:nowrap;cursor:pointer}.ds-full-diff:hover{background:var(--fill-2);color:var(--text)}.ds-full-diff:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
 .ds-step.is-code-step .ds-difftoolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center;padding:4px 10px}.ds-step.is-code-step .ds-difftoolbar>.ds-flex{display:none}
 /* The wrap toggle is the tallest control here and alone set the toolbar's
    height. Coarse pointers keep their 44px target via the min-height above. */
@@ -882,13 +884,23 @@ body.ds-story-reload-pending #ds-toast{bottom:140px}
 .ds-row[data-annot-tag-lanes] .ds-no{padding-top:calc(3px + var(--ds-annot-tag-space,0px))}
 .ds-row[data-annot-tag-lanes] .ds-sign{padding-top:calc(4px + var(--ds-annot-tag-space,0px))}
 .ds-row[data-annot-tag-lanes] .ds-code{padding-top:calc(3px + var(--ds-annot-tag-space,0px))}
+/* The row across the divider only mirrors the label's space to keep both code
+   lines level. It takes that space as a margin outside its cell, so the gap
+   shows the pane, not a blank tinted line, and its box hugs the code. */
+.ds-row[data-annot-tag-lanes]:not([data-annot-tag-here])>.ds-cell{margin-top:var(--ds-annot-tag-space,0px)}
+.ds-row[data-annot-tag-lanes]:not([data-annot-tag-here]) .ds-no{padding-top:3px}
+.ds-row[data-annot-tag-lanes]:not([data-annot-tag-here]) .ds-sign{padding-top:4px}
+.ds-row[data-annot-tag-lanes]:not([data-annot-tag-here]) .ds-code{padding-top:3px}
 .ds-annot-callout{box-sizing:border-box;width:calc(var(--ds-split,50) * 1%);display:flex;align-items:baseline;gap:9px;min-height:32px;padding:7px 12px 8px 14px;border-top:1px dashed color-mix(in srgb,var(--md-warn) 60%,transparent);border-bottom:1px solid color-mix(in srgb,var(--md-warn) 22%,transparent);background:color-mix(in srgb,var(--md-warn) 8%,var(--panel3));font-family:var(--sans)}
 .ds-annot-callout-left{margin-right:auto}
 .ds-annot-callout-right{width:calc((100 - var(--ds-split,50)) * 1%);margin-left:auto}
 .ds-annot-callout-unified{width:100%;margin-inline-start:0;margin-inline-end:0}
-.ds-annot-callout-consequence{border-color:color-mix(in srgb,var(--diff-del-text) 48%,transparent);background:color-mix(in srgb,var(--diff-del-text) 8%,var(--panel3))}
+/* A consequence explains the change; it is not a new hazard, so it takes the
+   after box's signal blue rather than a deletion red, and its rule ties it to
+   the box it hangs from. */
+.ds-annot-callout-consequence{border-top:0;border-bottom:1px solid color-mix(in srgb,var(--accent-blue) 22%,transparent);box-shadow:inset 2px 0 0 var(--accent-blue);background:color-mix(in srgb,var(--accent-blue) 6%,var(--panel3))}
 .ds-annot-tag{flex:none;color:var(--md-warn);font:700 9.5px/1.25 var(--mono);letter-spacing:.09em;text-transform:uppercase}
-.ds-annot-callout-consequence .ds-annot-tag{color:var(--diff-del-text)}
+.ds-annot-callout-consequence .ds-annot-tag{color:var(--accent-text)}
 .ds-annot-what{min-width:0;color:var(--text);font-size:12px;line-height:1.45}
 .ds-annot-what code{font-family:var(--mono);font-size:11.5px}
 .ds-annot-callout-cross{align-items:stretch;flex-direction:column;gap:6px;min-height:54px;padding-top:8px;padding-bottom:9px}
@@ -970,6 +982,8 @@ body.ds-resizing .ds-diffbody-cols>.ds-celldiv{border-color:var(--accent-blue)}
 .ds-band-del{color:var(--del-rail)}
 .ds-band-pair{color:var(--accent-blue)}
 .ds-band-moved{color:var(--move-rail)}
+.ds-band-stop-add{stop-color:var(--add-rail)}
+.ds-band-stop-del{stop-color:var(--del-rail)}
 /* Hatched filler for a track the other side occupies alone. Neutral: the
    change is coloured by its rows and the bridge, the void is only a void. */
 .ds-fill{position:relative;min-height:0;background:repeating-linear-gradient(-45deg,transparent 0 5px,var(--fill-1) 5px 6px)}
@@ -1008,6 +1022,10 @@ body.ds-line-wrap .ds-filepanel-body{width:100%;min-width:0}
 body.ds-line-wrap .ds-diffscroll{overflow-x:hidden}
 body.ds-line-wrap .ds-diff{width:100%;min-width:0;max-width:100%}
 body.ds-line-wrap .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
+/* Lines inside an annotation box always wrap: the box says "read this", so the
+   end of the condition must never sit past the pane edge or under its border. */
+.ds-split-mode [data-split-inner] .ds-row[data-move] .ds-code{white-space:pre-wrap;overflow-wrap:anywhere}
+body:not(.ds-line-wrap) .ds-split-mode [data-split-inner]:not([hidden]) .ds-row[data-move] .ds-code{transform:none}
 .ds-code-add{color:var(--diff-add-text)}
 .ds-code-del{color:var(--diff-del-text)}
 /* Sticky so the tag stays at the visible edge when long lines scroll the card. */
@@ -1126,7 +1144,7 @@ html:not([data-ds-motion]) .ds-filepanel-body>[data-diff-inner]:not([hidden]),ht
   .ds-filepanel-head .ds-modetoggle button{padding-inline-start:8px;padding-inline-end:8px}
   .ds-hunkgap-side{padding:0 6px;gap:6px}
 }
-@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
+@media (hover:none),(pointer:coarse){.ds-modetoggle button{min-height:44px;height:44px}.ds-linewrap-toggle,.ds-full-diff{min-height:44px;height:44px}.ds-filepanel-head{--ds-filepanel-control-height:44px}.ds-filepanel-head>.ds-changejump,.ds-filepanel-head>.ds-modetoggle{padding-top:0;padding-bottom:0}.ds-filepanel-head>.ds-changejump .ds-changebtn{width:44px;height:44px}}
 @media (prefers-reduced-motion:reduce){.ds-filepanel-body>*{animation:none!important}.ds-row.is-voice-focus,.ds-urow.is-voice-focus,.ds-row.is-change-jump,.ds-urow.is-change-jump{animation:none!important;filter:none!important}.ds-modetoggle button,.ds-gapbtn,.ds-viewed-toggle,.ds-viewed-toggle-icon,.ds-fileitem-viewed{transition:none!important}}
 
 .ds-top{height:56px;padding:0 14px;gap:10px;background:var(--panel3);border-bottom-color:var(--line)}

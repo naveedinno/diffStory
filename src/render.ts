@@ -165,7 +165,9 @@ function codeStepPanel(
         <div class="ds-difftoolbar">
           <span class="ds-flex"></span>
           <div class="ds-diffview-controls">
-            <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}">All files</button>
+            <button class="ds-full-diff" type="button" data-open-full-diff="${esc(s.file)}" title="${esc(
+              `Open every change in ${s.file} under All files`,
+            )}">Whole diff</button>
             ${lineWrapToggle()}
             <div class="ds-modetoggle" role="group" aria-label="Diff display mode">
               <button data-mode="diff" aria-pressed="false">Unified</button>
