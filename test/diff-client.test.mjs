@@ -268,6 +268,9 @@ test('split panes resize independently of line length and scroll their code loca
   assert.match(DIFF_CSS, /\.ds-diff\.ds-split-mode\{width:100%;min-width:0;max-width:100%\}/);
   assert.match(DIFF_CSS, /\.ds-filepanel\.ds-split-mode \.ds-filepanel-body\{width:100%;min-width:0\}/);
   assert.match(DIFF_CSS, /\.ds-split-scrollbars\{[^}]*display:flex/);
+  // The pinned bars sit outside the isolated column grid, so no z-index lifts
+  // an open composer above them; they unpin instead of covering the textarea.
+  assert.match(DIFF_CSS, /\.ds-split-mode:has\(\.ds-composer\) \.ds-split-scrollbars\{position:relative\}/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-left\{flex-grow:var\(--ds-split,50\)/);
   assert.match(DIFF_CSS, /\.ds-pane-scroll-right\{flex-grow:calc\(100 - var\(--ds-split,50\)\)/);
   assert.match(DIFF_CSS, /\.ds-celldiv::after\{[^}]*inset-inline-start:-12px;inset-inline-end:-12px/);
