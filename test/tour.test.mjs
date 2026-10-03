@@ -911,7 +911,7 @@ test('generated-story validation reports malformed beats instead of throwing', (
 
   let errors;
   assert.doesNotThrow(() => { errors = validateGeneratedTour(malformed); });
-  assert.ok(errors.includes('steps[0].beats[0].highlights are required for a generated story'));
+  assert.ok(errors.includes('steps[0].beats[0] needs highlights, oldHighlights, or both for a generated story'));
 
   // Non-pair highlight entries are reported, not thrown on, too.
   const badPair = structuredClone(malformed);

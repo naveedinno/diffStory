@@ -37,9 +37,13 @@ Pages may open the story, close it, or sit back to back.
 ```
 
 - `page` is a complete HTML document. Anything goes: HTML, CSS, SVG, canvas,
-  JavaScript, and libraries or fonts from a CDN (d3, three.js, Chart.js…).
-  It runs in a sandboxed frame that fills the stage, and it cannot reach
-  diffStory or the reviewer's files.
+  and JavaScript. It runs in a sandboxed frame that fills the stage, and it
+  cannot reach diffStory or the reviewer's files.
+- The page is offline by default: every network request is blocked. Set
+  `"network": true` on the step only when the page genuinely needs remote
+  resources (a CDN library or font — d3, three.js, Chart.js…). Prefer inline
+  SVG, canvas, and system fonts so the page works with no network at all.
+  The reviewer sees a Network badge on pages that opted in.
 - `narration` is what you would say while pointing at the page. Plain text,
   no tags. Aloud reads it and screen readers announce it, so it must make
   sense without seeing the page.

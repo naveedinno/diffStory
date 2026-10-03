@@ -113,15 +113,20 @@ storage, call its API, navigate the app, or open popups. Of the keys pressed
 inside it, only story navigation keys reach diffStory, and only while the page
 is focused on the active step.
 
-The page has network access, which is the trade-off for CDN libraries:
+The page is offline by default: inline markup, script, and style run, but
+every network request is blocked. A page opts into network access with
+`"network": true` on its step, and only then does the CDN trade-off apply:
 
-- Opening a story can make your browser contact servers its author chose,
+- Opening the story can make your browser contact servers its author chose,
   revealing your IP address and that the story was opened.
 - The page is served from `127.0.0.1`, so it can also send requests to other
   services on this machine's loopback, such as a local dev server. diffStory
   itself refuses the page's requests, but any local service that allows
   cross-origin requests, or acts on a simple request without checking where it
   came from, is reachable from the page.
+
+Pages with network access carry a Network badge on the step, so the opt-in is
+visible before the page loads.
 
 ## Narrative shape and commit evolution
 

@@ -59,3 +59,55 @@ export function reviewExclusionMetadata(
 export function isReviewNoise(path: string, changedLines: number): boolean {
   return reviewExclusionMetadata(path, changedLines, 0) !== null;
 }
+
+/**
+ * Minimal glob match for authored file patterns (`storyScope.regenerated`):
+ * `*` spans within a segment, `**` spans segments, `?` is one character.
+ * Pure and dependency-free like the rest of this module.
+ */
+export function matchGlob(pattern: string, path: string): boolean {
+  return globToRegExp(pattern).test(path);
+}
+
+/**
+ * The same matcher as a RegExp, for include/exclude lists. `**` is only
+ * special as a full segment; inside one (`a**b`) it behaves as `*`.
+ */
+export function globToRegExp(pattern: string): RegExp {
+  const parts = pattern.split('/');
+  let out = '^';
+  let pendingSlash = false;
+  const pushSlash = () => {
+    if (pendingSlash) {
+      out += '/';
+      pendingSlash = false;
+    }
+  };
+  const pushSegment = (segment: string) => {
+    pushSlash();
+    for (const char of segment) {
+      if (char === '*') out += '[^/]*';
+      else if (char === '?') out += '[^/]';
+      else if ('+.^$()|[]{}\\'.includes(char)) out += `\\${char}`;
+      else out += char;
+    }
+    pendingSlash = true;
+  };
+  parts.forEach((part, index) => {
+    const first = index === 0;
+    const last = index === parts.length - 1;
+    if (part !== '**') {
+      pushSegment(part);
+      return;
+    }
+    if (first && last) out += '.*';
+    else if (first) out += '(?:[^/]+/)*';
+    else if (last) out += '(?:/.*)?';
+    else {
+      pushSlash();
+      out += '(?:[^/]+/)*';
+    }
+    pendingSlash = false;
+  });
+  return new RegExp(`${out}$`);
+}

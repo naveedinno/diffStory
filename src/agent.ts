@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './config.js';
 import { codexTaskBinary } from './codex-tasks.js';
 import type { CommitEvolutionManifest } from './git.js';
-import type { StoryMode, StoryScope } from './types.js';
+import type { StoryAudience, StoryMode, StoryScope } from './types.js';
 import {
   type ProgressEvent, type PlanItem, type PlanStatus,
   fileEvent, commandEvent, activityEvent, toolEvent, textEvent, planEvent,
@@ -123,6 +123,7 @@ export function storyPrompt(
   storyScope?: StoryScope,
   evolutionManifest?: CommitEvolutionManifest,
   storyRefs?: { base: string; head?: string },
+  options?: { audience?: StoryAudience },
 ): string {
   const storyMode = normalizeStoryMode(mode);
   const includePaths = storyScope?.includedFiles ?? [];
@@ -150,10 +151,20 @@ export function storyPrompt(
       `- These files are generated or oversized artifacts (regenerated ABIs, lockfiles, built bundles) and are intentionally excluded from this review: ${excludePaths.join(', ')}.\n` +
       `- Do not read, narrate, or write steps for them. The coverage gate already excludes them, so it will not ask you to cover them — adding them back only bloats the story.\n\n`
     : '';
+  // Newcomer guidance is the skill default, so only a familiar reader changes
+  // the prompt. The default path stays byte-identical. Kept to a pointer: the
+  // prompt ceiling buys correctness, not verbosity, and the rules live in the
+  // reference.
+  const audienceContract =
+    options?.audience === 'familiar'
+      ? `Audience contract: a familiar reader. See references/audience.md: ` +
+        `terse landings, primers only for ideas this change introduces.\n\n`
+      : '';
   return (
     `Use the diffstory-storyteller skill to create a diffStory for exactly this change: ${diff}.\n\n` +
     `Write ${DATA_DIR}/story.json, set its "version" field to 4, set its "base" field to "${authoredBase}"${headField}, and set its "mode" field to "${storyMode}". The story is for a human ` +
     `reviewer, not a changelog.\n\n` +
+    audienceContract +
     storyStructureContract(evolutionManifest) +
     storyScopeContract +
     scopeContract +
@@ -170,8 +181,8 @@ export function storyPrompt(
     `- Every step: "id", "order" (number 1..N), "title", "kind".\n` +
     `- Code steps: "file", "range", "viewport", "highlights", "why", "beats"; optional TOP-LEVEL "ranges" only when "tags" includes "skim", "sweep", or "mechanical".\n` +
     `- Optional moves (max 6): "id", "kind", "before"/"after" {"file","range"}, "label" (tag, max 24), "hidden" {"as":path|destination|consequence, "tag" max 48, "what" max 120}; kinds are moved/extracted/inlined/wrapped/unwrapped/condition-changed/reordered/flow.\n` +
-    `- Every beat: "text" (not "body" or "prose") and non-empty "highlights". "body" is concept-only.\n` +
-    `- Page concept steps: "id", "order", "title", "kind": "concept", "page", "narration"; optional "preparesFor", "tags", "chapter". "page" is a complete HTML document (any HTML, CSS, SVG, canvas, JavaScript, CDN libraries). "narration" is plain text with no tags. Add as many as teach the change, anywhere in the path.\n` +
+    `- Every beat: "text" (not "body" or "prose") and "highlights"/"oldHighlights". "body" is concept-only.\n` +
+    `- Page concept steps: "id", "order", "title", "kind": "concept", "page", "narration"; optional "preparesFor", "tags", "chapter", "network". "page" is a complete HTML document (any HTML, CSS, SVG, canvas, JavaScript; offline unless "network": true opts into CDN libraries). "narration" is plain text with no tags. Add as many as teach the change, anywhere in the path.\n` +
     // The format is validator-enforced, so it is pinned here rather than left to
     // the skill: prose about a format does not survive being read as reliably as
     // a field name does, and a Markdown-shaped story now renders its asterisks
@@ -186,7 +197,7 @@ export function storyPrompt(
     // required field rather than a sample: a run that checked only order/text/
     // highlights shipped 55 code steps with no "why" at all.
     `Before writing, check EVERY step: every code step has all ten always-required fields ` +
-    `"id", "order", "title", "kind", "file", "range", "viewport", "highlights", "why", "beats"; and every beat has "text" and "highlights". ` +
+    `"id", "order", "title", "kind", "file", "range", "viewport", "highlights", "why", "beats"; and every beat has "text" plus highlights on one side. ` +
     `One omission invalidates the story.\n\n` +
     // Coverage fails the same way fields did — silently, and only a pass over the
     // finished JSON catches it. One diff hunk often holds several separate
@@ -207,10 +218,10 @@ export function storyPrompt(
     `Hard limits the app enforces — a story violating any of these is rejected:\n` +
     `- Each claimed span covers its FULL changed cluster. "range" is framed and inside "viewport"; other "ranges" entries need not be.\n` +
     `- Each beat highlight: at most 12 lines, ideally 1-8. A wide "range" does NOT permit a wide highlight.\n` +
-    `- One beat's highlights must stay local — never more than 10 lines apart, or it reads as jumping across the file.\n` +
+    `- One beat's highlights stay local: at most 10 lines apart.\n` +
     `- "viewport": at most ${storyMode === 'detailed' ? '60' : '40'} lines in ${storyMode} mode; only a changed/new-file step with a larger "range" may use its length plus at most 12 context lines.\n` +
     `- At most ${storyMode === 'detailed' ? '5' : '3'} beats per step in ${storyMode} mode; split the step instead of adding more.\n` +
-    `- Top-level "highlights" must equal the union of that step's beat highlights.\n` +
+    `- Top-level "highlights" must equal the union of that step's NEW-side beat highlights.\n` +
     `- Beat text must not open by naming line numbers ("Line 742 ...") and must not narrate a value transition ("650 -> 600"). The diff already shows both; say why they matter instead.\n` +
     // Heard aloud, a step that opens on the change makes the listener replay.
     `- A step's FIRST beat lands the listener: name the function/rule, who reaches it and when, then the change. Never open on the change.\n\n` +

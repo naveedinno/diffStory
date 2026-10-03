@@ -17,7 +17,8 @@ import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { landingSearchName } from './landing-verify.js';
 import { claimedRanges } from './types.js';
-import { computeCoverage, filesForStoryCoverage } from './coverage.js';
+import { computeCoverage, filesForStoryCoverage, regeneratedCommandFor } from './coverage.js';
+import { matchGlob } from './noise.js';
 export { filesForStoryCoverage } from './coverage.js';
 import { isCodeStep, isPageConcept } from './types.js';
 import { narrative, narrativeText, type Narrative } from './narrative.js';
@@ -40,6 +41,7 @@ import type {
   TourStep,
   StepKind,
   StoryStepSceneLayout,
+  StoryStepWeight,
 } from './types.js';
 
 export type RowType = 'add' | 'del' | 'ctx';
@@ -160,6 +162,8 @@ const FILE_KIND_LABEL: Record<FileKind, string> = {
 export interface StepViewBase {
   id: string;
   order: number;
+  /** Attention weight; the tour default (`must`) is resolved at build time. */
+  weight: StoryStepWeight;
   /** Projected once: `.html` for headings, `.text` for aria labels and titles. */
   title: Narrative;
   kind: StepKind;
@@ -208,6 +212,8 @@ export interface CodeStepView extends StepViewBase {
   focusRanges: Array<[number, number]>;
   /** Focus ranges grouped by spoken unit. */
   focusGroups: Array<Array<[number, number]>>;
+  /** Old-side focus ranges grouped by spoken unit; beat i reads index i. */
+  focusOldGroups: Array<Array<[number, number]>>;
   /** Whether focusRanges came from story JSON instead of the step range fallback. */
   focusExplicit: boolean;
   newFile: boolean;
@@ -227,6 +233,8 @@ export interface CodeStepView extends StepViewBase {
   };
   /** Author-declared distrust reason when this step is a story hotspot. */
   hotspot?: Narrative;
+  /** Cross-file sweep claim: the glob and how many changed files it matches. */
+  sweep?: { glob: string; files: number };
   health: StepHealthView;
   beats: StepBeatView[];
   /** Diff rows grouped by hunk (rendered with a ⋯ separator between blocks). */
@@ -258,6 +266,8 @@ export interface ConceptStepView extends StepViewBase {
   diagram?: ConceptDiagramView;
   /** True for a v4 page concept; the page itself never enters the view model. */
   hasPage: boolean;
+  /** True when the page opted into network access; offline pages omit the badge. */
+  network: boolean;
   /** Plain-text narration for a page concept, spoken by Aloud. Page concepts only. */
   narration?: Narrative;
   preparesFor: Array<{ id: string; order: number; title: Narrative }>;
@@ -269,6 +279,7 @@ export interface StepBeatView {
   text: Narrative;
   focusGroup: number;
   highlights: Array<[number, number]>;
+  oldHighlights: Array<[number, number]>;
 }
 
 export interface FileView {
@@ -281,6 +292,8 @@ export interface FileView {
   del: number;
   /** Number of changed hunks in this file no step explains. */
   untoured: number;
+  /** Generator command when `storyScope.regenerated` explains this file. */
+  regeneratedBy?: string;
   stepId?: string;
   stepOrder?: number;
   hunks: UnifiedRow[][];
@@ -469,6 +482,7 @@ export function buildReviewModel(
     files,
     stepByFile,
     uncoveredByFile,
+    (path) => regeneratedCommandFor(tour, path),
     headRef,
     opts?.detailedFilePaths,
     opts?.fileIndex,
@@ -616,12 +630,14 @@ function buildCodeStep(
   const highlights = stepHighlights(step);
   const beats = stepBeats(step);
   const focusGroups = stepFocusGroups(viewport, highlights, beats);
+  const focusOldGroups = stepFocusOldGroups(beats);
   const focusExplicit = beats.length > 0 || highlights.length > 0;
   const moves = buildLogicMoves(step, diffFile?.oldPath ?? step.file, ordered ?? []);
   const pairedView = pairedMoveFor(step)?.id;
   return {
     id: step.id,
     order: step.order,
+    weight: step.weight ?? 'must',
     title: narrative(step.title, 'inline'),
     chapter: chapterLabel(step),
     file: step.file,
@@ -630,6 +646,7 @@ function buildCodeStep(
     range: viewport,
     focusRanges: focusGroups.flat(),
     focusGroups,
+    focusOldGroups,
     focusExplicit,
     kind: step.kind,
     kindLabel: STEP_KIND_LABEL[step.kind],
@@ -641,6 +658,14 @@ function buildCodeStep(
     tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
     newFile: step.kind === 'new-file',
     context: step.kind === 'context',
+    ...(step.kind !== 'context' && step.files?.length
+      ? {
+          sweep: {
+            glob: step.files[0],
+            files: files.filter((f) => step.files!.some((pattern) => matchGlob(pattern, f.newPath))).length,
+          },
+        }
+      : {}),
     why: narrative(step.why ?? '', 'inline'),
     ...(step.landing
       ? {
@@ -776,6 +801,7 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
   return {
     id: step.id,
     order: step.order,
+    weight: step.weight ?? 'must',
     title: narrative(step.title, 'inline'),
     chapter: chapterLabel(step),
     kind: 'concept',
@@ -783,6 +809,7 @@ function buildConceptStep(step: ConceptTourStep, byId: Map<string, TourStep>): C
     sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined, hasPage }),
     tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
     hasPage,
+    network: hasPage && step.network === true,
     // The page itself stays on disk: only the concept-page endpoint serves it.
     narration: hasPage ? narrative(step.narration, 'text') : undefined,
     body: hasPage ? undefined : narrative(step.body, 'block'),
@@ -845,7 +872,8 @@ function stepBeats(step: CodeTourStep): StepBeatView[] {
   return (step.beats ?? []).map((beat, i) => ({
     text: narrative(beat.text, 'inline'),
     focusGroup: i,
-    highlights: beat.highlights,
+    highlights: beat.highlights ?? [],
+    oldHighlights: beat.oldHighlights ?? [],
   }));
 }
 
@@ -857,6 +885,11 @@ function stepFocusGroups(
   if (beats.length) return beats.map((beat) => beat.highlights);
   if (highlights.length) return highlights.map((range) => [range]);
   return [[viewport]];
+}
+
+/** Old-side focus ranges, parallel to stepFocusGroups: beat i reads index i. */
+function stepFocusOldGroups(beats: StepBeatView[]): Array<Array<[number, number]>> {
+  return beats.map((beat) => beat.oldHighlights);
 }
 
 function stepBlocks(
@@ -998,6 +1031,7 @@ function buildFiles(
   files: DiffFile[],
   stepByFile: Map<string, CodeTourStep>,
   uncoveredByFile: Map<string, Array<[number, number]>>,
+  regenerated: (path: string) => string | null,
   headRef?: string,
   detailedFilePaths?: ReadonlySet<string>,
   fileIndex?: readonly ReviewFileIndexEntry[],
@@ -1029,6 +1063,7 @@ function buildFiles(
         ? movedUnified(file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered))))
         : [];
     const step = stepByFile.get(summary.path);
+    const regeneratedBy = regenerated(summary.path) ?? undefined;
     views.push({
       file: summary.path,
       oldFile: summary.oldPath,
@@ -1038,6 +1073,7 @@ function buildFiles(
       add: summary.added ?? 0,
       del: summary.removed ?? 0,
       untoured: uncovered.length,
+      ...(regeneratedBy ? { regeneratedBy } : {}),
       stepId: step?.id,
       stepOrder: step?.order,
       hunks,

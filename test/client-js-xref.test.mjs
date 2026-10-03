@@ -33,6 +33,8 @@ const ENGINE_IMPORTS = [
   "runProgress",
   "progressPrimaryActionClass",
   "progressSecondaryActionClass",
+  "diagramErrorLine",
+  "diagramErrorSummary",
 ];
 const GLOBALS = new Set([
   ...ENGINE_IMPORTS,

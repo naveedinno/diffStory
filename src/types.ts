@@ -33,6 +33,13 @@ export type StoryMode =
   | 'guided' // guided review: behavior and context without line-by-line narration
   | 'detailed'; // deep review: more correctness boundaries, while still skipping trivial syntax
 
+/**
+ * Who the story is written for. Newcomers get full landings and primers;
+ * familiar readers get terse landings and primers only for new ideas.
+ * Experts pay a penalty for newcomer guidance (expertise reversal).
+ */
+export type StoryAudience = 'newcomer' | 'familiar';
+
 /** Optional legacy read-aloud pointer inside a step's wider review window. */
 export interface StepFocusTarget {
   /** Inclusive post-change line ranges to glow; [0, 0] means a whole-file deletion. */
@@ -55,8 +62,17 @@ export interface StoryBeat {
    * renders inside a `<button>`, which cannot hold block content.
    */
   text: string;
-  /** Inclusive post-change line ranges this beat points at while it is spoken. */
-  highlights: Array<[number, number]>;
+  /**
+   * Inclusive post-change line ranges this beat points at while it is spoken.
+   * Optional only when `oldHighlights` carries the beat instead.
+   */
+  highlights?: Array<[number, number]>;
+  /**
+   * Inclusive OLD-side line ranges this beat points at: deleted lines that no
+   * longer exist post-change. A beat needs `highlights`, `oldHighlights`, or
+   * both — never neither. Old-side ranges glow the red deleted rows.
+   */
+  oldHighlights?: Array<[number, number]>;
 }
 
 /** The recovered "why" behind the change — shown before any step. */
@@ -88,6 +104,14 @@ export interface StoryVerification {
   detail?: string;
 }
 
+/** One generator whose outputs need no story steps, only a command row. */
+export interface StoryRegenerated {
+  /** Glob patterns (`*`, `**`, `?`) over repo-relative paths, e.g. `abis/*.json`. */
+  files: string[];
+  /** The command that produced them, e.g. `npx hardhat export-abi`. Plain text. */
+  by: string;
+}
+
 /** The changed files the reviewer intentionally asked the generated story to cover. */
 export interface StoryScope {
   /** Repo-relative changed files that should receive story steps. */
@@ -100,6 +124,8 @@ export interface StoryScope {
    * surface, so it never carries markup.
    */
   reviewerNote?: string;
+  /** Generated outputs explained by their generator command instead of steps. */
+  regenerated?: StoryRegenerated[];
 }
 
 /** What kind of change the story explains. */
@@ -150,12 +176,21 @@ export interface StoryEvolution {
   phases: StoryEvolutionPhase[];
 }
 
+/**
+ * How much attention a stop asks for. `must` is the default: the core path.
+ * `skim` marks supporting stops the rail collapses and a must-read-only
+ * walkthrough skips. Weight never affects diff coverage.
+ */
+export type StoryStepWeight = 'must' | 'skim';
+
 /** Fields shared by every stop in the guided reading path. */
 export interface TourStepBase {
   /** Stable id, referenced by `calls` / `returnsTo` and by comments. */
   id: string;
   /** 1-based position in the reading order. */
   order: number;
+  /** Attention weight; absent reads as `must`. */
+  weight?: StoryStepWeight;
   /**
    * Short headline for the step. Plain text — it feeds nine sinks including
    * `aria-label` and `title` attributes, where markup can only ever show as
@@ -263,6 +298,13 @@ export interface ChangedCodeTourStep extends CodeTourStepBase {
    * Absent means the step claims exactly `range`, preserving legacy behaviour.
    */
   ranges?: Array<[number, number]>;
+  /**
+   * ONE glob (e.g. `src/i18n/*.json`) sweeping one mechanical change across
+   * files. The step's own `file` is the representative instance the reviewer
+   * reads; every other matched changed file must carry the same structural
+   * edit (verified by the checker), and coverage claims all of it.
+   */
+  files?: string[];
   /** Semantic moves this step's evidence demonstrates. Requires story version 3. */
   moves?: LogicMove[];
   /** Cross-file move id to present as old-file/new-file paired panes. Requires version 3. */
@@ -273,6 +315,7 @@ export interface ChangedCodeTourStep extends CodeTourStepBase {
 export interface ContextCodeTourStep extends CodeTourStepBase {
   kind: 'context';
   ranges?: never;
+  files?: never;
 }
 
 /** One code-backed stop with a local camera anchor. */
@@ -311,10 +354,16 @@ export interface LegacyConceptTourStep extends TourStepBase {
  */
 export interface PageConceptTourStep extends TourStepBase {
   kind: 'concept';
-  /** A complete HTML document. Any markup, script, or CDN resource. */
+  /** A complete HTML document. Any markup and inline script; CDN resources need `network`. */
   page: string;
   /** Plain text Aloud speaks and screen readers announce for the page. */
   narration: string;
+  /**
+   * Opt into network access for this page (CDN libraries, fonts, fetches).
+   * Absent or false serves the page fully offline: inline markup, script, and
+   * style still run, but every network request is blocked.
+   */
+  network?: boolean;
   /** Optional later code-step ids this page prepares the reviewer for. */
   preparesFor?: string[];
   body?: never;
@@ -438,6 +487,36 @@ export interface Comment {
   reply?: string;
   /** Legacy conversation field; preserved on disk but not used by the review UI. */
   turns?: Turn[];
+}
+
+// ---- Story history snapshots ----
+
+/** One automatic snapshot of a story file under `.diffstory/history/`. */
+export interface StoryHistoryEntry {
+  /** listStories()-style id, e.g. "history/story-20261003T120000-a1b2c3d4.json". */
+  id: string;
+  /** File name within `.diffstory/history`. */
+  name: string;
+  /** Story id this snapshot was taken from. */
+  storyId: string;
+  /** ISO timestamp of when the snapshot file was written. */
+  takenAt: string;
+  /** Full SHA-256 of the snapshot bytes. */
+  sha: string;
+  updatedAt: number;
+  valid: boolean;
+  title: string;
+  steps: number;
+  /** Field-level summary against the current story; absent when current is unreadable. */
+  diff?: StoryHistoryDiff;
+}
+
+/** How a snapshot differs from the live story: titles, step counts, step ids. */
+export interface StoryHistoryDiff {
+  titleChanged: boolean;
+  stepDelta: number;
+  addedSteps: string[];
+  removedSteps: string[];
 }
 
 // ---- Derived (parsed) diff shapes ----

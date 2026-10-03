@@ -204,6 +204,47 @@ function reviewExclusionMetadata(path, addedLines, removedLines, byteSize) {
   if (!reason) return null;
   return { path, reason, addedLines, removedLines, changedLines };
 }
+function matchGlob(pattern, path) {
+  return globToRegExp(pattern).test(path);
+}
+function globToRegExp(pattern) {
+  const parts = pattern.split("/");
+  let out = "^";
+  let pendingSlash = false;
+  const pushSlash = () => {
+    if (pendingSlash) {
+      out += "/";
+      pendingSlash = false;
+    }
+  };
+  const pushSegment = (segment) => {
+    pushSlash();
+    for (const char of segment) {
+      if (char === "*") out += "[^/]*";
+      else if (char === "?") out += "[^/]";
+      else if ("+.^$()|[]{}\\".includes(char)) out += `\\${char}`;
+      else out += char;
+    }
+    pendingSlash = true;
+  };
+  parts.forEach((part, index) => {
+    const first = index === 0;
+    const last = index === parts.length - 1;
+    if (part !== "**") {
+      pushSegment(part);
+      return;
+    }
+    if (first && last) out += ".*";
+    else if (first) out += "(?:[^/]+/)*";
+    else if (last) out += "(?:/.*)?";
+    else {
+      pushSlash();
+      out += "(?:[^/]+/)*";
+    }
+    pendingSlash = false;
+  });
+  return new RegExp(`${out}$`);
+}
 
 // src/git.ts
 var APP_DATA_PATHSPEC = ":(exclude).diffstory/**";
@@ -689,6 +730,15 @@ function computeStoryClaimCoverage(tour, files) {
     const list = claimsByFile.get(step.file) ?? [];
     list.push(...claimedRanges(step).filter((claim) => isCredibleClaim(claim, changed, cap)));
     claimsByFile.set(step.file, list);
+    if (step.files?.length) {
+      for (const other of files) {
+        if (other.newPath === step.file) continue;
+        if (!step.files.some((pattern) => matchGlob(pattern, other.newPath))) continue;
+        const swept = claimsByFile.get(other.newPath) ?? [];
+        swept.push(...changedRanges(other));
+        claimsByFile.set(other.newPath, swept);
+      }
+    }
   }
   const unclaimed = [];
   const changedFiles = files.filter((f) => f.hunks.length > 0);
@@ -737,10 +787,17 @@ function stalePointers(tour, files) {
   });
 }
 function filesForStoryCoverage(tour, files) {
+  const regeneratedFree = files.filter((f) => regeneratedCommandFor(tour, f.newPath) === null);
   const included = tour.storyScope?.includedFiles;
-  if (!included?.length) return files;
+  if (!included?.length) return regeneratedFree;
   const selected = new Set(included);
-  return files.filter((f) => selected.has(f.newPath));
+  return regeneratedFree.filter((f) => selected.has(f.newPath));
+}
+function regeneratedCommandFor(tour, path) {
+  for (const entry of tour.storyScope?.regenerated ?? []) {
+    if (entry.files.some((pattern) => matchGlob(pattern, path))) return entry.by;
+  }
+  return null;
 }
 
 // src/landing-verify.ts
@@ -1427,25 +1484,56 @@ function validateHighlights(step, containerRange, containerName, where, errors, 
   });
 }
 function validateBeatHighlights(beat, beatIndex, containerRange, containerName, where, errors, allowDeletionAnchor) {
-  if (!Array.isArray(beat.highlights) || beat.highlights.length === 0) {
+  const hasNew = Array.isArray(beat.highlights) && beat.highlights.length > 0;
+  const hasOld = Array.isArray(beat.oldHighlights) && beat.oldHighlights.length > 0;
+  if (!hasNew && !hasOld) {
     errors.push(
-      `${where}.beats[${beatIndex}].highlights must be a non-empty array`
+      `${where}.beats[${beatIndex}] needs highlights, oldHighlights, or both`
     );
     return;
   }
-  beat.highlights.forEach((range, j) => {
-    const highlight = validateLineRange(
-      range,
-      `${where}.beats[${beatIndex}].highlights[${j}]`,
-      errors,
-      { allowDeletionAnchor }
-    );
-    if (highlight && containerRange && (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
+  if (beat.highlights !== void 0) {
+    if (!Array.isArray(beat.highlights) || beat.highlights.length === 0) {
       errors.push(
-        `${where}.beats[${beatIndex}].highlights[${j}] must be inside ${containerName}`
+        `${where}.beats[${beatIndex}].highlights must be a non-empty array`
       );
+    } else {
+      beat.highlights.forEach((range, j) => {
+        const highlight = validateLineRange(
+          range,
+          `${where}.beats[${beatIndex}].highlights[${j}]`,
+          errors,
+          { allowDeletionAnchor }
+        );
+        if (highlight && containerRange && (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
+          errors.push(
+            `${where}.beats[${beatIndex}].highlights[${j}] must be inside ${containerName}`
+          );
+        }
+      });
     }
-  });
+  }
+  if (beat.oldHighlights !== void 0) {
+    if (!Array.isArray(beat.oldHighlights) || beat.oldHighlights.length === 0) {
+      errors.push(
+        `${where}.beats[${beatIndex}].oldHighlights must be a non-empty array`
+      );
+    } else {
+      beat.oldHighlights.forEach((range, j) => {
+        const highlight = validateLineRange(
+          range,
+          `${where}.beats[${beatIndex}].oldHighlights[${j}]`,
+          errors,
+          { allowDeletionAnchor: false }
+        );
+        if (highlight && (highlight[0] < 1 || highlight[1] < 1)) {
+          errors.push(
+            `${where}.beats[${beatIndex}].oldHighlights[${j}] must be old-side line numbers`
+          );
+        }
+      });
+    }
+  }
 }
 function validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
   if (step.beats === void 0) return;
@@ -1622,6 +1710,63 @@ function validateStoryScope(t, errors) {
     "text",
     errors
   );
+  if (scope.regenerated !== void 0) {
+    if (!Array.isArray(scope.regenerated)) {
+      errors.push("storyScope.regenerated must be an array");
+      return;
+    }
+    scope.regenerated.forEach((entry, index) => {
+      const where = `storyScope.regenerated[${index}]`;
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        errors.push(`${where} must be an object`);
+        return;
+      }
+      const { files, by } = entry;
+      validateStringArray(files, `${where}.files`, errors, {
+        required: true,
+        nonEmpty: true
+      });
+      if (Array.isArray(files)) {
+        files.forEach((pattern, patternIndex) => {
+          if (typeof pattern === "string" && pattern.trim())
+            validateGlobPattern(pattern, `${where}.files[${patternIndex}]`, errors);
+        });
+      }
+      if (typeof by !== "string" || !by.trim()) {
+        errors.push(`${where}.by must be a non-empty string`);
+      } else if (by.length > 240) {
+        errors.push(`${where}.by must be at most 240 characters`);
+      }
+      validateNarrative(by, `${where}.by`, "text", errors);
+    });
+  }
+}
+function validateSweepFiles(step, where, errors) {
+  if (!Array.isArray(step.files)) {
+    errors.push(`${where}.files must be an array with one glob`);
+    return;
+  }
+  if (step.files.length !== 1 || typeof step.files[0] !== "string") {
+    errors.push(`${where}.files must name exactly one glob`);
+    return;
+  }
+  validateGlobPattern(step.files[0], `${where}.files[0]`, errors);
+  if (typeof step.file === "string" && step.files[0].trim() && !matchGlob(step.files[0], step.file)) {
+    errors.push(
+      `${where}.file must match its sweep glob: the step shows one matched instance`
+    );
+  }
+}
+function validateGlobPattern(value, name, errors) {
+  if (!value.trim()) {
+    errors.push(`${name} must be a non-empty string`);
+    return;
+  }
+  const segments = value.split("/");
+  const bad = value.startsWith("/") || value.includes("\\") || /^[a-zA-Z]:/.test(value) || segments.some(
+    (segment) => segment === ".." || segment === "" || /[[{}\]!]/.test(segment)
+  );
+  if (bad) errors.push(`${name} must be a safe repository-relative glob`);
 }
 function validateStoryArc(t, errors) {
   if (t.storyArc === void 0) return;
@@ -1770,6 +1915,8 @@ function validateConceptStep(step, where, storyVersion, errors) {
     if (isBlankNarrative(step.narration))
       errors.push(`${where}.narration is required`);
     validateNarrative(step.narration, `${where}.narration`, "text", errors);
+    if (step.network !== void 0 && typeof step.network !== "boolean")
+      errors.push(`${where}.network must be a boolean`);
     if (step.diagram !== void 0)
       errors.push(`${where}.diagram is only allowed with body`);
   } else {
@@ -1777,6 +1924,8 @@ function validateConceptStep(step, where, storyVersion, errors) {
     validateNarrative(step.body, `${where}.body`, "block", errors);
     if (step.narration !== void 0)
       errors.push(`${where}.narration is only allowed with page`);
+    if (step.network !== void 0)
+      errors.push(`${where}.network is only allowed with page`);
     validateConceptDiagram(step.diagram, where, errors);
   }
   validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, {
@@ -1864,6 +2013,11 @@ function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     errors.push(`${where}.ranges is not allowed for a context step`);
   } else {
     validateClaimedRanges(step, stepRange, where, errors, allowDeletionAnchor);
+  }
+  if (stepKind === "context" && step.files !== void 0) {
+    errors.push(`${where}.files is not allowed for a context step`);
+  } else if (step.files !== void 0) {
+    validateSweepFiles(step, where, errors);
   }
   validateFocus(
     step,
@@ -2149,6 +2303,9 @@ function validateTour(obj) {
         (tag, tagIndex) => validateNarrative(tag, `${where}.tags[${tagIndex}]`, "text", errors)
       );
     }
+    if (step.weight !== void 0 && step.weight !== "must" && step.weight !== "skim") {
+      errors.push(`${where}.weight must be "must" or "skim"`);
+    }
     const stepKind = step.kind;
     if (!KINDS.includes(stepKind)) {
       errors.push(`${where}.kind must be one of ${KINDS.join(", ")}`);
@@ -2330,6 +2487,11 @@ function validateGeneratedTour(tour) {
         `${where}.ranges requires a "skim", "sweep", or "mechanical" tag for a generated story`
       );
     }
+    if (step.files !== void 0 && !isSkimStep(step)) {
+      errors.push(
+        `${where}.files requires a "skim", "sweep", or "mechanical" tag for a generated story`
+      );
+    }
     if (!step.viewport)
       errors.push(`${where}.viewport is required for a generated story`);
     if (!step.highlights?.length)
@@ -2378,40 +2540,49 @@ function validateGeneratedTour(tour) {
           `${where}.beats[${beatIndex}].text must not narrate a value transition; the diff already shows both sides \u2014 say what depended on the old value`
         );
       }
-      if (!Array.isArray(beat?.highlights) || beat.highlights.length === 0) {
+      const newSide = Array.isArray(beat?.highlights) ? beat.highlights : [];
+      const oldSide = Array.isArray(
+        beat?.oldHighlights
+      ) ? beat.oldHighlights ?? [] : [];
+      if (newSide.length === 0 && oldSide.length === 0) {
         errors.push(
-          `${where}.beats[${beatIndex}].highlights are required for a generated story`
+          `${where}.beats[${beatIndex}] needs highlights, oldHighlights, or both for a generated story`
         );
         return;
       }
-      const validHighlights = [];
-      beat.highlights.forEach((highlight, highlightIndex) => {
-        if (isComparableLineRange(highlight)) {
-          validHighlights.push({
-            range: highlight,
-            sourceIndex: highlightIndex
-          });
-        } else {
+      for (const [field, list] of [
+        ["highlights", newSide],
+        ["oldHighlights", oldSide]
+      ]) {
+        const validHighlights = [];
+        list.forEach((highlight, highlightIndex) => {
+          if (isComparableLineRange(highlight)) {
+            validHighlights.push({
+              range: highlight,
+              sourceIndex: highlightIndex
+            });
+          } else {
+            errors.push(
+              `${where}.beats[${beatIndex}].${field}[${highlightIndex}] must be a [start, end] pair`
+            );
+          }
+        });
+        const sortedHighlights = validHighlights.map(({ range }) => range).sort((a, b) => a[0] - b[0]);
+        if (sortedHighlights.some(
+          (range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10
+        )) {
           errors.push(
-            `${where}.beats[${beatIndex}].highlights[${highlightIndex}] must be a [start, end] pair`
+            `${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`
           );
         }
-      });
-      const sortedHighlights = validHighlights.map(({ range }) => range).sort((a, b) => a[0] - b[0]);
-      if (sortedHighlights.some(
-        (range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10
-      )) {
-        errors.push(
-          `${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`
-        );
+        validHighlights.forEach(({ range, sourceIndex }) => {
+          if (!isDeletionAnchor(range) && range[1] - range[0] + 1 > 12) {
+            errors.push(
+              `${where}.beats[${beatIndex}].${field}[${sourceIndex}] must point at at most 12 lines`
+            );
+          }
+        });
       }
-      validHighlights.forEach(({ range, sourceIndex }) => {
-        if (!isDeletionAnchor(range) && range[1] - range[0] + 1 > 12) {
-          errors.push(
-            `${where}.beats[${beatIndex}].highlights[${sourceIndex}] must point at at most 12 lines`
-          );
-        }
-      });
     });
     if (step.highlights?.length && step.beats?.length) {
       const stepHighlights = step.highlights.filter(isComparableLineRange);
@@ -2425,7 +2596,10 @@ function validateGeneratedTour(tour) {
       }
     }
     if (step.kind !== "context" && stepRange && step.beats?.length) {
-      const coversChange = step.beats.some(
+      const beatOld = (beat) => Array.isArray(beat?.oldHighlights) && (beat.oldHighlights.length ?? 0) > 0;
+      const beatNew = (beat) => Array.isArray(beat?.highlights) && (beat.highlights.length ?? 0) > 0;
+      const allOldSide = step.beats.length > 0 && step.beats.every((beat) => beatOld(beat) && !beatNew(beat));
+      const coversChange = allOldSide || step.beats.some(
         (beat) => (Array.isArray(beat.highlights) ? beat.highlights : []).filter(isComparableLineRange).some(
           (highlight) => isDeletionAnchor(stepRange) ? isDeletionAnchor(highlight) : !isDeletionAnchor(highlight) && highlight[0] <= stepRange[1] && highlight[1] >= stepRange[0]
         )
@@ -3181,6 +3355,8 @@ function runStoryCheck(repo, storyPath) {
       `stale step ${step.id}: its range or ranges do not match changed code in ${file} (re-read the post-change file and fix the line numbers)`
     );
   }
+  report.errors.push(...verifySweeps(tour, files));
+  report.errors.push(...verifyOldHighlights(tour, files));
   const moves = verifyLogicMoves(repo, tour);
   report.errors.push(...moves.errors);
   report.moveWarnings.push(...moves.warnings);
@@ -3190,6 +3366,70 @@ function runStoryCheck(repo, storyPath) {
   });
   return report;
 }
+function verifySweeps(tour, files) {
+  const errors = [];
+  for (const step of tour.steps) {
+    if (!isCodeStep(step) || step.kind === "context" || !step.files?.length) continue;
+    const matched = files.filter(
+      (f) => step.files.some((pattern) => matchGlob(pattern, f.newPath))
+    );
+    if (!matched.length) {
+      errors.push(
+        `sweep step ${step.id}: "${step.files[0]}" matches no changed file in this story's scope (drop the sweep or fix the glob)`
+      );
+      continue;
+    }
+    const expected = sweepSignature(matched[0]);
+    const divergent = matched.filter((file) => sweepSignature(file) !== expected);
+    if (divergent.length) {
+      const names = divergent.map((file) => file.newPath);
+      const shown = names.slice(0, 4).join(", ");
+      errors.push(
+        `sweep step ${step.id}: ${shown}${names.length > 4 ? ` and ${names.length - 4} more` : ""} ${names.length === 1 ? "does" : "do"} not carry the same structural edit as ${matched[0].newPath} (a sweep claims every matched file, so each one must change the same way \u2014 narrow the glob or write separate steps)`
+      );
+    }
+  }
+  return errors;
+}
+function sweepSignature(file) {
+  const skeleton = (content) => {
+    let seen = 0;
+    return content.trim().replace(/"[^"\n]*"|'[^'\n]*'/g, (literal) => seen++ === 0 ? literal : '""').replace(/\b\d+(\.\d+)?\b/g, "0");
+  };
+  const lines = file.hunks.flatMap((hunk) => hunk.lines).filter((line) => line.type === "add" || line.type === "del").map((line) => `${line.type === "add" ? "+" : "-"}${skeleton(line.content)}`);
+  return [`hunks:${file.hunks.length}`, ...lines].join("\n");
+}
+function verifyOldHighlights(tour, files) {
+  const errors = [];
+  const byPath = new Map(files.map((file) => [file.newPath, file]));
+  for (const step of tour.steps) {
+    if (!isCodeStep(step) || !step.beats?.length) continue;
+    const file = byPath.get(step.file);
+    const deleted = /* @__PURE__ */ new Set();
+    for (const hunk of file?.hunks ?? []) {
+      for (const line of hunk.lines) {
+        if (line.type === "del" && line.oldNo !== void 0) deleted.add(line.oldNo);
+      }
+    }
+    step.beats.forEach((beat, beatIndex) => {
+      for (const [start, end] of beat.oldHighlights ?? []) {
+        let hits = false;
+        for (let line = start; line <= end; line++) {
+          if (deleted.has(line)) {
+            hits = true;
+            break;
+          }
+        }
+        if (!hits) {
+          errors.push(
+            `steps[${step.id}].beats[${beatIndex}].oldHighlights ${start}-${end} point at no deleted line in ${step.file} (re-read the base-side file and fix the old line numbers)`
+          );
+        }
+      }
+    });
+  }
+  return errors;
+}
 function unownedFiles(repo, tours) {
   if (tours.length < 2) return [];
   const key = (t) => `${t.base ?? ""}..${t.head ?? ""}`;
@@ -3198,20 +3438,6 @@ function unownedFiles(repo, tours) {
   const excluded = new Set(tours.flatMap((t) => t.storyScope?.excludedFiles ?? []));
   const base = resolveBase(repo, tours[0].base);
   return parseUnifiedDiff(getDiff(repo, base, tours[0].head)).map((f) => f.newPath).filter((path) => !owned.has(path) && !excluded.has(path));
-}
-function globToRegExp(glob) {
-  let out = "";
-  for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
-    if (ch === "*" && glob[i + 1] === "*") {
-      const slash = glob[i + 2] === "/";
-      out += slash ? "(?:.*/)?" : ".*";
-      i += slash ? 2 : 1;
-    } else if (ch === "*") out += "[^/]*";
-    else if (ch === "?") out += "[^/]";
-    else out += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${out}$`);
 }
 function storyLedger(repo, opts = {}) {
   const base = resolveBase(repo, opts.base);

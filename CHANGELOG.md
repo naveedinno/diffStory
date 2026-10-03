@@ -7,6 +7,29 @@ All notable changes to diffStory are tracked here.
 - Story format v4: concept steps can be free HTML pages (JavaScript and CDN
   libraries allowed) rendered in a sandboxed frame, with no cap on how many or
   where they sit.
+- Concept pages are offline by default: a page opts into network access with
+  `"network": true` on its step, and opted-in pages carry a Network badge.
+- Story bundles for team handoff: export a story as a `.diffstory.json`
+  download and import it under `.diffstory/stories/` from Review history.
+- `storyScope.regenerated` declares generator outputs (ABIs, lockfiles) once
+  with their command instead of narrating them as steps; coverage treats them
+  as explained and the file list shows one row per generator.
+- Step `weight` (`must`/`skim`): the rail collapses skim runs, and a
+  must-read-only mode skips them in keyboard order and narration.
+- Story health row in the Overview: contract errors, lint findings grouped by
+  rule, and runtime diagram failures, each with step jump and agent repair.
+- Cross-file sweep steps: one tagged step names a glob for a repeated
+  mechanical pattern, coverage claims every matched file, and the checker
+  verifies each matched file carries the same structural edit.
+- Old-side beat highlights: beats about removed code point `oldHighlights` at
+  deleted OLD-side line numbers, which glow the red rows and speak as
+  "deleted lines N"; the checker verifies they hit real deletions.
+- Story health sections cap at ten rows with an overflow count, so large
+  stories keep a light Overview; a perf smoke test pins the 300-step review
+  page inside a 5s budget.
+- History snapshots no longer dirty the tree for scope selection: the
+  committed-story fallback and auto scope ignore `.diffstory/history/`, so a
+  clean tree with snapshots still opens its committed diff.
 - Tightened the story step header: the step title now leads its own line with
   the step number, kind, and call flow demoted to quiet reference marks at the
   end of the same row, instead of sitting in a band of filled chips above it.

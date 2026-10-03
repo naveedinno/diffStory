@@ -15,8 +15,20 @@
 /**
  * Sandboxed with scripts only, whether framed or opened top-level; anything
  * the author wants to load, run, or fetch; and only diffStory may frame it.
+ * Served only for pages that opt in with `"network": true`.
  */
 export const CONCEPT_PAGE_CSP = "sandbox allow-scripts; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+/**
+ * The default: the author's inline markup, script, and style run, but every
+ * network request is blocked. `default-src 'none'` covers connect, frame,
+ * worker, and object sources; script and style stay inline-only; images,
+ * media, and fonts may only be inline data or blobs.
+ */
+export const CONCEPT_PAGE_CSP_OFFLINE = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data: blob:; frame-ancestors 'self'";
+/** The policy for one page step: network only when the author opted in. */
+export function conceptPageCsp(network) {
+    return network === true ? CONCEPT_PAGE_CSP : CONCEPT_PAGE_CSP_OFFLINE;
+}
 /**
  * The only keys a page forwards to the app: they step through the story or
  * play and pause narration, and nothing else. The review engine accepts the

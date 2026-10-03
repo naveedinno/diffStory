@@ -126,6 +126,15 @@ never replace a changed step in the ledger. Generated or oversized files the
 prompt excludes get no steps; with `storyScope.includedFiles`, the ledger
 covers only those files and `storyScope.excludedFiles` are outside this story.
 
+Files a command regenerates (exported ABIs, committed build output, lockfiles
+a package manager rewrote) are not review decisions — never narrate them as
+steps. Declare them once in `storyScope.regenerated` as
+`{ "files": [<glob patterns>], "by": "<the command>" }`, e.g.
+`{ "files": ["abis/*.json"], "by": "npx hardhat export-abi" }`. Coverage treats
+matched files as explained, and the all-files view shows one row per generator
+with its command. Only claim files the command actually produces; the reviewer
+sees the command and can rerun it.
+
 ### Range and viewport audit
 
 - Read the post-change file with line numbers before choosing `range`,

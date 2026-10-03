@@ -1127,6 +1127,54 @@ test('lazy split and full-file responses honour the story scope like the review 
   assert.doesNotMatch(src, /computeCoverage\(tour, files\)\n/);
 });
 
+test('story bundles export as a download and import under stories/', async () => {
+  const repo = gitRepo();
+  writeFileSync(join(repo, 'README.md'), '# changed\n');
+  mkdirSync(join(repo, '.diffstory'), { recursive: true });
+  writeFileSync(join(repo, '.diffstory', 'story.json'), `${JSON.stringify({
+    version: 4, title: 'Bundle story', summary: 'For the team.', base: 'HEAD',
+    steps: [
+      { id: 's1', order: 1, title: 'Readme', kind: 'changed', file: 'README.md', range: [1, 1], why: 'The heading changed.' },
+    ],
+  })}\n`);
+  const { server, base } = await boot(repo);
+  try {
+    const exp = await fetch(`${base}/api/stories/bundle?id=story.json`);
+    assert.equal(exp.status, 200);
+    assert.match(
+      exp.headers.get('content-disposition') ?? '',
+      /attachment; filename="story-\d{8}\.diffstory\.json"/,
+    );
+    const bundle = await exp.json();
+    assert.equal(bundle.bundle, 1);
+    assert.equal(bundle.story.title, 'Bundle story');
+    assert.equal(bundle.base, 'HEAD');
+
+    const imp = await fetch(`${base}/api/stories/bundle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'teammate copy', bundle }),
+    });
+    assert.equal(imp.status, 201);
+    assert.equal((await imp.json()).id, 'stories/teammate-copy.json');
+    const round = await fetch(`${base}/api/stories/bundle?id=stories%2Fteammate-copy.json`);
+    assert.equal(round.status, 200);
+    assert.equal((await round.json()).story.title, 'Bundle story');
+
+    const bad = await fetch(`${base}/api/stories/bundle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad', bundle: { bundle: 1, story: { version: 4 } } }),
+    });
+    assert.equal(bad.status, 422);
+    const missing = await fetch(`${base}/api/stories/bundle?id=nope.json`);
+    assert.equal(missing.status, 404);
+  } finally {
+    server.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test('concept pages are served into a sandbox with their own policy', async () => {
   const repo = gitRepo();
   writeFileSync(join(repo, 'README.md'), '# changed\n');
@@ -1136,8 +1184,11 @@ test('concept pages are served into a sandbox with their own policy', async () =
     steps: [
       { id: 'page', order: 1, title: 'How it moves', kind: 'concept',
         page: '<html><head><title>t</title></head><body><script src="https://cdn.jsdelivr.net/npm/d3@7"></script></body></html>',
-        narration: 'Watch the line move.' },
-      { id: 'code', order: 2, title: 'Readme', kind: 'changed', file: 'README.md', range: [1, 1], why: 'The heading changed.' },
+        narration: 'Watch the line move.', network: true },
+      { id: 'offline', order: 2, title: 'Inline only', kind: 'concept',
+        page: '<html><body><p>inline</p></body></html>',
+        narration: 'No remote resources.' },
+      { id: 'code', order: 3, title: 'Readme', kind: 'changed', file: 'README.md', range: [1, 1], why: 'The heading changed.' },
     ],
   }, null, 2)}\n`);
   const { server, base } = await boot(repo);
@@ -1164,7 +1215,12 @@ test('concept pages are served into a sandbox with their own policy', async () =
     assert.match(body, /cdn\.jsdelivr\.net\/npm\/d3@7/);
     assert.match(body, /data-ds-theme',"dark"/);
 
-    const code = await fetch(leased(`${base}/api/review/concept-page?index=2`, token));
+    const offline = await fetch(leased(`${base}/api/review/concept-page?index=2&theme=dark`, token));
+    assert.equal(offline.status, 200);
+    assert.match(offline.headers.get('content-security-policy') ?? '', /default-src 'none'/);
+    assert.doesNotMatch(offline.headers.get('content-security-policy') ?? '', /default-src [^;]*\*/);
+
+    const code = await fetch(leased(`${base}/api/review/concept-page?index=3`, token));
     assert.equal(code.status, 404, 'code steps have no page');
     const stale = await fetch(leased(`${base}/api/review/concept-page?index=1`, 'not-a-real-token'));
     assert.equal(stale.status, 409);

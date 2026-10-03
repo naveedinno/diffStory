@@ -51,6 +51,7 @@ import type {
   CommentSide,
   DiffFile,
   ReviewFileIndexEntry,
+  StoryAudience,
   Tour,
 } from "./types.js";
 import type { ReviewStateSummary } from "./review-state.js";
@@ -65,6 +66,7 @@ import type {
   StoryDriftView,
 } from "./payloads.js";
 import { readWholeFile } from "./git.js";
+import { storyHealth } from "./story-health.js";
 
 /**
  * `StoryDriftView` used to be declared here and is imported from this module by
@@ -138,7 +140,7 @@ function codeStepPanel(
   comments: Comment[],
 ): string {
   const diffRegionId = `ds-story-diff-${i + 1}`;
-  return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}"${
+  return `<section class="ds-step is-code-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" data-step-weight="${s.weight}"${
     s.focusExplicit ? ' data-story-focus="authored"' : ""
   } hidden>
     <div class="ds-step-top">
@@ -146,6 +148,7 @@ function codeStepPanel(
         <h1 class="ds-step-title">${s.title.html}</h1>
         <div class="ds-step-actions">
           <span class="ds-badge ds-badge-${s.kind === "new-file" ? "new" : s.kind}">${esc(s.kindLabel)}</span>
+          ${s.sweep ? `<span class="ds-badge ds-badge-sweep" title="${esc(`Sweeps ${s.sweep.files} changed ${s.sweep.files === 1 ? "file" : "files"} matching ${s.sweep.glob}; each carries the same changed lines as this instance`)}">Sweep · ${s.sweep.files}</span>` : ""}
           ${storyRepairMenu(s, true)}
         </div>
       </div>
@@ -442,7 +445,7 @@ function conceptStepPanel(
       </figure>`
     : "";
   const speech = conceptSpeechText(s);
-  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
+  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" data-step-weight="${s.weight}" hidden>
     <div class="ds-concept-scroll">
       <article class="ds-concept-document" aria-labelledby="ds-concept-title-${i + 1}">
         <div class="ds-concept-copy">
@@ -465,11 +468,12 @@ function conceptStepPanel(
  */
 function conceptPagePanel(s: ConceptStepView, i: number): string {
   const speech = conceptSpeechText(s);
-  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" hidden>
+  return `<section class="ds-step ds-concept-step" data-step-panel="${i + 1}" data-step-id="${esc(s.id)}" data-scene-layout="${esc(s.sceneLayout)}" data-step-weight="${s.weight}" hidden>
     <article class="ds-concept-page-stage" aria-labelledby="ds-concept-title-${i + 1}">
       <div class="ds-concept-heading">
         <span class="ds-concept-eyebrow"><span aria-hidden="true">◇</span> Mental model</span>
         <h1 class="ds-concept-title" id="ds-concept-title-${i + 1}">${s.title.html}</h1>
+        ${s.network ? `<span class="ds-concept-network" title="This page loads remote resources. Opening it can contact servers its author chose.">Network</span>` : ""}
       </div>
       <figure class="ds-concept-page" data-concept-page>
         <button type="button" class="ds-concept-page-fullscreen" data-concept-page-fullscreen aria-pressed="false" aria-label="Open page fullscreen" title="Open page fullscreen">
@@ -537,7 +541,7 @@ function beatHtml(
   file: string,
   diffRegionId: string,
 ): string {
-  const destination = beatDestination(file, beat.highlights);
+  const destination = beatDestination(file, beat.highlights, beat.oldHighlights);
   return `<button type="button" class="ds-beat ds-beatdock-note" data-story-beat data-speech-beat="${beat.focusGroup}" data-focus-group="${beat.focusGroup}" data-speech-text="${esc(
     beat.text.speech,
   )}" data-focus-destination="${esc(destination)}" aria-controls="${diffRegionId}" aria-pressed="false" aria-label="Focus beat ${beat.focusGroup + 1}: ${esc(
@@ -545,14 +549,26 @@ function beatHtml(
   )}"><span class="ds-beat-text">${nl(beat.text.html)}</span></button>`;
 }
 
-function beatDestination(
+/**
+ * Spoken destination for a beat button. Exported for tests; panels and the
+ * rail speech cache render it.
+ */
+export function beatDestination(
   file: string,
   highlights: Array<[number, number]>,
+  oldHighlights: Array<[number, number]> = [],
 ): string {
   const ranges = highlights.map(([start, end]) => {
     if (start === 0 && end === 0) return "deleted lines";
     return start === end ? `line ${start}` : `lines ${start} to ${end}`;
   });
+  for (const [start, end] of oldHighlights) {
+    ranges.push(
+      start === end
+        ? `deleted line ${start}`
+        : `deleted lines ${start} to ${end}`,
+    );
+  }
   return `${file}, ${ranges.join(" and ")}`;
 }
 
@@ -817,8 +833,11 @@ function rowVoiceFocusIndex(
   s: CodeStepView,
   blockIndex: number,
 ): number | null {
-  const idx = s.focusGroups.findIndex((ranges) =>
-    ranges.some((range) => rowInFocusRange(row, s, range)),
+  const idx = s.focusGroups.findIndex((ranges, group) =>
+    ranges.some((range) => rowInFocusRange(row, s, range)) ||
+    (s.focusOldGroups[group] ?? []).some((range) =>
+      rowInOldFocusRange(row, range),
+    ),
   );
   if (idx >= 0) {
     return s.focusExplicit ? idx : blockIndex;
@@ -835,6 +854,20 @@ function rowInFocusRange(
 ): boolean {
   if (row.newNo !== undefined) return row.newNo >= start && row.newNo <= end;
   return s.kind === "changed" && row.type === "del" && start === 0 && end === 0;
+}
+
+/**
+ * Old-side focus: deleted rows glow when their OLD line number falls inside a
+ * beat's `oldHighlights`. Exported for tests; the engine only ever reads the
+ * stamped `data-step-focus` attribute.
+ */
+export function rowInOldFocusRange(
+  row: Pick<SbsRow, "type" | "oldNo">,
+  [start, end]: [number, number],
+): boolean {
+  return (
+    row.type === "del" && row.oldNo !== undefined && row.oldNo >= start && row.oldNo <= end
+  );
 }
 
 // ---- all files ----
@@ -1437,6 +1470,8 @@ export interface ReviewShellInput {
   baseLabel: string;
   /** Ref for the post-change side. Omitted means the live working tree. */
   headRef?: string;
+  /** Standing audience preference; absent reads as newcomer. */
+  audience?: StoryAudience;
   comments: Comment[];
   routeBase?: string;
   repoName?: string;
@@ -1454,6 +1489,7 @@ export interface ReviewShellInput {
   storyKey?: string;
   storyFreshness?: "current" | "stale" | "unverified";
   storyDrift?: StoryDriftView;
+  history?: { takenAt: string; liveId: string };
   excludedFiles?: ReviewExclusionMetadata[];
   stagedWorktreeDivergentFiles?: string[];
 }
@@ -1470,7 +1506,7 @@ function beatViews(step: CodeStepView): ReviewBeatView[] {
   return step.beats.map((beat) => ({
     focusGroup: beat.focusGroup,
     text: prose(beat.text),
-    destination: beatDestination(step.file, beat.highlights),
+    destination: beatDestination(step.file, beat.highlights, beat.oldHighlights),
   }));
 }
 
@@ -1486,6 +1522,7 @@ function stepView(step: StepView): ReviewStepView {
   const base: ReviewStepView = {
     id: step.id,
     kind: step.kind,
+    weight: step.weight,
     sceneLayout: step.sceneLayout,
     order: step.order,
     title: prose(step.title),
@@ -1523,6 +1560,7 @@ function fileRow(file: FileView): ReviewFileRow {
     reviewHash: fileReviewHash(file),
     hasFull: file.hasFull,
     hasHunks: file.hunks.length > 0,
+    ...(file.regeneratedBy ? { regeneratedBy: file.regeneratedBy } : {}),
   };
 }
 
@@ -1585,6 +1623,18 @@ export function renderReviewShell(input: ReviewShellInput): string {
     (comment) => comment.type === "change",
   ).length;
   const uncoveredCount = model.trust.uncovered.length;
+  // Health lint reads post-change lines; memoize per file so a 300-step story
+  // does not re-read the same file per step.
+  const healthLines = new Map<string, string[] | null>();
+  const health = storyless
+    ? { findings: [], errors: 0, warnings: 0, unexplainedRanges: 0 }
+    : {
+        ...storyHealth(tour, (file) => {
+          if (!healthLines.has(file)) healthLines.set(file, readWholeFile(repo, file, headRef));
+          return healthLines.get(file) ?? null;
+        }),
+        unexplainedRanges: uncoveredCount,
+      };
   const focusedStory = !!tour.storyScope?.excludedFiles?.length;
   const feedbackHealthy = reviewState.feedbackHealth?.status !== "invalid";
   const feedbackRecovery =
@@ -1615,6 +1665,8 @@ export function renderReviewShell(input: ReviewShellInput): string {
     routeBase,
     storyless,
     baseLabel,
+    audience: input.audience ?? "newcomer",
+    health,
     ...(headRef ? { headRef } : {}),
     ...(tour.base ? { baseRef: tour.base } : {}),
 
@@ -1693,6 +1745,7 @@ export function renderReviewShell(input: ReviewShellInput): string {
 
     storyFreshness,
     ...(storyDrift ? { storyDrift } : {}),
+    ...(input.history ? { history: input.history } : {}),
 
     comments: activeComments,
     // Where each comment's code went since it was written. Only the server can

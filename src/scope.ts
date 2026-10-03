@@ -5,7 +5,7 @@
 // base/head to diff plus a human label and active mode for the UI.
 import {
   describeBase,
-  isDirty,
+  isDirtyExceptHistory,
   commitParentBase,
   describeCommit,
   isCommitRef,
@@ -42,7 +42,7 @@ export function resolveScope(repo: string, params: URLSearchParams): Scope {
   const sel = params.get('scope'); // 'uncommitted' | 'commit' | 'last' | 'branch' | null (auto)
   if (sel === 'branch') return branchScope(repo, params.get('branch')?.trim() || '', params.get('from')?.trim() || '');
   if (sel === 'commit' || sel === 'last') return commitScope(repo, params.get('commit') || 'HEAD');
-  if (sel === 'uncommitted' || (sel == null && isDirty(repo))) {
+  if (sel === 'uncommitted' || (sel == null && isDirtyExceptHistory(repo))) {
     return { base: 'HEAD', head: undefined, label: 'Uncommitted changes', active: 'uncommitted' };
   }
   // auto + clean tree → the latest commit (whole first commit if no parent).

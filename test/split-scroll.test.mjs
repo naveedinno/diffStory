@@ -64,7 +64,8 @@ test('comment insertion lays out its shared track before revealing the draft', (
   };
   const context = vm.createContext({
     removeComposer() {}, buildComposer: () => ({}),
-    document: { activeElement: {} }, closest: () => ({}), $: () => null,
+    document: { activeElement: {}, body: { hasAttribute: () => false } },
+    closest: () => ({}), $: () => null,
     syncSplitFlow: () => events.push('layout'), revealComposer: () => events.push('reveal'),
   });
   vm.runInContext(fn('openComposer'), context);

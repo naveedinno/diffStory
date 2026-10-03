@@ -34,6 +34,7 @@ import type { StoryRowView } from "../../../src/payloads";
 import { cn } from "../../shared/cn";
 import { plural, relativeTime } from "./format";
 import { BADGE_CLASS, BLUE_INK, GREEN_INK, RED_INK, storyState, type StoryTone } from "./story-state";
+import { StoryHistory } from "./StoryHistory";
 
 /** beUI's semantic status, so the badge picks the icon-free variant it knows. */
 const BADGE_STATUS: Record<StoryTone, AnimatedBadgeStatus> = {
@@ -53,6 +54,7 @@ export interface StoryRowProps {
   liveEvidence: boolean;
   busy: boolean;
   onRemove: (story: StoryRowView) => void;
+  onRestored: (patch: Partial<StoryRowView>) => void;
 }
 
 function Fact({ children }: { children: React.ReactNode }) {
@@ -98,7 +100,7 @@ function ScopeChip({ scope }: { scope: StoryRowView["scope"] }) {
   );
 }
 
-export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onRemove }: StoryRowProps) {
+export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onRemove, onRestored }: StoryRowProps) {
   const state = storyState(story, liveEvidence);
   // Fallbacks live here, not in the payload: the route ships what the story
   // authored, and an empty field is a presentation question.
@@ -304,6 +306,10 @@ export function StoryRow({ story, index, routeBase, now, liveEvidence, busy, onR
           <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.9} />
         </Button>
       </Tooltip>
+
+      {/* Sibling of the anchor, like the delete control: a disclosure inside
+          the row link would nest interactive content. */}
+      <StoryHistory storyId={story.id} routeBase={routeBase} now={now} onRestored={onRestored} />
     </article>
   );
 }

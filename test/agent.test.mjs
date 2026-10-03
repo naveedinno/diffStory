@@ -121,6 +121,23 @@ test('storyPrompt supports story detail levels', () => {
   }
 });
 
+test('storyPrompt scales guidance to a familiar audience, and stays silent otherwise', () => {
+  const familiar = storyPrompt('main', undefined, 'guided', [], undefined, undefined, undefined, {
+    audience: 'familiar',
+  });
+  assert.ok(familiar.includes('Audience contract'));
+  assert.ok(familiar.includes('references/audience.md'));
+  assert.ok(familiar.length < 6500, `familiar prompt grew to ${familiar.length} chars`);
+  const plain = storyPrompt('main');
+  assert.ok(!plain.includes('Audience contract'));
+  assert.equal(
+    storyPrompt('main', undefined, 'guided', [], undefined, undefined, undefined, {
+      audience: 'newcomer',
+    }),
+    plain,
+  );
+});
+
 test('bundled diffstory-storyteller skill teaches reviewer-first story generation', () => {
   const skill = skillCorpus();
   const flat = skill.replace(/\s+/g, ' ');
@@ -823,7 +840,7 @@ test('storyPrompt self-check names every required field, not a sample', () => {
   for (const f of ['id', 'order', 'title', 'kind', 'file', 'range', 'viewport', 'highlights', 'why', 'beats']) {
     assert.ok(p.includes(`"${f}"`), `self-check omits ${f}`);
   }
-  assert.ok(p.includes('every beat has "text" and "highlights"'));
+  assert.ok(p.includes('every beat has "text" plus highlights on one side'));
   assert.ok(p.includes('One omission invalidates the story'));
 });
 

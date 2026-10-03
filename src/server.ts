@@ -29,7 +29,7 @@ import {
   listBranchRefs,
   listRecentCommits,
   currentBranch,
-  isDirty,
+  isDirtyExceptHistory,
   hasParentCommit,
   emptyTree,
   resolveCommit,
@@ -93,7 +93,7 @@ import {
   type NewComment,
 } from "./comments.js";
 import { resolveStoryPath, APP_BRAND, DATA_DIR } from "./config.js";
-import { CONCEPT_PAGE_CSP, conceptPageDocument } from "./concept-page.js";
+import { conceptPageCsp, conceptPageDocument } from "./concept-page.js";
 import {
   isCodeStep,
   isPageConcept,
@@ -187,7 +187,25 @@ import {
 import { createAloudReader, type AloudReader } from "./aloud-client.js";
 import { listCodexStoryModels } from "./codex-tasks.js";
 import { LiveEventHub, storyFileFingerprint } from "./live.js";
+import {
+  isHistoryStoryId,
+  listStoryHistory,
+  liveStoryIdForSnapshot,
+  restoreStoryVersion,
+  snapshotStoryIfChanged,
+} from "./story-history.js";
 import { reviewStateSummary } from "./review-state.js";
+import {
+  DEFAULT_AUDIENCE,
+  isStoryAudience,
+  loadRepoPreferences,
+  saveRepoPreferences,
+} from "./repo-preferences.js";
+import {
+  bundleFileName,
+  exportStoryBundle,
+  importStoryBundle,
+} from "./story-bundle.js";
 import {
   captureStorySnapshot,
   inspectStoryDrift,
@@ -864,6 +882,94 @@ function handle(
         });
       });
     }
+    if (method === "GET" && url.pathname === "/api/stories/history") {
+      if (!session.repo) return noRepo(res);
+      const id = url.searchParams.get("id") ?? "";
+      if (!id || isHistoryStoryId(id))
+        return sendJson(res, 400, { error: "Missing story id." });
+      if (!storyPathForId(session.repo, id))
+        return sendJson(res, 404, { error: "No such story." });
+      return sendJson(res, 200, {
+        id,
+        history: listStoryHistory(session.repo, id),
+      });
+    }
+    if (method === "POST" && url.pathname === "/api/stories/history/restore") {
+      if (!session.repo) return noRepo(res);
+      const repo = session.repo;
+      return readBody(req, res, (body) => {
+        let id = "";
+        let name = "";
+        try {
+          const parsed = JSON.parse(body || "{}") as {
+            id?: string;
+            name?: string;
+          };
+          id = String(parsed.id ?? "");
+          name = String(parsed.name ?? "");
+        } catch {
+          return sendJson(res, 400, { error: "Invalid JSON." });
+        }
+        if (!id || !name || isHistoryStoryId(id))
+          return sendJson(res, 400, {
+            error: "Missing story id or snapshot name.",
+          });
+        if (!storyPathForId(repo, id))
+          return sendJson(res, 404, { error: "No such story." });
+        if (!restoreStoryVersion(repo, id, name))
+          return sendJson(res, 404, { error: "No such snapshot." });
+        return sendJson(res, 200, {
+          ok: true,
+          stories: listStories(repo),
+          history: listStoryHistory(repo, id),
+        });
+      });
+    }
+    if (method === "GET" && url.pathname === "/api/stories/bundle") {
+      if (!session.repo) return noRepo(res);
+      const id = url.searchParams.get("id") ?? "";
+      if (!id) return sendJson(res, 400, { error: "Missing story id." });
+      const path = storyPathForId(session.repo, id);
+      if (!path) return sendJson(res, 404, { error: "No such story." });
+      try {
+        const bundle = exportStoryBundle(session.repo, path);
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${bundleFileName(id)}"`,
+        );
+        res.setHeader("Cache-Control", "no-store");
+        res.end(`${JSON.stringify(bundle, null, 2)}\n`);
+      } catch (e) {
+        return sendJson(res, 422, { error: (e as Error).message });
+      }
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/stories/bundle") {
+      if (!session.repo) return noRepo(res);
+      const repo = session.repo;
+      return readBody(req, res, (body) => {
+        let name = "";
+        let data: unknown = null;
+        try {
+          const parsed = JSON.parse(body || "{}") as {
+            name?: unknown;
+            bundle?: unknown;
+          };
+          name = typeof parsed.name === "string" ? parsed.name : "";
+          data = parsed.bundle ?? parsed;
+        } catch {
+          return sendJson(res, 400, { error: "Invalid JSON." });
+        }
+        try {
+          const { id } = importStoryBundle(repo, name, data);
+          return sendJson(res, 201, { ok: true, id });
+        } catch (e) {
+          return sendJson(res, 422, { error: (e as Error).message });
+        }
+      });
+    }
     if (method === "GET" && url.pathname === "/api/refs") {
       if (!session.repo) return noRepo(res);
       const ref = url.searchParams.get("ref")?.trim() || "";
@@ -982,10 +1088,10 @@ function handle(
       if (!step || !isPageConcept(step))
         return sendJson(res, 404, { error: "This step has no concept page." });
       const theme = url.searchParams.get("theme") === "light" ? "light" : "dark";
-      // The author's page runs in an opaque-origin sandbox, so it gets its own
-      // permissive policy. diffStory is the only document allowed to frame it.
+      // The author's page runs in an opaque-origin sandbox, and offline unless
+      // it opts into network. diffStory is the only document allowed to frame it.
       res.removeHeader("X-Frame-Options");
-      res.setHeader("Content-Security-Policy", CONCEPT_PAGE_CSP);
+      res.setHeader("Content-Security-Policy", conceptPageCsp(step.network));
       return sendLeasedHtml(res, session, page, conceptPageDocument(step.page, theme));
     }
     if (method === "GET" && url.pathname === "/api/review/file-search") {
@@ -1176,6 +1282,8 @@ function handle(
         );
       const repo = lease?.repo ?? session.repo;
       if (!repo) return noRepo(res);
+      const historyBlocked = historyMutationError(session, lease);
+      if (historyBlocked) return sendJson(res, 409, { error: historyBlocked });
       return readBody(req, res, (body) => {
         try {
           const loaded = loadCommentsWithHealth(repo);
@@ -1214,6 +1322,8 @@ function handle(
       const id = decodeURIComponent(
         url.pathname.slice("/api/comments/".length),
       );
+      const patchBlocked = historyMutationError(session, lease);
+      if (patchBlocked) return sendJson(res, 409, { error: patchBlocked });
       return readBody(req, res, (body) => {
         try {
           const input = JSON.parse(body || "{}") as {
@@ -1244,6 +1354,8 @@ function handle(
       const id = decodeURIComponent(
         url.pathname.slice("/api/comments/".length),
       );
+      const deleteBlocked = historyMutationError(session, lease);
+      if (deleteBlocked) return sendJson(res, 409, { error: deleteBlocked });
       try {
         const loaded = loadCommentsWithHealth(repo);
         if (loaded.health.status === "invalid")
@@ -1368,6 +1480,10 @@ function reviewScreen(
   if (existsSync(storyFile)) {
     try {
       loadTour(storyFile);
+      const observed = session.repo
+        ? storyIdForPath(session.repo, storyFile)
+        : null;
+      if (observed) snapshotStoryIfChanged(session.repo as string, observed);
       applyScope(session, params);
       return renderReview(session);
     } catch (e) {
@@ -1398,7 +1514,10 @@ function applyStoryChoice(
   }
   const path = storyPathForId(session.repo, id);
   session.selectedStory = path;
-  if (path) recordStorySelection(home, session.repo, id, nowMs());
+  // A history snapshot is a visit, not a resume target: reopening the repo
+  // must land on the live story, never a frozen read-only version.
+  if (path && !isHistoryStoryId(id))
+    recordStorySelection(home, session.repo, id, nowMs());
   return true;
 }
 
@@ -1441,6 +1560,19 @@ function activeStoryId(
   if (lease) return leaseStoryId(lease);
   if (!session.repo || session.selectedStory === null) return null;
   return storyIdForPath(session.repo, selectedStoryPath(session));
+}
+
+/**
+ * History snapshots open read-only in review: comments, generation, and
+ * repair all target the live story, so they refuse to run from a snapshot.
+ */
+function historyMutationError(
+  session: Session,
+  lease?: ReviewPageLease | null,
+): string | null {
+  return isHistoryStoryId(activeStoryId(session, lease))
+    ? "This is a frozen history snapshot. Return to the live story to make changes."
+    : null;
 }
 
 /** Apply a scope choice from the Your-change switcher (?scope=... | ?base= | ?head=). */
@@ -1555,6 +1687,7 @@ function diffScreen(session: Session, params: URLSearchParams): string {
     files: [],
     fileIndex: boundedReviewIndex(fileIndex),
     baseLabel: describeBase(repo, base),
+    audience: loadRepoPreferences(repo).audience ?? DEFAULT_AUDIENCE,
     headRef: head,
     comments: loadComments(repo),
     routeBase: repoRouteBase(repo),
@@ -1660,7 +1793,7 @@ function sessionReviewIndex(
       tour.base === "HEAD" &&
       head === undefined &&
       fileIndex.length === 0 &&
-      !isDirty(repo)
+      !isDirtyExceptHistory(repo)
     ) {
       base = hasParentCommit(repo) ? "HEAD~1" : emptyTree(repo);
       head = "HEAD";
@@ -1742,7 +1875,7 @@ function reviewDiff(
     tour.base === "HEAD" &&
     head === undefined &&
     diff.trim() === "" &&
-    !isDirty(repo)
+    !isDirtyExceptHistory(repo)
   ) {
     base = hasParentCommit(repo) ? "HEAD~1" : emptyTree(repo);
     head = "HEAD";
@@ -1783,6 +1916,11 @@ function renderReview(session: Session): string {
       )
     : undefined;
   const storyPath = selectedStoryPath(session);
+  const onScreenId = storyIdForPath(repo, storyPath);
+  const historyNotice =
+    onScreenId && isHistoryStoryId(onScreenId)
+      ? historyNoticeFor(repo, onScreenId)
+      : undefined;
   const pageLease = issueReviewPageLease(session, {
     repo,
     base,
@@ -1814,6 +1952,7 @@ function renderReview(session: Session): string {
     files: [],
     fileIndex: boundedReviewIndex(fileIndex),
     baseLabel: describeBase(repo, base),
+    audience: loadRepoPreferences(repo).audience ?? DEFAULT_AUDIENCE,
     headRef: head,
     comments: commentsForStory(
       loadComments(repo),
@@ -1825,7 +1964,27 @@ function renderReview(session: Session): string {
     storyDrift,
     stagedWorktreeDivergentFiles: data.stagedWorktreeDivergentFiles,
     excludedFiles: data.excludedFiles,
+    ...(historyNotice ? { history: historyNotice } : {}),
   });
+}
+
+/** Banner facts for a history snapshot on screen; undefined when unresolvable. */
+function historyNoticeFor(
+  repo: string,
+  id: string,
+): { takenAt: string; liveId: string } | undefined {
+  const liveId = liveStoryIdForSnapshot(repo, id.slice("history/".length));
+  if (!liveId) return undefined;
+  try {
+    return {
+      takenAt: new Date(
+        statSync(join(repo, DATA_DIR, id)).mtimeMs,
+      ).toISOString(),
+      liveId,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function readSessionReviewData(
@@ -2630,6 +2789,11 @@ export function finishStoryGeneration(
     (previousStoryContents === undefined ||
       previousStoryContents === null ||
       currentStoryContents !== previousStoryContents);
+  if (storyWritten) {
+    const historyRepo = session.repo ?? repoForStoryPath(storyPath);
+    const historyId = storyIdForPath(historyRepo, storyPath);
+    if (historyId) snapshotStoryIfChanged(historyRepo, historyId);
+  }
   const events: ProgressEvent[] = [];
   let status: RunStatus = "complete";
   if (storyWritten) {
@@ -3124,6 +3288,13 @@ function runStoryRepair(
       ),
     );
   }
+  const repairBlocked = historyMutationError(session);
+  if (repairBlocked)
+    return sendJson(
+      res,
+      409,
+      errorEvent("preflight", "History snapshot is read-only", repairBlocked),
+    );
   const action = input.action as StoryRepairAction;
   if (
     !(
@@ -3294,6 +3465,7 @@ function runGenerate(
     codexConfig?: string[] | string;
     includedFiles?: unknown;
     reviewerNote?: unknown;
+    audience?: unknown;
   } = {};
   try {
     input = JSON.parse(body || "{}");
@@ -3308,6 +3480,13 @@ function runGenerate(
       ),
     );
   }
+  const generateBlocked = historyMutationError(session);
+  if (generateBlocked)
+    return sendJson(
+      res,
+      409,
+      errorEvent("preflight", "History snapshot is read-only", generateBlocked),
+    );
 
   const agents = availableAgents();
   const pre = agentPreflight({ repo: session.repo, busy: agentBusy, agents });
@@ -3361,6 +3540,14 @@ function runGenerate(
   const changedFiles = numstat(repo, promptBase, promptHead)
     .map((f) => postRenamePath(f.path))
     .filter((p) => !excludePaths.includes(p));
+  // An explicit audience choice sticks: it is saved as a standing preference
+  // and used for this run. Otherwise the standing preference (if any) applies.
+  const repoPrefs = loadRepoPreferences(repo);
+  const audience =
+    isStoryAudience(input.audience)
+      ? saveRepoPreferences(repo, { audience: input.audience }).audience ??
+        DEFAULT_AUDIENCE
+      : (repoPrefs.audience ?? DEFAULT_AUDIENCE);
   const storyScope = storyScopeFromInput(input, changedFiles);
   if (!storyScope.ok) {
     return sendJson(
@@ -3384,6 +3571,7 @@ function runGenerate(
       storyScope.scope,
       evolutionManifest,
       { base, head: input.head },
+      { audience },
     ),
     context: {
       repoName: basename(repo),

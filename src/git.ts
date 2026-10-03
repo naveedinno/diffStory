@@ -22,6 +22,12 @@ import {
 import type { FileStatus, ReviewFileIndexEntry } from "./types.js";
 
 const APP_DATA_PATHSPEC = ":(exclude).diffstory/**";
+// History snapshots are written on read paths (review open, picker), so the
+// dirtiness checks behind scope selection must not see them — otherwise the
+// first visit to a clean tree vetoes the committed-story fallback forever.
+// Mirrors HISTORY_DIRNAME in story-history.ts; story files and comments stay
+// visible because only snapshot writes are implicit.
+const HISTORY_PATHSPEC = ":(exclude).diffstory/history/**";
 
 export function assertSafeRef(ref: string): void {
   if (
@@ -1259,6 +1265,18 @@ export function describeCommit(repo: string, commit: string): string {
 /** True when the working tree has uncommitted changes (staged or unstaged, incl. untracked). */
 export function isDirty(repo: string): boolean {
   const out = tryGit(repo, ["status", "--porcelain"]);
+  return out != null && out.trim().length > 0;
+}
+
+/** True when the working tree differs from HEAD, ignoring history snapshots. */
+export function isDirtyExceptHistory(repo: string): boolean {
+  const out = tryGit(repo, [
+    "status",
+    "--porcelain",
+    "--",
+    ".",
+    HISTORY_PATHSPEC,
+  ]);
   return out != null && out.trim().length > 0;
 }
 

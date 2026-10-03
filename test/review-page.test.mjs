@@ -213,6 +213,40 @@ test("both review entry points serve the same shell", async () => {
   }
 });
 
+test("the review payload carries story health for the Overview row", async () => {
+  const repo = fixtureRepo();
+  const { server, base, route } = await boot(repo);
+  try {
+    const html = await (await fetch(`${base}${route}/review?story=story.json`)).text();
+    const payload = shellPayload(html);
+    assert.ok(payload.health, "payload carries health");
+    assert.ok(
+      payload.health.findings.some((f) => f.kind === "contract"),
+      "the fixture's missing intent/mode surface as contract errors",
+    );
+    assert.equal(
+      payload.health.errors + payload.health.warnings,
+      payload.health.findings.length,
+    );
+    assert.equal(typeof payload.health.unexplainedRanges, "number");
+  } finally {
+    server.close();
+  }
+});
+
+test("the Overview renders the health row with per-finding repair", () => {
+  const healthSrc = read("surfaces/review/StoryHealth.tsx");
+  assert.ok(storyView.includes("StoryHealthRow"), "IntroPanel renders the health row");
+  assert.ok(healthSrc.includes("data-story-health"), "repair clicks keep the row open");
+  assert.ok(
+    healthSrc.includes('data-story-repair="rewrite"'),
+    "findings reuse the step-repair flow",
+  );
+  assert.ok(healthSrc.includes("data-goto-step"), "findings jump to their step");
+  assert.ok(healthSrc.includes("ds-diagram-error"), "runtime diagram failures join the row");
+  assert.ok(healthSrc.includes('data-goto-review="unexplained"'), "unexplained links to evidence");
+});
+
 test("a broken story still falls through to the scope picker with an explanation", async () => {
   const repo = fixtureRepo({ story: false });
   mkdirSync(join(repo, ".diffstory"), { recursive: true });
@@ -1272,12 +1306,12 @@ test("the engine is one module with one entry point and two seams", () => {
   assert.equal((engineRaw.match(/^export function /gm) || []).length, 1);
   assert.match(engineRaw, /export function startReviewEngine\(options\)\{/);
   const imports = engineRaw.match(/^import [\s\S]*?from '[^']+';/gm) || [];
-  assert.equal(
-    imports.length,
-    1,
-    "exactly one import: the progress-panel seam",
-  );
-  assert.match(imports[0], /\.\/progress-host/);
+  // Two seams, neither of them interaction handling: the progress panel, and
+  // the pure Mermaid-error parsers (no DOM, imported by node tests too). A
+  // third import — a per-component handler split — still fails this test.
+  assert.equal(imports.length, 2);
+  assert.ok(imports.some((i) => /\.\/progress-host/.test(i)));
+  assert.ok(imports.some((i) => /\.\/diagram-errors/.test(i)));
   // The other seam: it runs when React has committed, not on DOMContentLoaded.
   assert.doesNotMatch(engine, /DOMContentLoaded/);
   assert.match(reviewApp, /startReviewEngine\(\{/);

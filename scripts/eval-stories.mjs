@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { storyPrompt, streamCommand, parseClaudeStreamLine, onPath } from '../dist/agent.js';
 import { validateTour, validateNewGeneratedStory } from '../dist/tour.js';
 import { parseUnifiedDiff } from '../dist/diff.js';
-import { computeCoverage } from '../dist/coverage.js';
+import { computeCoverage, filesForStoryCoverage } from '../dist/coverage.js';
 import { lintStory, MARKDOWN_RESIDUE } from '../dist/story-lint.js';
 import { commitEvolutionManifest } from '../dist/git.js';
 import { normalizeEvolutionObject } from '../dist/evolution.js';
@@ -562,7 +562,7 @@ export function summarizeLint(findings) {
 // Mechanical scores are free and objective: the app's own gates.
 function mechanicalScores(c, tour) {
   const files = parseUnifiedDiff(caseDiff(c));
-  const uncovered = computeCoverage(tour, files).uncovered;
+  const uncovered = computeCoverage(tour, filesForStoryCoverage(tour, files)).uncovered;
   const codeSteps = tour.steps.filter((s) => s.kind !== 'concept');
   // Mirror the app: loadTour() runs validateTour() and refuses a malformed story
   // before the stricter generated profile ever sees it. Running the strict pass

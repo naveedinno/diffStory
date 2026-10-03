@@ -115,12 +115,14 @@ If `.diffstory/preferences.json` exists, read it first and follow it unless
 this request says otherwise:
 
 ```json
-{ "defaultMode": "detailed", "includeGlobs": ["**/*.sol"], "excludeGlobs": [], "notes": "Solidity only; tests are reviewed separately." }
+{ "defaultMode": "detailed", "includeGlobs": ["**/*.sol"], "excludeGlobs": [], "notes": "Solidity only; tests are reviewed separately.", "audience": "familiar" }
 ```
 
 `defaultMode` applies when the request names no mode. `includeGlobs` and
 `excludeGlobs` set the story's scope: files outside it get no steps, and
-`storyScope` lists the included and excluded changed files. When the user
+`storyScope` lists the included and excluded changed files. `audience`
+(`newcomer` or `familiar`) sets who the story is written for; read
+`references/audience.md` when it says `familiar`. When the user
 states the same preference twice ("only Solidity", "make it detailed"), offer
 to save it there. The file is local like the rest of `.diffstory/`; never
 commit it.
@@ -263,7 +265,8 @@ beats follow it.
   writes state"). Never merge unrelated decisions to shorten the rail; one
   verified repeated mechanical pattern in one file may instead become a tagged
   sweep whose top-level `ranges` lists every span while one local `range`,
-  viewport, and beat show a representative instance. This is a
+  viewport, and beat show a representative instance (across files, one glob in
+  `files` — see the sweeps section of `references/schema.md`). This is a
   coverage-preserving tool for the repetitive tail, not a general instruction to make stories shorter.
 - Order test: if sorting your planned steps by filename would not change how
   the story reads, it is not a story yet.

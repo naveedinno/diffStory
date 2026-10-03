@@ -86,6 +86,8 @@ export function runStoryCheck(repo, storyPath) {
         const file = isCodeStep(step) ? step.file : "?";
         report.errors.push(`stale step ${step.id}: its range or ranges do not match changed code in ${file} (re-read the post-change file and fix the line numbers)`);
     }
+    report.errors.push(...verifySweeps(tour, files));
+    report.errors.push(...verifyOldHighlights(tour, files));
     const moves = verifyLogicMoves(repo, tour);
     report.errors.push(...moves.errors);
     report.moveWarnings.push(...moves.warnings);
@@ -94,6 +96,92 @@ export function runStoryCheck(repo, storyPath) {
         readLines: (file) => readWholeFile(repo, file, tour.head),
     });
     return report;
+}
+/**
+ * A cross-file sweep is honest only when every matched file changed the same
+ * way: the reviewer reads one representative instance and trusts the rest.
+ * The signature is structural — hunk count plus the ordered changed lines
+ * with values blanked — so the same key renamed in thirty locale files
+ * passes while a differently-shaped edit fails. Line numbers and values
+ * may differ; the referenced thing and the edit's shape may not.
+ */
+export function verifySweeps(tour, files) {
+    const errors = [];
+    for (const step of tour.steps) {
+        if (!isCodeStep(step) || step.kind === "context" || !step.files?.length)
+            continue;
+        const matched = files.filter((f) => step.files.some((pattern) => matchGlob(pattern, f.newPath)));
+        if (!matched.length) {
+            errors.push(`sweep step ${step.id}: "${step.files[0]}" matches no changed file in this story's scope (drop the sweep or fix the glob)`);
+            continue;
+        }
+        const expected = sweepSignature(matched[0]);
+        const divergent = matched.filter((file) => sweepSignature(file) !== expected);
+        if (divergent.length) {
+            const names = divergent.map((file) => file.newPath);
+            const shown = names.slice(0, 4).join(", ");
+            errors.push(`sweep step ${step.id}: ${shown}${names.length > 4 ? ` and ${names.length - 4} more` : ""} ` +
+                `${names.length === 1 ? "does" : "do"} not carry the same structural edit as ${matched[0].newPath} ` +
+                `(a sweep claims every matched file, so each one must change the same way — narrow the glob or write separate steps)`);
+        }
+    }
+    return errors;
+}
+/** Hunk count plus the changed-line skeleton: the first literal per line is
+ *  the thing referenced (kept); later literals and all numbers are values
+ *  (blanked). The same key renamed in thirty locale files passes; a file
+ *  that renamed a different key fails. */
+function sweepSignature(file) {
+    const skeleton = (content) => {
+        let seen = 0;
+        return content
+            .trim()
+            .replace(/"[^"\n]*"|'[^'\n]*'/g, (literal) => (seen++ === 0 ? literal : '""'))
+            .replace(/\b\d+(\.\d+)?\b/g, "0");
+    };
+    const lines = file.hunks
+        .flatMap((hunk) => hunk.lines)
+        .filter((line) => line.type === "add" || line.type === "del")
+        .map((line) => `${line.type === "add" ? "+" : "-"}${skeleton(line.content)}`);
+    return [`hunks:${file.hunks.length}`, ...lines].join("\n");
+}
+/**
+ * Beat `oldHighlights` must point at lines the diff actually deleted. Shape
+ * validation cannot check this — old-side numbers live outside the
+ * post-change viewport — so the checker overlaps each range with the file's
+ * deleted lines instead.
+ */
+export function verifyOldHighlights(tour, files) {
+    const errors = [];
+    const byPath = new Map(files.map((file) => [file.newPath, file]));
+    for (const step of tour.steps) {
+        if (!isCodeStep(step) || !step.beats?.length)
+            continue;
+        const file = byPath.get(step.file);
+        const deleted = new Set();
+        for (const hunk of file?.hunks ?? []) {
+            for (const line of hunk.lines) {
+                if (line.type === "del" && line.oldNo !== undefined)
+                    deleted.add(line.oldNo);
+            }
+        }
+        step.beats.forEach((beat, beatIndex) => {
+            for (const [start, end] of beat.oldHighlights ?? []) {
+                let hits = false;
+                for (let line = start; line <= end; line++) {
+                    if (deleted.has(line)) {
+                        hits = true;
+                        break;
+                    }
+                }
+                if (!hits) {
+                    errors.push(`steps[${step.id}].beats[${beatIndex}].oldHighlights ${start}-${end} ` +
+                        `point at no deleted line in ${step.file} (re-read the base-side file and fix the old line numbers)`);
+                }
+            }
+        });
+    }
+    return errors;
 }
 /** Changed files a set of scoped stories leaves to nobody (same base/head only). */
 export function unownedFiles(repo, tours) {
@@ -110,24 +198,8 @@ export function unownedFiles(repo, tours) {
         .filter((path) => !owned.has(path) && !excluded.has(path));
 }
 /** Minimal glob: `**` spans directories, `*` and `?` stay inside one segment. */
-export function globToRegExp(glob) {
-    let out = "";
-    for (let i = 0; i < glob.length; i++) {
-        const ch = glob[i];
-        if (ch === "*" && glob[i + 1] === "*") {
-            const slash = glob[i + 2] === "/";
-            out += slash ? "(?:.*/)?" : ".*";
-            i += slash ? 2 : 1;
-        }
-        else if (ch === "*")
-            out += "[^/]*";
-        else if (ch === "?")
-            out += "[^/]";
-        else
-            out += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-    }
-    return new RegExp(`^${out}$`);
-}
+import { globToRegExp, matchGlob } from "./noise.js";
+export { globToRegExp };
 /** Every changed range a story must claim, with the enclosing scope for orientation. */
 export function storyLedger(repo, opts = {}) {
     const base = resolveBase(repo, opts.base);

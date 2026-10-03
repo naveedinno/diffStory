@@ -3,7 +3,7 @@
 // Explicit modes can pin a single commit, a whole branch since it forked, or any
 // base/head pair. Produces the exact
 // base/head to diff plus a human label and active mode for the UI.
-import { describeBase, isDirty, commitParentBase, describeCommit, isCommitRef, branchForkPoint, currentBranch, resolveCommit, } from './git.js';
+import { describeBase, isDirtyExceptHistory, commitParentBase, describeCommit, isCommitRef, branchForkPoint, currentBranch, resolveCommit, } from './git.js';
 export function resolveScope(repo, params) {
     const ref = params.get('base');
     if (ref) {
@@ -21,7 +21,7 @@ export function resolveScope(repo, params) {
         return branchScope(repo, params.get('branch')?.trim() || '', params.get('from')?.trim() || '');
     if (sel === 'commit' || sel === 'last')
         return commitScope(repo, params.get('commit') || 'HEAD');
-    if (sel === 'uncommitted' || (sel == null && isDirty(repo))) {
+    if (sel === 'uncommitted' || (sel == null && isDirtyExceptHistory(repo))) {
         return { base: 'HEAD', head: undefined, label: 'Uncommitted changes', active: 'uncommitted' };
     }
     // auto + clean tree → the latest commit (whole first commit if no parent).

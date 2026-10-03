@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, isAbsolute, join, relative, sep } from 'node:path';
 import { DATA_DIR, LEGACY_STORY_FILENAME, STORY_FILENAME, dataDir } from './config.js';
+import { HISTORY_DIRNAME, snapshotStoryIfChanged } from './story-history.js';
 import { loadTour } from './tour.js';
 import { getDiff, resolveBase } from './git.js';
 import { parseUnifiedDiff } from './diff.js';
@@ -76,7 +77,10 @@ function newestStoryFirst(a: StorySummary, b: StorySummary): number {
 export function storyPathForId(repo: string, id: string): string | null {
   const primary = id === STORY_FILENAME || id === LEGACY_STORY_FILENAME;
   const named = id.startsWith(`${NAMED_STORIES_DIR}/`) && id.endsWith('.json');
-  if (!primary && !named) return null;
+  // History snapshots resolve so an old version opens read-only in review;
+  // they never appear in listStories() and every mutation route rejects them.
+  const history = id.startsWith(`${HISTORY_DIRNAME}/`) && id.endsWith('.json');
+  if (!primary && !named && !history) return null;
   if (id.includes('\\')) return null;
   const path = join(dataDir(repo), id);
   const rel = relative(dataDir(repo), path).split(sep).join('/');
@@ -142,6 +146,9 @@ function storySummary(repo: string, id: string, liveEvidence: boolean): StorySum
   const path = join(repo, DATA_DIR, id);
   if (!existsSync(path)) return null;
   const updatedAt = statSync(path).mtimeMs;
+  // The agent writes story files directly, so the picker snapshots whatever it
+  // observes. History holds every version the app has seen.
+  snapshotStoryIfChanged(repo, id);
   try {
     const story = loadTour(path);
     const session = liveEvidence

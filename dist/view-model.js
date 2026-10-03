@@ -17,7 +17,8 @@ import { readFileRange, readWholeFile } from './git.js';
 import { orderedSteps } from './tour.js';
 import { landingSearchName } from './landing-verify.js';
 import { claimedRanges } from './types.js';
-import { computeCoverage, filesForStoryCoverage } from './coverage.js';
+import { computeCoverage, filesForStoryCoverage, regeneratedCommandFor } from './coverage.js';
+import { matchGlob } from './noise.js';
 export { filesForStoryCoverage } from './coverage.js';
 import { isCodeStep, isPageConcept } from './types.js';
 import { narrative, narrativeText } from './narrative.js';
@@ -139,7 +140,7 @@ export function buildReviewModel(repo, tour, files, headRef, opts) {
             ? [{ stepId: step.id, panelIndex: index + 1, order: step.order, title: step.title, reason }]
             : [];
     });
-    const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, headRef, opts?.detailedFilePaths, opts?.fileIndex);
+    const fileViews = buildFiles(repo, codeSteps, files, stepByFile, uncoveredByFile, (path) => regeneratedCommandFor(tour, path), headRef, opts?.detailedFilePaths, opts?.fileIndex);
     const trust = buildTrust(coverageFiles, uncovered, stepByFile, opts?.includeTrustRows !== false);
     if (opts?.trustPending)
         trust.pending = true;
@@ -259,12 +260,14 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
     const highlights = stepHighlights(step);
     const beats = stepBeats(step);
     const focusGroups = stepFocusGroups(viewport, highlights, beats);
+    const focusOldGroups = stepFocusOldGroups(beats);
     const focusExplicit = beats.length > 0 || highlights.length > 0;
     const moves = buildLogicMoves(step, diffFile?.oldPath ?? step.file, ordered ?? []);
     const pairedView = pairedMoveFor(step)?.id;
     return {
         id: step.id,
         order: step.order,
+        weight: step.weight ?? 'must',
         title: narrative(step.title, 'inline'),
         chapter: chapterLabel(step),
         file: step.file,
@@ -273,6 +276,7 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
         range: viewport,
         focusRanges: focusGroups.flat(),
         focusGroups,
+        focusOldGroups,
         focusExplicit,
         kind: step.kind,
         kindLabel: STEP_KIND_LABEL[step.kind],
@@ -284,6 +288,14 @@ function buildCodeStep(repo, step, files, headRef, hotspot, ordered, baseRef, de
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
         newFile: step.kind === 'new-file',
         context: step.kind === 'context',
+        ...(step.kind !== 'context' && step.files?.length
+            ? {
+                sweep: {
+                    glob: step.files[0],
+                    files: files.filter((f) => step.files.some((pattern) => matchGlob(pattern, f.newPath))).length,
+                },
+            }
+            : {}),
         why: narrative(step.why ?? '', 'inline'),
         ...(step.landing
             ? {
@@ -409,6 +421,7 @@ function buildConceptStep(step, byId) {
     return {
         id: step.id,
         order: step.order,
+        weight: step.weight ?? 'must',
         title: narrative(step.title, 'inline'),
         chapter: chapterLabel(step),
         kind: 'concept',
@@ -416,6 +429,7 @@ function buildConceptStep(step, byId) {
         sceneLayout: projectStoryStepScene({ kind: 'concept', hasDiagram: step.diagram !== undefined, hasPage }),
         tags: (step.tags ?? []).map((tag) => narrativeText(tag)),
         hasPage,
+        network: hasPage && step.network === true,
         // The page itself stays on disk: only the concept-page endpoint serves it.
         narration: hasPage ? narrative(step.narration, 'text') : undefined,
         body: hasPage ? undefined : narrative(step.body, 'block'),
@@ -474,7 +488,8 @@ function stepBeats(step) {
     return (step.beats ?? []).map((beat, i) => ({
         text: narrative(beat.text, 'inline'),
         focusGroup: i,
-        highlights: beat.highlights,
+        highlights: beat.highlights ?? [],
+        oldHighlights: beat.oldHighlights ?? [],
     }));
 }
 function stepFocusGroups(viewport, highlights, beats) {
@@ -483,6 +498,10 @@ function stepFocusGroups(viewport, highlights, beats) {
     if (highlights.length)
         return highlights.map((range) => [range]);
     return [[viewport]];
+}
+/** Old-side focus ranges, parallel to stepFocusGroups: beat i reads index i. */
+function stepFocusOldGroups(beats) {
+    return beats.map((beat) => beat.oldHighlights);
 }
 function stepBlocks(repo, step, files, headRef, baseRef) {
     const viewport = stepViewport(step);
@@ -597,7 +616,7 @@ function nearestNewLine(rows, from, dir) {
     }
     return undefined;
 }
-function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef, detailedFilePaths, fileIndex) {
+function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, regenerated, headRef, detailedFilePaths, fileIndex) {
     const views = [];
     const seen = new Set();
     const summaries = fileIndex ?? files.map((file) => ({
@@ -622,6 +641,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef, de
             ? movedUnified(file.hunks.map((h) => h.lines.map((l) => toUnified(l, uncovered))))
             : [];
         const step = stepByFile.get(summary.path);
+        const regeneratedBy = regenerated(summary.path) ?? undefined;
         views.push({
             file: summary.path,
             oldFile: summary.oldPath,
@@ -631,6 +651,7 @@ function buildFiles(repo, steps, files, stepByFile, uncoveredByFile, headRef, de
             add: summary.added ?? 0,
             del: summary.removed ?? 0,
             untoured: uncovered.length,
+            ...(regeneratedBy ? { regeneratedBy } : {}),
             stepId: step?.id,
             stepOrder: step?.order,
             hunks,

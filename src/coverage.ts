@@ -2,6 +2,7 @@
 // for every changed line. It does not prove that the story is correct or that a
 // human reviewed the change.
 import { changedRanges, rangesOverlap } from './diff.js';
+import { matchGlob } from './noise.js';
 import { claimedRanges, isCodeStep, type DiffFile, type Tour, type TourStep } from './types.js';
 
 export interface UnclaimedChange {
@@ -87,6 +88,18 @@ export function computeStoryClaimCoverage(tour: Tour, files: DiffFile[]): StoryC
     // A step may claim several scattered spans via `ranges`; each one counts.
     list.push(...claimedRanges(step).filter((claim) => isCredibleClaim(claim, changed, cap)));
     claimsByFile.set(step.file, list);
+    // A cross-file sweep claims every changed range of every matched file.
+    // The checker verifies the matched hunks are identical, so one reviewed
+    // representative instance honestly covers the rest.
+    if (step.files?.length) {
+      for (const other of files) {
+        if (other.newPath === step.file) continue;
+        if (!step.files.some((pattern) => matchGlob(pattern, other.newPath))) continue;
+        const swept = claimsByFile.get(other.newPath) ?? [];
+        swept.push(...changedRanges(other));
+        claimsByFile.set(other.newPath, swept);
+      }
+    }
   }
 
   const unclaimed: UnclaimedChange[] = [];
@@ -152,8 +165,26 @@ export function stalePointers(tour: Tour, files: DiffFile[]): TourStep[] {
  *  "unexplained" — the lazy split and full-file responses must apply the same
  *  filter as the review model or they flag every line of an excluded file. */
 export function filesForStoryCoverage(tour: Tour, files: DiffFile[]): DiffFile[] {
+  const regeneratedFree = files.filter((f) => regeneratedCommandFor(tour, f.newPath) === null);
   const included = tour.storyScope?.includedFiles;
-  if (!included?.length) return files;
+  if (!included?.length) return regeneratedFree;
   const selected = new Set(included);
-  return files.filter((f) => selected.has(f.newPath));
+  return regeneratedFree.filter((f) => selected.has(f.newPath));
+}
+
+/**
+ * The generator command that explains a path, or null when no
+ * `storyScope.regenerated` pattern matches it. First declared entry wins, so
+ * overlapping patterns resolve deterministically.
+ */
+export function regeneratedCommandFor(tour: Tour, path: string): string | null {
+  for (const entry of tour.storyScope?.regenerated ?? []) {
+    if (entry.files.some((pattern) => matchGlob(pattern, path))) return entry.by;
+  }
+  return null;
+}
+
+/** True when a `storyScope.regenerated` pattern claims the path. */
+export function isRegeneratedFile(tour: Tour, path: string): boolean {
+  return regeneratedCommandFor(tour, path) !== null;
 }

@@ -103,9 +103,9 @@ Inside a repo, diffStory gives you two useful ways to read:
   can pause for a short **concept primer** before the code that depends on it.
   Primers are document steps with optional locally rendered Mermaid diagrams;
   they do not pretend to be files and do not count as diff coverage. In story
-  version 4 a concept step can instead be a free HTML page (JavaScript and CDN
-  libraries allowed) rendered in a sandboxed frame; it has network access, so
-  see [the privacy notes](docs/story-schema.md#concept-pages-and-privacy).
+  version 4 a concept step can instead be a free HTML page (JavaScript allowed)
+  rendered in a sandboxed frame; pages are offline unless they opt into network
+  access, so see [the privacy notes](docs/story-schema.md#concept-pages-and-privacy).
 
 The story never replaces the diff. It only explains and orders it. The code you
 read comes from git.
@@ -229,6 +229,11 @@ A teammate can replay a walkthrough when they have:
 
 They open the app, pick the repo, and open the saved story. No agent is needed
 just to read an existing walkthrough.
+
+To share, use **Export bundle** under the story on the Review history page and
+send the `.diffstory.json` file; the teammate uses **Import bundle** on the
+same page. Imported stories land under `.diffstory/stories/` and never replace
+the live story. Queued comments stay local and are never exported.
 
 ## From Source
 

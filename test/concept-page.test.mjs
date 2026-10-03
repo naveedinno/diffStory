@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { conceptPageDocument, CONCEPT_PAGE_CSP } from '../dist/concept-page.js';
+import {
+  conceptPageCsp,
+  conceptPageDocument,
+  CONCEPT_PAGE_CSP,
+  CONCEPT_PAGE_CSP_OFFLINE,
+} from '../dist/concept-page.js';
+import { validateTour } from '../dist/tour.js';
+import { buildReviewModel } from '../dist/view-model.js';
 
 test('the shim goes first inside <head>, before any author markup', () => {
   const html = conceptPageDocument('<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src \'self\'"><script>var mine=1</script></head><body>x</body></html>', 'dark');
@@ -90,6 +97,59 @@ test('the page CSP is permissive but only frameable by diffStory', () => {
   assert.match(CONCEPT_PAGE_CSP, /^sandbox allow-scripts(;|$)/, 'the page is sandboxed even when opened as a top-level document');
   assert.doesNotMatch(CONCEPT_PAGE_CSP, /allow-same-origin|allow-popups|allow-top-navigation|allow-forms/);
   assert.match(CONCEPT_PAGE_CSP, /frame-ancestors 'self'/);
+});
+
+test('pages are offline unless they opt into network', () => {
+  assert.equal(conceptPageCsp(true), CONCEPT_PAGE_CSP);
+  assert.equal(conceptPageCsp(false), CONCEPT_PAGE_CSP_OFFLINE);
+  assert.equal(conceptPageCsp(undefined), CONCEPT_PAGE_CSP_OFFLINE);
+  assert.match(CONCEPT_PAGE_CSP_OFFLINE, /default-src 'none'/);
+  assert.doesNotMatch(CONCEPT_PAGE_CSP_OFFLINE, /default-src [^;]*\*/);
+  assert.match(CONCEPT_PAGE_CSP_OFFLINE, /script-src 'unsafe-inline'/, 'inline scripts still run');
+  assert.match(CONCEPT_PAGE_CSP_OFFLINE, /style-src 'unsafe-inline'/, 'inline styles still apply');
+  assert.match(CONCEPT_PAGE_CSP_OFFLINE, /^sandbox allow-scripts(;|$)/);
+  assert.doesNotMatch(CONCEPT_PAGE_CSP_OFFLINE, /allow-same-origin|allow-popups|allow-top-navigation|allow-forms/);
+  assert.match(CONCEPT_PAGE_CSP_OFFLINE, /frame-ancestors 'self'/);
+});
+
+function pageStory(network) {
+  return {
+    version: 4,
+    title: 'Page story',
+    summary: 'A page concept first.',
+    steps: [
+      {
+        id: 'page', order: 1, title: 'How it moves', kind: 'concept',
+        page: '<html><body>x</body></html>', narration: 'Watch.',
+        ...(network === undefined ? {} : { network }),
+      },
+      {
+        id: 'code', order: 2, title: 'Readme', kind: 'changed',
+        file: 'README.md', range: [1, 1], why: 'The heading changed.',
+      },
+    ],
+  };
+}
+
+test('network is an optional boolean on page concepts only', () => {
+  assert.deepEqual(validateTour(pageStory(undefined)), []);
+  assert.deepEqual(validateTour(pageStory(true)), []);
+  assert.deepEqual(validateTour(pageStory(false)), []);
+  assert.ok(validateTour(pageStory('yes')).join('\n').includes('.network must be a boolean'));
+  const body = pageStory(undefined);
+  delete body.steps[0].page;
+  body.steps[0].body = '<p>x</p>';
+  body.steps[0].preparesFor = ['code'];
+  body.steps[0].network = true;
+  assert.ok(validateTour(body).join('\n').includes('.network is only allowed with page'));
+});
+
+test('the view model flags network pages for the badge', () => {
+  const model = buildReviewModel('/repo', pageStory(true), []);
+  assert.equal(model.steps[0].kind, 'concept');
+  assert.equal(model.steps[0].network, true);
+  const offline = buildReviewModel('/repo', pageStory(undefined), []);
+  assert.equal(offline.steps[0].network, false);
 });
 
 // Run the real shim against a stub window: only story navigation keys leave

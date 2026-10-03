@@ -24,6 +24,11 @@ The checker enforces every line of this; knowing it saves a rewrite.
   anchor the range at the post-change deletion location.
 - For a whole deleted file, use `range`, `viewport`, and `highlights` of `[0, 0]`.
   Do not invent line 1 for a file that no longer exists.
+- A beat about removed code points `oldHighlights` at the deleted OLD-side
+  line numbers (read them from the base side: `git show <base>:<file>`). A
+  beat needs `highlights`, `oldHighlights`, or both; old-side ranges glow the
+  red deleted rows, and the checker verifies they hit real deletions. Never
+  narrate "around line N" for a deletion again — point at it.
 - `range`: post-change, 1-based inclusive lines; the tight local camera anchor.
   When top-level `ranges` is absent, `range` is also the step's complete
   coverage claim.
@@ -52,7 +57,7 @@ Story prose is restricted HTML, not Markdown: `**bold**` renders literally.
 | --- | --- |
 | concept `body` (legacy) | block HTML: `<p> <h2>-<h4> <ul> <ol> <li> <blockquote> <pre> <hr> <table> <caption> <thead> <tbody> <tr> <th> <td> <dl> <dt> <dd>`, plus the inline set |
 | `why`, `beats[].text`, `summary`, `intent.goal`, `intent.design`, `intent.nonGoals[]`, `hotspots[].reason`, `moves[].hidden.what` | inline only: `<code> <kbd> <strong> <em> <sup> <sub> <span> <br>` |
-| concept `page` | any complete HTML document; never sanitized; runs sandboxed |
+| concept `page` | any complete HTML document; never sanitized; runs sandboxed and offline unless the step sets `"network": true` |
 | concept `narration` | plain text, no tags |
 | every `title`, `moves[].label`, `moves[].hidden.tag`, `storyScope.reviewerNote`, `landing.*` | plain text — no tags at all |
 
@@ -105,7 +110,8 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
   "storyScope": {
     "includedFiles": ["contracts/Funding.sol", "contracts/lib/RateMath.sol"],
     "excludedFiles": ["test/Funding.t.sol"],
-    "reviewerNote": "Pay extra attention to the cap guard."
+    "reviewerNote": "Pay extra attention to the cap guard.",
+    "regenerated": [{ "files": ["abis/*.json"], "by": "npx hardhat export-abi" }]
   },
   "base": "main",
   "head": "feature-branch",
@@ -182,6 +188,17 @@ No links, URLs, `click`/`href` directives, init/config directives, HTML, images,
 Use `"mode": "brief"` for the shortest useful story and `"mode": "detailed"`
 for the line-by-line correctness story. Omit `head` for working tree vs base.
 
+## Attention weight
+
+Every step may carry `"weight": "must"` (the default) or `"weight": "skim"`.
+Mark a stop `skim` when a reviewer who trusts the surrounding must-read stops
+can skip it without losing the thread: repeated instances past the first,
+mechanical glue, already-familiar context. The rail collapses consecutive skim
+stops into one disclosure, and a must-read-only walkthrough skips them in
+keyboard order and narration. Weight never affects coverage — a skim stop
+still claims and explains its ranges. Never mark the entry point, the
+riskiest stop, or a hotspot's step as skim.
+
 ## Schema spot-check
 
 Schema spot-check, especially on long stories. Long stories are where authors
@@ -191,6 +208,22 @@ Confirm, in order: top level has `title` and `summary`; every step has `id`,
 `file`, `range`, `viewport`, `highlights`, `why`, `beats`; every new concept
 step has `page` and `narration` and none of those code fields; a step with
 `ranges` is a tagged changed/new-file sweep listing every full span and
-containing `range`; every beat has `text` (never `body`) and non-empty
-`highlights`. Those five — top-level `title`, top-level `summary`, step
-`order`, beat `text`, beat `highlights` — are the ones real stories lose first.
+containing `range`; a step with `files` names exactly one glob, carries a
+skim/sweep/mechanical tag, and its own `file` matches the glob; every beat
+has `text` (never `body`) and non-empty `highlights`. Those five — top-level
+`title`, top-level `summary`, step `order`, beat `text`, beat `highlights` —
+are the ones real stories lose first.
+
+## Cross-file sweeps
+
+One verified repeated mechanical pattern across files — the same import
+rewritten in thirty files, the same key renamed in every locale file — is one
+tagged sweep step with `"files": ["<one glob>"]`, e.g.
+`"files": ["src/i18n/*.json"]`. The step's own `file`, `range`, viewport, and
+beats show one representative instance; coverage claims every matched changed
+file, and the checker verifies each matched file carries the same structural
+edit — same hunks, same shape, values allowed to differ. Only the identical
+edit qualifies: if two matched files changed differently, narrow the glob or
+write separate steps. Never use a sweep to compress distinct decisions; it is
+a coverage-preserving tool for the repetitive tail, not a general instruction
+to make stories shorter.

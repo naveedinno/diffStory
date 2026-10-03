@@ -48,7 +48,10 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const main = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
 
   const cancel = () => {
@@ -88,6 +91,37 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
   // comments for every story because it never read the comment store, so this
   // is simply absent until someone asks for live evidence.
   const openNotes = stories.filter((story) => story.openComments).length;
+
+  // A bundle import ends in a plain navigation, not a state patch: the new row
+  // deserves a server-rendered card, and adopting the POST response's
+  // live-evidence stories array would silently upgrade a metadata-only page.
+  const importFile = (file: File) => {
+    setImporting(true);
+    setImportError(null);
+    file
+      .text()
+      .then((text) => {
+        let bundle: unknown;
+        try {
+          bundle = JSON.parse(text);
+        } catch {
+          throw new Error("That file is not valid JSON.");
+        }
+        return requestJson<{ id: string }>("/api/stories/bundle", {
+          method: "POST",
+          body: { name: file.name, bundle },
+          fallback: "Could not import this bundle.",
+          networkFallback: "Could not reach the server.",
+        });
+      })
+      .then(() => {
+        window.location.href = `${routeBase}/stories`;
+      })
+      .catch((cause: unknown) => {
+        setImporting(false);
+        setImportError(failureMessage(cause, "Could not import this bundle."));
+      });
+  };
 
   return (
     <>
@@ -145,7 +179,41 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                 >
                   Start review
                 </ButtonLink>
+                {/* Plain button styling, not a second primary: importing a
+                    teammate's bundle is rare next to starting a review. */}
+                <button
+                  type="button"
+                  disabled={importing}
+                  aria-busy={importing || undefined}
+                  onClick={() => fileInput.current?.click()}
+                  className={cn(
+                    "h-[var(--control-h-lg)] rounded-full border border-line px-4",
+                    "text-base font-semibold text-text-2 hover:text-text",
+                    "transition-colors duration-[var(--motion-duration-fast)] ease-out motion-reduce:transition-none",
+                    "disabled:opacity-55",
+                  )}
+                >
+                  {importing ? "Importing…" : "Import bundle"}
+                </button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".json,application/json"
+                  className="ds-sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) importFile(file);
+                  }}
+                />
               </div>
+              {importError ? (
+                <p className="mt-[7px] mb-0 text-base text-danger-text" role="alert">
+                  {importError}
+                </p>
+              ) : null}
               <p className="mt-[7px] mb-0 max-w-[58ch] text-base leading-[1.45] text-pretty text-text-2">
                 Resume a saved review when you need its scope or its notes.
               </p>
@@ -202,6 +270,11 @@ export function StoriesApp({ payload }: { payload: StoriesPayload }) {
                         liveEvidence={liveEvidence}
                         busy={busy && target?.id === story.id}
                         onRemove={setTarget}
+                        onRestored={(patch: Partial<StoryRowView>) =>
+                          setStories((rows) =>
+                            rows.map((row) => (row.id === story.id ? { ...row, ...patch } : row)),
+                          )
+                        }
                       />
                     </motion.div>
                   ))}

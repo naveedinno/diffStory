@@ -3,6 +3,7 @@
 // not render a broken page.
 import { readFileSync } from "node:fs";
 import { assertSafeRepoPath } from "./git.js";
+import { matchGlob } from "./noise.js";
 import { narrativeIssues, narrativeText, } from "./narrative.js";
 const CODE_KINDS = ["changed", "context", "new-file"];
 const KINDS = [...CODE_KINDS, "concept"];
@@ -206,18 +207,44 @@ function validateHighlights(step, containerRange, containerName, where, errors, 
     });
 }
 function validateBeatHighlights(beat, beatIndex, containerRange, containerName, where, errors, allowDeletionAnchor) {
-    if (!Array.isArray(beat.highlights) || beat.highlights.length === 0) {
-        errors.push(`${where}.beats[${beatIndex}].highlights must be a non-empty array`);
+    const hasNew = Array.isArray(beat.highlights) && beat.highlights.length > 0;
+    const hasOld = Array.isArray(beat.oldHighlights) && beat.oldHighlights.length > 0;
+    if (!hasNew && !hasOld) {
+        errors.push(`${where}.beats[${beatIndex}] needs highlights, oldHighlights, or both`);
         return;
     }
-    beat.highlights.forEach((range, j) => {
-        const highlight = validateLineRange(range, `${where}.beats[${beatIndex}].highlights[${j}]`, errors, { allowDeletionAnchor });
-        if (highlight &&
-            containerRange &&
-            (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
-            errors.push(`${where}.beats[${beatIndex}].highlights[${j}] must be inside ${containerName}`);
+    if (beat.highlights !== undefined) {
+        if (!Array.isArray(beat.highlights) || beat.highlights.length === 0) {
+            errors.push(`${where}.beats[${beatIndex}].highlights must be a non-empty array`);
         }
-    });
+        else {
+            beat.highlights.forEach((range, j) => {
+                const highlight = validateLineRange(range, `${where}.beats[${beatIndex}].highlights[${j}]`, errors, { allowDeletionAnchor });
+                if (highlight &&
+                    containerRange &&
+                    (highlight[0] < containerRange[0] || highlight[1] > containerRange[1])) {
+                    errors.push(`${where}.beats[${beatIndex}].highlights[${j}] must be inside ${containerName}`);
+                }
+            });
+        }
+    }
+    if (beat.oldHighlights !== undefined) {
+        if (!Array.isArray(beat.oldHighlights) || beat.oldHighlights.length === 0) {
+            errors.push(`${where}.beats[${beatIndex}].oldHighlights must be a non-empty array`);
+        }
+        else {
+            // Old-side ranges address the deleted rows, not the post-change
+            // viewport, so only shape is checked here — the checker verifies them
+            // against the real diff. [0, 0] is meaningless old-side: deletions have
+            // real old line numbers, and whole-file deletion anchors post-change.
+            beat.oldHighlights.forEach((range, j) => {
+                const highlight = validateLineRange(range, `${where}.beats[${beatIndex}].oldHighlights[${j}]`, errors, { allowDeletionAnchor: false });
+                if (highlight && (highlight[0] < 1 || highlight[1] < 1)) {
+                    errors.push(`${where}.beats[${beatIndex}].oldHighlights[${j}] must be old-side line numbers`);
+                }
+            });
+        }
+    }
 }
 function validateBeats(step, containerRange, containerName, where, errors, allowDeletionAnchor) {
     if (step.beats === undefined)
@@ -407,6 +434,73 @@ function validateStoryScope(t, errors) {
     }
     // Reviewer guidance is echoed back into agent prompts, not into the page.
     validateNarrative(scope.reviewerNote, "storyScope.reviewerNote", "text", errors);
+    if (scope.regenerated !== undefined) {
+        if (!Array.isArray(scope.regenerated)) {
+            errors.push("storyScope.regenerated must be an array");
+            return;
+        }
+        scope.regenerated.forEach((entry, index) => {
+            const where = `storyScope.regenerated[${index}]`;
+            if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+                errors.push(`${where} must be an object`);
+                return;
+            }
+            const { files, by } = entry;
+            validateStringArray(files, `${where}.files`, errors, {
+                required: true,
+                nonEmpty: true,
+            });
+            if (Array.isArray(files)) {
+                files.forEach((pattern, patternIndex) => {
+                    if (typeof pattern === "string" && pattern.trim())
+                        validateGlobPattern(pattern, `${where}.files[${patternIndex}]`, errors);
+                });
+            }
+            if (typeof by !== "string" || !by.trim()) {
+                errors.push(`${where}.by must be a non-empty string`);
+            }
+            else if (by.length > 240) {
+                errors.push(`${where}.by must be at most 240 characters`);
+            }
+            // The command renders in the all-files view, so markup never survives it.
+            validateNarrative(by, `${where}.by`, "text", errors);
+        });
+    }
+}
+/** A cross-file sweep: exactly one safe glob, and the step's own file — the
+ *  representative instance the reviewer reads — must match it. */
+function validateSweepFiles(step, where, errors) {
+    if (!Array.isArray(step.files)) {
+        errors.push(`${where}.files must be an array with one glob`);
+        return;
+    }
+    if (step.files.length !== 1 || typeof step.files[0] !== "string") {
+        errors.push(`${where}.files must name exactly one glob`);
+        return;
+    }
+    validateGlobPattern(step.files[0], `${where}.files[0]`, errors);
+    if (typeof step.file === "string" &&
+        step.files[0].trim() &&
+        !matchGlob(step.files[0], step.file)) {
+        errors.push(`${where}.file must match its sweep glob: the step shows one matched instance`);
+    }
+}
+/**
+ * A glob over repo-relative paths: `*`, `**`, and `?` are welcome, but the
+ * pattern must still stay inside the repo — no absolutes, no `..`, no drives.
+ */
+function validateGlobPattern(value, name, errors) {
+    if (!value.trim()) {
+        errors.push(`${name} must be a non-empty string`);
+        return;
+    }
+    const segments = value.split("/");
+    const bad = value.startsWith("/") ||
+        value.includes("\\") ||
+        /^[a-zA-Z]:/.test(value) ||
+        segments.some((segment) => segment === ".." || segment === "" || /[[{}\]!]/.test(segment));
+    if (bad)
+        errors.push(`${name} must be a safe repository-relative glob`);
 }
 function validateStoryArc(t, errors) {
     if (t.storyArc === undefined)
@@ -539,6 +633,8 @@ function validateConceptStep(step, where, storyVersion, errors) {
         if (isBlankNarrative(step.narration))
             errors.push(`${where}.narration is required`);
         validateNarrative(step.narration, `${where}.narration`, "text", errors);
+        if (step.network !== undefined && typeof step.network !== "boolean")
+            errors.push(`${where}.network must be a boolean`);
         if (step.diagram !== undefined)
             errors.push(`${where}.diagram is only allowed with body`);
     }
@@ -549,6 +645,8 @@ function validateConceptStep(step, where, storyVersion, errors) {
         validateNarrative(step.body, `${where}.body`, "block", errors);
         if (step.narration !== undefined)
             errors.push(`${where}.narration is only allowed with page`);
+        if (step.network !== undefined)
+            errors.push(`${where}.network is only allowed with page`);
         validateConceptDiagram(step.diagram, where, errors);
     }
     validateStringArray(step.preparesFor, `${where}.preparesFor`, errors, {
@@ -648,6 +746,12 @@ function validateCodeStep(step, where, storyFiles, storyVersion, errors) {
     }
     else {
         validateClaimedRanges(step, stepRange, where, errors, allowDeletionAnchor);
+    }
+    if (stepKind === "context" && step.files !== undefined) {
+        errors.push(`${where}.files is not allowed for a context step`);
+    }
+    else if (step.files !== undefined) {
+        validateSweepFiles(step, where, errors);
     }
     validateFocus(step, containerRange, containerName, where, errors, allowDeletionAnchor);
     validateHighlights(step, containerRange, containerName, where, errors, allowDeletionAnchor);
@@ -965,6 +1069,11 @@ export function validateTour(obj) {
         if (Array.isArray(step.tags)) {
             step.tags.forEach((tag, tagIndex) => validateNarrative(tag, `${where}.tags[${tagIndex}]`, "text", errors));
         }
+        if (step.weight !== undefined &&
+            step.weight !== "must" &&
+            step.weight !== "skim") {
+            errors.push(`${where}.weight must be "must" or "skim"`);
+        }
         const stepKind = step.kind;
         if (!KINDS.includes(stepKind)) {
             errors.push(`${where}.kind must be one of ${KINDS.join(", ")}`);
@@ -1183,6 +1292,10 @@ export function validateGeneratedTour(tour) {
         if (step.ranges !== undefined && !isSkimStep(step)) {
             errors.push(`${where}.ranges requires a "skim", "sweep", or "mechanical" tag for a generated story`);
         }
+        if (step.files !== undefined &&
+            !isSkimStep(step)) {
+            errors.push(`${where}.files requires a "skim", "sweep", or "mechanical" tag for a generated story`);
+        }
         if (!step.viewport)
             errors.push(`${where}.viewport is required for a generated story`);
         if (!step.highlights?.length)
@@ -1242,37 +1355,48 @@ export function validateGeneratedTour(tour) {
                 errors.push(`${where}.beats[${beatIndex}].text must not narrate a value transition; ` +
                     `the diff already shows both sides — say what depended on the old value`);
             }
-            // A generated story can arrive malformed (an agent omitting `highlights`,
-            // or spelling the beat's `text` as `body`). Report that as a validation
-            // error the author can act on — never throw a TypeError from here, since
-            // callers surface this message directly to the reviewer.
-            if (!Array.isArray(beat?.highlights) || beat.highlights.length === 0) {
-                errors.push(`${where}.beats[${beatIndex}].highlights are required for a generated story`);
+            // A generated story can arrive malformed (an agent omitting both
+            // highlight sides, or spelling the beat's `text` as `body`). Report that
+            // as a validation error the author can act on — never throw a TypeError
+            // from here, since callers surface this message directly to the reviewer.
+            const newSide = Array.isArray(beat?.highlights) ? beat.highlights : [];
+            const oldSide = Array.isArray(beat?.oldHighlights)
+                ? (beat.oldHighlights ?? [])
+                : [];
+            if (newSide.length === 0 && oldSide.length === 0) {
+                errors.push(`${where}.beats[${beatIndex}] needs highlights, oldHighlights, or both for a generated story`);
                 return;
             }
-            const validHighlights = [];
-            beat.highlights.forEach((highlight, highlightIndex) => {
-                if (isComparableLineRange(highlight)) {
-                    validHighlights.push({
-                        range: highlight,
-                        sourceIndex: highlightIndex,
-                    });
+            // Each side is checked on its own: old-side lines live in a different
+            // numbering than new-side ones, so a beat pointing at both is not a jump.
+            for (const [field, list] of [
+                ["highlights", newSide],
+                ["oldHighlights", oldSide],
+            ]) {
+                const validHighlights = [];
+                list.forEach((highlight, highlightIndex) => {
+                    if (isComparableLineRange(highlight)) {
+                        validHighlights.push({
+                            range: highlight,
+                            sourceIndex: highlightIndex,
+                        });
+                    }
+                    else {
+                        errors.push(`${where}.beats[${beatIndex}].${field}[${highlightIndex}] must be a [start, end] pair`);
+                    }
+                });
+                const sortedHighlights = validHighlights
+                    .map(({ range }) => range)
+                    .sort((a, b) => a[0] - b[0]);
+                if (sortedHighlights.some((range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10)) {
+                    errors.push(`${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`);
                 }
-                else {
-                    errors.push(`${where}.beats[${beatIndex}].highlights[${highlightIndex}] must be a [start, end] pair`);
-                }
-            });
-            const sortedHighlights = validHighlights
-                .map(({ range }) => range)
-                .sort((a, b) => a[0] - b[0]);
-            if (sortedHighlights.some((range, index) => index > 0 && range[0] - sortedHighlights[index - 1][1] > 10)) {
-                errors.push(`${where}.beats[${beatIndex}] jumps across distant code; split it into local review points`);
+                validHighlights.forEach(({ range, sourceIndex }) => {
+                    if (!isDeletionAnchor(range) && range[1] - range[0] + 1 > 12) {
+                        errors.push(`${where}.beats[${beatIndex}].${field}[${sourceIndex}] must point at at most 12 lines`);
+                    }
+                });
             }
-            validHighlights.forEach(({ range, sourceIndex }) => {
-                if (!isDeletionAnchor(range) && range[1] - range[0] + 1 > 12) {
-                    errors.push(`${where}.beats[${beatIndex}].highlights[${sourceIndex}] must point at at most 12 lines`);
-                }
-            });
         });
         if (step.highlights?.length && step.beats?.length) {
             const stepHighlights = step.highlights.filter(isComparableLineRange);
@@ -1284,13 +1408,23 @@ export function validateGeneratedTour(tour) {
             }
         }
         if (step.kind !== "context" && stepRange && step.beats?.length) {
-            const coversChange = step.beats.some((beat) => (Array.isArray(beat.highlights) ? beat.highlights : [])
-                .filter(isComparableLineRange)
-                .some((highlight) => isDeletionAnchor(stepRange)
-                ? isDeletionAnchor(highlight)
-                : !isDeletionAnchor(highlight) &&
-                    highlight[0] <= stepRange[1] &&
-                    highlight[1] >= stepRange[0]));
+            // A pure-deletion narrative points only at old-side rows the post-change
+            // range cannot contain; the checker verifies those against the real diff
+            // instead. A step with any new-side beat must still overlap the change.
+            const beatOld = (beat) => Array.isArray(beat?.oldHighlights) &&
+                (beat.oldHighlights.length ?? 0) > 0;
+            const beatNew = (beat) => Array.isArray(beat?.highlights) &&
+                (beat.highlights.length ?? 0) > 0;
+            const allOldSide = step.beats.length > 0 &&
+                step.beats.every((beat) => beatOld(beat) && !beatNew(beat));
+            const coversChange = allOldSide ||
+                step.beats.some((beat) => (Array.isArray(beat.highlights) ? beat.highlights : [])
+                    .filter(isComparableLineRange)
+                    .some((highlight) => isDeletionAnchor(stepRange)
+                    ? isDeletionAnchor(highlight)
+                    : !isDeletionAnchor(highlight) &&
+                        highlight[0] <= stepRange[1] &&
+                        highlight[1] >= stepRange[0]));
             if (!coversChange) {
                 errors.push(`${where}.beats must include a highlight that overlaps the changed range`);
             }

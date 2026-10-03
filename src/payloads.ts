@@ -196,7 +196,7 @@ export interface StoriesPayload {
 // Everything the projection omits arrives later through the lazy endpoints,
 // each of which still returns server-rendered diff HTML.
 
-import type { Comment, ReviewFileIndexEntry, StoryStepSceneLayout } from "./types.js";
+import type { Comment, ReviewFileIndexEntry, StoryAudience, StoryStepSceneLayout, StoryStepWeight } from "./types.js";
 import type { ReviewExclusionMetadata } from "./noise.js";
 
 /** A projected narrative: sanitized HTML, flat text, and the spoken form. */
@@ -205,6 +205,34 @@ export interface ReviewProse {
  text: string;
  /** What narration reads. Never derived from `text` — the parser owns it. */
  speech: string;
+}
+
+/** One story-health finding: a contract error, a lint, or a runtime diagram failure. */
+export interface StoryHealthFinding {
+ kind: "contract" | "lint" | "diagram";
+ severity: "error" | "warning";
+ /** Original locator (`steps[2]`, `steps[s4].beats[0]`, `story`). */
+ where: string;
+ message: string;
+ /** Lint rule id; absent for contract and diagram findings. */
+ rule?: string;
+ /** What to do about it; contract errors explain themselves. */
+ fix?: string;
+ /** Resolved target step, when the finding names one that exists. */
+ stepId?: string;
+ /** 1-based panel index for `data-goto-step` jumps. */
+ panelIndex?: number;
+ /** Code-step file, so repair targets the same evidence. */
+ file?: string;
+}
+
+/** Everything the Overview health row renders. Empty findings means healthy. */
+export interface StoryHealthView {
+ findings: StoryHealthFinding[];
+ errors: number;
+ warnings: number;
+ /** Changed ranges no step explains; the row links them to Review evidence. */
+ unexplainedRanges: number;
 }
 
 /** One review beat: a sentence plus the diff rows it focuses. */
@@ -231,6 +259,8 @@ export interface ReviewBeatView {
 export interface ReviewStepView {
  id: string;
  kind: "changed" | "new-file" | "context" | "concept";
+ /** Attention weight; the server resolves the tour default to `must`. */
+ weight: StoryStepWeight;
  /** Derived presentation layout. It carries no diff or diagram detail. */
  sceneLayout: StoryStepSceneLayout;
  /** 1-based position among code steps, as the step header prints it. */
@@ -275,6 +305,8 @@ export interface ReviewFileRow {
  hasFull: boolean;
  /** Whether the file has hunks at all; a file with none gets no mode toggle. */
  hasHunks: boolean;
+ /** Generator command when `storyScope.regenerated` explains this file. */
+ regeneratedBy?: string;
 }
 
 /** An author-flagged place to distrust first, listed on the Overview. */
@@ -410,6 +442,10 @@ export interface ReviewPayload {
  storyless: boolean;
  /** `describeBase()` — what the subtitle compares the working tree against. */
  baseLabel: string;
+ /** Standing audience preference; the storyless generator offers to change it. */
+ audience: StoryAudience;
+ /** Contract errors and lint findings behind the Overview health row. */
+ health: StoryHealthView;
  /** Ref for the post-change side. Absent means the live working tree. */
  headRef?: string;
  /** The story's own base ref, used by the storyless generator's scope. */
@@ -451,6 +487,12 @@ export interface ReviewPayload {
 
  storyFreshness: "current" | "stale" | "unverified";
  storyDrift?: StoryDriftView;
+
+ /**
+  * Present when the story on screen is a frozen history snapshot: when it
+  * was taken, and the live story id to return to. Mutations are refused.
+  */
+ history?: { takenAt: string; liveId: string };
 
  /** Already story-scoped by the lease. The chrome counts open comments separately. */
  comments: Comment[];

@@ -43,6 +43,7 @@ import {
   progressPrimaryActionClass,
   progressSecondaryActionClass,
 } from './progress-host';
+import { diagramErrorLine, diagramErrorSummary } from './diagram-errors';
 
 /**
  * Start the review page's engine against the DOM React has just committed.
@@ -468,6 +469,33 @@ export function startReviewEngine(options){
     var reset=$('[data-mermaid-reset]',figure);if(reset&&!reset._dsMermaidBound){reset._dsMermaidBound=true;reset.addEventListener('click',function(){resetMermaidView(figure);output.focus();});}
     applyMermaidView(figure);syncMermaidFullscreen();
   }
+  function diagramErrorBox(summary,failure){
+    // Built with textContent, never innerHTML: both the parser's message and
+    // the author's source line are untrusted text.
+    var box=el('div','ds-mermaid-error');
+    box.setAttribute('role','alert');
+    box.appendChild(el('p','ds-mermaid-error-title','This diagram could not be drawn.'));
+    box.appendChild(el('p','ds-mermaid-error-message',summary));
+    if(failure){
+      var line=el('p','ds-mermaid-error-line','Line '+failure.line+': ');
+      line.appendChild(el('code','',failure.text));
+      box.appendChild(line);
+    }
+    box.appendChild(el('p','ds-mermaid-error-hint','The caption and full source are preserved below.'));
+    return box;
+  }
+  function reportDiagramFailure(figure,summary,line){
+    // The story-health row (Overview) listens for this and folds runtime
+    // diagram failures into its findings; the stash covers listeners that
+    // attach after the render already failed.
+    var panel=figure?closest(figure,'[data-step-panel]'):null;
+    var detail={step:panel?panel.getAttribute('data-step-id'):'',panel:panel?parseInt(panel.getAttribute('data-step-panel')||'0',10):0,message:summary,line:line};
+    try{
+      window.__dsDiagramErrors=window.__dsDiagramErrors||[];
+      window.__dsDiagramErrors.push(detail);
+      document.dispatchEvent(new CustomEvent('ds-diagram-error',{detail: detail}));
+    }catch(e){}
+  }
   function renderConceptDiagrams(panel){
     if(!panel)return;
     $all('[data-concept-diagram]',panel).forEach(function(figure){
@@ -480,10 +508,14 @@ export function startReviewEngine(options){
         // pi-lens-ignore: ast-grep:no-inner-html-js
         output.innerHTML=sanitizeMermaidSvg(result.svg);
         classifyMermaidInlineShape(figure);figure.setAttribute('data-render-state','ready');prepareMermaidCanvas(figure);
-      }).catch(function(){
+      }).catch(function(err){
         figure.setAttribute('data-render-state','error');figure.classList.add('is-error');
-        if(output)output.textContent='The diagram could not be drawn. Its caption and source are preserved below.';
+        var summary=diagramErrorSummary(err),failure=diagramErrorLine(err&&err.message||summary,text);
+        figure.setAttribute('data-diagram-error',summary);
+        if(failure)figure.setAttribute('data-diagram-line',String(failure.line));
+        if(output){output.textContent='';output.appendChild(diagramErrorBox(summary,failure));}
         if(fallback)fallback.open=true;
+        reportDiagramFailure(figure,summary,failure?failure.line:0);
       });
     });
   }
@@ -1144,6 +1176,15 @@ export function startReviewEngine(options){
       if(nodes[to]){nodes[to].focus();nodes[to].click();}
     });
   }
+  function mustOnlyStep(i,delta){
+    // Sequential j/k walking skips skim stops in must-read-only mode.
+    // Explicit jumps — rail clicks, goto links, the film thread — call setActive
+    // directly and always land, so a skim stop stays one click away.
+    if(!mustOnly())return i+delta;
+    var j=i+delta;
+    while(j>=0&&j<total&&isSkimPanel(stepPanels[j]))j+=delta;
+    return j;
+  }
   function setActive(i,autoSpeak){
     if(i<0)i=0;if(i>total-1)i=total-1;
     syncThreadRoving(i);
@@ -1326,8 +1367,8 @@ export function startReviewEngine(options){
     var panel=beatPanel(button);if(!panel)return false;
     var beats=$all('[data-story-beat]',beatHost(panel)),index=beats.indexOf(button);if(index<0||!beats.length)return false;
     var stepIndex=parseInt(panel.getAttribute('data-step-panel')||'0',10);
-    if(delta>0&&index===beats.length-1&&stepIndex<total-1){focusStoryStepBoundary(stepIndex+1,false);return true;}
-    if(delta<0&&index===0&&stepIndex>1){focusStoryStepBoundary(stepIndex-1,true);return true;}
+    if(delta>0&&index===beats.length-1&&stepIndex<total-1){focusStoryStepBoundary(mustOnlyStep(stepIndex,1),false);return true;}
+    if(delta<0&&index===0&&stepIndex>1){focusStoryStepBoundary(mustOnlyStep(stepIndex,-1),true);return true;}
     var next=Math.max(0,Math.min(beats.length-1,index+delta)),target=beats[next];
     var group=parseInt(target.getAttribute('data-focus-group')||'0',10);
     selectStoryFocus(stepIndex,group,true);target.focus();return true;
@@ -1585,6 +1626,9 @@ export function startReviewEngine(options){
   function speechSequenceFrom(stepIndex,unitIndex,manual){
     var sequence=[],last=manual?stepIndex:total-1;
     for(var s=stepIndex;s<=last;s++){
+      // An explicit single-step play keeps its skim step; a must-read-only
+      // "play story" run skips them.
+      if(!manual&&mustOnly()&&isSkimPanel(stepPanels[s]))continue;
       var panel=stepPanels[s],units=panel?stepSpeechUnits(panel):[];
       var first=s===stepIndex?Math.max(0,unitIndex||0):0;
       for(var u=first;u<units.length;u++){
@@ -1626,12 +1670,15 @@ export function startReviewEngine(options){
     return speakNarrationSequence(speechSequenceFrom(stepIndex,index,manual),manual);
   }
   function speakStep(i){if(!narrationPlaying())return false;return speakStepIndex(i,false);}
+  function mustOnly(){return document.body.hasAttribute('data-must-only');}
+  function isSkimPanel(panel){return !!panel&&panel.getAttribute&&panel.getAttribute('data-step-weight')==='skim';}
+  function speakablePanel(j){var panel=stepPanels[j];if(!panel||!stepSpeechUnits(panel).length)return false;return !mustOnly()||!isSkimPanel(panel);}
   function nextSpeakableStep(i){
-    for(var j=i+1;j<total;j++){if(stepSpeechUnits(stepPanels[j]).length)return j;}
+    for(var j=i+1;j<total;j++){if(speakablePanel(j))return j;}
     return -1;
   }
   function previousSpeakableStep(i){
-    for(var j=i-1;j>=1;j--){if(stepSpeechUnits(stepPanels[j]).length)return j;}
+    for(var j=i-1;j>=1;j--){if(speakablePanel(j))return j;}
     return -1;
   }
   function speechBeatTarget(stepIndex,unitIndex,delta){
@@ -1675,8 +1722,8 @@ export function startReviewEngine(options){
     return true;
   }
   function firstSpeakableStep(){
-    for(var j=Math.max(1,active);j<total;j++){if(stepSpeechUnits(stepPanels[j]).length)return j;}
-    for(var k=1;k<Math.min(total,Math.max(1,active));k++){if(stepSpeechUnits(stepPanels[k]).length)return k;}
+    for(var j=Math.max(1,active);j<total;j++){if(speakablePanel(j))return j;}
+    for(var k=1;k<Math.min(total,Math.max(1,active));k++){if(speakablePanel(k))return k;}
     return -1;
   }
   function readJsonOrError(r,msg){
@@ -3353,7 +3400,7 @@ export function startReviewEngine(options){
   }
   function removeComposer(box,restoreFocus){var b=box||$('.ds-composer');stashComposerDraft(b);var back=composerReturnFocus,anchor=b&&b._dsAnchorRow,holder=b&&(closest(b,'.ds-filepanel')||closest(b,'.ds-diff'));if(anchor&&anchor.classList)anchor.classList.remove('ds-comment-draft-anchor');if(b&&b.parentNode)b.parentNode.removeChild(b);if(holder)syncSplitFlow(holder);composerReturnFocus=null;if(restoreFocus!==false&&back&&document.contains(back)&&back.focus)back.focus();}
   function revealComposer(box){var scroller=closest(box,'.ds-diffscroll')||closest(box,'.ds-filedetail');if(!scroller)return;requestAnimationFrame(function(){if(!document.documentElement.contains(box))return;var sr=scroller.getBoundingClientRect(),br=box.getBoundingClientRect(),pad=10,card=closest(box,'.ds-diff'),sticky=card?$all('.ds-difftoolbar,.ds-diffhead',card):[],stickyHeight=sticky.reduce(function(total,node){var nr=node.getBoundingClientRect(),style=getComputedStyle(node);return total+(style.position==='sticky'&&nr.height&&nr.bottom>sr.top&&nr.top<sr.bottom?nr.height:0);},0),topEdge=sr.top+stickyHeight+pad,bottomEdge=sr.bottom-pad,available=bottomEdge-topEdge,delta=0;if(br.height>available||br.top<topEdge)delta=br.top-topEdge;else if(br.bottom>bottomEdge)delta=br.bottom-bottomEdge;if(!delta)return;var top=Math.max(0,scroller.scrollTop+delta);try{scroller.scrollTo({top:top,behavior:'auto'});}catch(e){scroller.scrollTop=top;}});}
-  function openComposer(row,flavor,ctx){removeComposer(null,false);if(!(ctx&&ctx.line)&&!row.getAttribute('data-line'))return;if(!row.parentNode)return;composerReturnFocus=document.activeElement;var box=buildComposer(row,flavor,ctx);box._dsAnchorRow=row;row.classList.add('ds-comment-draft-anchor');row.parentNode.insertBefore(box,row.nextSibling);syncSplitFlow(closest(row,'.ds-filepanel')||closest(row,'.ds-diff'));var ta=$('.ds-composer-ta',box);if(ta){try{ta.focus({preventScroll:true});}catch(e){ta.focus();}}revealComposer(box);}
+  function openComposer(row,flavor,ctx){if(document.body.hasAttribute('data-history')){toast('History snapshots are read-only. Return to the live story to comment.','error');return;}removeComposer(null,false);if(!(ctx&&ctx.line)&&!row.getAttribute('data-line'))return;if(!row.parentNode)return;composerReturnFocus=document.activeElement;var box=buildComposer(row,flavor,ctx);box._dsAnchorRow=row;row.classList.add('ds-comment-draft-anchor');row.parentNode.insertBefore(box,row.nextSibling);syncSplitFlow(closest(row,'.ds-filepanel')||closest(row,'.ds-diff'));var ta=$('.ds-composer-ta',box);if(ta){try{ta.focus({preventScroll:true});}catch(e){ta.focus();}}revealComposer(box);}
   function openQueuedCommentEditor(card){if(!card)return;var editor=$('[data-comment-editor]',card),message=$('.ds-feedback-message',card);if(!editor)return;editor.hidden=false;card.classList.add('is-editing');if(message)message.hidden=true;var ta=$('[data-edit-body]',editor);if(ta)ta.focus();}
   function closeQueuedCommentEditor(card){if(!card)return;var editor=$('[data-comment-editor]',card),message=$('.ds-feedback-message',card),c=commentById(card.getAttribute('data-comment-id'));if(editor)editor.hidden=true;if(message)message.hidden=false;card.classList.remove('is-editing');if(c){var ta=$('[data-edit-body]',card);if(ta)ta.value=c.body||'';$all('[data-edit-flavor]',card).forEach(function(choice){choice.setAttribute('aria-pressed',choice.getAttribute('data-edit-flavor')===c.type?'true':'false');});}}
   function saveQueuedComment(card){if(!card)return;var id=card.getAttribute('data-comment-id'),ta=$('[data-edit-body]',card),selected=$('[data-edit-flavor][aria-pressed="true"]',card),body=ta&&ta.value.trim(),type=selected&&selected.getAttribute('data-edit-flavor');if(!body){if(ta)ta.focus();return;}var save=$('[data-edit-save]',card);if(save)save.disabled=true;fetch(reviewPageUrl(API+'/'+encodeURIComponent(id)),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type,body:body})}).then(function(r){return r.json().catch(function(){return {};}).then(function(data){if(!r.ok)throw new Error(data&&data.error||'Could not update comment');return data;});}).then(function(c){replaceComment(c);noteBlockingFeedbackMutation(c);syncFeedbackCards();syncCommentPins();refreshCount();toast('Queued comment updated.');}).catch(function(err){if(save)save.disabled=false;toast(err&&err.message?err.message:'Could not update the comment.','error');});}
@@ -3413,6 +3460,7 @@ export function startReviewEngine(options){
       modelChoices:$('#storyModelChoices'),
       qualityField:$('[data-story-quality-field]'),
       modeSel:$('#storyMode'),
+      audienceSel:$('#storyAudience'),
       note:$('#storyReviewerNote'),
       scope:$('[data-story-scope]'),
       scopeError:$('#storyScopeError'),
@@ -3671,6 +3719,7 @@ export function startReviewEngine(options){
       agent:e.agentSel&&e.agentSel.value?e.agentSel.value:undefined,
       model:model||undefined,
       mode:e.modeSel&&e.modeSel.value?e.modeSel.value:undefined,
+      audience:e.audienceSel&&e.audienceSel.value?e.audienceSel.value:undefined,
       includedFiles:storySelectedFiles(),
       reviewerNote:e.note&&e.note.value?e.note.value.trim():undefined
     };
@@ -4003,7 +4052,7 @@ export function startReviewEngine(options){
     b=closest(t,'[data-goto-step]');if(b){closeDriftDrawer();setView('tour');setActive(Number(b.getAttribute('data-goto-step')));collapseCompactSidebar();return;}
     b=closest(t,'[data-goto-file]');if(b){closeDriftDrawer();setView('files');selectFileByPath(b.getAttribute('data-goto-file'));collapseCompactSidebar();return;}
     b=closest(t,'[data-explain]');if(b){repairStory('explain',{file:b.getAttribute('data-story-file'),line:Number(b.getAttribute('data-story-line')||0)});return;}
-    b=closest(t,'[data-story-repair]');if(b){repairStory(b.getAttribute('data-story-repair'),{file:b.getAttribute('data-story-file'),stepId:b.getAttribute('data-story-step')});var det=closest(b,'details');if(det)det.open=false;return;}
+    b=closest(t,'[data-story-repair]');if(b){repairStory(b.getAttribute('data-story-repair'),{file:b.getAttribute('data-story-file'),stepId:b.getAttribute('data-story-step')});var det=closest(b,'details');if(det&&!det.hasAttribute('data-story-health'))det.open=false;return;}
     var cpf=closest(t,'[data-concept-page-fullscreen]');if(cpf){toggleConceptPageFullscreen(cpf);return;}
     b=closest(t,'.ds-stepcard');if(b){setActive(Number(b.getAttribute('data-step-index')));collapseCompactSidebar();return;}
   }
@@ -4105,7 +4154,7 @@ export function startReviewEngine(options){
       if(currentView()==='review')return;
       e.preventDefault();
       if(filesView&&!filesView.hidden)selectFile(selectedFile+(next?1:-1));
-      else if(tourView&&!tourView.hidden)setActive(active+(next?1:-1));
+      else if(tourView&&!tourView.hidden)setActive(mustOnlyStep(active,next?1:-1));
       return;
     }
     if(singleKeysEnabled()&&(e.key==='v'||e.key==='V')&&!isTextEntryTarget(e.target)&&filesView&&!filesView.hidden){

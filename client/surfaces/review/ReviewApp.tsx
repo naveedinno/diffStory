@@ -359,6 +359,9 @@ function useBodyFacts(payload: ReviewPayload): void {
       "data-review-page-token": payload.pageToken,
       // Blame links a commit back to the scope page for this repo.
       "data-route-base": payload.routeBase,
+      // A frozen history snapshot: the engine keeps comment and repair
+      // affordances quiet instead of letting them fail on POST.
+      "data-history": payload.history ? "1" : null,
     };
     for (const [name, value] of Object.entries(attrs)) {
       if (value === null) body.removeAttribute(name);
@@ -392,9 +395,27 @@ export function ReviewApp({ payload }: { payload: ReviewPayload }) {
     });
   }, [payload]);
 
+  const history = payload.history;
+  const historyWhen = history
+    ? new Date(history.takenAt).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "";
+
   return (
     <>
       <SkipLink />
+      {history ? (
+        <div className="ds-history-banner" role="note">
+          <span>
+            Viewing the version from <b>{historyWhen}</b> — this snapshot is read-only.
+          </span>{" "}
+          <a href={`${routeBase}/review?story=${encodeURIComponent(history.liveId)}`}>
+            Return to the live story
+          </a>
+        </div>
+      ) : null}
       <header
         className={`ds-reviewchrome${storyless ? "" : " is-storyful"}`}
         data-review-chrome

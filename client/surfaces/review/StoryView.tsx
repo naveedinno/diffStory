@@ -20,6 +20,7 @@
 import type { ReviewPayload, ReviewStepView } from "../../../src/payloads";
 import { ExcludedScopeNotice, StoryMark } from "./Sidebar";
 import { fileExtension, html, numeral, plural, refLabel, withBreaks } from "./format";
+import { StoryHealthRow } from "./StoryHealth";
 
 /** The invisible narration index inside a lazy stub. */
 function SpeechCache({ step }: { step: ReviewStepView }) {
@@ -232,6 +233,8 @@ function IntroPanel({ payload }: { payload: ReviewPayload }) {
 
         {story.evolution ? <EvolutionDetails evolution={story.evolution} /> : null}
 
+        <StoryHealthRow health={payload.health} />
+
         <div className="ds-intro-utility" role="group" aria-label="Story scope and optional review material">
           <span className="ds-intro-scope">
             {scopeText}
@@ -357,6 +360,11 @@ const DEPTHS: [string, string, string, string, string][] = [
     "Adds smaller stops for guards, branches, state writes, errors, side effects, and tests.",
     "Trivial syntax stays skipped",
   ],
+];
+
+const AUDIENCES: [string, string, string][] = [
+  ["newcomer", "Newcomer", "Full landings and primers for anything unfamiliar."],
+  ["familiar", "Familiar", "Terse landings, primers only for ideas this change introduces."],
 ];
 
 function StoryScopeControls({ files }: { files: ReviewPayload["files"] }) {
@@ -575,6 +583,39 @@ function GenerateCta({ payload }: { payload: ReviewPayload }) {
                 <input id="storyModelSel" type="hidden" value="" />
                 <div className="ds-choicegroup" id="storyModelChoices" role="radiogroup" aria-label="Story quality" />
               </div>
+              <fieldset className="ds-storygen-field ds-field-audience">
+                <legend className="ds-storygen-label">Audience</legend>
+                <p className="ds-storygen-help" id="storyAudienceHelp">
+                  Who the story is written for. Your choice is remembered for this repo.
+                </p>
+                <input id="storyAudience" type="hidden" value={payload.audience} />
+                <div
+                  className="ds-choicegroup"
+                  role="radiogroup"
+                  aria-label="Story audience"
+                  aria-describedby="storyAudienceHelp"
+                >
+                  {AUDIENCES.map(([value, title, desc]) => {
+                    const active = value === payload.audience;
+                    return (
+                      <button
+                        key={value}
+                        className={`ds-choice${active ? " is-active" : ""}`}
+                        type="button"
+                        role="radio"
+                        data-story-choice="storyAudience"
+                        data-value={value}
+                        title={desc}
+                        aria-label={`${title}: ${desc}`}
+                        aria-checked={active}
+                        tabIndex={active ? 0 : -1}
+                      >
+                        {title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
               <StoryScopeControls files={payload.files} />
             </div>
             <button
