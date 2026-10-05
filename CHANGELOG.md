@@ -4,6 +4,12 @@ All notable changes to diffStory are tracked here.
 
 ## Unreleased
 
+- Tightened the storyteller skill's explanation craft: a ranked repair order
+  for over-long beats, a ban on impact/risk language without a `verification`
+  measurement (mark it unknown or hotspot it instead), a bounded checker loop,
+  a question plus avoid-when line on every change-type and surface playbook,
+  and a still-frame rule requiring concept pages to teach with no fact living
+  only in motion, hover, or a transient state.
 - Story format v4: concept steps can be free HTML pages (JavaScript and CDN
   libraries allowed) rendered in a sandboxed frame, with no cap on how many or
   where they sit.

@@ -13,6 +13,10 @@ Part of the diffstory-storyteller skill. Run every audit before handing a story 
   viewport or in code you read.
 - Uncertain: narrow the claim to what the code shows. `intent` claims only a
   why its `sources` support.
+- Name only what the lit lines show. Impact, risk, performance, and security
+  language requires a measurement in `verification`; without one, mark it
+  inline as unknown — `<observed fact>; <what remains unknown>` — or as a
+  hotspot, never as a claim.
 
 ### Narrative audit
 
@@ -43,7 +47,8 @@ Falsifiable checks — run each, do not skim:
 - Page test: each concept page teaches one model with a concrete instance from
   this diff and shows the model (something to drag, step, toggle, or watch);
   a page that is mostly paragraphs fails. Its narration makes sense without
-  the page.
+  the page. Freeze the page mid-interaction: the still frame must still teach
+  the model, with no fact living only in motion, hover, or a transient state.
 
 ### Context and camera audit
 

@@ -355,6 +355,10 @@ see: whose code this is, why this line, why now, what it makes possible next.
 2. **One beat, one decision.** A semicolon or "and also" joining separate
    decisions means two beats, or two steps. Aim for 12-30 spoken words (a
    landing beat usually needs 20-40); over 45 is two beats.
+
+   Repair order for an over-long beat: split the beat; then split the step;
+   then shorten the wording. Never drop the landing clause or the consequence
+   clause to fit — deleting meaning is not a shortening repair.
 3. **End on the consequence.** What the code now guarantees, prevents, unlocks,
    or hands to the next stop. Put the new information at the end of the
    sentence, where the voice lands.
@@ -476,8 +480,12 @@ every `.diffstory/stories/*.json` when there is no single story.
 
 - Fix every ERROR. Fix every WARNING too, unless you can say in one sentence
   why the rule does not apply to that step.
-- Re-run until it prints `RESULT: READY`. If a clean story is impossible,
-  report the blocker instead of pretending it is ready.
+- Re-run until it prints `RESULT: READY`, within this bound: if a failure
+  survives two focused repairs, re-read the violated contract section before
+  the third attempt; after one evidence-based retry past that, report the
+  concrete gap instead of iterating.
+- If a clean story is impossible, report the blocker instead of pretending it
+  is ready.
 - If `node` is unavailable, do the schema spot-check in `references/schema.md`
   by hand and say the checker could not run.
 

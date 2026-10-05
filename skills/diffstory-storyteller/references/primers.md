@@ -47,6 +47,9 @@ Pages may open the story, close it, or sit back to back.
 - `narration` is what you would say while pointing at the page. Plain text,
   no tags. Aloud reads it and screen readers announce it, so it must make
   sense without seeing the page.
+- A concept page must teach its model in a still frame: no fact may live only
+  in motion, hover, or a transient state, and the page must read equivalently
+  with reduced motion.
 - The page has no background of its own. It sits directly on diffStory's
   background, which shows through, so don't paint `html` or `body` (the frame
   forces both transparent anyway). Inner elements may have fills: a card, a
